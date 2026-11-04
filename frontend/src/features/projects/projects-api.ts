@@ -49,6 +49,8 @@ export const projectKeys = {
   runs: (id: string) => [...projectKeys.detail(id), 'runs'] as const,
   /** GET /refinement: latest draft, latest round and its clarifying questions (FR-27; see refinement-api.ts). */
   refinement: (id: string) => [...projectKeys.detail(id), 'refinement'] as const,
+  /** GET /analysis: the summary state, the Stack Analyst's run and the stack profile (FR-182; see features/analysis/analysis-api.ts). */
+  analysis: (id: string) => [...projectKeys.detail(id), 'analysis'] as const,
   /** Every execution-steps query of the project, per plan type and version (FR-30; see execution-api.ts). */
   execution: (id: string) => [...projectKeys.detail(id), 'execution'] as const,
   /** GET /git/pull-request: the recorded PR and its branch comparison (FR-36; see features/git/pull-request-api.ts). */

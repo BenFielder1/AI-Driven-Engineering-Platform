@@ -1,11 +1,13 @@
 import { useState } from 'react'
 
+import type { Schemas } from '../../api/client'
 import {
   markdownOutline,
   requirementChangesIn,
   requirementChanges,
   type RequirementChange,
 } from '../artifacts/markdown-outline'
+import { UncoveredSourceItems } from '../trackers/uncovered-source-items'
 
 const changeLabels: Record<RequirementChange, string> = {
   new: 'New',
@@ -67,10 +69,32 @@ function ChangesInVersion({ content }: { content: string }) {
   )
 }
 
-/** FR-55 Specification panel: a section outline navigator (from the headings) and, for iterations, the changes filter. */
-export function SpecPanel({ content }: { content: string }) {
+/**
+ * FR-55 Specification panel: a section outline navigator (from the headings) and, for iterations, the changes filter.
+ * FR-172: the imported items no requirement cites, linked to the tracker.
+ */
+export function SpecPanel({
+  content,
+  warnings = [],
+  releaseVersionId,
+  projectId,
+}: {
+  content: string
+  warnings?: readonly Schemas['ArtifactWarningDto'][]
+  releaseVersionId?: string
+  projectId?: string
+}) {
   const outline = markdownOutline(content).filter((e) => e.level <= 3)
+  const uncovered = warnings.filter((w) => w.code === 'UNCOVERED_SOURCE_ITEMS')
   return (
+    <>
+      {projectId && uncovered.length > 0 && (
+        <UncoveredSourceItems
+          projectId={projectId}
+          releaseVersionId={releaseVersionId}
+          keys={uncovered.flatMap((w) => w.ids)}
+        />
+      )}
     <div className="grid gap-3 md:grid-cols-2">
       {outline.length > 0 && (
         <nav aria-label="Section outline" className="rounded-lg border border-border/60 p-3">
@@ -88,5 +112,6 @@ export function SpecPanel({ content }: { content: string }) {
       )}
       <ChangesInVersion content={content} />
     </div>
+    </>
   )
 }

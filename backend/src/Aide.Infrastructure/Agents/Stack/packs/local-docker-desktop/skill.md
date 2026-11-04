@@ -15,12 +15,12 @@ The user runs Docker Desktop with Compose v2. Write files only; don't assume the
 name: <app>
 services:
   db:
-    image: <from the data pack, e.g. postgres:17>
+    image: <from the data pack, e.g. postgres:18>
     env_file: .env
     environment:
-      PGDATA: /var/lib/postgresql/data/pgdata              # postgres; see the data pack for others
+      PGDATA: /var/lib/postgresql/18/docker                # postgres:18's own path; see the data pack for others
     ports: ["127.0.0.1:5432:5432"]
-    volumes: [db-data:/var/lib/postgresql/data]
+    volumes: [db-data:/var/lib/postgresql]                # postgres:18 mounts one level above 17's /var/lib/postgresql/data
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"], interval: 5s, retries: 20 }
 
   migrate:

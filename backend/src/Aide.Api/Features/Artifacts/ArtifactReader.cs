@@ -142,6 +142,11 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     /// </summary>
     private async Task<IReadOnlyList<ArtifactWarningDto>> WarningsAsync(Artifact artifact, CancellationToken cancellationToken)
     {
+        if (artifact.Type == ArtifactType.TechnicalSpecification)
+        {
+            return await SpecWarningsAsync(artifact, cancellationToken);
+        }
+
         if (artifact.Type != ArtifactType.ImplementationPlan)
         {
             return [];
@@ -180,6 +185,23 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             }
         }
         return [.. warnings.Select(w => new ArtifactWarningDto(w.Code, w.Message, w.Details))];
+    }
+
+    /// <summary>FR-172: <c>UNCOVERED_SOURCE_ITEMS</c> for the version's imported, not-done items no requirement cites; advisory (D-V5-6).</summary>
+    private async Task<IReadOnlyList<ArtifactWarningDto>> SpecWarningsAsync(Artifact artifact, CancellationToken cancellationToken)
+    {
+        var imports = await db.TrackerImports.AsNoTracking()
+            .Where(i => i.ReleaseVersionId == artifact.ReleaseVersionId && i.Status == Domain.Trackers.TrackerImportStatus.Completed)
+            .ToListAsync(cancellationToken);
+        if (imports.Count == 0)
+        {
+            return [];
+        }
+
+        var kept = Domain.Trackers.SourceItemsRenderer.Render(imports.Select(Trackers.SourceSnapshotWriter.ToSnapshot)).Items;
+        return Domain.Trackers.SourceTraceability.Check(artifact.Content, kept) is { } warning
+            ? [new ArtifactWarningDto(warning.Code, warning.Message, warning.Details)]
+            : [];
     }
 
     private Task<Artifact?> FindAsync(Guid projectId, ArtifactType type, int version, CancellationToken cancellationToken) =>

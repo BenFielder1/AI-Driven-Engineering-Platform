@@ -67,13 +67,29 @@ public sealed record PlatformConnectionMetadata
     public IReadOnlyList<string> MissingPermissions { get; init; } = [];
 
     public string? TokenKind { get; init; }
+
+    /// <summary>FR-165 Jira: the site, e.g. <c>acme.atlassian.net</c>, used only to resolve <see cref="CloudId"/>.</summary>
+    public string? Site { get; init; }
+
+    /// <summary>FR-165 Jira: from <c>_edge/tenant_info</c>; every API call goes through the gateway with it.</summary>
+    public string? CloudId { get; init; }
+
+    /// <summary>FR-165 Jira: the optional custom field holding acceptance criteria.</summary>
+    public string? AcceptanceCriteriaField { get; init; }
+
+    /// <summary>FR-166 Linear: the organisation's name.</summary>
+    public string? Organization { get; init; }
+
+    /// <summary>FR-166 Linear: the organisation's <c>urlKey</c>.</summary>
+    public string? OrganizationUrlKey { get; init; }
 }
 
 /// <summary>A team, account, workspace or organisation a platform token reaches (FR-142).</summary>
 public sealed record PlatformAccountRef(string Id, string Name, string? Slug = null, string? Kind = null);
 
 /// <summary>Deployment platforms and databases with pasted-token connections (FR-142, §4.20, §4.21). Wire values:
-/// <c>vercel</c>, <c>netlify</c>, <c>cloudflare</c>, <c>render</c>, <c>railway</c>, <c>supabase</c>.</summary>
+/// <c>vercel</c>, <c>netlify</c>, <c>cloudflare</c>, <c>render</c>, <c>railway</c>, <c>supabase</c>, and the issue trackers <c>jira</c>,
+/// <c>linear</c> (FR-165, FR-166).</summary>
 public enum PlatformProvider
 {
     Vercel = 0,
@@ -82,6 +98,8 @@ public enum PlatformProvider
     Render = 3,
     Railway = 4,
     Supabase = 5,
+    Jira = 6,
+    Linear = 7,
 }
 
 /// <summary>Validation state of a platform connection (FR-142). Wire values: <c>valid</c>, <c>invalid</c> (rejected),

@@ -46,7 +46,7 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
         schema.Properties[ApiProblems.PlatformKey] = new OpenApiSchema
         {
             Type = JsonSchemaType.String,
-            Description = "PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4).",
+            Description = "PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4).",
         };
         schema.Properties[ApiProblems.ViolationsKey] = new OpenApiSchema
         {

@@ -267,6 +267,9 @@ public enum DeploymentFailure
     /// <summary>Any other refusal (400, 409, 422 …).</summary>
     Rejected = 7,
 
+    /// <summary>FR-190, FR-192: a project of that name already exists in the workspace (<c>PLATFORM_RESOURCE_EXISTS</c>).</summary>
+    ResourceExists = 100,
+
     /// <summary>FR-143: the credentials lack a permission the operation needs, e.g. the GitHub App's Pages permission
     /// (<c>PLATFORM_PERMISSION_MISSING</c>).</summary>
     PermissionMissing = 8,
@@ -348,6 +351,7 @@ public static class VercelErrorRules
         DeploymentFailure.NotSupported => ErrorCodes.PlatformError,
         DeploymentFailure.CredentialRejected => ErrorCodes.CredentialInvalid,
         DeploymentFailure.NotFound => ErrorCodes.NotFound,
+        DeploymentFailure.ResourceExists => ErrorCodes.PlatformResourceExists,
         _ => ErrorCodes.UpstreamError,
     };
 }

@@ -49,6 +49,12 @@ public sealed class ReleaseVersion
     /// </summary>
     public string? StackComposition { get; set; }
 
+    /// <summary>
+    /// FR-178, FR-186: <c>infer</c> when the version's stack comes from a Stack Analyst profile approved in <c>analysis</c>
+    /// (the composition is null until then), else <c>manual</c>.
+    /// </summary>
+    public StackSource StackSource { get; set; } = StackSource.Manual;
+
     /// <summary>FR-117: the stack catalog version the composition was validated against.</summary>
     public string? CatalogVersion { get; set; }
 

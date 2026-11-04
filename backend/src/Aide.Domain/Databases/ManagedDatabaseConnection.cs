@@ -8,7 +8,8 @@ namespace Aide.Domain.Databases;
 /// <item>Supabase: <see cref="SupabaseRef"/>, the pooler (<see cref="PoolerHost"/>, <see cref="PoolerUser"/>,
 /// <see cref="DatabaseName"/>), the publishable and secret keys, and the Auth URLs last applied.</item>
 /// <item>Render: <see cref="Url"/> (<c>internalConnectionString</c>) and <see cref="ExternalUrl"/>.</item>
-/// <item>Railway: <see cref="RailwayService"/> (apps reference <c>${{&lt;service&gt;.DATABASE_URL}}</c>).</item>
+/// <item>Railway: <see cref="RailwayService"/> (apps reference <c>${{&lt;service&gt;.DATABASE_URL}}</c>); in its own project
+/// (§4.28, <see cref="RailwaySeparateProject"/>), <see cref="Url"/> over a TCP proxy, since no private network reaches it.</item>
 /// <item>External and Fake: <see cref="Url"/>.</item>
 /// </list>
 /// </summary>
@@ -22,6 +23,15 @@ public sealed record ManagedDatabaseConnection
 
     /// <summary>The Railway Postgres service name (the reference variable's prefix).</summary>
     public string? RailwayService { get; init; }
+
+    /// <summary>§4.28: a Railway Postgres in its own project: apps use <see cref="Url"/>, the public URL through a TCP proxy.</summary>
+    public bool RailwaySeparateProject { get; init; }
+
+    /// <summary>FR-192: the Railway project a standalone create made, and its name: stored the moment it exists, so a retry or repeated create resumes in it.</summary>
+    public string? RailwayOwnProjectId { get; init; }
+
+    /// <inheritdoc cref="RailwayOwnProjectId"/>
+    public string? RailwayOwnProjectName { get; init; }
 
     public string? SupabaseRef { get; init; }
 

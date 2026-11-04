@@ -144,6 +144,45 @@ public static class ErrorCodes
     /// platform API failure, or a provider AIDE can't call for real yet ("not supported yet").</summary>
     public const string PlatformError = "PLATFORM_ERROR";
 
+    /// <summary>FR-165 (400): the Jira site isn't <c>*.atlassian.net</c>; nothing was fetched.</summary>
+    public const string TrackerSiteNotAllowed = "TRACKER_SITE_NOT_ALLOWED";
+
+    /// <summary>FR-169, FR-173 (409): no usable connection for that tracker.</summary>
+    public const string TrackerNotConnected = "TRACKER_NOT_CONNECTED";
+
+    /// <summary>FR-167 (409): the AIDE GitHub App lacks Issues: read. The ProblemDetails carries the App settings link (<c>installUrl</c>).</summary>
+    public const string TrackerPermissionMissing = "TRACKER_PERMISSION_MISSING";
+
+    /// <summary>FR-169 (400): the tracker refused the native query; the title holds its message.</summary>
+    public const string TrackerQueryInvalid = "TRACKER_QUERY_INVALID";
+
+    /// <summary>FR-170 (job code): a rate limit during an import; the job waits without using an attempt.</summary>
+    public const string TrackerRateLimited = "TRACKER_RATE_LIMITED";
+
+    /// <summary>FR-170 (job code): an import ended without a snapshot.</summary>
+    public const string TrackerImportFailed = "TRACKER_IMPORT_FAILED";
+
+    /// <summary>§4.26 (400, and job and run code): over an import limit.</summary>
+    public const string SourceItemsTooLarge = "SOURCE_ITEMS_TOO_LARGE";
+
+    /// <summary>FR-172 (spec warning, never a failure): imported, not-done items that no requirement cites.</summary>
+    public const string UncoveredSourceItems = "UNCOVERED_SOURCE_ITEMS";
+
+    /// <summary>FR-178 (400): stack inference was asked for on a repository (or version base) with no code.</summary>
+    public const string StackInferNoCode = "STACK_INFER_NO_CODE";
+
+    /// <summary>FR-180 (run code): the Stack Analyst's profile failed validation twice (the reply and its corrective re-run).</summary>
+    public const string StackProfileInvalid = "STACK_PROFILE_INVALID";
+
+    /// <summary>FR-181 (409): a <c>stack_profile</c> with unresolved layers (unknown, conflict, or unsupported without "No stack") can't be approved; details list the layers.</summary>
+    public const string StackProfileIncomplete = "STACK_PROFILE_INCOMPLETE";
+
+    /// <summary>FR-187, FR-191 (400): the parts or provider don't form this deployment group.</summary>
+    public const string DeploymentGroupInvalid = "DEPLOYMENT_GROUP_INVALID";
+
+    /// <summary>FR-190, FR-192 (409, also on a part or group from the job): the project name already exists in the workspace.</summary>
+    public const string PlatformResourceExists = "PLATFORM_RESOURCE_EXISTS";
+
     /// <summary>FR-42, FR-43 (recorded on a failed release): Git or GitHub refused the merge, tag or push for good.</summary>
     public const string GitError = "GIT_ERROR";
 
@@ -415,6 +454,15 @@ public static class ErrorCodes
         [PlatformGitNotConnected] = 409,
         [PlatformPlanLimit] = 409,
         [PlatformError] = 502,
+        [DeploymentGroupInvalid] = 400,
+        [StackInferNoCode] = 400,
+        [StackProfileIncomplete] = 409,
+        [TrackerSiteNotAllowed] = 400,
+        [TrackerNotConnected] = 409,
+        [TrackerPermissionMissing] = 409,
+        [TrackerQueryInvalid] = 400,
+        [SourceItemsTooLarge] = 400,
+        [PlatformResourceExists] = 409,
         [PlatformPermissionMissing] = 409,
         [DeploymentNotConfigured] = 409,
         [InvalidDeployment] = 409,

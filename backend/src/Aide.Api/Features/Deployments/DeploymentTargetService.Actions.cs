@@ -99,6 +99,19 @@ public sealed partial class DeploymentTargetService
             return Fail(new DomainError(ErrorCodes.Validation, "The deployment target is invalid.") { Details = ["create: Create a resource or link an existing one."] }, provider);
         }
 
+        // FR-191: joining a group is explicit; a create or link without one leaves it, and a rebind keeps it.
+        var previousGroup = target?.GroupId;
+        if (request.GroupId is { } joining)
+        {
+            var group = await db.DeploymentGroups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == joining && g.ProjectId == projectId, cancellationToken);
+            var part = component == DeploymentComponent.Frontend ? DeploymentPart.Frontend : DeploymentPart.Backend;
+            var joinable = DeploymentGroupRules.CanJoin(facts.Composition, part, provider, group, access.UsesFake);
+            if (joinable.IsFailure)
+            {
+                return Fail(joinable.Error!, provider);
+            }
+        }
+
         var payload = request.Create is { } create
             ? new DeploymentSetupPayload(projectId, Guid.Empty, true, create.Name, create.Region, create.Plan, null)
             : request.Link is { } link
@@ -117,13 +130,20 @@ public sealed partial class DeploymentTargetService
         {
             target.ResourceId = null;
             target.PreviewResourceId = null;
+            target.PlatformProjectId = null;
             target.Name = null;
             target.ProductionUrl = null;
             target.PreviewUrl = null;
             await envSync.ResetAsync(projectId, component, cancellationToken);
         }
+        else if (target.ResourceId is not null && request.Create is not null)
+        {
+            // A new resource on a finished target is a new project; only an unfinished create resumes in its own.
+            target.PlatformProjectId = null;
+        }
 
         target.Provider = provider;
+        target.GroupId = request.GroupId ?? (rebind ? previousGroup : null);
         target.ConnectionId = connectionId;
         target.BoundByUserId = connectionId is null ? null : callerId;
         target.RootDirectory = plan.RootDirectory;
@@ -153,6 +173,12 @@ public sealed partial class DeploymentTargetService
         }
 
         await transaction.CommitAsync(cancellationToken);
+        await DeploymentGroups.RefreshAsync(db, projectId, target.GroupId, actor, now, cancellationToken);
+        if (previousGroup != target.GroupId)
+        {
+            await DeploymentGroups.RefreshAsync(db, projectId, previousGroup, actor, now, cancellationToken);
+        }
+
         LogQueued(logger, projectId, component, provider);
         return (await TargetDtoAsync(projectId, component, true, null, cancellationToken), null);
     }
@@ -167,6 +193,7 @@ public sealed partial class DeploymentTargetService
         }
 
         var now = time.GetUtcNow();
+        var group = target.GroupId;
         await CancelQueuedSetupAsync(projectId, target.Id, now, cancellationToken);
         db.DeploymentTargets.Remove(target);
         await envSync.ResetAsync(projectId, component, cancellationToken);
@@ -191,6 +218,8 @@ public sealed partial class DeploymentTargetService
             await db.SaveChangesAsync(cancellationToken);
         }
 
+        // FR-191: the part left its group; the platform resource stays.
+        await DeploymentGroups.RefreshAsync(db, projectId, group, actor, now, cancellationToken);
         return null;
     }
 

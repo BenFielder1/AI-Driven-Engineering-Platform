@@ -11,11 +11,12 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | v1 | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
 | v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
 | v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v3/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
-| v4 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: stack composition from stack-packs (replaces presets), GitLab + Bitbucket, deployment platforms and managed databases, LLM choice at creation and long outputs. Draft: [`docs/v4/DRAFT_SPEC.md`](docs/v4/DRAFT_SPEC.md) |
+| v4 | [`docs/v4/SPEC.md`](docs/v4/SPEC.md) | [`docs/v4/PROGRESS.md`](docs/v4/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
+| v5 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: issue tracker imports, commit co-authorship, stack inference with an Analysis phase, shared deployment projects, local PostgreSQL 18 |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
-- **v4 is an increment on v3 (and v1, v2):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113), and the spec-verifier checks the requirements of v1–v4.
-- **Scaffolding:** v2 and v4 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
+- **v5 is an increment on v4 (and v1–v3):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113, v5 at FR-163), and the spec-verifier checks the requirements of v1–v5.
+- **Scaffolding:** v2, v4 and v5 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
 - Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
 
 ## Stack
@@ -25,7 +26,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
 - **Frontend** (`frontend/`): TypeScript (strict), Next.js 16 App Router, React 19, TanStack Query, Tailwind 4, React Hook Form + Zod, Vitest + Testing Library + MSW, Playwright, ESLint (typescript-eslint strict type-checked, plus `@next/eslint-plugin-next`).
   - Pages are client components (SPEC D-V3-2), and routing goes through `src/lib/navigation.ts`.
   - The web server is `frontend/server.ts`, a custom Node server run with Node 24 type stripping. It serves Next, proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL` read at runtime, sets the CSP nonce and security headers, and writes redacted JSON request logs.
-- **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 17 via Npgsql (Railway runs 18, SPEC D-V3-13) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
+- **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 18 via Npgsql (SPEC D-V5-1) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` and `production`, deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
@@ -67,11 +68,8 @@ deploy/
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on dispatch)
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v4)
-docs/v1/                    v1 SPEC.md + PROGRESS.md (frozen)
-docs/v2/                    v2 SPEC.md + PROGRESS.md (frozen) + AIDE brand assets
-docs/v3/                    v3 SPEC.md + PROGRESS.md (frozen)
-docs/v4/                    v4 DRAFT_SPEC.md (the draft behind SPEC.md)
+SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v5)
+docs/                       Store SPEC.md + PROGRESS.md + research for each version
 ```
 
 ## Commands
@@ -79,7 +77,7 @@ docs/v4/                    v4 DRAFT_SPEC.md (the draft behind SPEC.md)
 ```bash
 # Dev loop (one-off setup: cp .env.example .env, pick a password, then
 #   cd backend && dotnet tool restore && dotnet user-secrets set ConnectionStrings:Aide "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<from .env>" --project src/Aide.Api)
-docker compose up -d db                                   # dev database (PostgreSQL 17, values from .env)
+docker compose up -d db                                   # dev database (PostgreSQL 18, values from .env)
 dotnet run --project backend/src/Aide.Api                 # http://localhost:5080
 npm --prefix frontend run dev                             # http://localhost:3000 (proxies /api + WebSockets → BACKEND_URL, default 5080)
 

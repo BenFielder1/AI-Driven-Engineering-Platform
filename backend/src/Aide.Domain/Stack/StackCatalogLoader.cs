@@ -855,6 +855,7 @@ public static partial class StackCatalogLoader
         {
             StackFacts.VcsHost => vcsHosts,
             StackFacts.NextjsMode => StackFacts.NextjsModes,
+            StackFacts.SeparateFrontend or StackFacts.SeparateBackend or StackFacts.SeparateDatabase => StackFacts.YesNo,
             _ => [.. (Choice(fact)?.Options ?? []).Select(o => o.Id)],
         };
 

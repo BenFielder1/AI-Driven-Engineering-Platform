@@ -70,6 +70,8 @@ const allTypes: Schemas['NotificationType'][] = [
   'database_expiring',
   'migration_failed',
   'deployment_target_attention',
+  'stack_profile_ready',
+  'tracker_import_failed',
 ]
 
 describe('FR-92: v2 notification types in the UI', () => {
@@ -188,6 +190,7 @@ describe('FR-92: v2 notification types in the UI', () => {
         'DATABASE_EXPIRING',
         'MIGRATION_RUN_FAILED',
         'DEPLOYMENT_TARGET_FAILED',
+        'TRACKER_IMPORT_FAILED',
       ].sort(),
     )
     // Not notifying: deployment bookkeeping, merges seen on GitHub, versions and presets.

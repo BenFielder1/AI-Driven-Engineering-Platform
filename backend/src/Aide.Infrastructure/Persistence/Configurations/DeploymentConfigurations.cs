@@ -43,6 +43,7 @@ internal sealed class DeploymentTargetConfiguration : IEntityTypeConfiguration<D
         builder.Property(t => t.Provider).IsRequired();
         builder.Property(t => t.ResourceId).HasColumnType("text");
         builder.Property(t => t.PreviewResourceId).HasColumnType("text");
+        builder.Property(t => t.PlatformProjectId).HasColumnType("text");
         builder.Property(t => t.Name).HasColumnType("text");
         builder.Property(t => t.RootDirectory).HasColumnType("text")
             .HasDefaultValue(DeploymentTarget.DefaultRootDirectory).IsRequired();
@@ -55,6 +56,10 @@ internal sealed class DeploymentTargetConfiguration : IEntityTypeConfiguration<D
         builder.Property(t => t.RowVersion).IsXminRowVersion();
         builder.HasOne<Project>().WithMany().HasForeignKey(t => t.ProjectId).OnDelete(DeleteBehavior.Cascade);
 
+        // §5: null for standalone and v4 rows; deleting the group leaves the target standing.
+        builder.HasOne<DeploymentGroup>().WithMany().HasForeignKey(t => t.GroupId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(t => t.GroupId);
+
         // FR-144: the bound connection and the Owner who bound it; deleting either clears the binding.
         builder.HasOne<PlatformConnection>().WithMany().HasForeignKey(t => t.ConnectionId).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(t => t.BoundByUserId).OnDelete(DeleteBehavior.SetNull);
@@ -65,6 +70,35 @@ internal sealed class DeploymentTargetConfiguration : IEntityTypeConfiguration<D
             .HasDatabaseName("ux_deployment_targets_project_id_component");
         builder.HasIndex(t => t.ConnectionId);
         builder.HasIndex(t => t.BoundByUserId);
+    }
+}
+
+internal sealed class DeploymentGroupConfiguration : IEntityTypeConfiguration<DeploymentGroup>
+{
+    public void Configure(EntityTypeBuilder<DeploymentGroup> builder)
+    {
+        builder.ToTable("deployment_groups");
+        builder.HasKey(g => g.Id);
+        builder.Property(g => g.Id).ValueGeneratedNever();
+        builder.Property(g => g.Provider).IsRequired();
+        builder.Property(g => g.Name).HasColumnType("text").IsRequired();
+        builder.Property(g => g.SharedResourceId).HasColumnType("text");
+        builder.Property(g => g.Region).HasColumnType("text");
+        builder.Property(g => g.Plan).HasColumnType("text");
+        builder.Property(g => g.Status).IsRequired();
+        builder.Property(g => g.StatusReason).HasColumnType("text");
+        builder.Property(g => g.UpdatedAt).IsRequired();
+        builder.Property(g => g.RowVersion).IsXminRowVersion();
+        builder.HasOne<Project>().WithMany().HasForeignKey(g => g.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<PlatformConnection>().WithMany().HasForeignKey(g => g.ConnectionId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(g => g.BoundByUserId).OnDelete(DeleteBehavior.SetNull);
+
+        // §5: one group per platform per project.
+        builder.HasIndex(g => new { g.ProjectId, g.Provider })
+            .IsUnique()
+            .HasDatabaseName("ux_deployment_groups_project_id_provider");
+        builder.HasIndex(g => g.ConnectionId);
+        builder.HasIndex(g => g.BoundByUserId);
     }
 }
 

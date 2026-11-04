@@ -36,13 +36,29 @@ public sealed record DeploymentTargetRef(
     DeploymentRepoRef Repo);
 
 /// <summary>FR-144: create a resource (<see cref="Create"/>, with name, region and plan) or link <see cref="LinkResourceId"/>.</summary>
-public sealed record DeploymentSetupRequest(DeploymentTargetRef Target, bool Create, string? Name, string? Region, string? Plan, string? LinkResourceId);
+public sealed record DeploymentSetupRequest(DeploymentTargetRef Target, bool Create, string? Name, string? Region, string? Plan, string? LinkResourceId)
+{
+    /// <summary>§4.28: the group's platform project: a Railway service goes in it, and a Render service is placed in it.</summary>
+    public string? SharedProjectId { get; init; }
+}
+
+/// <summary>§4.28: a platform project (a group's shared resource): its id and name.</summary>
+public sealed record SharedProject(string Id, string Name);
+
+/// <summary>
+/// FR-190: create a platform project. The caller stores the id at once and resumes from it, so a name that already exists
+/// is always someone else's and always refused.
+/// </summary>
+public sealed record SharedProjectRequest(string Name, string? Region);
 
 /// <summary>What setup made or found: the resource, its name, and the production and preview resource and URLs when known.</summary>
 public sealed record DeploymentSetupResult(string ResourceId, string Name, string? ProductionUrl, string? PreviewResourceId, string? PreviewUrl)
 {
     /// <summary>The instance type the platform reports for the resource (Render), when known.</summary>
     public string? Plan { get; init; }
+
+    /// <summary>§11 Q5: the platform wouldn't place the resource in the group's project; the group still shares workspace, region and name.</summary>
+    public bool PlacementUnavailable { get; init; }
 }
 
 /// <summary>
@@ -118,6 +134,24 @@ public interface IDeploymentProvider
     /// </summary>
     Task<BuildRefresh> RefreshBuildAsync(DeploymentAuth auth, DeploymentTargetRef target, string sha, DateTimeOffset variablesSyncedAt, CancellationToken cancellationToken) =>
         Task.FromResult(BuildRefresh.UpToDate);
+
+    /// <summary>
+    /// FR-190: the platform project of that name in the connection's workspace, or <c>null</c>. Platforms without
+    /// <see cref="SharedProjectCapability.Project"/> have none.
+    /// </summary>
+    Task<SharedProject?> FindSharedProjectAsync(DeploymentAuth auth, string name, CancellationToken cancellationToken) => Task.FromResult<SharedProject?>(null);
+
+    /// <summary>
+    /// FR-190, FR-191: the platform project by id, or <c>null</c> when the connection doesn't reach it (a not found or an
+    /// authorisation refusal may also throw <see cref="DeploymentProviderException"/>).
+    /// </summary>
+    Task<SharedProject?> GetSharedProjectAsync(DeploymentAuth auth, string projectId, CancellationToken cancellationToken) => Task.FromResult<SharedProject?>(null);
+
+    /// <summary>
+    /// FR-190, §4.28: creates the platform project. An existing name is <see cref="DeploymentFailure.ResourceExists"/>.
+    /// </summary>
+    Task<SharedProject> CreateSharedProjectAsync(DeploymentAuth auth, SharedProjectRequest request, CancellationToken cancellationToken) =>
+        throw new DeploymentProviderException(DeploymentFailure.NotSupported, null, $"{DeploymentPlatforms.DisplayName(Platform)} has no shared projects.", platform: Platform);
 }
 
 /// <summary>§9, §4.20: providers by platform id (the Fake for all in Fake mode) and the Vercel client for connection checks.</summary>

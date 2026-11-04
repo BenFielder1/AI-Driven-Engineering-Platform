@@ -87,17 +87,19 @@ function component(pack: string, path: string, withPath: boolean) {
 /**
  * The request for `POST /api/stack/options` / `/validate` / create / PUT: chosen layers only (a missing layer is "not
  * chosen yet" for `/options`). `withPaths` adds the layer paths (they don't change option states, so `/options` is
- * sent without them). `omitVcs`: the server sets the VCS from the repository (R5).
+ * sent without them). `omitVcs`: the server sets the VCS from the repository (R5). `separateParts`: §4.28, the parts in
+ * their own projects, which changing the other choices must not lose.
  */
 export function toStackRequest(
   sel: StackSelection,
-  { withPaths = true, omitVcs = false }: { withPaths?: boolean; omitVcs?: boolean } = {},
+  { withPaths = true, omitVcs = false, separateParts = [] }: { withPaths?: boolean; omitVcs?: boolean; separateParts?: readonly string[] } = {},
 ): StackCompositionRequest {
   const deploy = {
     ...(chosen(sel.frontendHost) ? { frontendHost: sel.frontendHost } : {}),
     ...(chosen(sel.backendHost) ? { backendHost: sel.backendHost } : {}),
     ...(chosen(sel.databaseHost) ? { databaseHost: sel.databaseHost } : {}),
     ...(chosen(sel.local) ? { local: sel.local } : {}),
+    ...(separateParts.length > 0 ? { separateParts: [...separateParts] } : {}),
   }
   return {
     ...(chosen(sel.frontend) ? { frontend: component(sel.frontend, sel.frontendPath, withPaths) } : {}),

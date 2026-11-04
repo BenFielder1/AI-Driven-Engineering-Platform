@@ -43,6 +43,16 @@ public enum ReleaseStatus
     AwaitingMerge = 3,
 }
 
+/// <summary>
+/// FR-178, §5 <c>release_versions.stack_source</c>: how a version's stack is chosen. <c>manual</c> (default; the wizard,
+/// Settings → Stack, or no stack) or <c>infer</c> (the Stack Analyst writes a <c>stack_profile</c> in the <c>analysis</c> phase).
+/// </summary>
+public enum StackSource
+{
+    Manual = 0,
+    Infer = 1,
+}
+
 /// <summary>Status of a release version (§4.10). Wire values: <c>in_development</c>, <c>awaiting_merge</c>, <c>released</c>, <c>imported</c>.</summary>
 public enum ReleaseVersionStatus
 {

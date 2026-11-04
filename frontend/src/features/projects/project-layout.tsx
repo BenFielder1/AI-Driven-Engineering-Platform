@@ -11,6 +11,7 @@ import { isApiError } from '../../lib/errors'
 import { canInProject, effectiveProjectRole } from '../../lib/permissions'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
+import { useCurrentVersionFlags } from '../analysis/version-flags'
 import { useCurrentUser } from '../auth/auth-api'
 import { actionHref, nextAction } from '../lifecycle/next-action'
 import { NextActionButton } from '../lifecycle/next-action-button'
@@ -63,6 +64,8 @@ function ProjectHeader({
   const role = effectiveProjectRole(user, project.myRole)
   const pathname = usePathname()
   const viewing = stageFromPath(pathname)
+  // §4.27: the tracker shows Analysis only on a version that infers its stack.
+  const { infers } = useCurrentVersionFlags(project.id, project.releaseVersionId)
   // A past release version is read-only (FR-62): no next action is offered.
   const action = state.data && !readOnly ? nextAction(state.data, (c) => canInProject(user, role, c)) : null
   // The page on screen already holds the control the action links to (e.g. "Start execution" on Execution).
@@ -85,11 +88,11 @@ function ProjectHeader({
       </div>
       <div className={cn(panelClass, 'flex flex-col gap-2 p-2 md:flex-row md:items-center md:justify-between')}>
         {state.data ? (
-          <StageStepper projectId={project.id} stages={stageStatuses(state.data)} viewing={viewing} />
+          <StageStepper projectId={project.id} stages={stageStatuses(state.data, { analysis: infers })} viewing={viewing} />
         ) : (
           <Skeleton className="h-11 w-full max-w-2xl" />
         )}
-        <StageNavButtons projectId={project.id} from={viewing ?? state.data?.phase ?? project.currentPhase} />
+        <StageNavButtons projectId={project.id} from={viewing ?? state.data?.phase ?? project.currentPhase} analysis={infers} />
       </div>
     </header>
   )

@@ -100,7 +100,8 @@ public sealed partial class GateTimerService(AideDbContext db, JobEnqueuer jobs,
 /// <summary>
 /// The notification background loop: every <see cref="NotificationOptions.DeliverySweepInterval"/> it retries due channel
 /// deliveries (FR-49), every <see cref="NotificationOptions.GateSweepInterval"/> it runs the gate timers (FR-15), and every
-/// <see cref="NotificationOptions.DatabaseExpirySweepInterval"/> it queues the database expiry sweep job (FR-155).
+/// <see cref="NotificationOptions.DatabaseExpirySweepInterval"/> it queues the database expiry sweep job (FR-155), and every
+/// <see cref="NotificationOptions.ConnectionExpirySweepInterval"/> it warns of Jira and Linear tokens about to expire (FR-165).
 /// Tests turn the loop off (<c>Notifications:SweepEnabled=false</c>) and call the steps directly.
 /// </summary>
 public sealed partial class NotificationSweeper(
@@ -124,6 +125,13 @@ public sealed partial class NotificationSweeper(
     {
         await using var scope = scopes.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<GateTimerService>().RunAsync(cancellationToken);
+    }
+
+    /// <summary>FR-165: one tracker connection expiry pass; returns how many connections' owners were warned.</summary>
+    public async Task<int> RunConnectionExpirySweepAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<Trackers.TrackerConnectionExpirySweepService>().RunAsync(cancellationToken);
     }
 
     /// <summary>
@@ -154,6 +162,7 @@ public sealed partial class NotificationSweeper(
 
         DateTimeOffset? lastGateSweep = null;
         DateTimeOffset? lastDatabaseSweep = null;
+        DateTimeOffset? lastConnectionSweep = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -170,6 +179,12 @@ public sealed partial class NotificationSweeper(
                 {
                     await QueueDatabaseExpirySweepAsync(stoppingToken);
                     lastDatabaseSweep = now;
+                }
+
+                if (lastConnectionSweep is null || now - lastConnectionSweep >= _options.ConnectionExpirySweepInterval)
+                {
+                    await RunConnectionExpirySweepAsync(stoppingToken);
+                    lastConnectionSweep = now;
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

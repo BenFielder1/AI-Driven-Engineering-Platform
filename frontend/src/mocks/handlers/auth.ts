@@ -45,8 +45,8 @@ export function resetAuthDb() {
 }
 
 function toDto(stored: StoredUser): User {
-  const { id, email, name, systemRole, avatarUrl, githubLinked } = stored
-  return { id, email, name, systemRole, avatarUrl, githubLinked }
+  const { id, email, name, systemRole, avatarUrl, githubLinked, commitCreditOptOut } = stored
+  return { id, email, name, systemRole, avatarUrl, githubLinked, commitCreditOptOut }
 }
 
 export function seedUser(overrides: Partial<StoredUser> = {}): User {
@@ -57,6 +57,7 @@ export function seedUser(overrides: Partial<StoredUser> = {}): User {
     systemRole: authDb.users.length === 0 ? 'admin' : 'user',
     avatarUrl: null,
     githubLinked: false,
+    commitCreditOptOut: false,
     password: 'password1',
     ...overrides,
   }
@@ -122,6 +123,23 @@ export const authHandlers = [
   http.get('*/api/auth/me', () => {
     const user = currentUser()
     return user ? HttpResponse.json<User>(toDto(user)) : unauthenticated()
+  }),
+
+  http.patch('*/api/auth/me', async ({ request }) => {
+    const rejected = antiforgeryFailure(request)
+    if (rejected) {
+      return rejected
+    }
+    const user = currentUser()
+    if (!user) {
+      return unauthenticated()
+    }
+    const body = (await request.json()) as Schemas['UpdateCurrentUserRequest']
+    if (typeof body.commitCreditOptOut !== 'boolean') {
+      return problem(400, 'VALIDATION', 'Say whether to credit you on commits.')
+    }
+    user.commitCreditOptOut = body.commitCreditOptOut
+    return HttpResponse.json<User>(toDto(user))
   }),
 
   http.post('*/api/auth/register', async ({ request }) => {

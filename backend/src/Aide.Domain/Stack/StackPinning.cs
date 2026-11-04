@@ -152,7 +152,8 @@ public static class StackPinning
                 composition.Deploy.FrontendHost ?? StackIds.None,
                 composition.Deploy.BackendHost ?? StackIds.None,
                 composition.Deploy.DatabaseHost ?? StackIds.None,
-                composition.Deploy.Local),
+                composition.Deploy.Local)
+            { SeparateParts = composition.Deploy.SeparateParts },
             OriginModel = composition.OriginModel,
         };
     }

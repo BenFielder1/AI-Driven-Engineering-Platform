@@ -1,3 +1,4 @@
+using Aide.Api.Features.Deployments;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
@@ -56,8 +57,18 @@ public sealed partial class DatabaseProvisioningJobHandler(
         }
 
         var provider = providers.ForHost(row.Provider);
-        var host = await databases.HostContextAsync(row.ProjectId, cancellationToken);
+        var host = await databases.HostContextAsync(row, cancellationToken);
         var now = time.GetUtcNow();
+
+        // §4.28: one Postgres service holds both Railway environments, in one project: the preview waits for production's
+        // to exist, so the two jobs don't create it twice. v4 rows set up one at a time, as before.
+        if (payload.Phase == DatabaseProvisioningPayload.SetupPhase && row.Environment == DeploymentEnvironment.Preview && row.Provider == ManagedDatabaseProvider.Railway
+            && (host.SharedProjectId is not null || host.RailwayStandsAlone)
+            && await db.ManagedDatabases.AsNoTracking().AnyAsync(d => d.ProjectId == row.ProjectId && d.Environment == DeploymentEnvironment.Production && d.Status == ManagedDatabaseStatus.Provisioning && d.ResourceId == null, cancellationToken))
+        {
+            throw Defer(now, payload, "Waiting for the production database's Railway project.");
+        }
+
         try
         {
             if (payload.Phase == DatabaseProvisioningPayload.SetupPhase)
@@ -104,6 +115,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
                 DeploymentFailure.CredentialRejected => ErrorCodes.CredentialInvalid,
                 DeploymentFailure.Forbidden => ErrorCodes.ConnectionScopeInsufficient,
                 DeploymentFailure.PlanLimit => ErrorCodes.PlatformPlanLimit,
+                DeploymentFailure.ResourceExists => ErrorCodes.PlatformResourceExists,
                 _ => ErrorCodes.DatabaseProvisioningFailed,
             };
             await MarkConnectionAsync(auth.Value.Connection?.Id, row.ProjectId, ex, now, cancellationToken);
@@ -129,8 +141,15 @@ public sealed partial class DatabaseProvisioningJobHandler(
         // §4.21: AIDE generates the password of what it creates, and resets a linked Supabase project's it doesn't hold.
         var needsPassword = payload.Mode == DatabaseSetupMode.Create
             ? row.Provider is ManagedDatabaseProvider.Supabase or ManagedDatabaseProvider.Railway
-            : payload.Mode == DatabaseSetupMode.Link && row.Provider == ManagedDatabaseProvider.Supabase && secrets.Password(row) is null;
+            : payload.Mode == DatabaseSetupMode.Link
+                && ((row.Provider == ManagedDatabaseProvider.Supabase && secrets.Password(row) is null)
+                    || (row.Provider == ManagedDatabaseProvider.Railway && row.Environment == DeploymentEnvironment.Preview && (host.SharedProjectId is not null || host.RailwayStandsAlone)));
         var password = needsPassword ? ManagedDatabaseSecrets.GeneratePassword() : null;
+        if (host.RailwayStandsAlone && payload.Mode == DatabaseSetupMode.Create)
+        {
+            (host, connection) = await OwnProjectAsync(row, connection, payload, provider, auth, host, cancellationToken);
+        }
+
         var result = await provider.SetupAsync(
             auth,
             new DatabaseSetupRequest(row.ProjectId, row.Environment, payload.Mode, payload.Name, payload.Region, payload.Plan, payload.ResourceId, password, host),
@@ -156,9 +175,44 @@ public sealed partial class DatabaseProvisioningJobHandler(
         };
         secrets.SetConnection(row, updated);
         row.UpdatedAt = now;
+
+        // §11 Q5: never blocks; the group's card says so.
+        if (result.PlacementUnavailable && row.GroupId is { } groupId && await db.DeploymentGroups.FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken) is { StatusReason: null } group)
+        {
+            group.StatusReason = DeploymentGroupRules.PlacementUnavailable;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         LogSetUp(logger, row.ProjectId, row.Environment, row.Provider);
         return updated;
+    }
+
+    /// <summary>The project's name from a database name: the preview shares production's.</summary>
+    private static string ProjectNameOf(string name) => name.EndsWith("-preview", StringComparison.Ordinal) ? name[..^"-preview".Length] : name;
+
+    /// <summary>
+    /// FR-192: a standalone create's project: what the other environment made, or this row's under this name, else a new one
+    /// (an existing name is refused). The id is saved on its own as soon as it exists, whatever happens next.
+    /// </summary>
+    private async Task<(DatabaseHostContext Host, ManagedDatabaseConnection Connection)> OwnProjectAsync(
+        ManagedDatabase row, ManagedDatabaseConnection connection, DatabaseProvisioningPayload payload, IDatabaseProvider provider, DatabaseAuth auth, DatabaseHostContext host, CancellationToken cancellationToken)
+    {
+        var name = ProjectNameOf(payload.Name);
+        if (connection.RailwayOwnProjectId is { } stored && connection.RailwayOwnProjectName == name)
+        {
+            return (host with { RailwayOwnProjectId = stored }, connection);
+        }
+
+        if (connection.RailwayOwnProjectId is null && host.RailwayOwnProjectId is not null)
+        {
+            return (host, connection);
+        }
+
+        var created = await provider.CreateOwnProjectAsync(auth, name, cancellationToken);
+        var updated = connection with { RailwayOwnProjectId = created, RailwayOwnProjectName = name };
+        secrets.SetConnection(row, updated);
+        await db.SaveChangesAsync(CancellationToken.None);
+        return (host with { RailwayOwnProjectId = created }, updated);
     }
 
     private async Task CompleteAsync(
@@ -212,6 +266,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);
+        await DeploymentGroups.RefreshAsync(db, row.ProjectId, row.GroupId, SystemActor.Name, now, cancellationToken);
         LogAvailable(logger, row.ProjectId, row.Environment, row.Status);
     }
 
@@ -266,6 +321,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
         secrets.SetConnection(row, connection with { Step = code, ErrorMessage = clean });
         DatabaseEvents.ProvisioningFailed(db, row, code, row.UpdatedAt);
         await db.SaveChangesAsync(cancellationToken);
+        await DeploymentGroups.RefreshAsync(db, row.ProjectId, row.GroupId, SystemActor.Name, row.UpdatedAt, cancellationToken);
         LogFailed(logger, row.ProjectId, row.Environment, code);
         throw new JobFailedException(clean, transient: false, code);
     }
@@ -325,6 +381,10 @@ public sealed class DatabaseProvisioningJobEndedHook(ManagedDatabaseSecrets secr
             row.UpdatedAt = time.GetUtcNow();
             secrets.SetConnection(row, connection with { Step = ErrorCodes.UpstreamError, ErrorMessage = job.Error });
             DatabaseEvents.ProvisioningFailed(db, row, ErrorCodes.UpstreamError, row.UpdatedAt);
+            if (row.GroupId is { } groupId && await db.DeploymentGroups.FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken) is { } group)
+            {
+                await DeploymentGroups.ApplyStatusAsync(db, group, SystemActor.Name, row.UpdatedAt, cancellationToken);
+            }
         }
     }
 }

@@ -21,6 +21,7 @@ import {
   Plug,
   Plus,
   Rocket,
+  ScanSearch,
   ScrollText,
   Settings,
   ShieldAlert,
@@ -32,7 +33,7 @@ import {
 
 import type { Schemas } from '../../api/client'
 import type { AppPath } from '../../lib/app-paths'
-import { artifactTypeLabels, phaseLabels, phases } from '../projects/labels'
+import { artifactTypeLabels, phaseLabels, phases, type StagePhase } from '../projects/labels'
 import { parseSettingsTab, settingsTabLabels } from '../projects/settings/settings-tabs'
 
 /** Every navigable route path, e.g. `/projects/$projectId/review` (src/lib/app-paths.ts). */
@@ -108,8 +109,9 @@ export function workspaceSections(viewer: NavViewer): NavSection[] {
 
 // ---- Project mode (FR-54) ----------------------------------------------------------------------------------------
 
-/** Each lifecycle stage's page (FR-54, FR-55). */
+/** Each lifecycle stage's page (FR-54, FR-55); Analysis (FR-182) has one too. */
 export const stageRoute: Record<Phase, AppPath> = {
+  analysis: '/projects/$projectId/analysis',
   refinement: '/projects/$projectId/refinement',
   specification: '/projects/$projectId/specification',
   planning: '/projects/$projectId/planning',
@@ -118,7 +120,7 @@ export const stageRoute: Record<Phase, AppPath> = {
   release: '/projects/$projectId/release',
 }
 
-const stageIcon: Record<Phase, LucideIcon> = {
+const stageIcon: Record<StagePhase, LucideIcon> = {
   refinement: Compass,
   specification: FileText,
   planning: ListTree,
@@ -138,6 +140,19 @@ const LIFECYCLE: NavSection = {
     stage,
     keywords: ['stage', 'phase'],
   })),
+}
+
+/**
+ * FR-182: the Analysis page, first in Lifecycle, for a version with existing code (its codebase summary and, when the
+ * version infers its stack, the stack profile).
+ */
+const ANALYSIS_ITEM: NavItem = {
+  key: 'stage-analysis',
+  label: phaseLabels.analysis,
+  to: stageRoute.analysis,
+  icon: ScanSearch,
+  stage: 'analysis',
+  keywords: ['stack', 'codebase', 'summary', 'infer', 'profile'],
 }
 
 /** FR-91: the Deployments page, shown between Activity and Settings only when the project has a deployment target. */
@@ -178,6 +193,8 @@ export interface ProjectNavOptions {
   deploymentsEnabled?: boolean
   /** FR-153: the project has a Supabase BaaS database (`hasSupabaseBaasDatabase`), so Migrations shows. */
   migrationsEnabled?: boolean
+  /** FR-182: the current version has existing code, so Analysis shows first in Lifecycle. */
+  analysisEnabled?: boolean
 }
 
 /**
@@ -199,13 +216,14 @@ export function hasSupabaseBaasDatabase(
  * (FR-91) shows only when the project has a deployment target.
  */
 export function projectSections(options: ProjectNavOptions = {}): NavSection[] {
+  const lifecycle = options.analysisEnabled ? { ...LIFECYCLE, items: [ANALYSIS_ITEM, ...LIFECYCLE.items] } : LIFECYCLE
   const optional = [...(options.deploymentsEnabled ? [DEPLOYMENTS_ITEM] : []), ...(options.migrationsEnabled ? [MIGRATIONS_ITEM] : [])]
   if (optional.length === 0) {
-    return [LIFECYCLE, PROJECT]
+    return [lifecycle, PROJECT]
   }
   const items = [...PROJECT.items]
   items.splice(items.length - 1, 0, ...optional)
-  return [LIFECYCLE, { ...PROJECT, items }]
+  return [lifecycle, { ...PROJECT, items }]
 }
 
 /** Routes that aren't sidebar items but are in the palette and breadcrumbs. */
@@ -252,7 +270,7 @@ export interface FoundItem {
 export function findNavItem(pathname: string, viewer: NavViewer): FoundItem | undefined {
   const projectId = projectIdFromPath(pathname)
   const candidates: FoundItem[] = projectId
-    ? projectSections({ deploymentsEnabled: true, migrationsEnabled: true }).flatMap((section) => section.items.map((item) => ({ item, section })))
+    ? projectSections({ deploymentsEnabled: true, migrationsEnabled: true, analysisEnabled: true }).flatMap((section) => section.items.map((item) => ({ item, section })))
     : [
         ...workspaceSections(viewer).flatMap((section) => section.items.map((item) => ({ item, section }))),
         ...EXTRA_ITEMS.map((item) => ({ item, section: null })),
@@ -336,7 +354,7 @@ export interface PaletteEntry {
 /** Every page the viewer can go to from ⌘K: the current project's pages first (in project mode), then the workspace. */
 export function paletteEntries(
   viewer: NavViewer,
-  project?: { id: string; name: string; deploymentsEnabled?: boolean; migrationsEnabled?: boolean },
+  project?: { id: string; name: string; deploymentsEnabled?: boolean; migrationsEnabled?: boolean; analysisEnabled?: boolean },
 ): PaletteEntry[] {
   const entries: PaletteEntry[] = []
   const add = (item: NavItem, group: string, params: PathParams = {}) => {
@@ -350,7 +368,11 @@ export function paletteEntries(
     })
   }
   if (project) {
-    for (const section of projectSections({ deploymentsEnabled: project.deploymentsEnabled, migrationsEnabled: project.migrationsEnabled })) {
+    for (const section of projectSections({
+      deploymentsEnabled: project.deploymentsEnabled,
+      migrationsEnabled: project.migrationsEnabled,
+      analysisEnabled: project.analysisEnabled,
+    })) {
       for (const item of section.items) {
         add(item, `${project.name} · ${section.label}`, { projectId: project.id })
       }

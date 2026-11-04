@@ -28,7 +28,7 @@ None for you. The Render API key, workspace and Git connection are AIDE connecti
 - Don't rely on Render-only variables except `PORT` and `RENDER_EXTERNAL_URL`.
 
 ## Database
-Render Postgres, created by AIDE in the backend's region (version 17), plus `<name>-preview` for the preview service. Migrations run in the backend's pre-deploy (paid) or at container start (free), with the data pack's one-off migrate command. Migrations must be backward compatible (expand/contract), because the old version keeps serving until the new one is healthy. Free Postgres expires after 30 days.
+Render Postgres, created by AIDE in the backend's region (version 18; an existing instance keeps its version), plus `<name>-preview` for the preview service. Migrations run in the backend's pre-deploy (paid) or at container start (free), with the data pack's one-off migrate command. Migrations must be backward compatible (expand/contract), because the old version keeps serving until the new one is healthy. Free Postgres expires after 30 days.
 
 ## Deploy commands
 None in files. AIDE deploys `-preview` services pinned to the PR head commit, adopts the production auto-deploy of the merge commit, and rolls back by deploy id. Don't add CI jobs or scripts that call the Render CLI or deploy hooks.

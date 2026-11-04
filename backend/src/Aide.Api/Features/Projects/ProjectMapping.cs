@@ -68,6 +68,7 @@ internal static class ProjectMapping
         {
             RepoWebUrl = ProjectSettingsRules.RepoWebUrl(s.Provider, s.RepoUrl, s.RepoFullName),
             ExternalRepoId = s.ExternalRepoId,
+            CommitCreditEnabled = s.CommitCreditEnabled,
         };
 
     /// <param name="s">The project's LLM settings.</param>
@@ -111,6 +112,7 @@ internal static class ProjectMapping
             PlanGenerator = Get(AgentKind.PlanGenerator),
             CodeGenerator = Get(AgentKind.CodeGenerator),
             CodeReview = Get(AgentKind.CodeReview),
+            StackAnalyst = Get(AgentKind.StackAnalyst),
         };
     }
 
@@ -122,6 +124,7 @@ internal static class ProjectMapping
         (AgentKind.PlanGenerator, "planGenerator", dto.PlanGenerator),
         (AgentKind.CodeGenerator, "codeGenerator", dto.CodeGenerator),
         (AgentKind.CodeReview, "codeReview", dto.CodeReview),
+        (AgentKind.StackAnalyst, "stackAnalyst", dto.StackAnalyst),
     ];
 }
 

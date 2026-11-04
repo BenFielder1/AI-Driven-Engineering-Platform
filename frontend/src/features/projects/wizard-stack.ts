@@ -85,8 +85,11 @@ export function repoVcsOf(gitMode: WizardValues['gitMode']): string | null {
 
 /** FR-114/FR-117: `stack` for CreateProject; the VCS is omitted when the repository sets it (R5). */
 export function toWizardStackRequest(v: WizardValues): StackCompositionRequest {
-  return toStackRequest(selectionOfValues(v), { omitVcs: repoVcsOf(v.gitMode) !== null })
+  return toStackRequest(selectionOfValues(v), { omitVcs: repoVcsOf(v.gitMode) !== null, separateParts: separatePartsOf(v.stackSeparateParts) })
 }
+
+/** §4.28 `deploy.separateParts`, kept flat like the other stack fields: `database,frontend`. */
+export const separatePartsOf = (value: string): string[] => value.split(',').filter(Boolean)
 
 /**
  * FR-118: the repository to detect the stack of, at the import's base (the released tag, else the default branch), or
@@ -131,10 +134,11 @@ export function detectionIdOf(request: DetectStackRequest, detection: StackDetec
 }
 
 /**
- * FR-118: the stack fields a user edits (kind, frontend, backend, data, paths), to tell whether the stack is untouched
- * since the last applied detection. Fields the step sets itself (the VCS fixed by the repo, deployment defaults) are
- * left out.
+ * FR-118: the stack fields a user edits (frontend, backend, data, paths), to tell whether the layers are untouched since
+ * the last applied detection. The kind isn't part of it (FR-178): picking Infer, Choose manually or No stack doesn't
+ * stop detection from pre-filling the layers. Fields the step sets itself (the VCS fixed by the repo, deployment
+ * defaults) are left out.
  */
-export function stackSnapshot(v: Pick<WizardValues, 'stackKind' | WizardStackField>): string {
-  return JSON.stringify([v.stackKind, v.stackFrontend, v.stackBackend, v.stackData, v.stackFrontendPath, v.stackBackendPath])
+export function stackSnapshot(v: Pick<WizardValues, WizardStackField>): string {
+  return JSON.stringify([v.stackFrontend, v.stackBackend, v.stackData, v.stackFrontendPath, v.stackBackendPath])
 }

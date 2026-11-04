@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using Aide.Domain.Deployments;
+using Aide.Domain.Entities;
 using Aide.Domain.Stack;
 
 namespace Aide.Api.Features.Stack;
@@ -124,6 +126,10 @@ public sealed record StackDeploySelection
 
     [MaxLength(StackDtoLimits.IdMaxLength)]
     public string? Local { get; init; }
+
+    /// <summary>§4.28: the parts deployed to their own projects (<c>frontend</c>, <c>backend</c>, <c>database</c>); absent means none. R13 removes any that share no platform, and a caveat says so.</summary>
+    [MaxLength(3)]
+    public IReadOnlyList<string>? SeparateParts { get; init; }
 }
 
 /// <summary>
@@ -131,7 +137,23 @@ public sealed record StackDeploySelection
 /// earlier choices now forbid is <c>invalidated</c> (the wizard clears it and names the reason); later choices are
 /// evaluated without it. <c>nextjsMode</c> is R2's derived mode once known.
 /// </summary>
-public sealed record StackOptionsDto(string CatalogVersion, IReadOnlyList<StackChoiceStateDto> Choices, string? NextjsMode);
+/// <remarks>FR-187: <c>groups</c> and the Deployment step's <c>windows</c> for the choices made so far, and the <c>caveats</c> of the selection (with a removed separate part, R13).</remarks>
+public sealed record StackOptionsDto(
+    string CatalogVersion,
+    IReadOnlyList<StackChoiceStateDto> Choices,
+    string? NextjsMode,
+    IReadOnlyList<StackDeploymentGroupDto> Groups,
+    IReadOnlyList<StackDeploymentWindowDto> Windows,
+    IReadOnlyList<StackCaveatDto> Caveats);
+
+/// <summary>FR-187: parts on one platform that form a group, and what that platform shares (<c>project</c>, or <c>shared_setup</c> on Vercel).</summary>
+public sealed record StackDeploymentGroupDto(DeploymentProvider Provider, IReadOnlyList<DeploymentPart> Parts, SharedProjectCapability Capability);
+
+/// <summary>
+/// FR-188: one window of the Deployment step: a group, or one part (<c>capability</c> <c>none</c>). <c>platform</c> is the host's
+/// name (<c>railway</c>, <c>netlify</c>, <c>supabase</c>, <c>external</c> …), and <c>environment</c> is set where a database has a window per environment.
+/// </summary>
+public sealed record StackDeploymentWindowDto(string Platform, IReadOnlyList<DeploymentPart> Parts, SharedProjectCapability Capability, DeploymentEnvironment? Environment);
 
 /// <summary>
 /// A choice's options for the choices made so far: <c>selected</c> is the current selection, <c>default</c> the option to
@@ -160,7 +182,9 @@ public sealed record StackCompositionDto(
     StackDeployDto Deploy,
     string? OriginModel,
     StackDerivedDto Derived,
-    IReadOnlyList<StackCaveatDto> Caveats);
+    IReadOnlyList<StackCaveatDto> Caveats,
+    IReadOnlyList<StackDeploymentGroupDto> Groups,
+    IReadOnlyList<StackDeploymentWindowDto> Windows);
 
 public sealed record StackComponentDto(string Pack, string Path);
 
@@ -168,8 +192,8 @@ public sealed record StackDataDto(string Pack, string? Mode);
 
 public sealed record StackVcsDto(string Pack, Guid? InstanceId, bool SelfManaged);
 
-/// <summary>Host option ids (<c>null</c> = None) and the local dev loop (<c>compose</c> or <c>none</c>).</summary>
-public sealed record StackDeployDto(string? FrontendHost, string? BackendHost, string? DatabaseHost, string Local);
+/// <summary>Host option ids (<c>null</c> = None), the local dev loop (<c>compose</c> or <c>none</c>) and §4.28's parts in their own projects (normalised; <c>[]</c> when none).</summary>
+public sealed record StackDeployDto(string? FrontendHost, string? BackendHost, string? DatabaseHost, string Local, IReadOnlyList<string> SeparateParts);
 
 /// <summary>
 /// Derived facts (§4.18): the Next.js mode (R2), the specialists in play (FR-120), the origin models the Owner can switch
@@ -250,7 +274,7 @@ internal static class StackMapping
         Backend = request.Backend is { } b ? new StackComponentPick(b.Pack, b.Path) : null,
         Data = request.Data is { } d ? new StackDataPick(d.Pack, d.Mode) : null,
         Vcs = request.Vcs is { } v ? new StackVcsPick(v.Pack, v.InstanceId, v.SelfManaged) : null,
-        Deploy = request.Deploy is { } x ? new StackDeployPick(x.FrontendHost, x.BackendHost, x.DatabaseHost, x.Local) : null,
+        Deploy = request.Deploy is { } x ? new StackDeployPick(x.FrontendHost, x.BackendHost, x.DatabaseHost, x.Local) { SeparateParts = x.SeparateParts } : null,
         OriginModel = request.OriginModel,
     };
 
@@ -262,7 +286,16 @@ internal static class StackMapping
             c.Selected,
             c.Default,
             [.. c.Options.Select(o => new StackOptionStateDto(o.Option, o.State, [.. o.Reasons.Select(r => new StackReasonDto(r.Rule, r.Text))], o.Recommended))]))],
-        evaluation.NextjsMode);
+        evaluation.NextjsMode,
+        ToDto(evaluation.Groups),
+        ToDto(evaluation.Windows),
+        [.. evaluation.Caveats.Select(x => new StackCaveatDto(x.Layer, x.Option, x.Rule, x.Text))]);
+
+    private static List<StackDeploymentGroupDto> ToDto(IReadOnlyList<DeploymentGroupSpec> groups) =>
+        [.. groups.Select(g => new StackDeploymentGroupDto(g.Provider, g.Parts, g.Capability))];
+
+    private static List<StackDeploymentWindowDto> ToDto(IReadOnlyList<DeploymentWindow> windows) =>
+        [.. windows.Select(w => new StackDeploymentWindowDto(w.Platform, w.Parts, w.Capability, w.Environment))];
 
     public static StackCompositionDto ToDto(StackComposition c) => new(
         c.CatalogVersion,
@@ -271,10 +304,12 @@ internal static class StackMapping
         c.Backend is { } b ? new StackComponentDto(b.Pack, b.Path) : null,
         c.Data is { } d ? new StackDataDto(d.Pack, d.Mode) : null,
         new StackVcsDto(c.Vcs.Pack, c.Vcs.InstanceId, c.Vcs.SelfManaged),
-        new StackDeployDto(c.Deploy.FrontendHost, c.Deploy.BackendHost, c.Deploy.DatabaseHost, c.Deploy.Local),
+        new StackDeployDto(c.Deploy.FrontendHost, c.Deploy.BackendHost, c.Deploy.DatabaseHost, c.Deploy.Local, c.Deploy.SeparateParts ?? []),
         c.OriginModel,
         new StackDerivedDto(c.Derived.NextjsMode, c.Derived.Agents, c.Derived.OriginModelOptions, c.Derived.SpecSections, c.Derived.EnvNames, c.Derived.Gates),
-        [.. c.Caveats.Select(x => new StackCaveatDto(x.Layer, x.Option, x.Rule, x.Text))]);
+        [.. c.Caveats.Select(x => new StackCaveatDto(x.Layer, x.Option, x.Rule, x.Text))],
+        ToDto(DeploymentGrouping.Groups(c)),
+        ToDto(DeploymentGrouping.Windows(c)));
 
     public static AdminStackCatalogDto ToAdminDto(Infrastructure.Stack.IStackCatalog catalog) => new(
         catalog.Version,

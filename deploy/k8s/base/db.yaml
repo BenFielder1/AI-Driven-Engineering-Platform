@@ -37,7 +37,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: postgres
-          image: postgres:17
+          image: postgres:18
           imagePullPolicy: IfNotPresent
           ports:
             - name: postgres
@@ -52,9 +52,10 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD }
-            # Subdirectory of the mount (postgres:17 layout), so initdb doesn't trip over lost+found.
+            # The postgres:18 layout: a subdirectory of the mount, so initdb doesn't trip over lost+found. The image's
+            # default is the same path; it's set here so the layout the deploy guard relies on is explicit.
             - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+              value: /var/lib/postgresql/18/docker
           readinessProbe:
             exec:
               command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
@@ -77,9 +78,15 @@ spec:
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits: { memory: 1Gi }
+          # FR-164: image, env and mountPath sit in the pod template, so applying this over a postgres:17 StatefulSet is
+          # accepted (volumeClaimTemplates, which is immutable, is unchanged) and reuses PVC data-db-0. That pod would
+          # NOT see the old data, which sits in pgdata/ on the volume: it would initialise an empty database in
+          # 18/docker/. So deploy-local.sh stops before applying while pgdata/ is there, and the README's upgrade
+          # procedure dumps it and renames it first.
+          # The root filesystem stays read-only: postgres writes only to PGDATA (this mount), /var/run/postgresql and /tmp.
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
             - name: run
               mountPath: /var/run/postgresql
             - name: tmp

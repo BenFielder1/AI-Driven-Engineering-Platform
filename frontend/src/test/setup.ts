@@ -14,6 +14,7 @@ import { resetLlmDb } from '../mocks/handlers/llm'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
 import { resetProjectsDb } from '../mocks/handlers/projects'
 import { resetStackDb } from '../mocks/handlers/stack'
+import { resetTrackersDb } from '../mocks/handlers/trackers'
 import { server } from '../mocks/server'
 import { router } from './memory-router'
 
@@ -83,6 +84,7 @@ afterEach(() => {
   resetGitLabDb()
   resetBitbucketDb()
   resetStackDb()
+  resetTrackersDb()
   localStorage.clear()
   sessionStorage.clear()
   router.reset('/')

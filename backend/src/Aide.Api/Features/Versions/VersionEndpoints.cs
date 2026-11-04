@@ -30,7 +30,7 @@ public static class VersionEndpoints
 
         group.MapPost("/versions", StartReleaseVersion)
             .WithName("StartReleaseVersion")
-            .WithSummary("Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog.")
+            .WithSummary("Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog. sourceImports (FR-171, optional) queues a tracker_import job per entry with the version.")
             .Produces<StartReleaseVersionResultDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -39,8 +39,8 @@ public static class VersionEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
                 (StatusCodes.Status201Created, "The release version (in_development) and the project state."),
-                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH."),
-                (StatusCodes.Status403Forbidden, "FORBIDDEN: only Owners start versions."),
+                (StatusCodes.Status400BadRequest, "VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH, SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys) or STACK_INFER_NO_CODE (stackSource infer with no released base commit; FR-186: an inference version starts in analysis; stack alongside it is VALIDATION)."),
+                (StatusCodes.Status403Forbidden, "FORBIDDEN (only Owners start versions) or CREDENTIAL_NOT_OWNER (FR-171: a source import with another user's connection)."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "VERSION_IN_PROGRESS, RELEASE_NOT_MERGED (the latest release is awaiting merge), NOT_RELEASED, VERSION_NOT_GREATER (not above the released version), TAG_EXISTS (the tag is already in the repository) or CONFLICT."),
                 (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR: the repository's tags could not be checked."));

@@ -112,6 +112,10 @@ public sealed class GitConnection
     /// <summary>FR-134: ciphertext of the Atlassian account email that goes with a Bitbucket API token.</summary>
     public string? TokenEmailEncrypted { get; set; }
 
+    /// <summary>FR-176: ciphertext of the Bitbucket account's primary confirmed email, used only for co-author trailers.
+    /// Filled at connect, refresh or re-test; none until then, so the person is skipped.</summary>
+    public string? CommitEmailEncrypted { get; set; }
+
     /// <summary>Granted scopes (OAuth scopes, or a token's scopes as validated).</summary>
     public IReadOnlyList<string> Scopes { get; set; } = [];
 

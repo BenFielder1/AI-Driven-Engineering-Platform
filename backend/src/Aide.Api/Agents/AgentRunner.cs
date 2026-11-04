@@ -77,6 +77,9 @@ public sealed record AgentRunRequest
     /// specialist step (<see cref="SpecialistAgentKey"/> in play) gets <see cref="Domain.Stack.StackPrompt.Compose"/> of the base template.
     /// </summary>
     public Domain.Stack.StackResolution? Stack { get; init; }
+
+    /// <summary>FR-172: the size of the rendered <c>source_items</c> the prompt carries; over the budget of the run's model the run fails with <c>SOURCE_ITEMS_TOO_LARGE</c>, without calling the provider.</summary>
+    public int? SourceItemsBytes { get; init; }
 }
 
 /// <summary>A succeeded run: its id, the provider's text, what it cost and when it completed.</summary>
@@ -196,6 +199,18 @@ public sealed partial class AgentRunner(
         }
 
         run ??= await StartAsync(runId, request, template, cancellationToken);
+
+        // FR-172, §4.26: the snapshot must fit the model now configured (catalog; unlisted: the fixed budget).
+        if (request.SourceItemsBytes is { } sourceBytes)
+        {
+            var modelWindow = LlmOutputLimits.Find(catalog.Catalog(run.Provider), run.Model)?.ContextTokens;
+            var budgeted = Domain.Trackers.TrackerRules.CheckRunBudget(sourceBytes, modelWindow);
+            if (budgeted.IsFailure)
+            {
+                await FailAsync(run, budgeted.Error!.Code, budgeted.Error.Message, deadLetter: false);
+                throw new JobFailedException(budgeted.Error.Message, transient: false, budgeted.Error.Code);
+            }
+        }
 
         var inputs = new Dictionary<string, string?>(request.Inputs, StringComparer.Ordinal);
         if (!inputs.ContainsKey(FeedbackInput))

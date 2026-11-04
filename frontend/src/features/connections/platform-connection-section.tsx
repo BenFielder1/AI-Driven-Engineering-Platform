@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { panelClass } from '../../components/shared/panel-class'
@@ -13,8 +13,9 @@ import { formatDateTime } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
 import { isPast, maskedKey } from './connection-format'
 import { CredentialStatusBadge } from './credential-status-badge'
-import { AddPlatformConnectionDialog, RenamePlatformConnectionDialog } from './platform-connection-dialogs'
+import { AddPlatformConnectionDialog, EditTrackerConnectionDialog, RenamePlatformConnectionDialog } from './platform-connection-dialogs'
 import {
+  isTrackerPlatform,
   useDeletePlatformConnection,
   usePlatformConnections,
   useTestPlatformConnection,
@@ -59,6 +60,7 @@ function PlatformRow({
   const account = platformAccountLabel(c)
   const granted = grantedOf(c)
   const missing = c.metadata.missingPermissions
+  const tracker = isTrackerPlatform(c.provider)
   return (
     <li aria-label={`${info.name} connection ${c.label}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1 text-sm">
@@ -74,6 +76,12 @@ function PlatformRow({
           {' · '}
           <ExpiryText expiresAt={c.expiresAt} />
         </span>
+        {c.expiryWarning && !isPast(c.expiresAt ?? '') && (
+          <span data-testid="platform-expiry-warning">This token expires soon. Add a new one here before it lapses.</span>
+        )}
+        {c.provider === 'jira' && c.metadata.acceptanceCriteriaField && (
+          <span className="text-muted-foreground">Acceptance criteria field: {c.metadata.acceptanceCriteriaField}</span>
+        )}
         {granted.length > 0 && (
           <span className="break-words text-muted-foreground" data-testid="platform-scopes">
             {c.scopes.length > 0 ? 'Scopes' : 'Permissions'}: {granted.join(', ')}
@@ -110,7 +118,7 @@ function PlatformRow({
           )}
           {' · '}Added <RelativeTime iso={c.createdAt} />
         </span>
-        <span className="text-muted-foreground">
+        {!tracker && <span className="text-muted-foreground">
           {c.boundProjects.length === 0 ? (
             'Not used by any project'
           ) : (
@@ -130,7 +138,7 @@ function PlatformRow({
               ))}
             </>
           )}
-        </span>
+        </span>}
         {c.status === 'invalid' && (
           <span className="text-destructive">
             {info.name} rejected this token. Add a new connection, then delete this one.
@@ -141,8 +149,8 @@ function PlatformRow({
         <Button variant="secondary" pending={testing} pendingLabel="Testing…" onClick={onTest} aria-label={`Re-test ${c.label}`}>
           Re-test
         </Button>
-        <Button variant="secondary" onClick={onRename} aria-label={`Rename ${c.label}`}>
-          Rename
+        <Button variant="secondary" onClick={onRename} aria-label={`${tracker ? 'Edit' : 'Rename'} ${c.label}`}>
+          {tracker ? 'Edit' : 'Rename'}
         </Button>
         <Button variant="danger" onClick={onDelete} aria-label={`Delete ${c.label}`}>
           Delete
@@ -183,13 +191,19 @@ export function PlatformConnectionSection({
   title,
   description,
   providers,
+  includeTrackers = false,
+  children,
 }: {
   id: string
   title: string
   description: string
   providers: readonly PlatformProvider[]
+  /** FR-165: the Issue trackers section lists Jira and Linear, which the other sections and pickers never show. */
+  includeTrackers?: boolean
+  /** More of the section, after the providers (FR-165: GitHub and GitLab Issues readiness). */
+  children?: ReactNode
 }) {
-  const connections = usePlatformConnections()
+  const connections = usePlatformConnections({ includeTrackers })
   const test = useTestPlatformConnection()
   const remove = useDeletePlatformConnection()
   const [adding, setAdding] = useState<PlatformProvider | null>(null)
@@ -320,6 +334,7 @@ export function PlatformConnectionSection({
         </Alert>
       )}
       {body}
+      {children}
 
       {adding && (
         <AddPlatformConnectionDialog
@@ -337,7 +352,18 @@ export function PlatformConnectionSection({
           }}
         />
       )}
-      {renaming && (
+      {renaming && isTrackerPlatform(renaming.provider) && (
+        <EditTrackerConnectionDialog
+          connection={renaming}
+          onClose={(saved) => {
+            setRenaming(null)
+            if (saved) {
+              toast.success('Connection saved.')
+            }
+          }}
+        />
+      )}
+      {renaming && !isTrackerPlatform(renaming.provider) && (
         <RenamePlatformConnectionDialog
           connection={renaming}
           onClose={(renamed) => {

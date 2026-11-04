@@ -96,11 +96,17 @@ public sealed record CreateArtifactDraftRequest
     public int? BaseVersion { get; init; }
 }
 
-/// <summary>Approve or reject a draft (FR-17). On reject, <c>comment</c> is recorded and fed to the re-run agent.</summary>
+/// <summary>
+/// Approve or reject a draft (FR-17). On reject, <c>comment</c> is recorded and fed to the re-run agent. FR-181: approving a
+/// <c>stack_profile</c> with <c>generalist: true</c> is "Continue with No stack (general)": the choice is recorded on a new
+/// version of the profile (the draft is superseded), which is locked with no composition. Only for <c>stack_profile</c>.
+/// </summary>
 public sealed record DecideArtifactRequest
 {
     [MaxLength(ArtifactLimits.CommentMaxLength)]
     public string? Comment { get; init; }
+
+    public bool? Generalist { get; init; }
 }
 
 /// <summary>Request limits of the artifacts feature.</summary>

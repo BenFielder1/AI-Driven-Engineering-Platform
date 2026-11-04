@@ -91,6 +91,8 @@ internal sealed partial class GitConnectionTokens(
 
     private ISecretProtector EmailProtector => protectors.ForPurpose(SecretPurposes.GitHostTokenEmail);
 
+    private ISecretProtector CommitEmailProtector => protectors.ForPurpose(SecretPurposes.GitHostCommitEmail);
+
     /// <summary>
     /// The host a connection's token is bound to: a GitLab instance (with its view, for the OAuth application) or Bitbucket
     /// Cloud (the consumer; its API base is fixed).
@@ -257,9 +259,35 @@ internal sealed partial class GitConnectionTokens(
         }
 
         LogRefreshed(logger, connectionId);
+        await RefreshCommitEmailAsync(db, connection, tokens.AccessToken, uncancellable);
         return Result.Success(new GitAccessToken(
             connection.Id, connection.UserId, connection.Provider, connection.InstanceId, instance.BaseUrl, connection.AuthKind,
             connection.Login, tokens.AccessToken, connection.RowVersion, Refreshed: true));
+    }
+
+    /// <summary>
+    /// FR-176: a refreshed Bitbucket connection re-reads its primary confirmed email for co-author trailers (the backfill of
+    /// connections made before FR-176). Only after the rotated pair is safely saved, and a failure only leaves the stored email:
+    /// a token refresh must never fail for this.
+    /// </summary>
+    private async Task RefreshCommitEmailAsync(AideDbContext db, GitConnection connection, string accessToken, CancellationToken cancellationToken)
+    {
+        if (connection.Provider != GitHostKind.Bitbucket)
+        {
+            return;
+        }
+
+        try
+        {
+            var emails = await bitbucketClients.Create(connection.Id).GetEmailsAsync(BitbucketAuth.OAuth(accessToken), cancellationToken);
+            connection.CommitEmailEncrypted = BitbucketRules.CommitEmail(emails) is { } email ? CommitEmailProtector.Protect(email) : null;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is BitbucketApiException or HttpRequestException or TaskCanceledException or DbUpdateException)
+        {
+            LogCommitEmailUnavailable(logger, connection.Id);
+            db.ChangeTracker.Clear();
+        }
     }
 
     /// <summary>
@@ -403,6 +431,9 @@ internal sealed partial class GitConnectionTokens(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Refreshing Git connection {ConnectionId} was blocked: the instance's address isn't allowed")]
     private static partial void LogRefreshBlocked(ILogger logger, Guid connectionId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The commit email of Git connection {ConnectionId} couldn't be read; the stored one stays")]
+    private static partial void LogCommitEmailUnavailable(ILogger logger, Guid connectionId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Git connection {ConnectionId} changed during token rotation")]
     private static partial void LogRotationConflict(ILogger logger, Guid connectionId);

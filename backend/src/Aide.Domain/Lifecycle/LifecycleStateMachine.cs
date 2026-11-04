@@ -75,6 +75,17 @@ public static class LifecycleStateMachine
 
         switch (entering)
         {
+            case Phase.Analysis:
+                // §4.27: analysis is first; only a project or version created with stack inference starts in it.
+                unmet.Add("Analysis is only entered when a version that infers its stack starts.");
+                break;
+            case Phase.Refinement when state.Phase == Phase.Analysis:
+                // FR-179, D-V5-5: in every approval mode (no gate: approving the stack_profile is the control).
+                Require(snapshot.StackProfileLocked, "The stack profile is not approved.");
+                Require(
+                    !snapshot.StackProfileLocked || snapshot.StackCompositionPinned || snapshot.StackProfileGeneralist,
+                    "No stack composition is pinned and the profile doesn't choose No stack (general).");
+                break;
             case Phase.Refinement:
                 break;
             case Phase.Specification:
@@ -255,9 +266,21 @@ public static class LifecycleStateMachine
     /// </summary>
     private static Result<PhaseTransition> NewVersion(LifecycleState state, TransitionRequest request, LifecycleSnapshot snapshot)
     {
-        if (request.TargetPhase is { } target && target != Phase.Refinement)
+        // FR-186, §4.27: a version that infers its stack starts in analysis, any other in refinement.
+        var entering = request.TargetPhase ?? Phase.Refinement;
+        if (entering is not (Phase.Refinement or Phase.Analysis))
         {
-            return WrongPhase("A new version starts in refinement.");
+            return WrongPhase("A new version starts in refinement, or in analysis when it infers its stack.");
+        }
+
+        if (entering == Phase.Analysis && !snapshot.InfersStack)
+        {
+            return WrongPhase("Only a version that infers its stack starts in analysis.");
+        }
+
+        if (entering == Phase.Refinement && snapshot.InfersStack)
+        {
+            return WrongPhase("A version that infers its stack starts in analysis.");
         }
 
         if (state.Phase != Phase.Release || state.Status != ProjectStatus.Released)
@@ -271,8 +294,33 @@ public static class LifecycleStateMachine
             return Result.Failure<PhaseTransition>(new DomainError(ErrorCodes.VersionInProgress, "A version is already in development."));
         }
 
-        return Success(state, Phase.Refinement, ProjectStatus.Active, LifecycleState.Initial.Version, request, "New version started");
+        if (entering == Phase.Analysis && !snapshot.BaseHasCode)
+        {
+            return Result.Failure<PhaseTransition>(NoCodeToInfer());
+        }
+
+        return Success(state, entering, ProjectStatus.Active, LifecycleState.Initial.Version, request, "New version started");
     }
+
+    /// <summary>
+    /// FR-178, §4.27 "project or version created": the first lifecycle state of a new project's version. A version that infers
+    /// its stack (<paramref name="infersStack"/>) starts in <c>analysis</c> and needs a base commit with code
+    /// (<c>STACK_INFER_NO_CODE</c> otherwise); every other starts in <c>refinement</c> (<see cref="LifecycleState.Initial"/>).
+    /// </summary>
+    public static Result<LifecycleState> Start(bool infersStack, bool baseHasCode)
+    {
+        if (!infersStack)
+        {
+            return Result.Success(LifecycleState.Initial);
+        }
+
+        return baseHasCode
+            ? Result.Success(LifecycleState.Initial with { Phase = Phase.Analysis, Status = PhaseOrder.StatusFor(Phase.Analysis) })
+            : Result.Failure<LifecycleState>(NoCodeToInfer());
+    }
+
+    private static DomainError NoCodeToInfer() =>
+        new(ErrorCodes.StackInferNoCode, "This repository has no code to analyse. Choose a stack instead.");
 
     private static Result<PhaseTransition> Success(
         LifecycleState state,

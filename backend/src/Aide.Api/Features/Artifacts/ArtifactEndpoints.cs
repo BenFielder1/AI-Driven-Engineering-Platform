@@ -82,7 +82,7 @@ public static class ArtifactEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION: unknown artifact type, or empty or too long content. INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason)."),
+                (StatusCodes.Status400BadRequest, "VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable aide-stack-profile block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: Viewers can't create drafts."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save."));
@@ -103,21 +103,21 @@ public static class ArtifactEndpoints
 
         group.MapPost("/{artifactId:guid}/approve", ApproveArtifact)
             .WithName("ApproveArtifact")
-            .WithSummary("Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT.")
+            .WithSummary("Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT. A stack_profile (FR-183) also pins its composition (with catalog version and hash) and stack packs in the same transaction; with generalist: true it is locked with no composition (FR-181).")
             .Produces<ArtifactDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION. INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason)."),
+                (StatusCodes.Status400BadRequest, "VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: only Owners approve artifacts."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project or artifact."),
-                (StatusCodes.Status409Conflict, "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT."));
+                (StatusCodes.Status409Conflict, "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT. STACK_PROFILE_INCOMPLETE: a stack_profile with unresolved layers (details: the layers); WRONG_PHASE: a stack_profile outside analysis."));
 
         group.MapPost("/{artifactId:guid}/reject", RejectArtifact)
             .WithName("RejectArtifact")
-            .WithSummary("Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED.")
+            .WithSummary("Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts; FR-183: a stack_profile always re-runs the Stack Analyst, a human edit included, with the rejected draft as context). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED.")
             .Produces<ArtifactDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -278,7 +278,10 @@ public static class ArtifactEndpoints
             id, EnumStrings.Parse<ArtifactType>(type), request.Content, request.BaseVersion, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
         if (created.IsFailure)
         {
-            return ApiProblems.FromError(created.Error!);
+            // FR-183: a stack_profile edit's field errors ("layers.backend.option": …) as a VALIDATION errors map.
+            return created.Error!.Code == ErrorCodes.Validation && created.Error.Details.Count > 0
+                ? ApiProblems.Validation(created.Error)
+                : ApiProblems.FromError(created.Error);
         }
 
         var dto = await reader.ToDtoAsync(created.Value, cancellationToken);
@@ -328,10 +331,13 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var approved = await service.ApproveAsync(id, artifactId, request?.Comment, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
-        return approved.IsSuccess
-            ? TypedResults.Ok(await reader.ToDtoAsync(approved.Value, cancellationToken))
-            : ApiProblems.FromError(approved.Error!);
+        var approved = await service.ApproveAsync(id, artifactId, request?.Comment, currentUser.RequiredUserId, currentUser.Actor, cancellationToken, request?.Generalist);
+        if (approved.IsSuccess)
+        {
+            return TypedResults.Ok(await reader.ToDtoAsync(approved.Value, cancellationToken));
+        }
+
+        return approved.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(approved.Error) : ApiProblems.FromError(approved.Error);
     }
 
     private static async Task<Results<Ok<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> RejectArtifact(

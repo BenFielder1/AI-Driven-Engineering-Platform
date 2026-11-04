@@ -19,6 +19,8 @@ const types: readonly ArtifactType[] = [
   'implementation_plan',
   'optimization_plan',
   'codebase_summary',
+  'source_items',
+  'stack_profile',
 ]
 
 /** SPEC §4.4: what approving a new version of each type invalidates. */
@@ -28,11 +30,15 @@ const cascade: Record<ArtifactType, readonly ArtifactType[]> = {
   implementation_plan: ['optimization_plan'],
   optimization_plan: [],
   codebase_summary: [],
+  source_items: [],
+  stack_profile: ['project_request', 'technical_specification', 'implementation_plan', 'optimization_plan'],
 }
 
 /** §4.12: the phase that produces each type (restore is allowed only there, FR-58). */
 const producingPhase: Record<ArtifactType, Schemas['Phase']> = {
+  stack_profile: 'analysis',
   codebase_summary: 'refinement',
+  source_items: 'refinement',
   project_request: 'refinement',
   technical_specification: 'specification',
   implementation_plan: 'planning',
@@ -138,7 +144,7 @@ function latestOf(p: StoredProject, type: ArtifactType): Artifact | undefined {
 }
 
 /** Keeps GET /state's artifact summary (§6) in line with the stored versions. */
-function syncState(p: StoredProject, type: ArtifactType) {
+export function syncState(p: StoredProject, type: ArtifactType) {
   const all = versionsOf(p, type)
   const latest = all[0]
   const summary = {

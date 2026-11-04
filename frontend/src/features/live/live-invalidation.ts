@@ -24,6 +24,7 @@ const activity = (id: string): Target => ({ queryKey: [...projectKeys.detail(id)
 const artifacts = (id: string): Target => ({ queryKey: projectKeys.artifacts(id) })
 const runs = (id: string): Target => ({ queryKey: projectKeys.runs(id) })
 const refinement = (id: string): Target => ({ queryKey: projectKeys.refinement(id) })
+const analysis = (id: string): Target => ({ queryKey: projectKeys.analysis(id) })
 const execution = (id: string): Target => ({ queryKey: projectKeys.execution(id) })
 const pullRequest = (id: string): Target => ({ queryKey: projectKeys.pullRequest(id) })
 const review = (id: string): Target => ({ queryKey: projectKeys.review(id) })
@@ -65,21 +66,24 @@ export const liveInvalidation: Record<EventCategory, (id: string, type: string) 
     ...(ARTIFACT_GATE_EVENTS.has(type) ? [artifactsDeduped(id)] : []),
   ],
   // New version, approval, rejection, invalidation cascade (§4.4) or corruption. A new project request draft ends a
-  // refinement round (FR-27); approving a plan creates its execution steps and invalidates older ones (FR-30).
-  artifact: (id) => [artifacts(id), state(id), activity(id), refinement(id), execution(id)],
+  // refinement round (FR-27); approving a plan creates its execution steps and invalidates older ones (FR-30). A
+  // stack_profile or codebase_summary changes the Analysis page (FR-182).
+  artifact: (id) => [artifacts(id), state(id), activity(id), refinement(id), analysis(id), execution(id)],
   integrity: (id) => [artifacts(id), activity(id)],
   // Agent runs (started, completed, failed, refused by the budget, connection invalid) change the runs list and the
   // tokens used; a refinement round's status is its run's (FR-27). The artifacts a run produces arrive as artifact
   // events (FR-23, FR-26); only RUN_COMPLETED also refreshes the artifact queries, so a missed artifact event can't
   // leave a stage page empty. It cancels and restarts an in-flight artifact fetch: one started before the run wrote its
   // draft would otherwise settle on pre-draft data when the ARTIFACT_* event itself was missed. RUN_STARTED,
-  // RUN_FAILED, BUDGET_EXCEEDED and CONNECTION_INVALID create no artifact.
+  // RUN_FAILED, BUDGET_EXCEEDED and CONNECTION_INVALID create no artifact. The Stack Analyst's status is its run's
+  // (FR-182, live on the Analysis page).
   run: (id, type) => [
     project(id),
     state(id),
     runs(id),
     activity(id),
     refinement(id),
+    analysis(id),
     ...(ARTIFACT_RUN_EVENTS.has(type) ? [artifacts(id)] : []),
   ],
   // STEP_STARTED/COMPLETED/REJECTED/BLOCKED (FR-31–FR-34) and pause/resume (FR-37): steps, counts and the pause flag

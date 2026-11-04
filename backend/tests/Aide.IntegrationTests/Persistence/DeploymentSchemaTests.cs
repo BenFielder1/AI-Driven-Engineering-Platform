@@ -8,7 +8,7 @@ using Npgsql;
 
 namespace Aide.IntegrationTests.Persistence;
 
-/// <summary>FR-87, FR-88, FR-91, FR-142, FR-144, FR-145, §4.15, §5: the deployment schema (PlatformsAndTargets) against real PostgreSQL 17.</summary>
+/// <summary>FR-87, FR-88, FR-91, FR-142, FR-144, FR-145, §4.15, §5: the deployment schema (PlatformsAndTargets) against real PostgreSQL 18.</summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class DeploymentSchemaTests(AideApiFactory factory)
 {

@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "layers": [
     { "id": "frontend", "name": "Frontend", "description": "The web UI, or None for an API-only project." },
     { "id": "backend", "name": "Backend", "description": "The API service, or None for a static site, Next.js full-stack or an SPA with Supabase." },
@@ -128,11 +128,12 @@
       "R5": "VCS: any option, fixed to the repository's host once a repository is chosen or imported.",
       "R6": "Frontend host, by frontend and Next.js mode.",
       "R7": "Backend host, by backend.",
-      "R8": "Database host, by data pack; Render or Railway Postgres is best on the backend's platform.",
+      "R8": "Database host, by data pack; Render Postgres is best on the backend's platform, and Railway Postgres in a shared Railway project with the backend or Next.js app.",
       "R9": "Each platform must build from the repository's Git host.",
-      "R10": "Origin model, by frontend, backend and their hosts.",
+      "R10": "Origin model, by frontend, backend and their hosts. A Railway SPA and backend are same-origin only in one Railway project.",
       "R11": "A database host needs a deployed component that can reach it.",
-      "R12": "The Compose dev loop is offered, and the default, when there's a backend or a database."
+      "R12": "The Compose dev loop is offered, and the default, when there's a backend or a database.",
+      "R13": "A part deployed to a separate project must be on a platform shared with another part."
     },
     "constraints": [
       { "rule": "R1", "choices": ["backend"], "options": ["none"], "state": "forbidden", "when": [{ "frontend": ["none"] }], "text": "Frontend and Backend can't both be None" },
@@ -162,6 +163,7 @@
       { "rule": "R8", "choices": ["databaseHost"], "options": ["render-postgres", "railway-postgres", "external", "none"], "state": "forbidden", "when": [{ "data": ["data-supabase"] }], "text": "Supabase (BaaS) runs on Supabase" },
       { "rule": "R8", "choices": ["databaseHost"], "options": ["render-postgres"], "state": "caveat", "when": [{ "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"] }], "unless": [{ "backendHost": ["deploy-render"] }, { "nextjsMode": ["full-stack"], "frontendHost": ["deploy-render"] }], "text": "Database on a different platform from the backend: higher latency, public connection" },
       { "rule": "R8", "choices": ["databaseHost"], "options": ["railway-postgres"], "state": "caveat", "when": [{ "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"] }], "unless": [{ "backendHost": ["deploy-railway"] }, { "nextjsMode": ["full-stack"], "frontendHost": ["deploy-railway"] }], "text": "Database on a different platform from the backend: higher latency, public connection" },
+      { "rule": "R8", "choices": ["databaseHost"], "options": ["railway-postgres"], "state": "caveat", "when": [{ "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"], "backendHost": ["deploy-railway"], "separateDatabase": ["yes"] }, { "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"], "backendHost": ["deploy-railway"], "separateBackend": ["yes"] }, { "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"], "nextjsMode": ["full-stack"], "frontendHost": ["deploy-railway"], "separateDatabase": ["yes"] }, { "data": ["data-efcore-postgres", "data-jpa-flyway", "data-sqlalchemy", "data-prisma", "data-drizzle"], "nextjsMode": ["full-stack"], "frontendHost": ["deploy-railway"], "separateFrontend": ["yes"] }], "text": "Separate Railway project: no private network, public connection, higher latency" },
 
       { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-railway"], "state": "forbidden", "when": [{ "vcsHost": ["!github"] }], "text": "Railway only builds from GitHub" },
       { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-github-pages"], "state": "forbidden", "when": [{ "vcsHost": ["!github"] }], "text": "GitHub Pages only builds from GitHub" },
@@ -179,7 +181,8 @@
       { "when": [{ "frontendHost": ["none"] }], "allowed": ["same-origin"], "default": "same-origin", "text": "The frontend isn't deployed: same-origin through the local proxy" },
       { "when": [{ "frontendHost": ["deploy-github-pages"] }], "allowed": ["cross-origin"], "default": "cross-origin", "text": "GitHub Pages serves static files only, so the browser calls the backend cross-origin" },
       { "when": [{ "frontendHost": ["deploy-vercel"], "frontend": ["!fe-nextjs"] }], "allowed": ["cross-origin"], "default": "cross-origin", "text": "A static SPA on Vercel is cross-origin only: its rewrites can't point preview and production at different backends" },
-      { "when": [{ "frontend": ["!fe-nextjs"], "frontendHost": ["deploy-railway"], "backendHost": ["deploy-railway"] }], "allowed": ["same-origin", "cross-origin"], "default": "same-origin", "text": "The SPA container proxies /api to the backend over Railway's private network" },
+      { "when": [{ "frontend": ["!fe-nextjs"], "frontendHost": ["deploy-railway"], "backendHost": ["deploy-railway"], "separateFrontend": ["no"], "separateBackend": ["no"] }], "allowed": ["same-origin", "cross-origin"], "default": "same-origin", "text": "The SPA container proxies /api to the backend over Railway's private network" },
+      { "when": [{ "frontend": ["!fe-nextjs"], "frontendHost": ["deploy-railway"], "backendHost": ["deploy-railway"] }], "allowed": ["cross-origin"], "default": "cross-origin", "text": "Separate Railway projects share no private network, so the SPA calls the backend cross-origin" },
       { "when": [{ "frontend": ["fe-nextjs"] }], "allowed": ["proxy", "cross-origin"], "default": "proxy", "text": "Next.js calls the backend from the server or rewrites /api to it" },
       { "allowed": ["proxy", "cross-origin"], "default": "proxy", "text": "The frontend host proxies /api to the backend's URL" }
     ],

@@ -2,11 +2,12 @@
 # Build the images, apply the local overlay, run migrations, roll out and smoke-test.
 # Target: Docker Desktop Kubernetes (context docker-desktop) only. App: http://localhost:8080
 # Idempotent: safe to re-run. Never deletes data (PVCs, namespace).
+# Stops before changing anything if the database volume still holds PostgreSQL 17 data (FR-164; see README.md).
 #
 # Usage: deploy-local.sh [--e2e]
 #   (default)  overlays/local: Vercel deployments, no Local import (normal use).
 #   --e2e      overlays/local-e2e (the only switch): Deployments__Provider=Fake + Databases__Provider=Fake + Deployments__AllowFake=true,
-#              Git__Local__ImportRoot=/data/import, Llm__DefaultProvider=fake, and seeds the Local import repo
+#              Trackers__Provider=Fake (SPEC v5 §9), Git__Local__ImportRoot=/data/import, Llm__DefaultProvider=fake, and seeds the Local import repo
 #              /data/import/existing-app (tags v0.1.0, v0.2.0). For the Playwright suites (SPEC §8). Re-run without
 #              --e2e to switch back; the seeded repo stays on the data volume (harmless, import is off).
 set -euo pipefail
@@ -19,7 +20,7 @@ E2E=0
 for arg in "$@"; do
   case "$arg" in
     --e2e) E2E=1 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) die "Unknown argument: $arg (see --help)" ;;
   esac
 done
@@ -34,6 +35,10 @@ docker info >/dev/null 2>&1 || die "Docker is not running. Start Docker Desktop.
 require_context
 RUNTIME="$($K get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}')"
 info "node runtime: $RUNTIME"
+
+# ---------------------------------------------------------------------------
+step "Checking the database volume's PostgreSQL version"
+check_db_data_version
 
 # ---------------------------------------------------------------------------
 step "Checking $SECRETS_FILE"
@@ -221,7 +226,7 @@ fi
 
 step "Deployed $TAG ($MODE mode) -> http://localhost:$APP_PORT"
 if [[ $E2E -eq 1 ]]; then
-  info "E2E mode: Fake deployments + Fake LLM default, Local import root /data/import (existing-app). Run without --e2e to switch back."
+  info "E2E mode: Fake deployments + Fake trackers + Fake LLM default, Local import root /data/import (existing-app). Run without --e2e to switch back."
 fi
 # DEP-2: the overlay sets Seed__Enabled=true. The api logs the generated admin password ONCE (Warning) when it
 # first creates admin@aide.local; later restarts don't log it again (the account is never reset).

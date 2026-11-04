@@ -75,6 +75,7 @@ internal sealed class GitConnectionConfiguration : IEntityTypeConfiguration<GitC
         builder.Property(c => c.AccessTokenEncrypted).HasColumnType("text").IsRequired();
         builder.Property(c => c.RefreshTokenEncrypted).HasColumnType("text");
         builder.Property(c => c.TokenEmailEncrypted).HasColumnType("text");
+        builder.Property(c => c.CommitEmailEncrypted).HasColumnType("text");
         builder.PrimitiveCollection(c => c.Scopes).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
         builder.Property(c => c.Status).IsRequired();
         builder.Property(c => c.CreatedAt).IsRequired();

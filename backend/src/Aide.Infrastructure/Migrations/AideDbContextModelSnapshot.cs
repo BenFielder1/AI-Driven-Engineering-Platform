@@ -982,6 +982,83 @@ namespace Aide.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.DeploymentGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BoundByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_by_user_id");
+
+                    b.Property<Guid?>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Plan")
+                        .HasColumnType("text")
+                        .HasColumnName("plan");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("text")
+                        .HasColumnName("region");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("SharedResourceId")
+                        .HasColumnType("text")
+                        .HasColumnName("shared_resource_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasColumnType("text")
+                        .HasColumnName("status_reason");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deployment_groups");
+
+                    b.HasIndex("BoundByUserId")
+                        .HasDatabaseName("ix_deployment_groups_bound_by_user_id");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_deployment_groups_connection_id");
+
+                    b.HasIndex("ProjectId", "Provider")
+                        .IsUnique()
+                        .HasDatabaseName("ux_deployment_groups_project_id_provider");
+
+                    b.ToTable("deployment_groups", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.DeploymentTarget", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1009,9 +1086,17 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("connection_id");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<string>("Name")
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<string>("PlatformProjectId")
+                        .HasColumnType("text")
+                        .HasColumnName("platform_project_id");
 
                     b.Property<string>("PreviewResourceId")
                         .HasColumnType("text")
@@ -1074,6 +1159,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("ConnectionId")
                         .HasDatabaseName("ix_deployment_targets_connection_id");
+
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_deployment_targets_group_id");
 
                     b.HasIndex("ProjectId", "Component")
                         .IsUnique()
@@ -1282,6 +1370,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("auth_kind");
+
+                    b.Property<string>("CommitEmailEncrypted")
+                        .HasColumnType("text")
+                        .HasColumnName("commit_email_encrypted");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1735,6 +1827,10 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
                     b.Property<string>("Plan")
                         .HasColumnType("text")
                         .HasColumnName("plan");
@@ -1778,6 +1874,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("ConnectionId")
                         .HasDatabaseName("ix_managed_databases_connection_id");
+
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_managed_databases_group_id");
 
                     b.HasIndex("ProjectId", "Environment")
                         .IsUnique()
@@ -2162,6 +2261,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("bound_by_user_id");
 
+                    b.Property<bool>("CommitCreditEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("commit_credit_enabled");
+
                     b.Property<string>("DefaultBranch")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2514,6 +2619,14 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("stack_composition");
 
+                    b.Property<string>("StackSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("manual")
+                        .HasColumnName("stack_source");
+
                     b.Property<Guid?>("StartedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("started_by");
@@ -2707,6 +2820,138 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("state_transitions", (string)null);
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.TrackerImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Drift")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("drift");
+
+                    b.Property<DateTimeOffset?>("DriftCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("drift_checked_at");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<Guid?>("GitConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("git_connection_id");
+
+                    b.Property<long?>("GithubUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("github_user_id");
+
+                    b.Property<int>("ItemCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_count");
+
+                    b.Property<string>("Items")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("items")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<string>("Options")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("options");
+
+                    b.Property<Guid?>("PlatformConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("platform_connection_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("query");
+
+                    b.Property<Guid>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
+
+                    b.Property<int>("RenderedBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("rendered_bytes");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid?>("SourceArtifactId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_artifact_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("SupersedesImportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supersedes_import_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tracker_imports");
+
+                    b.HasIndex("GitConnectionId")
+                        .HasDatabaseName("ix_tracker_imports_git_connection_id");
+
+                    b.HasIndex("PlatformConnectionId")
+                        .HasDatabaseName("ix_tracker_imports_platform_connection_id");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_tracker_imports_project_id");
+
+                    b.HasIndex("SourceArtifactId")
+                        .HasDatabaseName("ix_tracker_imports_source_artifact_id");
+
+                    b.HasIndex("SupersedesImportId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tracker_imports_supersedes_import_id")
+                        .HasFilter("supersedes_import_id IS NOT NULL");
+
+                    b.HasIndex("ReleaseVersionId", "Status")
+                        .HasDatabaseName("ix_tracker_imports_release_version_id_status");
+
+                    b.ToTable("tracker_imports", (string)null);
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.UserExternalLogin", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2797,6 +3042,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("avatar_url");
+
+                    b.Property<bool>("CommitCreditOptOut")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("commit_credit_opt_out");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -3291,6 +3542,28 @@ namespace Aide.Infrastructure.Migrations
                         .HasConstraintName("fk_deployment_env_vars_projects_project_id");
                 });
 
+            modelBuilder.Entity("Aide.Domain.Entities.DeploymentGroup", b =>
+                {
+                    b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("BoundByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_groups_users_bound_by_user_id");
+
+                    b.HasOne("Aide.Domain.Entities.PlatformConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_groups_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_deployment_groups_projects_project_id");
+                });
+
             modelBuilder.Entity("Aide.Domain.Entities.DeploymentTarget", b =>
                 {
                     b.HasOne("Aide.Infrastructure.Persistence.Identity.AppUser", null)
@@ -3304,6 +3577,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_deployment_targets_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.DeploymentGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_deployment_targets_deployment_groups_group_id");
 
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithMany()
@@ -3415,6 +3694,12 @@ namespace Aide.Infrastructure.Migrations
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_managed_databases_platform_connections_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.DeploymentGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_managed_databases_deployment_groups_group_id");
 
                     b.HasOne("Aide.Domain.Entities.Project", null)
                         .WithMany()
@@ -3607,6 +3892,47 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired()
                         .HasConstraintName("fk_state_transitions_release_versions_release_version_id");
+                });
+
+            modelBuilder.Entity("Aide.Domain.Entities.TrackerImport", b =>
+                {
+                    b.HasOne("Aide.Domain.Entities.GitConnection", null)
+                        .WithMany()
+                        .HasForeignKey("GitConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_tracker_imports_git_connections_git_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.PlatformConnection", null)
+                        .WithMany()
+                        .HasForeignKey("PlatformConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_tracker_imports_platform_connections_platform_connection_id");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tracker_imports_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_tracker_imports_release_versions_release_version_id");
+
+                    b.HasOne("Aide.Domain.Entities.Artifact", null)
+                        .WithMany()
+                        .HasForeignKey("SourceArtifactId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_tracker_imports_artifacts_source_artifact_id");
+
+                    b.HasOne("Aide.Domain.Entities.TrackerImport", null)
+                        .WithMany()
+                        .HasForeignKey("SupersedesImportId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_tracker_imports_tracker_imports_supersedes_import_id");
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.UserExternalLogin", b =>

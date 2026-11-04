@@ -69,6 +69,7 @@ export function seedPlatformConnection(
     status: 'valid',
     lastValidatedAt: '2026-09-01T09:00:00Z',
     createdAt: '2026-09-01T09:00:00Z',
+    expiryWarning: false,
     ...rest,
     metadata: { ...emptyMetadata(), ...metadata },
     token,
@@ -96,6 +97,7 @@ export function platformDto(c: StoredPlatformConnection): PlatformConnection {
     status: c.status,
     lastValidatedAt: c.lastValidatedAt,
     createdAt: c.createdAt,
+    expiryWarning: c.expiryWarning,
     boundProjects: projectsDb.projects
       .filter((p) => p.deployment?.targets.some((t) => t.binding?.connectionId === c.id))
       .map((p) => ({ id: p.id, name: p.name })),
@@ -141,6 +143,15 @@ function validated(provider: Provider, token: string, accountId: string | null) 
       metadata.accounts = [{ id: 'org_acme', name: 'Acme', slug: 'acme', kind: 'organization' }]
       accountName = 'Acme'
       break
+    case 'jira':
+      metadata.cloudId = 'cloud-1'
+      scopes.push('read')
+      break
+    case 'linear':
+      metadata.organization = 'Acme'
+      metadata.organizationUrlKey = 'acme'
+      scopes.push('read')
+      break
   }
   return { metadata, accountName, scopes }
 }
@@ -154,6 +165,8 @@ function userMutation(request: Request) {
 }
 
 const providerNames: Record<Provider, string> = {
+  jira: 'Jira',
+  linear: 'Linear',
   vercel: 'Vercel',
   netlify: 'Netlify',
   cloudflare: 'Cloudflare',
@@ -208,6 +221,9 @@ export const platformConnectionHandlers = [
     if (Object.keys(errors).length > 0) {
       return problem(400, 'VALIDATION', 'The connection is invalid.', { errors })
     }
+    if (body.provider === 'jira' && !/^[a-z0-9-]+\.atlassian\.net$/.test(body.site ?? '')) {
+      return problem(400, 'TRACKER_SITE_NOT_ALLOWED', 'The site is not a Jira Cloud site.')
+    }
     if (body.provider === 'cloudflare' && body.token.startsWith('cfat_')) {
       return problem(
         400,
@@ -228,6 +244,11 @@ export const platformConnectionHandlers = [
     const { metadata, accountName, scopes } = validated(body.provider, body.token, accountId)
     const missing = platformDb.missingPermissions.get(body.token) ?? []
     metadata.missingPermissions = missing
+    if (body.provider === 'jira') {
+      metadata.site = body.site ?? null
+      metadata.acceptanceCriteriaField = body.acceptanceCriteriaField ?? null
+    }
+    const tracker = body.provider === 'jira' || body.provider === 'linear'
     const created = seedPlatformConnection({
       userId: user.id,
       provider: body.provider,
@@ -237,7 +258,11 @@ export const platformConnectionHandlers = [
       accountName,
       metadata,
       scopes,
-      expiresAt: body.provider === 'render' || body.provider === 'railway' ? null : '2027-01-01T00:00:00Z',
+      expiresAt: tracker
+        ? (body.expiresAt ?? null)
+        : body.provider === 'render' || body.provider === 'railway'
+          ? null
+          : '2027-01-01T00:00:00Z',
       status: missing.length > 0 ? 'insufficient_scope' : 'valid',
       lastValidatedAt: now,
       createdAt: now,
@@ -255,10 +280,21 @@ export const platformConnectionHandlers = [
     if (!c) {
       return notFound()
     }
-    if (!body.label.trim()) {
+    const label = body.label?.trim()
+    if (body.label != null && !label) {
       return problem(400, 'VALIDATION', 'The connection is invalid.', { errors: { label: ['The label is required.'] } })
     }
-    c.label = body.label.trim()
+    if (label) {
+      c.label = label
+    }
+    if (body.clearExpiresAt) {
+      c.expiresAt = null
+    } else if (body.expiresAt) {
+      c.expiresAt = body.expiresAt
+    }
+    if (body.acceptanceCriteriaField != null) {
+      c.metadata = { ...c.metadata, acceptanceCriteriaField: body.acceptanceCriteriaField === '' ? null : body.acceptanceCriteriaField }
+    }
     return HttpResponse.json<PlatformConnection>(platformDto(c))
   }),
 
@@ -330,6 +366,20 @@ export const platformConnectionHandlers = [
       return unavailable
     }
     const type = new URL(request.url).searchParams.get('type') ?? 'projects'
+    if (c.provider === 'jira' && type === 'fields') {
+      return HttpResponse.json<Schemas['PlatformResourceDto'][]>([
+        { id: 'customfield_10042', name: 'Acceptance criteria', url: null, detail: 'Custom field' },
+        { id: 'customfield_10050', name: 'Definition of done', url: null, detail: 'Custom field' },
+      ])
+    }
+    // §4.28: Railway services are `project:service`, with the project's name as `detail`.
+    if (c.provider === 'railway' && type === 'services') {
+      return HttpResponse.json<Schemas['PlatformResourceDto'][]>([
+        { id: 'projects_1:svc_web', name: 'shop-web', url: null, detail: 'inventory-projects' },
+        { id: 'projects_1:svc_api', name: 'shop-api', url: null, detail: 'inventory-projects' },
+        { id: 'prj_other:svc_x', name: 'elsewhere', url: null, detail: 'another-project' },
+      ])
+    }
     return HttpResponse.json<Schemas['PlatformResourceDto'][]>([
       { id: `${type}_1`, name: `inventory-${type}`, url: null, detail: `A ${c.provider} ${type.replace(/s$/, '')}` },
     ])

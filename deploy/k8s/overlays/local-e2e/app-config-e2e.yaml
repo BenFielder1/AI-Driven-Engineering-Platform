@@ -11,6 +11,9 @@ data:
   Deployments__AllowFake: "true"
   # §9: managed databases and the migration runner are Fake too (AllowFake covers them; a second warning is logged).
   Databases__Provider: Fake
+  # v5 §9 (FR-165..FR-168): Jira, Linear, GitHub and GitLab issue imports use the Fake tracker (recorded fixtures, no
+  # network). AllowFake above covers it outside Development. The normal overlay leaves it unset (real trackers).
+  Trackers__Provider: Fake
   # FR-73 / §8: Local import ("existing" repo) resolves git.localSourcePath under this root. Seeded by
   # deploy/scripts/seed-e2e-repo.sh with existing-app (tags v0.1.0, v0.2.0). On the aide-data volume.
   Git__Local__ImportRoot: /data/import

@@ -40,6 +40,7 @@ export function HostSetupFields({
   planField,
   modeFirst = false,
   showDetails = true,
+  linkPicker = true,
   onAddConnection,
 }: {
   ids: Record<HostSetupField, string>
@@ -62,6 +63,8 @@ export function HostSetupFields({
   /** The wizard asks create, link or later first, and shows the rest only when not later. */
   modeFirst?: boolean
   showDetails?: boolean
+  /** False when Link has no resource of its own (a Vercel group links per part, FR-192). */
+  linkPicker?: boolean
   /** "Add a token in Connections": the wizard saves its draft before Connections opens. */
   onAddConnection?: () => void
 }) {
@@ -69,7 +72,7 @@ export function HostSetupFields({
   const connections = usePlatformConnections({ enabled: connectionsEnabled && showDetails && platform !== undefined, ...(platform ? { provider: platform } : {}) })
   const own = connections.data ?? []
   const selected = own.find((c) => c.id === connectionId)
-  const resources = usePlatformResources(showDetails && mode === 'link' && connectionId && pickerType ? connectionId : null, pickerType)
+  const resources = usePlatformResources(showDetails && linkPicker && mode === 'link' && connectionId && pickerType ? connectionId : null, pickerType)
 
   const connection = (
     <div className="flex flex-col gap-2">
@@ -145,6 +148,7 @@ export function HostSetupFields({
         </div>
       )}
       {showDetails &&
+        linkPicker &&
         mode === 'link' &&
         (pickerType === null ? (
           <TextField

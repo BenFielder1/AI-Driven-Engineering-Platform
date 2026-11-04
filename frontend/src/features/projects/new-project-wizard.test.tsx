@@ -163,6 +163,8 @@ describe('New project wizard (FR-5, FR-73)', () => {
     await stepHeading(/Step 7 of 8: Deployment/)
     await next(user)
     await stepHeading(/Step 8 of 8: Review & create/)
+    // FR-177: the Review step shows the project's commit credit setting.
+    expect(within(screen.getByRole('region', { name: 'Repository' })).getByText('Credit people on commits').nextElementSibling).toHaveTextContent('On')
     expect(within(screen.getByRole('region', { name: 'Version' })).getByText('1.0.0')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Create project' }))

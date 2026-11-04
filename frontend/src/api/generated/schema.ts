@@ -103,7 +103,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** FR-177: change the signed-in user's own preferences: commitCreditOptOut ("Credit me on commits made by AIDE"). Browser session only. */
+        patch: operations["UpdateCurrentUser"];
         trace?: never;
     };
     "/api/auth/providers": {
@@ -328,7 +329,7 @@ export interface paths {
         delete: operations["DeletePlatformConnection"];
         options?: never;
         head?: never;
-        /** FR-142: rename one of the caller's platform connections. Browser session only. */
+        /** FR-142: rename one of the caller's platform connections. FR-165: on Jira and Linear, also the expiry and the acceptance criteria field. Browser session only. */
         patch: operations["RenamePlatformConnection"];
         trace?: never;
     };
@@ -378,6 +379,126 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/trackers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-165: Jira, Linear, GitHub Issues and GitLab Issues for the caller: whether each is ready, why not (not_connected, app_not_registered, issues_permission_missing, with the App settings link) and its connections. */
+        get: operations["ListTrackers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/trackers/{provider}/containers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-169: Jira projects, Linear teams and projects, GitHub repositories or GitLab projects the connection reaches, a page at a time. The next page's cursor is nextCursor. An unknown provider: 400 VALIDATION. */
+        get: operations["ListTrackerContainers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/trackers/{provider}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-169: item summaries matching a native query (JQL for Jira, search qualifiers for GitHub) or structured filters, paginated with the provider's cursor. Done items are hidden unless the filter asks for them. GitHub never returns pull requests. Never a description or comment. */
+        post: operations["SearchTrackerItems"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-170, FR-173 (members): a release version's imports, newest first (default: the current version), the current source_items version, whether the latest project request draft is behind it ("Sources changed since this draft", approval confirmation) and whether items can be changed now. */
+        get: operations["GetProjectSources"];
+        put?: never;
+        /** FR-171 (Contributor or Owner): queues a tracker_import job for the selection, in refinement only. Returns 202 with the queued import; it writes a new source_items version when it completes. */
+        post: operations["AddProjectSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/sources/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-173 (members): compares updatedAt per item with the tracker: unchanged, changed, removed or unknown. Uses the importer's connection, else the caller's own, else unknown. Cached for 5 minutes, capped at 10 seconds. Never changes a snapshot. */
+        post: operations["CheckProjectSources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/sources/{importId}/reimport": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-173 (Contributor or Owner): repeats an import's query (also the retry of a failed one). Returns 202 with the new queued import; when it completes it supersedes the old one and writes a new source_items version. Earlier versions stay readable. */
+        post: operations["ReimportProjectSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/sources/{importId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-173 (Contributor or Owner): removes an import. A completed one writes a new source_items version without it. Earlier versions stay readable (rule 9). */
+        delete: operations["RemoveProjectSource"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1054,7 +1175,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. sourceImports (FR-171, optional) queues a tracker_import job per entry with the project; a failed import never blocks creation. stackSource infer (FR-178) starts the version in the analysis phase with no stack: the Stack Analyst writes a stack_profile after the Repository Analyst (400 STACK_INFER_NO_CODE when the repository has no code; stack or deployment alongside: 400 VALIDATION). */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -1181,7 +1302,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off. */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -1336,6 +1457,41 @@ export interface paths {
         post?: never;
         /** Delete a user environment variable in AIDE and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION). */
         delete: operations["DeleteDeploymentEnv"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/groups/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set up the platform's deployment group (Owner, FR-190, FR-191): one of the caller's own connections and create {name, region?, plan?}, link {resourceId, parts {frontend?, backend?, database?}} or neither (rebind). Answers 202 with the group. A create or link queues one deployment_setup job: the platform project, then backend, frontend and database, each part reporting its own status. A rebind only swaps the connection, after checking it reaches the project. */
+        put: operations["PutDeploymentGroup"];
+        post?: never;
+        /** Remove the platform's deployment group and clear its parts (Owner, FR-191). Every platform resource stays, as do deployments and migration runs; derived env vars are recomputed. */
+        delete: operations["DeleteDeploymentGroup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/settings/deployment/groups/{provider}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry the group's failed or missing parts (Owner, FR-190): queues one deployment_setup job and leaves ready parts alone. Answers 202 with the group. */
+        post: operations["RetryDeploymentGroup"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1726,7 +1882,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT. */
+        /** Approve a draft (Owner): records approver and time, sets locked and applies the invalidation cascade (§4.4). Approving an already locked artifact is a no-op. 409 ARTIFACT_NOT_DRAFT. A stack_profile (FR-183) also pins its composition (with catalog version and hash) and stack packs in the same transaction; with generalist: true it is locked with no composition (FR-181). */
         post: operations["ApproveArtifact"];
         delete?: never;
         options?: never;
@@ -1743,7 +1899,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED. */
+        /** Reject a draft (Owner): records the comment and re-runs the producing agent with it (not for human-edited drafts; FR-183: a stack_profile always re-runs the Stack Analyst, a human edit included, with the rejected draft as context). 409 ARTIFACT_NOT_DRAFT, ARTIFACT_LOCKED. */
         post: operations["RejectArtifact"];
         delete?: never;
         options?: never;
@@ -1813,6 +1969,40 @@ export interface paths {
         put?: never;
         /** Run a refinement round (Contributor or Owner): queues the Idea Refinement agent on the idea, the current draft and the answers given (questionId of a question from the latest round, or the question text). Returns 202 with the queued round; the new draft and questions arrive with the run. 409 WRONG_PHASE, BUDGET_EXCEEDED, REFINEMENT_IN_PROGRESS. */
         post: operations["StartRefinement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Analysis page of a release version (default: the project's current release version; a past version's page shows that version's summary, run and profile, read-only), members (FR-182): the Repository Analyst's summary state and, for a version that infers its stack, the Stack Analyst's run, the latest stack_profile parsed, the layers that need input, whether it can be approved (and why not), whether the project can continue to refinement, the detector's profile for "Fill in manually", the profile as a /api/stack/options selection, the pinned and previous compositions and the deployment state. */
+        get: operations["GetAnalysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/analysis/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the Stack Analyst again (Contributor or Owner, FR-180 Retry or re-run): queues it on the version's base commit; the new stack_profile draft arrives with the run. 409 WRONG_PHASE, BUDGET_EXCEEDED, INVALID_STATE. */
+        post: operations["RunStackAnalysis"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2170,7 +2360,7 @@ export interface paths {
         /** The project's release versions, highest first (members, FR-62): in development, awaiting merge, released and imported baselines, with tag, base, branch, PR, checkpoints, the retired preset of a migrated version (history, FR-129) and dates. */
         get: operations["ListReleaseVersions"];
         put?: never;
-        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog. */
+        /** Start a new release version (Owner, FR-60, FR-61): needs a released project whose release is merged and nothing in development. The project goes to refinement / active at checkpoint 1 with the request as its idea; VERSION_STARTED is recorded and the Repository Analyst is queued. stack (FR-117, optional) is the new version's stack composition (validated like project create); omitted, the base version's composition is kept, re-pinned to the current catalog. sourceImports (FR-171, optional) queues a tracker_import job per entry with the version. */
         post: operations["StartReleaseVersion"];
         delete?: never;
         options?: never;
@@ -2661,10 +2851,10 @@ export interface components {
         /** @enum {unknown} */
         AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
-         * @description The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70).
+         * @description The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70) and the Stack Analyst (FR-180).
          * @enum {unknown}
          */
-        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
+        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
         /** @description Model id per agent; an omitted or `null` agent uses the default model. */
         AgentModelsDto: {
             ideaRefinement?: null | string;
@@ -2672,6 +2862,8 @@ export interface components {
             planGenerator?: null | string;
             codeGenerator?: null | string;
             codeReview?: null | string;
+            /** @description FR-180: the Stack Analyst's model (D-V5-7: its own setting). */
+            stackAnalyst?: null | string;
         };
         /**
          * @description An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut
@@ -2787,6 +2979,48 @@ export interface components {
          * @enum {unknown}
          */
         AgentRunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        /**
+         * @description FR-184: `available` once the profile is locked with a composition that has a host (the page then shows the Deployment
+         *     setup windows, from `GET …/settings/deployment` and the `windows` of `POST /api/stack/options`); else
+         *     `reason` says why not.
+         */
+        AnalysisDeploymentDto: {
+            available: boolean;
+            reason: null | string;
+        };
+        /**
+         * @description `GET /api/projects/:id/analysis` (FR-182): the Analysis page of the project's current release version.
+         *         * summary: the Repository Analyst's state and the locked codebase_summary (every version with code).
+         *     * stackSource infer only: run (the Stack Analyst's latest run), profile (the latest
+         *         stack_profile version, parsed), needsInput (FR-181 "Needs your input", in layer order),
+         *         unresolvedLayers and canApprove/approveBlockedReason (the reason as text), canContinue
+         *         (FR-185: a locked profile while in analysis), suggested (FR-180 "Fill in manually": the detector's profile with no
+         *         agent findings), selection (the profile as a POST /api/stack/options body, for the editor's option states and
+         *         the Hosts section; FR-184), composition (pinned once approved), previousComposition (FR-186: the base
+         *         version's, as the comparison) and deployment (FR-184: whether deployment setup can be offered).
+         */
+        AnalysisDto: {
+            /** Format: uuid */
+            releaseVersionId: string;
+            releaseVersion: string;
+            phase: components["schemas"]["Phase"];
+            stackSource: components["schemas"]["StackSource"];
+            hasExistingCode: boolean;
+            baseCommitSha: null | string;
+            summary: components["schemas"]["CodebaseSummaryStatusDto"];
+            run: null | components["schemas"]["StackAnalysisRunDto"];
+            profile: null | components["schemas"]["StackProfileViewDto"];
+            needsInput: components["schemas"]["StackProfileBlankDto"][];
+            unresolvedLayers: string[];
+            canApprove: boolean;
+            approveBlockedReason: null | string;
+            canContinue: boolean;
+            suggested: null | components["schemas"]["StackProfileDocumentDto"];
+            selection: null | components["schemas"]["StackCompositionRequest"];
+            composition: null | components["schemas"]["StackCompositionDto"];
+            previousComposition: null | components["schemas"]["StackCompositionDto"];
+            deployment: components["schemas"]["AnalysisDeploymentDto"];
+        };
         /** @description A personal API token as listed (never includes the token or its hash). */
         ApiTokenDto: {
             /** Format: uuid */
@@ -2946,7 +3180,7 @@ export interface components {
             restoredFromVersion: null | number;
         };
         /** @enum {unknown} */
-        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+        ArtifactType: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
         /** @description A non-blocking finding about an artifact version (FR-76, §4.13): its code, a message and the ids it is about. */
         ArtifactWarningDto: {
             code: string;
@@ -3425,6 +3659,17 @@ export interface components {
             label: string;
             token: string;
             accountId?: null | string;
+            /** @description FR-165 Jira: the site, e.g. `acme.atlassian.net` (else 400 `TRACKER_SITE_NOT_ALLOWED`, nothing fetched). */
+            site?: null | string;
+            /** @description FR-165 Jira: the Atlassian account email; stored encrypted with the token. */
+            email?: null | string;
+            /**
+             * Format: date-time
+             * @description FR-165: Jira and Linear don't report token expiry, so the dialog asks. AIDE warns 14 days before it.
+             */
+            expiresAt?: null | string;
+            /** @description FR-165 Jira: the custom field holding acceptance criteria, from `GET …/resources?type=fields`. */
+            acceptanceCriteriaField?: null | string;
         };
         /**
          * @description Deployment step of the new-project wizard (FR-88): `provider` `vercel`, one of the caller's own Vercel
@@ -3553,6 +3798,13 @@ export interface components {
             source?: components["schemas"]["ProjectSource"];
             import?: null | components["schemas"]["CreateProjectImportRequest"];
             stack?: null | components["schemas"]["StackCompositionRequest"];
+            stackSource?: null | components["schemas"]["StackSource"];
+            /**
+             * @description FR-171 (wizard Idea step): tracker items to import, each a `tracker_import` job queued with the project. The idea stays required (D-V5-6).
+             *     A failed import never blocks creation. `VALIDATION` on `sourceImports[i].selection.*`; another user's connection is
+             *     403 `CREDENTIAL_NOT_OWNER`.
+             */
+            sourceImports?: null | components["schemas"]["SourceImportRequest"][];
             deployment?: null | components["schemas"]["CreateProjectDeploymentRequest"];
             llm?: null | components["schemas"]["CreateProjectLlmRequest"];
         };
@@ -3612,9 +3864,14 @@ export interface components {
             /** Format: date-time */
             deadLetteredAt: null | string;
         };
-        /** @description Approve or reject a draft (FR-17). On reject, `comment` is recorded and fed to the re-run agent. */
+        /**
+         * @description Approve or reject a draft (FR-17). On reject, `comment` is recorded and fed to the re-run agent. FR-181: approving a
+         *     `stack_profile` with `generalist: true` is "Continue with No stack (general)": the choice is recorded on a new
+         *     version of the profile (the draft is superseded), which is locked with no composition. Only for `stack_profile`.
+         */
         DecideArtifactRequest: {
             comment?: null | string;
+            generalist?: null | boolean;
         };
         /**
          * @description Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the
@@ -3697,6 +3954,8 @@ export interface components {
             updatedAt: null | string;
             /** @default false */
             resetRecommended: boolean;
+            /** Format: uuid */
+            groupId?: null | string;
         };
         /**
          * @description A preview or production deployment (FR-90, FR-91, §4.15). `status` follows `queued → building → ready | error |
@@ -3790,6 +4049,56 @@ export interface components {
          */
         DeploymentEnvironment: "preview" | "production";
         /**
+         * @description A group card of Settings → Deployment (FR-191): every group the composition forms, plus any configured group it no
+         *     longer does. `id` is `null` and `status` `not_configured` until it is set up; then `configuring`,
+         *     `ready`, `attention` or `error`. `capability`: `project` (one real project,
+         *     `sharedResourceId` and its `sharedResourceUrl`) or `shared_setup` (Vercel: same team and name, no shared
+         *     resource). `statusReason`: the failure code, or `project_placement_unavailable` (Render project grouping isn't
+         *     available: the group still works). `canRetry`: a part failed or is missing and no setup is running.
+         */
+        DeploymentGroupDto: {
+            /** Format: uuid */
+            id: null | string;
+            provider: components["schemas"]["DeploymentProvider"];
+            capability: components["schemas"]["SharedProjectCapability"];
+            parts: components["schemas"]["DeploymentPart"][];
+            name: null | string;
+            binding: null | components["schemas"]["DeploymentTargetBindingDto"];
+            canBind: boolean;
+            sharedResourceId: null | string;
+            sharedResourceUrl: null | string;
+            region: null | string;
+            plan: null | string;
+            status: string;
+            statusReason: null | string;
+            partStatuses: components["schemas"]["DeploymentGroupPartDto"][];
+            canRetry: boolean;
+            /** Format: date-time */
+            updatedAt: null | string;
+        };
+        /**
+         * @description FR-190 Link: per part, an existing resource from the connection's picker (`GET …/resources`: Railway
+         *     `type=services`, Render `services` and `databases`, Vercel `projects`); left out means
+         *     <b>Create in this project</b> (Vercel: every part must name one).
+         */
+        DeploymentGroupLinkParts: {
+            frontend?: null | string;
+            backend?: null | string;
+            database?: null | string;
+        };
+        /**
+         * @description One part's progress on a group card (FR-190): `part`, the database's `environment`, `status` (a target's
+         *     or database's status, `not_configured` before it has a row), `statusReason` (the failure code or step) and the
+         *     platform resource. The part's full card is in `targets[]` or `databases[]`.
+         */
+        DeploymentGroupPartDto: {
+            part: components["schemas"]["DeploymentPart"];
+            environment: null | components["schemas"]["DeploymentEnvironment"];
+            status: string;
+            statusReason: null | string;
+            resourceId: null | string;
+        };
+        /**
          * @description What a deployment row does (FR-150, §5). Wire values: `deploy`, `rollback`, `promote`.
          * @enum {unknown}
          */
@@ -3806,6 +4115,11 @@ export interface components {
             explanation: null | string;
         };
         /**
+         * @description A deployable part of a composition (§4.28). Wire values: `frontend`, `backend`, `database`.
+         * @enum {unknown}
+         */
+        DeploymentPart: "frontend" | "backend" | "database";
+        /**
          * @description Deployment provider (§4.15, §4.20): a target's platform, from the composition's host (`deploy-vercel` → `vercel`).
          *     Wire values: `vercel`, `fake` (v2's explicit Fake provider; deployments made under
          *     `Deployments:Provider=Fake` are recorded as `fake`), `netlify`, `cloudflare`, `render`,
@@ -3816,7 +4130,8 @@ export interface components {
         /**
          * @description Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): `targets`, `databases`,
          *     the environment inventory (`env`; keys only) and the `originModel`. `canManage`: the caller is an Owner.
-         *     `fakeMode`: `Deployments:Provider=Fake`.
+         *     `fakeMode`: `Deployments:Provider=Fake`. FR-191: `groups`: the group cards; parts' full cards stay in
+         *     `targets` and `databases`, tied to a group by their `groupId`.
          */
         DeploymentSettingsDto: {
             targets: components["schemas"]["DeploymentTargetDto"][];
@@ -3825,6 +4140,7 @@ export interface components {
             originModel: components["schemas"]["DeploymentOriginModelDto"];
             canManage: boolean;
             fakeMode: boolean;
+            groups: components["schemas"]["DeploymentGroupDto"][];
         };
         /**
          * @description The `deployment_setup` job of a target (FR-144): `state` `queued`, `running`, `succeeded` or
@@ -3896,6 +4212,8 @@ export interface components {
             readiness: components["schemas"]["ReadinessItemDto"][];
             implementedForReal: boolean;
             fakeMode: boolean;
+            /** Format: uuid */
+            groupId?: null | string;
         };
         /**
          * @description State of a deployment target (FR-144). Wire values: `not_configured`, `configuring`, `ready`,
@@ -4606,6 +4924,8 @@ export interface components {
             binding?: null | components["schemas"]["GitBindingDto"];
             /** @description FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab or Bitbucket project. */
             canRebind?: boolean;
+            /** @description FR-177: AIDE credits the accountable person on later commits (default on). */
+            commitCreditEnabled?: boolean;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
         GitTestResultDto: {
@@ -4651,7 +4971,7 @@ export interface components {
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
-            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
             platform?: string;
             /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
             violations?: {
@@ -4695,6 +5015,11 @@ export interface components {
             presetName: string;
             presetVersion: null | string;
             label: string;
+        };
+        /** @description FR-190 Link: the platform project (`type=projects` in the picker; Vercel has none, so leave it out) and the parts. */
+        LinkDeploymentGroupRequest: {
+            resourceId?: null | string;
+            parts?: null | components["schemas"]["DeploymentGroupLinkParts"];
         };
         /** @description FR-144: link an existing platform resource (from `GET /api/me/connections/platforms/:id/resources`). */
         LinkDeploymentResourceRequest: {
@@ -5013,7 +5338,7 @@ export interface components {
          *     types (`NotificationRules.ChannelTypes`); the personal `connection_invalid` never goes to project channels.
          * @enum {unknown}
          */
-        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
+        NotificationEvent: "gate_required" | "gate_overdue" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention" | "stack_profile_ready" | "tracker_import_failed";
         /**
          * @description A page of the caller's notifications, newest first. `unreadCount` counts all the caller's unread notifications
          *     (not just this page). Load more with `before` = `nextBefore`; `null` on the last page.
@@ -5036,11 +5361,12 @@ export interface components {
         };
         /**
          * @description The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus
-         *     `gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92).
+         *     `gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92; also the
+         *     FR-165 warning that a Jira or Linear token expires within 14 days).
          *     Wire values are snake_case.
          * @enum {unknown}
          */
-        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention";
+        NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention" | "stack_profile_ready" | "tracker_import_failed";
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminAgentRunDto: {
             items: components["schemas"]["AdminAgentRunDto"][];
@@ -5102,10 +5428,11 @@ export interface components {
             total: number;
         };
         /**
-         * @description The six lifecycle phases, in order (§4.1). Stored as snake_case strings.
+         * @description The lifecycle phases, in order (§4.1; v5 §4.27 adds Phase.Analysis first). Stored as snake_case strings, so the
+         *     numeric values only give the order (PhaseOrder) and may be renumbered.
          * @enum {unknown}
          */
-        Phase: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+        Phase: "analysis" | "refinement" | "specification" | "planning" | "execution" | "review" | "release";
         /**
          * @description The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),
          *     `running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation
@@ -5136,7 +5463,8 @@ export interface components {
          *     account, Render workspace, Railway workspace, Supabase organisation; `null` when not chosen or unknown),
          *     `metadata` what else the token reaches, `scopes` its scopes where the platform reports them, `expiresAt`
          *     its expiry (`null`: none or unknown), `status` (`valid`, `invalid`, `insufficient_scope`,
-         *     `unchecked`) and when it was last checked, plus the projects whose deployment targets are bound to it.
+         *     `unchecked`) and when it was last checked, plus the projects whose deployment targets are bound to it. `expiryWarning`: the token
+         *     expires within 14 days (FR-165).
          */
         PlatformConnectionDto: {
             /** Format: uuid */
@@ -5156,13 +5484,16 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             boundProjects: components["schemas"]["PlatformBoundProjectDto"][];
+            /** @default false */
+            expiryWarning: boolean;
         };
         /**
          * @description What the platform says about a token (FR-142). `teamId`/`teamSlug`: a team-scoped Vercel token's team.
          *     `accounts`: the teams, accounts, workspaces or organisations it reaches. `policies`: a Cloudflare token's
          *     permission groups (empty when the token can't read them). `missingPermissions`: what the platform said is missing
          *     (Supabase `missing_permissions`; non-empty with status `insufficient_scope`). `tokenKind`: e.g. Railway
-         *     `workspace` or `account`, Cloudflare `user` (`null` when it doesn't matter).
+         *     `workspace` or `account`, Cloudflare `user` (`null` when it doesn't matter). FR-165, FR-166: `site`, `cloudId` and
+         *     `acceptanceCriteriaField` for Jira; `organization` and `organizationUrlKey` for Linear.
          */
         PlatformConnectionMetadataDto: {
             teamId: null | string;
@@ -5171,6 +5502,11 @@ export interface components {
             policies: string[];
             missingPermissions: string[];
             tokenKind: null | string;
+            site?: null | string;
+            cloudId?: null | string;
+            acceptanceCriteriaField?: null | string;
+            organization?: null | string;
+            organizationUrlKey?: null | string;
         };
         /**
          * @description Validation state of a platform connection (FR-142). Wire values: `valid`, `invalid` (rejected),
@@ -5180,10 +5516,11 @@ export interface components {
         PlatformConnectionStatus: "valid" | "invalid" | "insufficient_scope" | "unchecked";
         /**
          * @description Deployment platforms and databases with pasted-token connections (FR-142, §4.20, §4.21). Wire values:
-         *                 `vercel`, `netlify`, `cloudflare`, `render`, `railway`, `supabase`.
+         *                 `vercel`, `netlify`, `cloudflare`, `render`, `railway`, `supabase`, and the issue trackers `jira`,
+         *                 `linear` (FR-165, FR-166).
          * @enum {unknown}
          */
-        PlatformProvider: "vercel" | "netlify" | "cloudflare" | "render" | "railway" | "supabase";
+        PlatformProvider: "vercel" | "netlify" | "cloudflare" | "render" | "railway" | "supabase" | "jira" | "linear";
         /**
          * @description An entry of a platform picker (FR-142 `GET …/resources`): the platform's id (send it as the resource to link), its
          *     name, URL when there is one, and a short detail (e.g. the linked repository, the service type, a project's region and
@@ -5258,7 +5595,7 @@ export interface components {
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
-            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
+            /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
             platform?: string;
             /** @description STACK_INCOMPATIBLE: each broken compatibility rule (FR-116). */
             violations?: {
@@ -5375,6 +5712,18 @@ export interface components {
          * @enum {unknown}
          */
         ProjectSource: "scratch" | "import";
+        /**
+         * @description §6 `GET /sources`: a release version's imports, newest first, its current snapshot and draft state, and whether items can be
+         *     changed now (`canChange`: the project is in an import phase and this is the current version).
+         */
+        ProjectSourcesDto: {
+            /** Format: uuid */
+            releaseVersionId: null | string;
+            imports: components["schemas"]["SourceImportDto"][];
+            currentSnapshot: null | components["schemas"]["SourceSnapshotDto"];
+            draft: null | components["schemas"]["SourceDraftStateDto"];
+            canChange: boolean;
+        };
         /**
          * @description Settings → Stack (FR-117, FR-119): the stack of the project's current release version.
          *         * composition: the pinned normalised composition with its derived fields (§4.18), null for "No stack
@@ -5544,6 +5893,17 @@ export interface components {
             public?: null | boolean;
         };
         /**
+         * @description FR-190, FR-191 (Owner): set up a group. `connectionId` is one of the caller's own connections of the platform;
+         *     `create {name, region?, plan?}` a new project, `link` an existing one, neither a <b>rebind</b> of an existing
+         *     group to the new connection. `plan` applies to services; a group's database uses the platform's default plan.
+         */
+        PutDeploymentGroupRequest: {
+            /** Format: uuid */
+            connectionId?: null | string;
+            create?: null | components["schemas"]["CreateDeploymentResourceRequest"];
+            link?: null | components["schemas"]["LinkDeploymentGroupRequest"];
+        };
+        /**
          * @description FR-144 (Owner): set up a target. `provider` must be the composition's host for the component (`fake` also in
          *     Fake mode); `connectionId` one of the caller's own connections of that platform (not used by GitHub Pages);
          *     `create` or `link`, not both (GitHub Pages: neither; setup enables Pages on the repository).
@@ -5554,6 +5914,11 @@ export interface components {
             connectionId?: null | string;
             create?: null | components["schemas"]["CreateDeploymentResourceRequest"];
             link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
+            /**
+             * Format: uuid
+             * @description FR-191: set the part up in this group (`DEPLOYMENT_GROUP_INVALID` when it can't join); left out, a create or link makes it standalone.
+             */
+            groupId?: null | string;
         };
         /**
          * @description FR-152 (Owner): set the environment's database. `provider` must be the composition's database host (`fake`
@@ -5567,6 +5932,11 @@ export interface components {
             create?: null | components["schemas"]["CreateManagedDatabaseRequest"];
             link?: null | components["schemas"]["LinkDeploymentResourceRequest"];
             external?: null | components["schemas"]["ExternalDatabaseRequest"];
+            /**
+             * Format: uuid
+             * @description FR-191: set the database up in this group (`DEPLOYMENT_GROUP_INVALID` when it can't join); left out, it is standalone.
+             */
+            groupId?: null | string;
         };
         /** @description One readiness checklist item (FR-144): a stable `id`, `state` (`ok`, `warning`, `error`, `na`), a message and an optional fix link. */
         ReadinessItemDto: {
@@ -5837,6 +6207,8 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             releasedAt: null | string;
+            /** @description FR-178, FR-186: `infer` when the version's stack comes from a stack_profile approved in `analysis` (the lifecycle tracker then shows Analysis), else `manual`. */
+            stackSource?: components["schemas"]["StackSource"];
         };
         /**
          * @description Status of a release version (§4.10). Wire values: `in_development`, `awaiting_merge`, `released`, `imported`.
@@ -5993,6 +6365,148 @@ export interface components {
          */
         Severity: "minor" | "major" | "critical";
         /**
+         * @description FR-192, §4.28: what a platform shares between a group's parts. Wire values: `none`, `project` (one real
+         *     project), `shared_setup` (one connection and name, one platform project per part: Vercel, D-V5-8).
+         * @enum {unknown}
+         */
+        SharedProjectCapability: "none" | "project" | "shared_setup";
+        /**
+         * @description FR-173: the latest project request draft against the snapshot. `builtFromSnapshotVersion` is what its run listed (`null`:
+         *     a person's edit, or none). `behindSnapshot` true drives "Sources changed since this draft: run another round" and the
+         *     confirmation on approving it.
+         */
+        SourceDraftStateDto: {
+            /** Format: uuid */
+            artifactId: string;
+            /** Format: int32 */
+            version: number;
+            /** Format: int32 */
+            builtFromSnapshotVersion: null | number;
+            behindSnapshot: boolean;
+        };
+        /** @description One imported item's drift. */
+        SourceDriftItemDto: {
+            /** Format: uuid */
+            importId: string;
+            provider: components["schemas"]["TrackerProvider"];
+            key: string;
+            title: string;
+            url: string;
+            drift: components["schemas"]["SourceItemDrift"];
+        };
+        /**
+         * @description One import (§5). `status`: `queued`, `running`, `completed` (active), `failed` (see `errorCode`;
+         *     re-import to retry), `superseded`, `removed`. `errorCode` is `TRACKER_RATE_LIMITED` while a queued job waits.
+         *     `sourceArtifactId` is the `source_items` version its completion wrote.
+         */
+        SourceImportDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            provider: components["schemas"]["TrackerProvider"];
+            /** Format: uuid */
+            connectionId: null | string;
+            status: components["schemas"]["TrackerImportStatus"];
+            errorCode: null | string;
+            errorMessage: null | string;
+            selection: components["schemas"]["TrackerSelectionDto"];
+            options: components["schemas"]["TrackerImportOptionsDto"];
+            /** Format: int32 */
+            itemCount: number;
+            /** Format: int32 */
+            renderedBytes: number;
+            items: components["schemas"]["TrackerItemSummaryDto"][];
+            /** Format: uuid */
+            sourceArtifactId: null | string;
+            createdBy: components["schemas"]["ActorDto"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /**
+         * @description FR-171: one import: a tracker, the connection (one of the caller's own; omitted: their newest usable one; ignored for GitHub
+         *     beyond being the caller's), the selection and options. A `sourceImports[]` entry on project and version creation, and
+         *     the body of `POST /sources`.
+         */
+        SourceImportRequest: {
+            provider: components["schemas"]["TrackerProvider"];
+            /** Format: uuid */
+            connectionId?: null | string;
+            selection: components["schemas"]["TrackerSelectionDto"];
+            options?: null | components["schemas"]["TrackerImportOptionsDto"];
+        };
+        /**
+         * @description FR-173: how an imported item compares with the tracker now. Wire values: `unchanged`, `changed`, `removed`, `unknown`.
+         * @enum {unknown}
+         */
+        SourceItemDrift: "unchanged" | "changed" | "removed" | "unknown";
+        /**
+         * @description §4.26: the normalised status of an item. Wire values: `todo`, `in_progress`, `done`.
+         * @enum {unknown}
+         */
+        SourceItemStatusCategory: "todo" | "in_progress" | "done";
+        /**
+         * @description §4.26: the normalised type of an item. Wire values: `epic`, `story`, `task`, `bug`, `subtask`, `other`.
+         * @enum {unknown}
+         */
+        SourceItemType: "epic" | "story" | "task" | "bug" | "subtask" | "other";
+        /** @description The current `source_items` version (read it through the artifact routes). */
+        SourceSnapshotDto: {
+            /** Format: uuid */
+            artifactId: string;
+            /** Format: int32 */
+            version: number;
+            contentHash: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description §6 `POST /sources/check`: per-item drift, with the snapshot's hash (a check never changes it). */
+        SourcesCheckDto: {
+            items: components["schemas"]["SourceDriftItemDto"][];
+            snapshotContentHash: null | string;
+            /** Format: date-time */
+            checkedAt: string;
+        };
+        /** @description `POST /api/projects/:id/analysis/run`: the queued Stack Analyst job. */
+        StackAnalysisQueuedDto: {
+            /** Format: uuid */
+            jobId: string;
+            trigger: string;
+            /** Format: date-time */
+            queuedAt: string;
+        };
+        /**
+         * @description FR-180, FR-182: the latest Stack Analyst job of the version and its run (the corrective re-run's when there was one).
+         *     `errorCode` is set when it failed (e.g. `STACK_PROFILE_INVALID`, `BUDGET_EXCEEDED`); `warnings` are the run's
+         *     (e.g. `summary_unavailable`). `artifactId`/`artifactVersion` is the draft the run wrote, if any.
+         */
+        StackAnalysisRunDto: {
+            /** Format: uuid */
+            jobId: string;
+            /** Format: uuid */
+            runId: null | string;
+            status: components["schemas"]["StackAnalysisRunState"];
+            trigger: string;
+            errorCode: null | string;
+            error: null | string;
+            warnings: string[];
+            /** Format: uuid */
+            artifactId: null | string;
+            /** Format: int32 */
+            artifactVersion: null | number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /**
+         * @description Where the Stack Analyst is: `queued`, `running`, `succeeded` or `failed`.
+         * @enum {unknown}
+         */
+        StackAnalysisRunState: "queued" | "running" | "succeeded" | "failed";
+        /**
          * @description The stack catalog (FR-113, §4.16) for the wizard's Stack step, Settings → Stack and Admin → Stack catalog: the five
          *     layers, the choices in evaluation order (frontend, backend, data, vcs, then the deployment choices frontendHost,
          *     backendHost, databaseHost, local and originModel) with their options, the rule statements and the recommended
@@ -6066,6 +6580,8 @@ export interface components {
             originModel: null | string;
             derived: components["schemas"]["StackDerivedDto"];
             caveats: components["schemas"]["StackCaveatDto"][];
+            groups: components["schemas"]["StackDeploymentGroupDto"][];
+            windows: components["schemas"]["StackDeploymentWindowDto"][];
         };
         /**
          * @description A (partial) composition (§4.17, §4.18). For `/options` a missing layer is "not chosen yet"; for `/validate` it
@@ -6090,12 +6606,13 @@ export interface components {
             pack: string;
             mode?: null | string;
         };
-        /** @description Host option ids (`null` = None) and the local dev loop (`compose` or `none`). */
+        /** @description Host option ids (`null` = None), the local dev loop (`compose` or `none`) and §4.28's parts in their own projects (normalised; `[]` when none). */
         StackDeployDto: {
             frontendHost: null | string;
             backendHost: null | string;
             databaseHost: null | string;
             local: string;
+            separateParts: string[];
         };
         /** @description The Deployment layer: option ids of the frontend, backend and database hosts (or `none`) and the local dev loop (`compose`/`none`). */
         StackDeploySelection: {
@@ -6103,6 +6620,24 @@ export interface components {
             backendHost?: null | string;
             databaseHost?: null | string;
             local?: null | string;
+            /** @description §4.28: the parts deployed to their own projects (`frontend`, `backend`, `database`); absent means none. R13 removes any that share no platform, and a caveat says so. */
+            separateParts?: null | string[];
+        };
+        /** @description FR-187: parts on one platform that form a group, and what that platform shares (`project`, or `shared_setup` on Vercel). */
+        StackDeploymentGroupDto: {
+            provider: components["schemas"]["DeploymentProvider"];
+            parts: components["schemas"]["DeploymentPart"][];
+            capability: components["schemas"]["SharedProjectCapability"];
+        };
+        /**
+         * @description FR-188: one window of the Deployment step: a group, or one part (`capability` `none`). `platform` is the host's
+         *     name (`railway`, `netlify`, `supabase`, `external` …), and `environment` is set where a database has a window per environment.
+         */
+        StackDeploymentWindowDto: {
+            platform: string;
+            parts: components["schemas"]["DeploymentPart"][];
+            capability: components["schemas"]["SharedProjectCapability"];
+            environment: null | components["schemas"]["DeploymentEnvironment"];
         };
         /**
          * @description Derived facts (§4.18): the Next.js mode (R2), the specialists in play (FR-120), the origin models the Owner can switch
@@ -6198,12 +6733,108 @@ export interface components {
             catalogVersion: string;
             choices: components["schemas"]["StackChoiceStateDto"][];
             nextjsMode: null | string;
+            groups: components["schemas"]["StackDeploymentGroupDto"][];
+            windows: components["schemas"]["StackDeploymentWindowDto"][];
+            caveats: components["schemas"]["StackCaveatDto"][];
         };
         /** @description Where a pack was adapted from (FR-122): the stack-packs plugin, its version and the snapshot date. */
         StackPackSourceDto: {
             plugin: string;
             version: string;
             snapshot: string;
+        };
+        /** @description FR-181: one "Needs your input" entry: the layer, why (status), the agent's question, the unsupported technology and a conflict's candidates. */
+        StackProfileBlankDto: {
+            layer: string;
+            status: components["schemas"]["StackProfileLayerStatus"];
+            question: null | string;
+            technology: null | string;
+            candidates: components["schemas"]["StackProfileCandidateDto"][];
+        };
+        /** @description A candidate of a `conflict` layer; `source` is `agent` or `detector`; `option` may be `none`. */
+        StackProfileCandidateDto: {
+            option: string;
+            path: null | string;
+            source: string;
+            evidence: components["schemas"]["StackProfileEvidenceDto"][];
+        };
+        /** @enum {unknown} */
+        StackProfileConfidence: "high" | "medium" | "low" | null;
+        /** @description §4.27: the structured profile, as in the `aide-stack-profile` block (the editor posts it back inside that block). */
+        StackProfileDocumentDto: {
+            /** Format: int32 */
+            schemaVersion: number;
+            baseCommitSha: null | string;
+            generalist: boolean;
+            layers: components["schemas"]["StackProfileLayersDto"];
+            hosts: components["schemas"]["StackProfileHostsDto"];
+            structure: components["schemas"]["StackProfileStructureDto"][];
+            questions: components["schemas"]["StackProfileQuestionDto"][];
+        };
+        StackProfileEvidenceDto: {
+            file: string;
+            text: string;
+        };
+        /** @description FR-184: hosts (option ids, `null` = None), local dev loop, origin model, separate parts and the host choices the detector found. */
+        StackProfileHostsDto: {
+            frontendHost: null | string;
+            backendHost: null | string;
+            databaseHost: null | string;
+            local: null | string;
+            originModel: null | string;
+            separateParts: string[];
+            detected: string[];
+        };
+        /** @description A layer: catalog option (or `null`), path (frontend, backend), mode (data), status, confidence, the technology of an `unsupported` layer, evidence and a conflict's candidates. */
+        StackProfileLayerDto: {
+            option: null | string;
+            path: null | string;
+            mode: null | string;
+            status: components["schemas"]["StackProfileLayerStatus"];
+            confidence: null | components["schemas"]["StackProfileConfidence"];
+            technology: null | string;
+            evidence: components["schemas"]["StackProfileEvidenceDto"][];
+            candidates: components["schemas"]["StackProfileCandidateDto"][];
+        };
+        /**
+         * @description §4.27 layer status. Wire values: `inferred`, `user`, `none`, `fixed`, `unknown`, `conflict`, `unsupported`.
+         * @enum {unknown}
+         */
+        StackProfileLayerStatus: "inferred" | "user" | "none" | "fixed" | "unknown" | "conflict" | "unsupported";
+        StackProfileLayersDto: {
+            frontend: components["schemas"]["StackProfileLayerDto"];
+            backend: components["schemas"]["StackProfileLayerDto"];
+            data: components["schemas"]["StackProfileLayerDto"];
+            vcs: components["schemas"]["StackProfileLayerDto"];
+        };
+        StackProfileQuestionDto: {
+            layer: string;
+            text: string;
+        };
+        StackProfileStructureDto: {
+            path: string;
+            role: string;
+            note: string;
+        };
+        /**
+         * @description The latest `stack_profile` version (FR-182): its status, author, narrative and parsed document. `document` is
+         *     `null` (with `errors`) when the content can't be read as a profile, e.g. a corrupted version.
+         */
+        StackProfileViewDto: {
+            /** Format: uuid */
+            artifactId: string;
+            /** Format: int32 */
+            version: number;
+            status: components["schemas"]["ArtifactStatus"];
+            integrity: components["schemas"]["ArtifactIntegrity"];
+            authoredByAgent: boolean;
+            /** Format: uuid */
+            agentRunId: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            narrative: string;
+            document: null | components["schemas"]["StackProfileDocumentDto"];
+            errors: string[];
         };
         /** @description A rule id (`R1`…) and its text, e.g. `R3` "Prisma needs Express, NestJS or Next.js full-stack". */
         StackReasonDto: {
@@ -6223,6 +6854,8 @@ export interface components {
             id: string;
             statement: string;
         };
+        /** @enum {unknown} */
+        StackSource: "manual" | "infer" | null;
         StackVcsDto: {
             pack: string;
             /** Format: uuid */
@@ -6253,8 +6886,11 @@ export interface components {
             version: string;
             request: string;
             stack?: null | components["schemas"]["StackCompositionRequest"];
+            /** @description FR-171: tracker items to import into the new version, as on project create. The request stays required (D-V5-6). */
+            sourceImports?: null | components["schemas"]["SourceImportRequest"][];
+            stackSource?: null | components["schemas"]["StackSource"];
         };
-        /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1). */
+        /** @description FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1; FR-186: analysis for `stackSource: infer`). */
         StartReleaseVersionResultDto: {
             releaseVersion: components["schemas"]["ReleaseVersionDto"];
             state: components["schemas"]["ProjectStateDto"];
@@ -6320,6 +6956,100 @@ export interface components {
             truncated: boolean;
             error: null | string;
         };
+        /** @description A connection in the Issue trackers section. `id` is what to send as `connectionId`; `status` is `valid`, `invalid` or `insufficient_scope`; `detail` the Jira site, Linear organisation, GitHub login or GitLab instance. */
+        TrackerConnectionSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            status: string;
+            accountName: null | string;
+            detail: null | string;
+        };
+        /** @description A project, team or repository to browse; send `id` as `containerId`. */
+        TrackerContainerDto: {
+            id: string;
+            name: string;
+            detail: null | string;
+            url: null | string;
+        };
+        TrackerContainerPageDto: {
+            items: components["schemas"]["TrackerContainerDto"][];
+            nextCursor: null | string;
+        };
+        /** @description FR-169: structured filters: title text, status categories (done is hidden unless asked for), labels, and parent (epic key, Linear sub-issue key or project name, GitLab milestone). */
+        TrackerFilterDto: {
+            text?: null | string;
+            statusCategories?: null | components["schemas"]["SourceItemStatusCategory"][];
+            labels?: null | string[];
+            parent?: null | string;
+        };
+        /** @description FR-169: include children (default on), comments and assignees (default off). */
+        TrackerImportOptionsDto: {
+            includeChildren?: boolean;
+            includeComments?: boolean;
+            includeAssignees?: boolean;
+        };
+        /**
+         * @description Where an import is (§5). `completed` imports are the version's <b>active</b> imports; `superseded` (re-imported)
+         *     and `removed` ones stay as history. Wire values: `queued`, `running`, `completed`, `failed`,
+         *     `superseded`, `removed`.
+         * @enum {unknown}
+         */
+        TrackerImportStatus: "queued" | "running" | "completed" | "failed" | "superseded" | "removed";
+        /** @description An item without its body: for the browse dialog, chips and the sources list. */
+        TrackerItemSummaryDto: {
+            key: string;
+            title: string;
+            url: string;
+            type: components["schemas"]["SourceItemType"];
+            status: string;
+            statusCategory: components["schemas"]["SourceItemStatusCategory"];
+            labels: string[];
+            parentKey: null | string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description An issue tracker AIDE imports from (FR-165–FR-168). Wire values: `jira`, `linear`, `github`, `gitlab`.
+         * @enum {unknown}
+         */
+        TrackerProvider: "jira" | "linear" | "github" | "gitlab";
+        /** @description FR-169: browse results. Send `query` or `filter`, and `cursor` from the previous page. */
+        TrackerSearchRequest: {
+            /** Format: uuid */
+            connectionId?: null | string;
+            containerId?: null | string;
+            filter?: null | components["schemas"]["TrackerFilterDto"];
+            query?: null | string;
+            cursor?: null | string;
+        };
+        TrackerSearchResultDto: {
+            items: components["schemas"]["TrackerItemSummaryDto"][];
+            nextCursor: null | string;
+        };
+        /**
+         * @description FR-169, FR-171: what an import reads: ticked `keys` (at most 200), or everything matching `filter` or the native
+         *     `query` (JQL for Jira, search qualifiers for GitHub; GitLab and Linear offer filters only), in `containerId` (a Jira
+         *     project key, Linear `team:KEY` or `project:ID`, GitHub `owner/repo`, GitLab `group/project`).
+         */
+        TrackerSelectionDto: {
+            keys?: null | string[];
+            query?: null | string;
+            containerId?: null | string;
+            filter?: null | components["schemas"]["TrackerFilterDto"];
+        };
+        /**
+         * @description FR-165: one tracker for the Issue trackers section: whether it's `ready` to browse and, if not, why (`reason`:
+         *     `not_connected`, `app_not_registered` or `issues_permission_missing`, with the App settings link in `settingsUrl`).
+         */
+        TrackerStatusDto: {
+            provider: components["schemas"]["TrackerProvider"];
+            name: string;
+            ready: boolean;
+            reason: null | string;
+            settingsUrl: null | string;
+            connections: components["schemas"]["TrackerConnectionSummaryDto"][];
+        };
         /** @description The number of the caller's unread notifications (the bell badge). */
         UnreadNotificationCountDto: {
             /** Format: int32 */
@@ -6332,6 +7062,11 @@ export interface components {
         UpdateBitbucketConsumerRequest: {
             clientId: string;
             clientSecret?: null | string;
+        };
+        /** @description FR-177: `PATCH /api/auth/me`. `commitCreditOptOut` is required (else 400 `VALIDATION`). */
+        UpdateCurrentUserRequest: {
+            /** @description `true`: commit credit skips this person, and moves on to the next one (§4.25). */
+            commitCreditOptOut?: null | boolean;
         };
         /**
          * @description Change a GitLab instance (FR-130); omitted fields are unchanged. An empty `clientId` or `clientSecret` clears it.
@@ -6371,6 +7106,8 @@ export interface components {
              *         development. 409 `CONFLICT` while that version is `awaiting_merge` or a release attempt is in progress.
              */
             tagPrefix?: null | string;
+            /** @description FR-177: credit people on later commits (Owner). Never rewrites history. */
+            commitCreditEnabled?: null | boolean;
         };
         /** @description Rename an LLM connection (FR-78). */
         UpdateLlmCredentialRequest: {
@@ -6403,9 +7140,16 @@ export interface components {
         UpdateNotificationSettingsRequest: {
             channels: components["schemas"]["NotificationChannelInput"][];
         };
-        /** @description Rename a platform connection (FR-142). */
+        /**
+         * @description Rename a platform connection (FR-142). FR-165: on Jira and Linear, set the expiry (`clearExpiresAt` removes it) and, on Jira, the
+         *     acceptance criteria field (an empty string clears it). Omitted fields are unchanged; at least one is needed.
+         */
         UpdatePlatformConnectionRequest: {
-            label: string;
+            label?: null | string;
+            /** Format: date-time */
+            expiresAt?: null | string;
+            clearExpiresAt?: boolean;
+            acceptanceCriteriaField?: null | string;
         };
         /** @description Partial update of a project (FR-7). Omitted fields are unchanged. */
         UpdateProjectRequest: {
@@ -6434,6 +7178,8 @@ export interface components {
             systemRole: components["schemas"]["SystemRole"];
             avatarUrl: null | string;
             githubLinked: boolean;
+            /** @description FR-177: the user turned off "Credit me on commits made by AIDE". */
+            commitCreditOptOut?: boolean;
         };
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
         ViolationDto: {
@@ -6651,6 +7397,57 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7264,7 +8061,7 @@ export interface operations {
                     "application/json": components["schemas"]["PlatformConnectionDto"];
                 };
             };
-            /** @description VALIDATION, CREDENTIAL_INVALID (the platform rejected the token; nothing is saved) or CONNECTION_SCOPE_INSUFFICIENT (a Cloudflare account-owned cfat_ token: Workers Builds needs a user token) */
+            /** @description VALIDATION, CREDENTIAL_INVALID (the platform rejected the token; nothing is saved), CONNECTION_SCOPE_INSUFFICIENT (a Cloudflare account-owned cfat_ token: Workers Builds needs a user token) or TRACKER_SITE_NOT_ALLOWED (FR-165: the Jira site isn't *.atlassian.net; nothing is fetched) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7563,7 +8360,7 @@ export interface operations {
     ListPlatformConnectionResources: {
         parameters: {
             query?: {
-                type?: "sites" | "services" | "projects" | "workers" | "orgs" | "regions" | "databases";
+                type?: "sites" | "services" | "projects" | "workers" | "orgs" | "regions" | "databases" | "fields";
                 accountId?: string;
             };
             header?: never;
@@ -7623,6 +8420,486 @@ export interface operations {
             };
             /** @description UPSTREAM_ERROR (the platform failed or couldn't be reached) */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListTrackers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerStatusDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListTrackerContainers: {
+        parameters: {
+            query?: {
+                connectionId?: string;
+                search?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                provider: "jira" | "linear" | "github" | "gitlab";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerContainerPageDto"];
+                };
+            };
+            /** @description VALIDATION, CONNECTION_SCOPE_INSUFFICIENT (the token can't read this) or TRACKER_QUERY_INVALID (the title holds the tracker's message) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CREDENTIAL_NOT_OWNER: another user's connection. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the connection. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description TRACKER_NOT_CONNECTED (no usable connection for that tracker; a rejected token also marks it invalid) or TRACKER_PERMISSION_MISSING (GitHub: the App lacks Issues: read; extension installUrl is the App settings link) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the tracker's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the tracker failed or didn't answer within Trackers:SearchTimeout) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    SearchTrackerItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "jira" | "linear" | "github" | "gitlab";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackerSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerSearchResultDto"];
+                };
+            };
+            /** @description VALIDATION, CONNECTION_SCOPE_INSUFFICIENT (the token can't read this) or TRACKER_QUERY_INVALID (the title holds the tracker's message) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description CREDENTIAL_NOT_OWNER: another user's connection. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the connection or container. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description TRACKER_NOT_CONNECTED (no usable connection for that tracker; a rejected token also marks it invalid) or TRACKER_PERMISSION_MISSING (GitHub: the App lacks Issues: read; extension installUrl is the App settings link) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_RATE_LIMITED (the tracker's 429; Retry-After when known) */
+            429: {
+                headers: {
+                    /** @description Seconds until the action is allowed again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description UPSTREAM_ERROR (the tracker failed or didn't answer within Trackers:SearchTimeout) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetProjectSources: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSourcesDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or a releaseVersionId of another project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AddProjectSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceImportDto"];
+                };
+            };
+            /** @description VALIDATION or SOURCE_ITEMS_TOO_LARGE (over 200 items with what's active). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (a Viewer) or CREDENTIAL_NOT_OWNER (another user's connection). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or connection. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE (D-V5-10: new work belongs in a new version, or after a rollback) or TRACKER_NOT_CONNECTED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CheckProjectSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcesCheckDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ReimportProjectSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceImportDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: a Viewer. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or an import that isn't active in the current version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE or TRACKER_NOT_CONNECTED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RemoveProjectSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: a Viewer. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project or an import that isn't active in the current version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE or CONFLICT. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10218,7 +11495,7 @@ export interface operations {
         parameters: {
             query?: {
                 projectId?: string;
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
                 status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                 provider?: "anthropic" | "openai" | "ollama" | "fake";
                 model?: string;
@@ -10570,7 +11847,7 @@ export interface operations {
                 page?: number;
                 limit?: number;
                 search?: string;
-                phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+                phase?: "analysis" | "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
                 pack?: string;
@@ -10634,7 +11911,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDto"];
                 };
             };
-            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH or LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) */
+            /** @description VALIDATION, VERSION_INVALID (initialVersion, import.developmentVersion or import.releasedTag), TAG_NOT_FOUND (import: the released tag isn't in the repository), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH, LLM_PROVIDER_UNAVAILABLE (llm: provider disabled or not usable by the caller) SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys) or STACK_INFER_NO_CODE (stackSource infer on a repository with no code) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10652,7 +11929,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection; llm: another user's LLM connection) */
+            /** @description FORBIDDEN (github_app: the caller's GitHub account can't push to the repository) or CREDENTIAL_NOT_OWNER (deployment: another user's Vercel connection; llm: another user's LLM connection; sourceImports: another user's tracker connection) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10705,7 +11982,7 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string;
-                phase?: "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+                phase?: "analysis" | "refinement" | "specification" | "planning" | "execution" | "review" | "release";
                 status?: "active" | "building" | "reviewing" | "releasing" | "released" | "rolled_back" | "awaiting_merge";
                 hasDevelopmentVersion?: boolean;
                 pack?: string;
@@ -11697,7 +12974,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentTargetDto"];
                 };
             };
-            /** @description VALIDATION (body, component, or a Local Git project outside Fake mode) or STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) */
+            /** @description VALIDATION (body, component, or a Local Git project outside Fake mode), STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) or DEPLOYMENT_GROUP_INVALID (groupId: the part can't join that group) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12047,6 +13324,221 @@ export interface operations {
             };
             /** @description Bad Gateway */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PutDeploymentGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutDeploymentGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentGroupDto"];
+                };
+            };
+            /** @description VALIDATION, STACK_INCOMPATIBLE (the stack deploys nothing to this platform) or DEPLOYMENT_GROUP_INVALID (the parts don't form this group, or a part is already set up on its own) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project, connection, or the group of a rebind) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PLATFORM_RESOURCE_EXISTS (extension platform; link it instead) or CONFLICT (the group is being set up, already has resources, or changed concurrently). PLATFORM_GIT_NOT_CONNECTED and PLATFORM_PLAN_LIMIT land on the part from the job. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PLATFORM_ERROR (extension platform; the connection can't reach the project, and any old binding stays) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteDeploymentGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RetryDeploymentGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentGroupDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND (project or group) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description INVALID_STATE (setup is running, or nothing needs a retry) or CONFLICT */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13208,7 +14700,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -13261,7 +14753,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -13311,7 +14803,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
                 version: number;
             };
             cookie?: never;
@@ -13365,7 +14857,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -13415,7 +14907,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
             };
             cookie?: never;
         };
@@ -13434,7 +14926,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION: unknown artifact type, or empty or too long content. INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason). */
+            /** @description VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable aide-stack-profile block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -13487,7 +14979,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                type: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
                 version: number;
             };
             cookie?: never;
@@ -13575,7 +15067,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION. INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). */
+            /** @description VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -13611,7 +15103,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT. */
+            /** @description ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT. STACK_PROFILE_INCOMPLETE: a stack_profile with unresolved layers (details: the layers); WRONG_PHASE: a stack_profile outside analysis. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -13697,7 +15189,7 @@ export interface operations {
     ListRuns: {
         parameters: {
             query?: {
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
                 page?: number;
                 limit?: number;
                 releaseVersionId?: string;
@@ -13911,11 +15403,111 @@ export interface operations {
             };
         };
     };
+    GetAnalysis: {
+        parameters: {
+            query?: {
+                releaseVersionId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the release version in this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RunStackAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StackAnalysisQueuedDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description FORBIDDEN: Viewers can't run agents. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description WRONG_PHASE (not in analysis, or the version doesn't infer its stack), BUDGET_EXCEEDED (token budget used up), INVALID_STATE (the Stack Analyst is queued or running) or CONFLICT (a concurrent start). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListExecutionSteps: {
         parameters: {
             query?: {
                 planVersion?: number;
-                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary";
+                planType?: "project_request" | "technical_specification" | "implementation_plan" | "optimization_plan" | "codebase_summary" | "source_items" | "stack_profile";
                 releaseVersionId?: string;
             };
             header?: never;
@@ -15034,7 +16626,7 @@ export interface operations {
                     "application/json": components["schemas"]["StartReleaseVersionResultDto"];
                 };
             };
-            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension) or VCS_MISMATCH. */
+            /** @description VALIDATION (version or request missing or too long), VERSION_INVALID (not MAJOR.MINOR.PATCH[-prerelease]), STACK_INCOMPATIBLE (violations extension), VCS_MISMATCH, SOURCE_ITEMS_TOO_LARGE (sourceImports: over 200 ticked keys) or STACK_INFER_NO_CODE (stackSource infer with no released base commit; FR-186: an inference version starts in analysis; stack alongside it is VALIDATION). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -15052,7 +16644,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description FORBIDDEN: only Owners start versions. */
+            /** @description FORBIDDEN (only Owners start versions) or CREDENTIAL_NOT_OWNER (FR-171: a source import with another user's connection). */
             403: {
                 headers: {
                     [name: string]: unknown;

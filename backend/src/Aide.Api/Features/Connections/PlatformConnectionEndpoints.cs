@@ -18,7 +18,7 @@ namespace Aide.Api.Features.Connections;
 /// </summary>
 public static class PlatformConnectionEndpoints
 {
-    private const string Invalid400 = "VALIDATION, CREDENTIAL_INVALID (the platform rejected the token; nothing is saved) or CONNECTION_SCOPE_INSUFFICIENT (a Cloudflare account-owned cfat_ token: Workers Builds needs a user token)";
+    private const string Invalid400 = "VALIDATION, CREDENTIAL_INVALID (the platform rejected the token; nothing is saved), CONNECTION_SCOPE_INSUFFICIENT (a Cloudflare account-owned cfat_ token: Workers Builds needs a user token) or TRACKER_SITE_NOT_ALLOWED (FR-165: the Jira site isn't *.atlassian.net; nothing is fetched)";
     private const string RateLimited429 = "UPSTREAM_RATE_LIMITED (the platform's 429; Retry-After when known)";
     private const string Upstream502 = "UPSTREAM_ERROR (the platform failed or couldn't be reached)";
     private const string Use400 = "VALIDATION (a type the provider doesn't list, or a malformed accountId), CREDENTIAL_INVALID (the token is invalid or was just rejected; the connection is now invalid) or CONNECTION_SCOPE_INSUFFICIENT (the token lacks a permission for this request; the connection's status is unchanged)";
@@ -52,7 +52,7 @@ public static class PlatformConnectionEndpoints
 
         group.MapPatch("/{id:guid}", RenamePlatformConnection)
             .WithName("RenamePlatformConnection")
-            .WithSummary("FR-142: rename one of the caller's platform connections. Browser session only.")
+            .WithSummary("FR-142: rename one of the caller's platform connections. FR-165: on Jira and Linear, also the expiry and the acceptance criteria field. Browser session only.")
             .RequireAuthorization(AuthConstants.BrowserSessionPolicy)
             .Produces<PlatformConnectionDto>()
             .ProducesValidationProblem()
@@ -140,7 +140,7 @@ public static class PlatformConnectionEndpoints
         PlatformConnectionService connections,
         CancellationToken cancellationToken)
     {
-        var result = await connections.RenameAsync(currentUser.RequiredUserId, id, request.Label, cancellationToken);
+        var result = await connections.UpdateAsync(currentUser.RequiredUserId, id, request, cancellationToken);
         if (result.IsFailure)
         {
             return result.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(result.Error) : ApiProblems.FromError(result.Error);

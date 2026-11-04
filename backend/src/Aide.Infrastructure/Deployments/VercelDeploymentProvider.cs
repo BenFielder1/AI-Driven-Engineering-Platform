@@ -52,7 +52,7 @@ public sealed class VercelDeploymentProvider(VercelApiClient client) : IDeployme
         {
             return existing.LinkedRepo is not null && DeploymentSettingsRules.LinkMatches(existing.LinkedRepo, repo.FullName)
                 ? Result(existing)
-                : throw new DeploymentProviderException(DeploymentFailure.Rejected, 409, "A Vercel project with this name exists already; link it instead or pick another name.");
+                : throw new DeploymentProviderException(DeploymentFailure.ResourceExists, 409, "A Vercel project with this name exists already; link it instead or pick another name.");
         }
 
         var config = request.Target.BuildConfig;

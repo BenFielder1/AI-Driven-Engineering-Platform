@@ -81,16 +81,18 @@ public sealed class NotificationComposer(AideDbContext db)
             return new ComposedNotification(type, projectId, projectName, sourceId, NotificationMessages.Compose(facts), NotificationRules.LinkPath(type, projectId), gate);
         }
 
-        var payload = await db.Events.AsNoTracking()
+        var source = await db.Events.AsNoTracking()
             .Where(e => e.Id == sourceId && e.ProjectId == projectId)
-            .Select(e => e.Payload)
+            .Select(e => new { e.Type, e.Payload })
             .FirstOrDefaultAsync(cancellationToken);
-        if (payload is null)
+        if (source is null)
         {
             return null;
         }
 
+        var payload = source.Payload;
         var read = ReadFacts(type, projectName, payload);
+        read = read with { Reason = SourceReason(type, source.Type) ?? read.Reason };
         return new ComposedNotification(
             type,
             projectId,
@@ -100,19 +102,33 @@ public sealed class NotificationComposer(AideDbContext db)
             NotificationRules.LinkPath(type, projectId, read.ArtifactType, read.DeploymentEnvironment, HasRunId(payload)),
             null)
         {
-            RecipientUserId = NotificationRules.IsPersonal(type) ? UserId(payload) : null,
+            RecipientUserId = NotificationRules.RecipientField(type) is { } field ? UserId(payload, field) : null,
             Notifies = NotificationRules.Notifies(read),
         };
     }
 
-    /// <summary>The <c>userId</c> of an event payload: the connection's owner of <c>CONNECTION_INVALID</c>.</summary>
-    private static Guid? UserId(string payload)
+    /// <summary>
+    /// The reason the source event itself gives a type raised by more than one event: an expiry warning
+    /// (<c>CONNECTION_EXPIRING</c>) rather than a rejected connection, and a failed Stack Analyst run rather than a draft (FR-165, FR-193).
+    /// </summary>
+    private static string? SourceReason(NotificationType type, string eventType) => (type, eventType) switch
+    {
+        (NotificationType.ConnectionInvalid, EventTypes.ConnectionExpiring) => NotificationRules.ConnectionExpiringReason,
+        (NotificationType.StackProfileReady, EventTypes.RunFailed) => NotificationRules.StackProfileRunFailedReason,
+        _ => null,
+    };
+
+    /// <summary>
+    /// The user an event payload names in <paramref name="field"/>: the connection's owner (<c>userId</c>) of
+    /// <c>CONNECTION_INVALID</c> and <c>CONNECTION_EXPIRING</c>, the importer (<c>importedBy</c>) of <c>TRACKER_IMPORT_FAILED</c>.
+    /// </summary>
+    private static Guid? UserId(string payload, string field)
     {
         try
         {
             using var document = JsonDocument.Parse(payload);
             return document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("userId", out var value)
+                && document.RootElement.TryGetProperty(field, out var value)
                 && value.ValueKind == JsonValueKind.String
                 && value.TryGetGuid(out var userId)
                     ? userId

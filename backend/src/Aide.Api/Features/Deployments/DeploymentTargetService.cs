@@ -13,7 +13,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.Api.Features.Deployments;
 
 /// <summary>Payload of the <c>deployment_setup</c> job (FR-144): the target and what to do (create with name/region/plan, or link).</summary>
-public sealed record DeploymentSetupPayload(Guid ProjectId, Guid TargetId, bool Create, string? Name, string? Region, string? Plan, string? ResourceId);
+/// <remarks>FR-190: a group's job has <see cref="GroupId"/> and an empty <see cref="TargetId"/>; <see cref="LinkParts"/> names each part's existing resource.</remarks>
+public sealed record DeploymentSetupPayload(
+    Guid ProjectId, Guid TargetId, bool Create, string? Name, string? Region, string? Plan, string? ResourceId, Guid? GroupId = null, DeploymentGroupLinkParts? LinkParts = null);
 
 /// <summary>
 /// FR-143–FR-146: Settings → Deployment. Targets come from the composition of the project's current version (one card per
@@ -30,6 +32,7 @@ public sealed partial class DeploymentTargetService(
     IGitHubAppStore apps,
     Infrastructure.Git.IWorkingCopies workingCopies,
     RolloutReader rollouts,
+    DeploymentGroupReader groups,
     JobEnqueuer jobs,
     TimeProvider time,
     ILogger<DeploymentTargetService> logger)
@@ -77,7 +80,8 @@ public sealed partial class DeploymentTargetService(
                 composition?.Derived.OriginModelOptions ?? [],
                 OriginModels.Explanation(composition?.OriginModel)),
             callerRole == ProjectRole.Owner,
-            access.UsesFake);
+            access.UsesFake,
+            await groups.ListAsync(projectId, composition, callerRole == ProjectRole.Owner, cancellationToken));
     }
 
     /// <summary>One target card; <paramref name="checkedItems"/> replaces the local readiness after a verify.</summary>
@@ -144,13 +148,14 @@ public sealed partial class DeploymentTargetService(
             new DeploymentCapabilitiesDto(caps.ShaPinned, caps.Previews, caps.Rollback, caps.PerEnvironmentVariables, caps.RuntimeSecrets),
             [.. items.Select(i => new ReadinessItemDto(i.Id, i.State, i.Message, i.FixUrl))],
             DeploymentPlatforms.ImplementedForReal(provider),
-            access.UsesFake);
+            access.UsesFake,
+            row?.GroupId);
     }
 
     /// <summary>The target's setup progress from its row and its newest <c>deployment_setup</c> job.</summary>
     private async Task<DeploymentSetupDto?> SetupAsync(Guid projectId, DeploymentTarget row, DeploymentFacts facts, CancellationToken cancellationToken)
     {
-        var job = await LatestSetupJobAsync(projectId, row.Id, cancellationToken);
+        var job = await LatestSetupJobAsync(projectId, row, cancellationToken);
         if (row.Status == DeploymentTargetStatus.Configuring)
         {
             return new DeploymentSetupDto(job?.Id, job?.Status == JobStatus.Running ? "running" : "queued", row.StatusReason ?? StepQueued, null, null, null, job?.CreatedAt, null);
@@ -171,14 +176,14 @@ public sealed partial class DeploymentTargetService(
         return new DeploymentSetupDto(job.Id, "succeeded", null, null, null, null, job.CreatedAt, job.CompletedAt);
     }
 
-    private async Task<Job?> LatestSetupJobAsync(Guid projectId, Guid targetId, CancellationToken cancellationToken)
+    private async Task<Job?> LatestSetupJobAsync(Guid projectId, DeploymentTarget row, CancellationToken cancellationToken)
     {
         var candidates = await db.Jobs.AsNoTracking()
             .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
             .OrderByDescending(j => j.CreatedAt)
             .Take(20)
             .ToListAsync(cancellationToken);
-        return candidates.FirstOrDefault(j => TryPayload(j.Payload)?.TargetId == targetId);
+        return candidates.FirstOrDefault(j => TryPayload(j.Payload) is { } payload && (payload.TargetId == row.Id || (row.GroupId is not null && payload.GroupId == row.GroupId)));
     }
 
     /// <summary>The fix link of a setup or readiness failure: the platform's Git connect link, or the AIDE GitHub App's page.</summary>

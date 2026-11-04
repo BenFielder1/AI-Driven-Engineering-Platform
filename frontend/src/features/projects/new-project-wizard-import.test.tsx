@@ -63,14 +63,13 @@ async function pickShop(user: User) {
   await screen.findByRole('group', { name: 'Currently released version' })
 }
 
-/** Version → Configuration → Review & create. */
+/** Version → Stack → Configuration → Review & create (FR-178: an import with code infers its stack, so Deployment is skipped). */
 async function toReview(user: User) {
   await next(user)
   await stepHeading(/Step 5 of 8: Stack/)
+  expect(screen.getByRole('radio', { name: 'Infer from the repository (recommended)' })).toBeChecked()
   await next(user)
   await stepHeading(/Step 6 of 8: Configuration/)
-  await next(user)
-  await stepHeading(/Step 7 of 8: Deployment/)
   await next(user)
   await stepHeading(/Step 8 of 8: Review & create/)
 }
@@ -130,8 +129,10 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
       source: 'import',
       import: { releasedTag: 'v2.3.0', developmentVersion: '2.4.0' },
       git: { mode: 'github_app', installationId: 9001, repoFullName: 'ada/shop', defaultBranch: 'trunk' },
+      stackSource: 'infer',
     })
     expect(createBody()).not.toHaveProperty('initialVersion')
+    expect(createBody()).not.toHaveProperty('stack')
     const badges = within(projectHeader('Shop')).getByTestId('version-badges')
     expect(badges).toHaveTextContent('Released 2.3.0')
     expect(badges).toHaveTextContent('In development 2.4.0')

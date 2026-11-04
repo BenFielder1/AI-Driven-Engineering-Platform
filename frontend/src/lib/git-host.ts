@@ -42,6 +42,10 @@ export function gitHostTerms(provider: Schemas['GitProvider'] | null | undefined
   return provider ? termsByProvider[provider] : github
 }
 
+/** FR-177: why commit credit is different on Bitbucket; shown on Settings → Git and Account. */
+export const bitbucketCommitEmailWarning =
+  "Bitbucket has no private commit address, so this adds the person's Bitbucket email to the repository's history."
+
 /** The terms for a free-form `provider` value (e.g. an activity payload); unknown or missing reads as GitHub. */
 export function gitHostTermsOf(value: unknown): GitHostTerms {
   return typeof value === 'string' && Object.hasOwn(termsByProvider, value)

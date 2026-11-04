@@ -65,7 +65,8 @@ internal enum GitProvider
     Local,
 }
 
-internal sealed record CreateProjectGitRequest(GitProvider Provider, string? RepoUrl, string? DefaultBranch, string? Token);
+/// <summary><c>localSourcePath</c>: FR-73 Local import only, a directory under the server's import root.</summary>
+internal sealed record CreateProjectGitRequest(GitProvider Provider, string? RepoUrl, string? DefaultBranch, string? Token, string? LocalSourcePath = null);
 
 /// <summary>FR-159: the new project's LLM provider (wire value), default model and, optionally, the caller's connection.</summary>
 internal sealed record CreateProjectLlmRequest(string Provider, string DefaultModel, Guid? CredentialId);
@@ -79,7 +80,10 @@ internal sealed record CreateProjectRequest(
     int? MaxReviewCycles,
     long? TokenBudget,
     CreateProjectGitRequest Git,
-    CreateProjectLlmRequest? Llm = null);
+    CreateProjectLlmRequest? Llm = null,
+    string? StackSource = null,
+    string? Source = null,
+    CreateProjectImportRequest? Import = null);
 
 internal sealed record ArtifactStateDto(string Type, int? LatestVersion, string? LatestStatus, int? CurrentLockedVersion);
 
@@ -314,3 +318,144 @@ internal sealed record MigrationRunDto(
     long TotalMs,
     string? ErrorCode,
     DateTimeOffset StartedAt);
+
+// FR-194: `aide analysis` (GET /analysis, POST /analysis/run, the generic approve and reject of the stack_profile).
+
+internal sealed record CodebaseSummaryStatusDto(string Status, Guid? RunId, Guid? ArtifactId, int? ArtifactVersion);
+
+internal sealed record StackAnalysisRunDto(
+    Guid JobId,
+    Guid? RunId,
+    string Status,
+    string Trigger,
+    string? ErrorCode,
+    string? Error,
+    IReadOnlyList<string>? Warnings,
+    Guid? ArtifactId,
+    int? ArtifactVersion,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt);
+
+internal sealed record StackProfileCandidateDto(string Option, string? Path, string Source);
+
+internal sealed record StackProfileLayerDto(
+    string? Option,
+    string? Path,
+    string? Mode,
+    string Status,
+    string? Confidence,
+    string? Technology,
+    IReadOnlyList<StackProfileCandidateDto>? Candidates);
+
+internal sealed record StackProfileLayersDto(StackProfileLayerDto Frontend, StackProfileLayerDto Backend, StackProfileLayerDto Data, StackProfileLayerDto Vcs);
+
+internal sealed record StackProfileHostsDto(string? FrontendHost, string? BackendHost, string? DatabaseHost, string? Local, string? OriginModel);
+
+internal sealed record StackProfileDocumentDto(bool Generalist, StackProfileLayersDto Layers, StackProfileHostsDto? Hosts);
+
+internal sealed record StackProfileViewDto(
+    Guid ArtifactId,
+    int Version,
+    string Status,
+    string Integrity,
+    bool AuthoredByAgent,
+    DateTimeOffset CreatedAt,
+    StackProfileDocumentDto? Document,
+    IReadOnlyList<string>? Errors);
+
+internal sealed record StackProfileBlankDto(string Layer, string Status, string? Question, string? Technology, IReadOnlyList<StackProfileCandidateDto>? Candidates);
+
+internal sealed record AnalysisDeploymentDto(bool Available, string? Reason);
+
+internal sealed record AnalysisDto(
+    Guid ReleaseVersionId,
+    string ReleaseVersion,
+    string Phase,
+    string StackSource,
+    bool HasExistingCode,
+    string? BaseCommitSha,
+    CodebaseSummaryStatusDto? Summary,
+    StackAnalysisRunDto? Run,
+    StackProfileViewDto? Profile,
+    IReadOnlyList<StackProfileBlankDto>? NeedsInput,
+    IReadOnlyList<string>? UnresolvedLayers,
+    bool CanApprove,
+    string? ApproveBlockedReason,
+    bool CanContinue,
+    StackCompositionDto? Composition,
+    AnalysisDeploymentDto? Deployment);
+
+internal sealed record StackAnalysisQueuedDto(Guid JobId, string Trigger, DateTimeOffset QueuedAt);
+
+/// <summary>The body of approving a <c>stack_profile</c>: a comment, and <c>generalist</c> for "Continue with No stack (general)" (FR-181).</summary>
+internal sealed record ApproveStackProfileRequest(string? Comment, bool? Generalist);
+
+// FR-194: `aide sources` (GET/POST /sources, POST /sources/:importId/reimport, DELETE /sources/:importId, POST /sources/check).
+
+internal sealed record TrackerSelectionRequest(IReadOnlyList<string>? Keys, string? Query, string? ContainerId);
+
+internal sealed record TrackerImportOptionsRequest(bool IncludeChildren, bool IncludeComments, bool IncludeAssignees);
+
+/// <summary>A <c>sourceImports[]</c> entry and the body of <c>POST /sources</c>.</summary>
+internal sealed record SourceImportRequest(string Provider, Guid? ConnectionId, TrackerSelectionRequest Selection, TrackerImportOptionsRequest? Options);
+
+internal sealed record TrackerSelectionDto(IReadOnlyList<string>? Keys, string? Query, string? ContainerId);
+
+internal sealed record TrackerItemSummaryDto(string Key, string Title, string Url, string Status, string StatusCategory);
+
+internal sealed record SourceImportDto(
+    Guid Id,
+    Guid ReleaseVersionId,
+    string Provider,
+    Guid? ConnectionId,
+    string Status,
+    string? ErrorCode,
+    string? ErrorMessage,
+    TrackerSelectionDto? Selection,
+    int ItemCount,
+    int RenderedBytes,
+    IReadOnlyList<TrackerItemSummaryDto>? Items,
+    Guid? SourceArtifactId,
+    ActorDto? CreatedBy,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt);
+
+internal sealed record SourceSnapshotDto(Guid ArtifactId, int Version, string ContentHash, DateTimeOffset CreatedAt);
+
+internal sealed record SourceDraftStateDto(Guid ArtifactId, int Version, int? BuiltFromSnapshotVersion, bool BehindSnapshot);
+
+internal sealed record ProjectSourcesDto(
+    Guid? ReleaseVersionId,
+    IReadOnlyList<SourceImportDto>? Imports,
+    SourceSnapshotDto? CurrentSnapshot,
+    SourceDraftStateDto? Draft,
+    bool CanChange);
+
+internal sealed record SourceDriftItemDto(Guid ImportId, string Provider, string Key, string Title, string Url, string Drift);
+
+internal sealed record SourcesCheckDto(IReadOnlyList<SourceDriftItemDto>? Items, string? SnapshotContentHash, DateTimeOffset CheckedAt);
+
+// FR-194: `aide deployments groups` (the groups of GET /settings/deployment).
+
+internal sealed record DeploymentGroupPartDto(string Part, string? Environment, string Status, string? StatusReason, string? ResourceId);
+
+internal sealed record DeploymentGroupBindingDto(Guid ConnectionId, string Label, DeploymentUserDto? BoundBy, string Status);
+
+internal sealed record DeploymentGroupDto(
+    Guid? Id,
+    string Provider,
+    string Capability,
+    IReadOnlyList<string> Parts,
+    string? Name,
+    DeploymentGroupBindingDto? Binding,
+    string? SharedResourceId,
+    string? SharedResourceUrl,
+    string Status,
+    string? StatusReason,
+    IReadOnlyList<DeploymentGroupPartDto>? PartStatuses,
+    bool CanRetry);
+
+internal sealed record DeploymentGroupsDto(IReadOnlyList<DeploymentGroupDto>? Groups);
+
+/// <summary>FR-73: the versions of an imported repository (FR-194 <c>project create --infer-stack</c> needs code to analyse).</summary>
+internal sealed record CreateProjectImportRequest(string DevelopmentVersion, string? ReleasedTag);

@@ -92,6 +92,9 @@ export const errorMessages = {
   PLATFORM_GIT_NOT_CONNECTED: "{platform} can't see this repository. Connect it in {platform}, then verify again.",
   PLATFORM_PLAN_LIMIT: "Your {platform} plan doesn't allow this.",
   PLATFORM_ERROR: "{platform} returned an error. Try again later.",
+  // Deployment groups (FR-187, FR-190, §6). DEPLOYMENT_GROUP_INVALID's `{reason}` is the ProblemDetails `reason`.
+  DEPLOYMENT_GROUP_INVALID: "These parts can't share a {platform} project: {reason}.",
+  PLATFORM_RESOURCE_EXISTS: "{platform} already has a project with that name. Link it instead, or choose another name.",
   // A job code (FR-150, §6): the platform answered 429, so the deployment job backs off and retries.
   PLATFORM_RATE_LIMITED: "{platform} is rate limiting deployments. AIDE will retry.",
   DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support this action.",
@@ -174,6 +177,23 @@ export const errorMessages = {
   MIGRATION_HISTORY_DIVERGED: "The database's migration history doesn't match the repository.",
   DATABASE_PROVISIONING_FAILED: "Creating the database failed.",
   DATABASE_PROVISIONING_TIMEOUT: "The database took too long to become available.",
+  // Issue trackers (FR-165–FR-173, §6). `{tracker}`, `{detail}`, `{size}` and `{limit}` are completed by trackerCopy().
+  TRACKER_SITE_NOT_ALLOWED: "Enter your Jira Cloud site, like acme.atlassian.net.",
+  TRACKER_NOT_CONNECTED: "Connect {tracker} to do this.",
+  TRACKER_PERMISSION_MISSING: "The AIDE GitHub App needs the Issues permission. Update it in GitHub settings.",
+  TRACKER_QUERY_INVALID: "{tracker} couldn't run that query: {detail}",
+  TRACKER_RATE_LIMITED: "{tracker} is rate limiting requests. AIDE will retry.",
+  TRACKER_IMPORT_FAILED: "The import from {tracker} failed: {detail}",
+  SOURCE_ITEMS_TOO_LARGE:
+    "These items are too large for the AI model ({size} of {limit}). Remove some items or choose a larger model.",
+  // FR-172: a spec warning, never a failure (D-V5-6).
+  UNCOVERED_SOURCE_ITEMS:
+    "Some imported items aren't cited by any requirement. This is a warning: the specification can still be approved.",
+  // Stack inference (FR-178–FR-183, §6). STACK_PROFILE_INCOMPLETE's `{layers}` is completed by errorMessage() from the
+  // ProblemDetails `details` (stackProfileIncompleteMessage).
+  STACK_INFER_NO_CODE: "This repository has no code to analyse. Choose a stack instead.",
+  STACK_PROFILE_INVALID: "The Stack Analyst couldn't produce valid findings. Retry, or fill them in yourself.",
+  STACK_PROFILE_INCOMPLETE: "Answer these before approving: {layers}.",
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof errorMessages;
@@ -218,6 +238,18 @@ export const contextualErrorMessages = {
   artifactDiff: {
     VALIDATION:
       "These versions are too large to compare here: together they have more than 100,000 lines.",
+  },
+  /** POST /api/projects/:id/analysis/run (FR-180 Retry). INVALID_STATE adds the server's reason (errorMessage). */
+  runStackAnalysis: {
+    WRONG_PHASE: "The Stack Analyst runs only while the project is in the Analysis phase of a version that infers its stack.",
+    CONFLICT: "Someone else started the Stack Analyst at the same time. The page now shows it.",
+  },
+  /** POST /api/projects/:id/artifacts/:artifactId/approve · /reject of a stack_profile (FR-181, FR-183). */
+  decideStackProfile: {
+    WRONG_PHASE: "The stack profile is decided only while the project is in the Analysis phase.",
+    ARTIFACT_NOT_DRAFT:
+      "This profile can no longer be decided: it was already decided or replaced by a newer draft. The page now shows the latest state.",
+    VALIDATION: "This profile can't be read, so it can't be approved. Edit it, or run the analysis again.",
   },
   /** POST /api/projects/:id/artifacts/:artifactId/approve · /reject (FR-17). */
   decideArtifact: {
@@ -361,6 +393,31 @@ export const contextualErrorMessages = {
     CREDENTIAL_INVALID:
       "{provider} rejected this token, so it wasn't saved. Check that you copied the whole token, that it hasn't expired or been revoked, and that it is the type of token described above.",
   },
+  /** FR-165 Jira: the email and token are checked together. */
+  jiraConnection: {
+    CREDENTIAL_INVALID:
+      "Jira rejected this email and token, so nothing was saved. Check the site and email, and that you copied the whole token.",
+  },
+  /** FR-166 Linear: a personal API key. */
+  linearConnection: {
+    CREDENTIAL_INVALID: "Linear rejected this key, so nothing was saved. Check that you copied the whole key and that it is active.",
+  },
+  /** GET /api/me/trackers/:provider/containers · POST …/search (FR-169). `{tracker}` is completed by trackerBrowseMessage(). */
+  trackerBrowse: {
+    CONNECTION_SCOPE_INSUFFICIENT: "The {tracker} token doesn't have read access to this.",
+    CREDENTIAL_NOT_OWNER: "That connection belongs to someone else. Use one of your own.",
+    NOT_FOUND: "{tracker} couldn't find that, or the connection can't see it.",
+    UPSTREAM_RATE_LIMITED: "{tracker} is rate limiting requests. Try again in a few minutes.",
+    UPSTREAM_ERROR: "{tracker} returned an error or couldn't be reached. Try again later.",
+  },
+  /** POST and DELETE /api/projects/:id/sources[/:importId[/reimport]] (FR-171, FR-173). */
+  sourceImport: {
+    WRONG_PHASE: "Tracker items can only change during Refinement. New work belongs in a new version, or after a rollback.",
+    FORBIDDEN: "Only Contributors and Owners can change the source items.",
+    CREDENTIAL_NOT_OWNER: "That connection belongs to someone else. Use one of your own.",
+    NOT_FOUND: "That import or connection no longer exists. The list now shows the latest.",
+    CONFLICT: "Someone else changed the source items at the same time. The list now shows the latest; try again.",
+  },
   /** FR-142 Vercel: the v2 copy (FR-87), naming team tokens. */
   vercelConnection: {
     UPSTREAM_ERROR: "We couldn't reach Vercel to check the token. Nothing changed; try again in a moment.",
@@ -386,6 +443,15 @@ export const contextualErrorMessages = {
     VALIDATION: "Check the target's settings: some fields need attention.",
     UPSTREAM_ERROR: "A service AIDE needs for this failed or couldn't be reached, so nothing changed. Try again in a moment.",
     CONFLICT: "Someone else changed the deployment settings at the same time. The page now shows the latest; try again.",
+  },
+  /** PUT, DELETE and retry of /api/projects/:id/settings/deployment/groups/:provider (FR-190, FR-191). */
+  deploymentGroup: {
+    FORBIDDEN: "Only project Owners can change the deployment groups.",
+    CREDENTIAL_NOT_OWNER:
+      "You can only bind one of your own connections. Pick one of yours, or add a token under Connections.",
+    VALIDATION: "Check the group's settings: some fields need attention.",
+    NOT_FOUND: "That connection or group no longer exists. Refresh the page and try again.",
+    CONFLICT: "The group changed or already has platform resources. The page now shows the latest; try again.",
   },
   /** PUT /api/projects/:id/settings/deployment/databases/:environment (FR-152). */
   databaseSetup: {
@@ -698,6 +764,7 @@ export type ErrorContext = keyof typeof contextualErrorMessages;
 const retryAfterContexts: ReadonlySet<ErrorContext> = new Set<ErrorContext>([
   "bitbucketConnection",
   "platformConnection",
+  "trackerBrowse",
   "bitbucketRepos",
   "createBitbucketRepo",
   "createProjectBitbucket",
@@ -838,6 +905,47 @@ export function platformConnectionMessage(error: unknown, provider: { id: string
   return errorMessage(error, context).replaceAll("{provider}", provider.name);
 }
 
+type TrackerCopyCode =
+  | "TRACKER_NOT_CONNECTED"
+  | "TRACKER_QUERY_INVALID"
+  | "TRACKER_RATE_LIMITED"
+  | "TRACKER_IMPORT_FAILED"
+  | "SOURCE_ITEMS_TOO_LARGE";
+
+/** SPEC §6: the tracker codes whose copy has placeholders. The server composes them in full, so its title wins. */
+const composedTrackerCodes: ReadonlySet<string> = new Set<TrackerCopyCode>([
+  "TRACKER_NOT_CONNECTED",
+  "TRACKER_QUERY_INVALID",
+  "TRACKER_RATE_LIMITED",
+  "TRACKER_IMPORT_FAILED",
+  "SOURCE_ITEMS_TOO_LARGE",
+]);
+
+/** SPEC §6: tracker copy with its placeholders filled. No placeholder ever reaches the screen. */
+export function trackerCopy(code: TrackerCopyCode, tracker?: string | null, detail?: string | null): string {
+  const d = detail?.trim() ?? "";
+  switch (code) {
+    case "TRACKER_NOT_CONNECTED":
+      return errorMessages.TRACKER_NOT_CONNECTED.replace("{tracker}", tracker ?? "this tracker");
+    case "TRACKER_QUERY_INVALID":
+      return errorMessages.TRACKER_QUERY_INVALID.replace("{tracker}", tracker ?? "The tracker").replace("{detail}", d === "" ? "the query is invalid" : d);
+    case "TRACKER_RATE_LIMITED":
+      return errorMessages.TRACKER_RATE_LIMITED.replace("{tracker}", tracker ?? "The tracker");
+    case "TRACKER_IMPORT_FAILED":
+      return errorMessages.TRACKER_IMPORT_FAILED.replace("{tracker}", tracker ?? "the tracker").replace(
+        "{detail}",
+        d === "" ? "it returned an error or couldn't be reached." : d,
+      );
+    case "SOURCE_ITEMS_TOO_LARGE":
+      return errorMessages.SOURCE_ITEMS_TOO_LARGE.replace(" ({size} of {limit})", "");
+  }
+}
+
+/** FR-169: copy for a failed browse call, naming the tracker. */
+export function trackerBrowseMessage(error: unknown, tracker: string): string {
+  return errorMessage(error, "trackerBrowse").replaceAll("{tracker}", tracker);
+}
+
 /**
  * Codes recorded on deployments and events before v4 renamed them (D-V4-4: VERCEL_* → PLATFORM_*). They are no
  * longer API codes, so they aren't in `errorMessages`; copyForCode() still reads them so history stays readable.
@@ -896,6 +1004,21 @@ export function withPlatform(text: string, platform: string | null | undefined):
 function withPlanDetail(code: ErrorCode | null, text: string, detail: string | null | undefined): string {
   const d = detail?.trim();
   return code === "PLATFORM_PLAN_LIMIT" && d ? `${text} ${d}` : text;
+}
+
+/**
+ * SPEC §6 DEPLOYMENT_GROUP_INVALID: the copy with the problem's `platform` and `reason`. Without a `platform` extension
+ * the server's own title has the platform's name; without either, the reason stands alone.
+ */
+function deploymentGroupInvalidMessage(error: ApiError): string {
+  const reason = error.reason?.trim().replace(/\.+$/, "");
+  if (error.platform && reason) {
+    return withPlatform(errorMessages.DEPLOYMENT_GROUP_INVALID, error.platform).replace("{reason}", reason);
+  }
+  if (!error.message.startsWith("Request failed with HTTP")) {
+    return error.message;
+  }
+  return reason ? `These parts can't share a project: ${reason}.` : "These parts can't share a project.";
 }
 
 /**
@@ -1067,6 +1190,23 @@ export function stackIncompatibleMessage(violations: readonly StackViolation[]):
     : `These stack choices don't work together: ${reasons.join("; ")}.`;
 }
 
+const profileLayerWords: Readonly<Record<string, string>> = {
+  frontend: "Frontend",
+  backend: "Backend",
+  data: "Data",
+  vcs: "Version control",
+  hosts: "Hosts",
+};
+
+/**
+ * SPEC §6 STACK_PROFILE_INCOMPLETE: "Answer these before approving: {layers}." The layers are the ProblemDetails
+ * `details` (`backend`, …), named as the Analysis page names them.
+ */
+export function stackProfileIncompleteMessage(layers: readonly string[]): string {
+  const names = layers.map((l) => profileLayerWords[l.trim().toLowerCase()] ?? l.trim()).filter(Boolean);
+  return errorMessages.STACK_PROFILE_INCOMPLETE.replace("{layers}", names.length > 0 ? names.join(", ") : "the layers that need your input");
+}
+
 /** The value of a `key: value` entry in ProblemDetails `details` (e.g. `latestVersion: 5`), if present. */
 export function detailValue(error: ApiError, key: string): string | null {
   const prefix = `${key}:`;
@@ -1204,6 +1344,17 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       if (blocked) {
         return blocked;
       }
+    }
+    if (error.errorCode === "DEPLOYMENT_GROUP_INVALID") {
+      return deploymentGroupInvalidMessage(error);
+    }
+    if (error.errorCode === "STACK_PROFILE_INCOMPLETE") {
+      return stackProfileIncompleteMessage(error.details);
+    }
+    if (error.errorCode && composedTrackerCodes.has(error.errorCode)) {
+      return error.message.startsWith("Request failed with HTTP")
+        ? trackerCopy(error.errorCode as TrackerCopyCode)
+        : error.message;
     }
     if (error.errorCode === "INVALID_STATE") {
       const reason = error.message.startsWith("Request failed with HTTP") ? "" : error.message.trim();

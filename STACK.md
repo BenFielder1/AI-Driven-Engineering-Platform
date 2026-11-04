@@ -2,8 +2,8 @@
 
 2026-10-23 · composed with `compose-stack`
 
-This file records the stack of **AIDE itself**. It is unchanged for v4, which is built on the v3 stack (Next.js frontend,
-Railway deploy). v2 used React + Vite with Docker Desktop Kubernetes only. v3 made two stack changes: **deploy to
+This file records the stack of **AIDE itself**. v5 adds no pack and changes only the data engine (PostgreSQL 18). It is
+otherwise the v3 stack (Next.js frontend, Railway deploy). v2 used React + Vite with Docker Desktop Kubernetes only. v3 made two stack changes: **deploy to
 Railway**, and **convert the frontend to Next.js**. v4 adds no pack: its stack catalog describes the stacks of the
 projects AIDE builds, not AIDE's own. `SPEC.md` gives the requirements. This file names the packs and the shared
 conventions.
@@ -13,8 +13,8 @@ conventions.
 | --- | --- | --- | --- |
 | Frontend | `fe-nextjs` (UI for a separate backend) | `frontend/` | dev port 3000, container port 8080. Since v3; replaced `fe-react-vite` (v2: React 19 + Vite 8, TanStack Router, dev port 5173) |
 | Backend | `be-aspnet` | `backend/` | .NET 10 minimal APIs, dev port 5080, container port 8080. Unchanged from v2 |
-| Data | `data-efcore-postgres` | inside `backend/` (`Aide.Infrastructure`) | engine: PostgreSQL 17 (Railway: 18, SPEC D-V3-13) · mode: ORM (EF Core owns migrations; bundle at `/app/efbundle`) |
-| VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for v4: `build/aide-v4` |
+| Data | `data-efcore-postgres` | inside `backend/` (`Aide.Infrastructure`) | engine: PostgreSQL 18 everywhere (SPEC D-V5-1) · mode: ORM (EF Core owns migrations; bundle at `/app/efbundle`) |
+| VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for v5: `build/aide-v5` |
 | Deploy | `deploy-railway` (web + api + Postgres) | `.railway/railway.ts` | Added in v3. See Deploy below |
 | Local | `local-docker-desktop-k8s` | `deploy/k8s/`, `deploy/scripts/` | app URL: http://localhost:8080. Kept from v2; the `web` image becomes the Next.js standalone server |
 
@@ -70,7 +70,7 @@ npm ci --prefix .railway && npm --prefix .railway run typecheck
     (Data Protection keys, Git working copies), one replica, pre-deploy `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'` with a 600 s
     timeout, healthcheck `/api/health/ready`, `ForwardedHeaders__ForwardLimit=2`
   - `web` also sets `TRUST_EDGE_FORWARDED=true`, so it keeps the edge's `X-Forwarded-Proto`/`-Host`
-  - `postgres`: Railway Postgres (17), with backups on
+  - `postgres`: Railway Postgres (18), with backups on
 - **How deploys happen:** `.github/workflows/deploy.yml` deploys `preview` after green CI on `main` and `production` on
   manual dispatch. It runs `railway config plan` (drift fails the deploy) and `deploy/scripts/smoke-remote.sh`. Ops
   docs: `deploy/railway/README.md`, `deploy/railway/variables.md`.

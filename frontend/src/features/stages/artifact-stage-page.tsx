@@ -51,7 +51,9 @@ export function SpecificationPage({ version, onVersionChange }: ArtifactStagePro
         awaitingDraft={drafting}
         notStarted="The Spec Generator writes the technical specification from the approved project request. Refinement has to finish first: approve the project request and advance to Specification."
       >
-        {(artifact) => <SpecPanel content={artifact.content} />}
+        {(artifact) => (
+          <SpecPanel content={artifact.content} warnings={artifact.warnings} projectId={project.id} releaseVersionId={artifact.releaseVersionId} />
+        )}
       </StageArtifact>
       <StageGates types={stageGates.specification} />
       <StageRuns agent="spec_generator" />

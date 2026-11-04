@@ -19,7 +19,11 @@ namespace Aide.Api.Agents;
 public sealed record ArtifactAgentSpec(
     ArtifactType Type,
     Func<string, Result<string>> ToContent,
-    Func<string, DomainError, AgentRunRequest> Corrective);
+    Func<string, DomainError, AgentRunRequest> Corrective)
+{
+    /// <summary>Called with a newly added draft (not one a redelivered run already stored), before it is saved: e.g. its event (FR-193).</summary>
+    public Action<Artifact, AgentRunOutcome>? OnAdded { get; init; }
+}
 
 /// <summary>
 /// The shared flow of the refinement, spec and plan jobs (FR-27–FR-29), on top of <see cref="AgentRunner"/>:
@@ -48,7 +52,7 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
         var checkedFirst = spec.ToContent(first.Text);
         if (checkedFirst.IsSuccess)
         {
-            await AddDraftAsync(request.ProjectId, spec.Type, checkedFirst.Value, first, cancellationToken);
+            await AddDraftAsync(request.ProjectId, spec, checkedFirst.Value, first, cancellationToken);
             return first.RunId;
         }
 
@@ -68,17 +72,23 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
             throw new JobFailedException(checkedSecond.Error!.Message, transient: false, checkedSecond.Error.Code);
         }
 
-        await AddDraftAsync(request.ProjectId, spec.Type, checkedSecond.Value, second, cancellationToken);
+        await AddDraftAsync(request.ProjectId, spec, checkedSecond.Value, second, cancellationToken);
         return second.RunId;
     }
 
-    private async Task AddDraftAsync(Guid projectId, ArtifactType type, string content, AgentRunOutcome run, CancellationToken cancellationToken)
+    private async Task AddDraftAsync(Guid projectId, ArtifactAgentSpec spec, string content, AgentRunOutcome run, CancellationToken cancellationToken)
     {
+        var type = spec.Type;
         var draft = await drafts.AddAsync(projectId, type, content, run.RunId, run.CompletedAt, cancellationToken);
         if (draft is null)
         {
             LogDraftSkipped(logger, type);
             return;
+        }
+
+        if (spec.OnAdded is { } onAdded && db.Entry(draft).State == EntityState.Added)
+        {
+            onAdded(draft, run);
         }
 
         try
@@ -198,6 +208,18 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
         }
 
         return payload.Trigger != LifecycleJobPayload.PhaseEntered || project.CurrentPhase == ArtifactRules.ProducingPhase(type);
+    }
+
+    /// <summary>FR-172: for a release version, when its oldest still-queued or running import was queued, and whether a failed import awaits a retry.</summary>
+    public async Task<(DateTimeOffset? OldestPending, bool HasFailed)> ImportStateAsync(Guid releaseVersionId, CancellationToken cancellationToken)
+    {
+        var imports = await db.TrackerImports.AsNoTracking()
+            .Where(i => i.ReleaseVersionId == releaseVersionId
+                && (i.Status == Domain.Trackers.TrackerImportStatus.Queued || i.Status == Domain.Trackers.TrackerImportStatus.Running || i.Status == Domain.Trackers.TrackerImportStatus.Failed))
+            .Select(i => new { i.Status, i.CreatedAt })
+            .ToListAsync(cancellationToken);
+        var pending = imports.Where(i => i.Status != Domain.Trackers.TrackerImportStatus.Failed).Select(i => (DateTimeOffset?)i.CreatedAt).Min();
+        return (pending, imports.Any(i => i.Status == Domain.Trackers.TrackerImportStatus.Failed));
     }
 
     public static InputArtifactRef Ref(Artifact artifact)

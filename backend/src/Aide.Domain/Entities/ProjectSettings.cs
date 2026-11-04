@@ -38,6 +38,9 @@ public sealed class ProjectGitSettings
     /// <summary>FR-136: the host's stable repo id (GitLab numeric project id, Bitbucket repository UUID), as text.</summary>
     public string? ExternalRepoId { get; set; }
 
+    /// <summary>FR-177: credit people on later commits (default on, Owner only). Never rewrites history.</summary>
+    public bool CommitCreditEnabled { get; set; } = true;
+
     // The working branch and pull request belong to the release version (ReleaseVersion.BranchName, PullRequestUrl/Number).
 }
 

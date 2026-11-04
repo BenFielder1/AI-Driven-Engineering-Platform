@@ -73,4 +73,22 @@ public enum NotificationEvent
     /// <summary>FR-155: the platform lost Git access, or the deployment target's token is invalid.</summary>
     [JsonStringEnumMemberName("deployment_target_attention")]
     DeploymentTargetAttention = 18,
+
+    /// <summary>FR-193: a stack profile draft waits for review, or the Stack Analyst run failed.</summary>
+    [JsonStringEnumMemberName("stack_profile_ready")]
+    StackProfileReady = 19,
+
+    /// <summary>FR-193: a tracker import ended without a snapshot.</summary>
+    [JsonStringEnumMemberName("tracker_import_failed")]
+    TrackerImportFailed = 20,
+}
+
+/// <summary>The selectable channel events.</summary>
+public static class NotificationEvents
+{
+    /// <summary>
+    /// How many events a channel can select: one past the highest <see cref="NotificationEvent"/>, whose values run from 0 without
+    /// gaps (a test checks this, and that it matches <c>NotificationRules.ChannelTypes</c>). A constant, for <c>[MaxLength]</c>.
+    /// </summary>
+    public const int Count = (int)NotificationEvent.TrackerImportFailed + 1;
 }

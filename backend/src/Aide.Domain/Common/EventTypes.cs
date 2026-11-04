@@ -53,6 +53,9 @@ public static class EventTypes
     /// <summary>Git, LLM or notification settings changed (FR-9). The payload never contains secret values.</summary>
     public const string SettingsUpdated = "SETTINGS_UPDATED";
 
+    /// <summary>FR-177, FR-193: an Owner turned commit credit on or off: <c>{enabled}</c>. Holds no emails.</summary>
+    public const string CommitCreditChanged = "COMMIT_CREDIT_CHANGED";
+
     /// <summary>
     /// FR-79: the project's LLM binding was cleared because the binding Owner lost the Owner role, left or was removed, or
     /// deleted the connection: <c>{projectId, credentialId, boundByUserId, provider, reason}</c>
@@ -77,6 +80,12 @@ public static class EventTypes
 
     /// <summary>§9 (v4) seed marker: the dev seed created its BaaS stack demo project (<c>{projectId, packs}</c>, project_id null).</summary>
     public const string DemoStackProjectSeeded = "DEMO_STACK_PROJECT_SEEDED";
+
+    /// <summary>
+    /// §9 (v5) seed marker: the dev seed created its stack inference demo project, in <c>analysis</c> with a draft profile and a
+    /// Fake tracker import (<c>{projectId, importId}</c>, project_id null).
+    /// </summary>
+    public const string DemoAnalysisProjectSeeded = "DEMO_ANALYSIS_PROJECT_SEEDED";
 
     /// <summary>
     /// DEP-V2 (§9) seed marker: the one-off upgrade of a v1-seeded demo project to released 0.1.0 ran
@@ -128,6 +137,13 @@ public static class EventTypes
     /// (<c>userId</c>) gets the personal <c>connection_invalid</c> notification (in-app and email).
     /// </summary>
     public const string ConnectionInvalid = "CONNECTION_INVALID";
+
+    /// <summary>
+    /// FR-165, FR-193: a Jira or Linear connection's user-entered expiry is 14 days away or less: <c>{connectionId, userId, provider,
+    /// expiresAt}</c> (project_id null; no token, label or email). Recorded once per connection and expiry date by the expiry sweep.
+    /// The connection's owner gets the personal <c>connection_invalid</c> notification, worded as a warning.
+    /// </summary>
+    public const string ConnectionExpiring = "CONNECTION_EXPIRING";
 
     /// <summary>FR-26: a run was refused because the project's token budget is used up (Owners are notified, phase 12).</summary>
     public const string BudgetExceeded = "BUDGET_EXCEEDED";
@@ -237,6 +253,36 @@ public static class EventTypes
     /// </summary>
     public const string CodebaseSummaryCreated = "CODEBASE_SUMMARY_CREATED";
 
+    /// <summary>
+    /// FR-170, FR-193: an import finished and wrote a <c>source_items</c> version: <c>{importId, provider, itemCount, renderedBytes,
+    /// releaseVersionId, artifactId, version, contentHash}</c>. Never a token, email or item body.
+    /// </summary>
+    public const string TrackerImportCompleted = "TRACKER_IMPORT_COMPLETED";
+
+    /// <summary>
+    /// FR-170, FR-193: an import ended without a snapshot: <c>{importId, provider, errorCode, releaseVersionId, importedBy}</c>
+    /// (<c>importedBy</c>: the importer's user id, who gets <c>tracker_import_failed</c> with the Owners).
+    /// </summary>
+    public const string TrackerImportFailed = "TRACKER_IMPORT_FAILED";
+
+    /// <summary>FR-173, FR-193: a person removed an import: <c>{importId, provider, itemCount, releaseVersionId, artifactId, version}</c>; the last two are null when no snapshot changed.</summary>
+    public const string SourceItemsRemoved = "SOURCE_ITEMS_REMOVED";
+
+    /// <summary>
+    /// FR-180, FR-193: the Stack Analyst wrote a <c>stack_profile</c> draft: <c>{artifactId, version, releaseVersionId, agentRunId,
+    /// unresolvedLayers}</c>. No repository content.
+    /// </summary>
+    public const string StackProfileCreated = "STACK_PROFILE_CREATED";
+
+    /// <summary>
+    /// FR-183, FR-193: an Owner approved a <c>stack_profile</c>, locking it and pinning its composition (or none, with
+    /// <c>generalist</c>): <c>{artifactId, version, releaseVersionId, generalist, catalogVersion, catalogHash, stackPacks, layersChanged}</c>.
+    /// </summary>
+    public const string StackProfileApproved = "STACK_PROFILE_APPROVED";
+
+    /// <summary>FR-183, FR-193: an Owner rejected a <c>stack_profile</c> draft: <c>{artifactId, version, releaseVersionId, rerun, jobId}</c> (no comment text).</summary>
+    public const string StackProfileRejected = "STACK_PROFILE_REJECTED";
+
     // Deployments (FR-90, FR-91, §4.15): category release.
 
     /// <summary>
@@ -281,6 +327,12 @@ public static class EventTypes
     /// the platform lost Git access or the token is invalid (<see cref="Notifications.NotificationRules.Notifies"/>).
     /// </summary>
     public const string DeploymentTargetFailed = "DEPLOYMENT_TARGET_FAILED";
+
+    /// <summary>FR-190, FR-193: every part of a deployment group is ready: <c>{groupId, provider, status, sharedResourceId}</c>.</summary>
+    public const string DeploymentGroupConfigured = "DEPLOYMENT_GROUP_CONFIGURED";
+
+    /// <summary>FR-190, FR-193: a deployment group's setup ended with a failure: <c>{groupId, provider, status, errorCode}</c>.</summary>
+    public const string DeploymentGroupFailed = "DEPLOYMENT_GROUP_FAILED";
 
     /// <summary>
     /// FR-152, FR-155: a database became available through its provisioning job (created, linked, External or restored):
@@ -347,13 +399,13 @@ public static class EventTypes
     {
         [EventCategory.Transition] = [PhaseChanged],
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
-        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated],
-        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid],
+        [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated, TrackerImportCompleted, TrackerImportFailed, SourceItemsRemoved, StackProfileCreated, StackProfileApproved, StackProfileRejected],
+        [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid, ConnectionExpiring],
         [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
-        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
+        [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DeploymentGroupConfigured, DeploymentGroupFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
         [EventCategory.Rollback] = [RollbackCompleted],
-        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, LlmBindingCleared, GitBindingCleared, GitHostInstanceChanged, PresetChanged, StackChanged, StackDetected],
+        [EventCategory.Project] = [ProjectCreated, ProjectUpdated, ProjectDeleted, MemberAdded, MemberRoleChanged, MemberRemoved, SettingsUpdated, CommitCreditChanged, LlmBindingCleared, GitBindingCleared, GitHostInstanceChanged, PresetChanged, StackChanged, StackDetected],
         [EventCategory.Integrity] = [IntegrityAlert],
     };
 
@@ -362,6 +414,7 @@ public static class EventTypes
         RunFailed,
         BudgetExceeded,
         ConnectionInvalid,
+        ConnectionExpiring,
         LlmBindingCleared,
         GitBindingCleared,
         StepRejected,
@@ -373,10 +426,12 @@ public static class EventTypes
         DeploymentFailed,
         MigrationRunFailed,
         DeploymentTargetFailed,
+        DeploymentGroupFailed,
         DatabaseProvisioningFailed,
         DatabaseExpiring,
         ArtifactCorrupted,
         IntegrityAlert,
+        TrackerImportFailed,
     };
 
     private static readonly Dictionary<string, EventCategory> CategoryByType = ByCategory

@@ -65,10 +65,12 @@ async function toHostsStep(database = 'Render Postgres', seed?: (me: string) => 
 
 const card = (name: string) => screen.findByRole('region', { name })
 
-/** Chooses "create" on a card and its only connection. */
+const GROUP = 'Backend and database on Render'
+
+/** Chooses "create" on a card (`project`: a group's) and its only connection. */
 async function createWith(user: User, name: string, platform: string, connection: RegExp) {
   const region = await card(name)
-  await user.click(within(region).getByRole('radio', { name: new RegExp(`^Create a new ${platform}`) }))
+  await user.click(within(region).getByRole('radio', { name: name === GROUP ? 'Create a new project' : new RegExp(`^Create a new ${platform}`) }))
   await user.selectOptions(await within(region).findByLabelText(`${platform} connection`), within(region).getByRole('option', { name: connection }))
   return region
 }
@@ -92,9 +94,7 @@ describe('Wizard → Deployment step of a composed stack (§7, FR-115, FR-144, F
     const user = await toHostsStep()
 
     expect(await card('Frontend on Netlify')).toBeInTheDocument()
-    expect(await card('Backend on Render')).toBeInTheDocument()
-    expect(await card('Production database on Render Postgres')).toBeInTheDocument()
-    expect(await card('Preview database on Render Postgres')).toBeInTheDocument()
+    expect(await card(GROUP)).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /^Vercel/ })).not.toBeInTheDocument()
     expect(within(screen.getByRole('list', { name: 'Readiness checks' })).getByText('Repository access')).toBeInTheDocument()
     for (const radio of screen.getAllByRole('radio', { name: 'Set up later' })) {
@@ -103,7 +103,7 @@ describe('Wizard → Deployment step of a composed stack (§7, FR-115, FR-144, F
 
     await next(user)
     await stepHeading(/Step 8 of 8/)
-    expect(within(screen.getByRole('region', { name: 'Deployment' })).getAllByText('Set up later')).toHaveLength(4)
+    expect(within(screen.getByRole('region', { name: 'Deployment' })).getAllByText('Set up later')).toHaveLength(2)
     await user.click(screen.getByRole('button', { name: 'Create project' }))
     await screen.findByRole('heading', { level: 1, name: 'Storefront' })
     expect(requests('PUT', '/targets/frontend')).toHaveLength(0)
@@ -113,11 +113,11 @@ describe('Wizard → Deployment step of a composed stack (§7, FR-115, FR-144, F
 
   it('S7_changing_a_host_resets_its_region_and_plan_and_a_typed_name_but_the_suggested_name_comes_back', async () => {
     const user = await toHostsStep('Render Postgres', seedHosts)
-    const before = await createWith(user, 'Backend on Render', 'Render', /Render key/)
+    const before = await createWith(user, GROUP, 'Render', /Render key/)
     await user.type(within(before).getByLabelText('Region (optional)'), 'frankfurt')
     await user.type(within(before).getByLabelText('Plan (optional)'), 'starter')
     await user.clear(within(before).getByLabelText('Name'))
-    await user.type(within(before).getByLabelText('Name'), 'my-own-api')
+    await user.type(within(before).getByLabelText('Name'), 'my-own')
 
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await stepHeading(/Step 6 of 8: Configuration/)
@@ -131,10 +131,10 @@ describe('Wizard → Deployment step of a composed stack (§7, FR-115, FR-144, F
     await next(user)
     await stepHeading(/Step 7 of 8: Deployment/)
 
-    const after = await createWith(user, 'Backend on Render', 'Render', /Render key/)
+    const after = await createWith(user, GROUP, 'Render', /Render key/)
     expect(within(after).getByLabelText('Region (optional)')).toHaveValue('')
     expect(within(after).getByLabelText('Plan (optional)')).toHaveValue('')
-    expect(within(after).getByLabelText('Name')).toHaveValue('storefront-api')
+    expect(within(after).getByLabelText('Name')).toHaveValue('storefront')
   })
 
   it('S7_FR144_a_target_needs_an_own_connection_and_is_set_up_with_the_same_endpoint_as_settings_after_create', async () => {
@@ -146,41 +146,38 @@ describe('Wizard → Deployment step of a composed stack (§7, FR-115, FR-144, F
 
     await user.selectOptions(await within(frontend).findByLabelText('Netlify connection'), within(frontend).getByRole('option', { name: /Netlify key/ }))
     expect(within(frontend).getByLabelText('Name')).toHaveValue('storefront-web')
-    await createWith(user, 'Backend on Render', 'Render', /Render key/)
-    await createWith(user, 'Production database on Render Postgres', 'Render', /Render key/)
+    await createWith(user, GROUP, 'Render', /Render key/)
     await next(user)
     await stepHeading(/Step 8 of 8/)
     const summary = screen.getByRole('region', { name: 'Deployment' })
     expect(summary).toHaveTextContent('New site storefront-web')
-    expect(summary).toHaveTextContent('New service storefront-api')
+    expect(summary).toHaveTextContent('New project storefront')
     await user.click(screen.getByRole('button', { name: 'Create project' }))
     await screen.findByRole('heading', { level: 1, name: 'Storefront' })
 
     expect(requests('PUT', '/targets/frontend')[0]?.body).toEqual({ provider: 'netlify', connectionId: expect.any(String) as string, create: { name: 'storefront-web' } })
-    expect(requests('PUT', '/targets/backend')[0]?.body).toEqual({ provider: 'render', connectionId: expect.any(String) as string, create: { name: 'storefront-api' } })
-    expect(requests('PUT', '/databases/production')[0]?.body).toEqual({ provider: 'render', connectionId: expect.any(String) as string, create: {} })
-    expect(requests('PUT', '/databases/preview')).toHaveLength(0)
-
-    // §4.21: Render Postgres reads its target's region, so it starts after the target's setup job.
-    const paths = projectsDb.requests.map((r) => r.path)
-    expect(paths.findIndex((p) => p.endsWith('/databases/production'))).toBeGreaterThan(paths.findIndex((p) => p.endsWith('/targets/backend')))
+    // FR-190: one PUT for the group, whose job resolves the order inside: no target or database PUT, and no wait.
+    expect(requests('PUT', '/groups/render')[0]?.body).toEqual({ connectionId: expect.any(String) as string, create: { name: 'storefront' } })
+    expect(requests('PUT', '/targets/backend')).toHaveLength(0)
+    expect(requests('PUT', '/databases/production')).toHaveLength(0)
+    expect(requests('GET', '/settings/deployment')).toHaveLength(0)
   })
 
   it('S7_a_failed_setup_after_create_keeps_the_project_and_points_to_settings_deployment', async () => {
     const user = await toHostsStep('Render Postgres', seedHosts)
     server.use(
-      http.put('*/api/projects/:id/settings/deployment/targets/backend', () =>
-        problem(409, 'PLATFORM_PLAN_LIMIT', 'The workspace plan allows no more services.', { platform: 'render' }),
+      http.put('*/api/projects/:id/settings/deployment/groups/render', () =>
+        problem(409, 'PLATFORM_RESOURCE_EXISTS', 'Render already has a project with that name.', { platform: 'render' }),
       ),
     )
     await createWith(user, 'Frontend on Netlify', 'Netlify', /Netlify key/)
-    await createWith(user, 'Backend on Render', 'Render', /Render key/)
+    await createWith(user, GROUP, 'Render', /Render key/)
     await next(user)
     await stepHeading(/Step 8 of 8/)
     await user.click(screen.getByRole('button', { name: 'Create project' }))
 
     const failures = await screen.findByTestId('host-setup-failures')
-    expect(within(failures).getByRole('listitem')).toHaveTextContent(/^Backend on Render:/)
+    expect(within(failures).getByRole('listitem')).toHaveTextContent(/^Backend and database on Render: Render already has a project with that name\. Link it instead, or choose another name\.$/)
     expect(screen.getByRole('alert')).toHaveTextContent(/The project is created/)
     expect(requests('PUT', '/targets/frontend')).toHaveLength(1)
     expect(projectsDb.projects).toHaveLength(1)
@@ -220,17 +217,26 @@ describe('Wizard → Deployment step of a composed stack (§7, FR-115, FR-144, F
     expect(window.sessionStorage.getItem('aide.new-project-wizard.draft')).not.toContain('postgres://')
   })
 
-  it('S7_hosts_follow_the_stack_and_railway_postgres_needs_a_railway_target', () => {
-    const stack = { stackKind: 'compose', stackFrontendHost: 'deploy-github-pages', stackBackendHost: 'none', stackDatabaseHost: 'railway-postgres' }
-    expect(wizardHosts(stack).map((h) => h.title)).toEqual(['Frontend on GitHub Pages', 'Production database on Railway Postgres'])
+  it('S7_FR188_windows_decide_the_hosts_and_a_railway_database_alone_needs_no_target', () => {
+    const windows = [
+      { platform: 'github_pages', parts: ['frontend'], capability: 'none', environment: null },
+      { platform: 'railway', parts: ['database'], capability: 'none', environment: null },
+    ]
+    const stack = { stackKind: 'compose', hostWindows: JSON.stringify(windows) }
+    expect(wizardHosts(stack).map((h) => h.title)).toEqual(['Frontend on GitHub Pages', 'Database on Railway Postgres'])
     expect(wizardHosts({ ...stack, stackKind: 'general' })).toEqual([])
+    expect(hostChecks({ ...wizardDefaults, ...stack, hostDbProductionMode: 'create', hostDbProductionConnectionId: 'c1' })).toEqual([])
+  })
 
-    const issues = hostChecks({ ...wizardDefaults, ...stack, hostDbProductionMode: 'create', hostDbProductionConnectionId: 'c1' })
-    expect(issues.map(([field]) => field)).toEqual(['hostDbProductionMode'])
+  it('S7_FR188_a_lone_render_database_has_a_window_per_environment', () => {
+    const windows = (['production', 'preview'] as const).map((environment) => ({ platform: 'render', parts: ['database'], capability: 'none', environment }))
+    const hosts = wizardHosts({ stackKind: 'compose', hostWindows: JSON.stringify(windows) })
+    expect(hosts.map((h) => h.title)).toEqual(['Production database on Render Postgres', 'Preview database on Render Postgres'])
   })
 
   it('S7_FR152_the_preview_database_must_be_separate_and_supabase_needs_a_region', () => {
-    const stack = { stackKind: 'compose', stackFrontendHost: '', stackBackendHost: '', stackDatabaseHost: 'supabase' }
+    const windows = (['production', 'preview'] as const).map((environment) => ({ platform: 'supabase', parts: ['database'], capability: 'none', environment }))
+    const stack = { stackKind: 'compose', hostWindows: JSON.stringify(windows) }
     const issues = hostChecks({
       ...wizardDefaults,
       ...stack,

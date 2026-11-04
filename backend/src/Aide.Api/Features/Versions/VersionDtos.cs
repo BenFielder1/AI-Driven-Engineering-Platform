@@ -42,7 +42,11 @@ public sealed record ReleaseVersionDto(
     string Request,
     ActorDto? StartedBy,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ReleasedAt);
+    DateTimeOffset? ReleasedAt)
+{
+    /// <summary>FR-178, FR-186: <c>infer</c> when the version's stack comes from a stack_profile approved in <c>analysis</c> (the lifecycle tracker then shows Analysis), else <c>manual</c>.</summary>
+    public StackSource StackSource { get; init; } = StackSource.Manual;
+}
 
 /// <summary>
 /// FR-60: start a new release version. <c>version</c> is semver (a leading <c>v</c> is stripped, e.g. <c>v1.2.0</c> →
@@ -65,9 +69,19 @@ public sealed record StartReleaseVersionRequest
 
     /// <summary>FR-117: the new version's stack composition (omitted: the base version's, re-pinned).</summary>
     public Stack.StackCompositionRequest? Stack { get; init; }
+
+    /// <summary>FR-171: tracker items to import into the new version, as on project create. The request stays required (D-V5-6).</summary>
+    public IReadOnlyList<Trackers.SourceImportRequest>? SourceImports { get; init; }
+
+    /// <summary>
+    /// FR-186: <c>infer</c> starts the version in <c>analysis</c> at the new base commit, with no composition until its
+    /// stack_profile is approved (the previous composition is shown as the comparison). <c>stack</c> alongside it is 400
+    /// <c>VALIDATION</c>; a base with no code (a first version never released) is 400 <c>STACK_INFER_NO_CODE</c>.
+    /// </summary>
+    public StackSource? StackSource { get; init; }
 }
 
-/// <summary>FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1).</summary>
+/// <summary>FR-60: the release version that was started and the project state (now refinement / active at checkpoint 1; FR-186: analysis for <c>stackSource: infer</c>).</summary>
 public sealed record StartReleaseVersionResultDto(ReleaseVersionDto ReleaseVersion, ProjectStateDto State);
 
 /// <summary>

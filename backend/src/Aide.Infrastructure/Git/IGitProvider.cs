@@ -239,6 +239,18 @@ public sealed record ReleaseRequest(
     int? PullRequestNumber,
     Func<string, CancellationToken, Task>? OnMerged = null)
 {
+    /// <summary>FR-174: the <c>Co-authored-by</c> line of this release's merge and tag; <c>null</c> for no trailer.</summary>
+    public string? CoAuthorLine { get; init; }
+
+    /// <summary>FR-174: the merge commit's message: the title from <see cref="Domain.Releases.ReleaseRules.MergeTitle"/>, then the trailer.</summary>
+    public string MergeMessage => Domain.GitHosts.CommitTrailers.Append(Domain.Releases.ReleaseRules.MergeTitle(ProjectName, Tag), CoAuthorLine);
+
+    /// <summary>FR-174: the annotated tag's message, then the trailer. Use <see cref="TagMessageFor"/> when the tag was renamed for the host.</summary>
+    public string TagMessage => TagMessageFor(Tag);
+
+    /// <summary>FR-174: the annotated tag's message for <paramref name="tag"/>, then the trailer.</summary>
+    public string TagMessageFor(string tag) => Domain.GitHosts.CommitTrailers.Append(Domain.Releases.ReleaseRules.TagMessage(ProjectName, tag, Version), CoAuthorLine);
+
     /// <summary>
     /// FR-65: whether AIDE may merge (<c>aide_merges</c>). <c>false</c> (<c>manual</c>, and the merge poll): never merge —
     /// a PR (or Local branch) already merged by someone else is tagged on its merge commit and released; one not merged yet

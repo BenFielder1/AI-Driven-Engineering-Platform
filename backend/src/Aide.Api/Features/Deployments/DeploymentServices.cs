@@ -14,7 +14,9 @@ public static class DeploymentServiceCollectionExtensions
         services.AddScoped<DeploymentEnvSync>();
         services.AddScoped<DeploymentSettingsService>();
         services.AddScoped<DeploymentInventoryService>();
+        services.AddScoped<DeploymentGroupReader>();
         services.AddScoped<DeploymentTargetService>();
+        services.AddScoped<DeploymentGroupService>();
         services.AddScoped<IJobEndedHook, DeploymentSetupJobEndedHook>();
         services.AddJobHandler<DeploymentSetupJobHandler>(JobTypes.DeploymentSetup);
         services.AddScoped<DeploymentScheduler>();

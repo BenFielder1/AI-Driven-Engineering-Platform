@@ -53,6 +53,23 @@ export function useAuthProviders() {
   return useQuery(providersQueryOptions)
 }
 
+/** FR-177: PATCH /api/auth/me: the signed-in user's own preferences. */
+export function useUpdateMe() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: Schemas['UpdateCurrentUserRequest']): Promise<User> => {
+      const { data, error, response } = await api.PATCH('/api/auth/me', { body })
+      if (data) {
+        return data
+      }
+      throw toApiError(error, response)
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(authKeys.me(), user)
+    },
+  })
+}
+
 /** FR-1 sign-in. On success the session cookie is set; `me` is refetched so guards see the user. */
 export function useLogin() {
   const queryClient = useQueryClient()

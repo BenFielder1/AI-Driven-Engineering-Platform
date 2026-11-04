@@ -14,7 +14,8 @@ internal static class ExitCodes
     /// <summary>
     /// FR-93: release-version errors are conflicts with the project's versions or tags whatever their HTTP status
     /// (<c>VERSION_INVALID</c> is a 400), so scripts can tell them apart from other failures. FR-156 adds
-    /// <c>STACK_INCOMPATIBLE</c>, <c>STACK_LOCKED</c> and <c>LLM_PROVIDER_UNAVAILABLE</c>.
+    /// <c>STACK_INCOMPATIBLE</c>, <c>STACK_LOCKED</c> and <c>LLM_PROVIDER_UNAVAILABLE</c>; FR-194 adds
+    /// <c>STACK_PROFILE_INCOMPLETE</c>, <c>STACK_INFER_NO_CODE</c> and <c>SOURCE_ITEMS_TOO_LARGE</c>.
     /// </summary>
     public static readonly IReadOnlySet<string> ConflictErrorCodes = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -31,6 +32,12 @@ internal static class ExitCodes
         // FR-156: the stack choices break a compatibility rule (a 400), or the stack can no longer change (a 409).
         "STACK_INCOMPATIBLE",
         "STACK_LOCKED",
+
+        // FR-194: an inferred stack profile has unresolved layers (a 409), the repository has no code to infer from (a 400), or
+        // the imported items are too large for the model (a 400).
+        "STACK_PROFILE_INCOMPLETE",
+        "STACK_INFER_NO_CODE",
+        "SOURCE_ITEMS_TOO_LARGE",
     };
 
     /// <summary>401/403 → auth, 409 → conflict, anything else that failed → error.</summary>

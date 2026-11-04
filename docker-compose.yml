@@ -4,7 +4,7 @@ name: aide
 
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-aide}
@@ -13,12 +13,16 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - aide-db-data:/var/lib/postgresql/data
+      # postgres:18 keeps its data in /var/lib/postgresql/18/docker, so the volume mounts one level up from the 17 layout.
+      - aide-db-data-18:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      # Over TCP: the image's temporary init server listens only on the unix socket, so this isn't healthy until the real server is up.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
 volumes:
-  aide-db-data:
+  # FR-164: a new volume, because PostgreSQL 18 can't open a 17 data directory. The old aide-db-data volume stays on
+  # disk, untouched. To bring its data across, see "Upgrade local data from PostgreSQL 17 to 18" in README.md.
+  aide-db-data-18:

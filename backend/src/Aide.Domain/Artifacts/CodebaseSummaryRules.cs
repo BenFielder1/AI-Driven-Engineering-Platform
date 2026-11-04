@@ -25,8 +25,8 @@ public static class CodebaseSummaryRules
         "Notable Risks",
     ];
 
-    /// <summary>Whether a type is stored locked by its agent without an approval gate (only <c>codebase_summary</c>).</summary>
-    public static bool IsAutoLocked(ArtifactType type) => type == ArtifactType.CodebaseSummary;
+    /// <summary>Whether a type is stored locked without an approval gate (<c>codebase_summary</c>, FR-70; <c>source_items</c>, FR-170).</summary>
+    public static bool IsAutoLocked(ArtifactType type) => type is ArtifactType.CodebaseSummary or ArtifactType.SourceItems;
 
     /// <summary>The required sections missing from <paramref name="markdown"/>, in order.</summary>
     public static IReadOnlyList<string> Missing(string markdown) => SpecSections.Missing(markdown, RequiredSections);

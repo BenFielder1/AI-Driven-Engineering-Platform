@@ -66,7 +66,11 @@ export function ShellNavigation({
         />
         <nav aria-label="Project sections">
           <NavList
-            sections={projectSections({ deploymentsEnabled: nav.deploymentsEnabled, migrationsEnabled: nav.migrationsEnabled })}
+            sections={projectSections({
+              deploymentsEnabled: nav.deploymentsEnabled,
+              migrationsEnabled: nav.migrationsEnabled,
+              analysisEnabled: nav.analysisEnabled,
+            })}
             pathname={nav.pathname}
             projectId={nav.projectId}
             stages={nav.stages}

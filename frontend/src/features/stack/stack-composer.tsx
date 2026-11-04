@@ -280,6 +280,7 @@ export function StackComposer({
   vcsFixedReason,
   detection,
   errors = {},
+  separateParts,
 }: {
   catalog: StackCatalog
   value: StackSelection
@@ -292,10 +293,12 @@ export function StackComposer({
   vcsFixedReason?: string
   detection?: StackDetection | null | undefined
   errors?: StackFieldErrors
+  /** §4.28: they affect R8, R10 and R13, so the options are asked with them. */
+  separateParts?: readonly string[] | undefined
 }) {
   const layers = stackLayers(catalog)
   const layer = layers[Math.min(subStep, layers.length - 1)]
-  const options = useStackOptions(toStackRequest(value, { withPaths: false }))
+  const options = useStackOptions(toStackRequest(value, { withPaths: false, ...(separateParts ? { separateParts } : {}) }))
   const processed = useRef<unknown>(null)
   const onDeploy = layer?.id === 'deploy'
 

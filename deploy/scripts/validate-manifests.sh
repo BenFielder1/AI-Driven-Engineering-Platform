@@ -50,11 +50,11 @@ for overlay in overlays/local overlays/local-e2e; do
   # Mode-specific config must be where expected: Fake deployments only in the E2E variant.
   if [[ "$overlay" == overlays/local-e2e ]]; then
     for kv in 'Deployments__Provider: Fake' 'Databases__Provider: Fake' 'Deployments__AllowFake: "true"' 'Git__Local__ImportRoot: /data/import' \
-              'App__PublicBaseUrl: http://localhost:8080'; do
+              'Trackers__Provider: Fake' 'App__PublicBaseUrl: http://localhost:8080'; do
       grep -qF "$kv" <<<"$RENDERED" || { echo "ERROR: $overlay is missing '$kv'." >&2; exit 1; }
     done
-  elif grep -qE 'Deployments__(Provider|AllowFake)|Databases__Provider|Git__Local__ImportRoot' <<<"$RENDERED"; then
-    echo "ERROR: $overlay (normal deploy) must not set Fake deployments or databases, or a Local import root." >&2
+  elif grep -qE 'Deployments__(Provider|AllowFake)|Databases__Provider|Trackers__Provider|Git__Local__ImportRoot' <<<"$RENDERED"; then
+    echo "ERROR: $overlay (normal deploy) must not set Fake deployments, databases or trackers, or a Local import root." >&2
     exit 1
   fi
 
@@ -81,6 +81,19 @@ for overlay in overlays/local overlays/local-e2e; do
     echo "ERROR: $overlay: web/app-config mention nginx or set TRUST_EDGE_FORWARDED (no edge proxy on Docker Desktop)." >&2
     exit 1
   fi
+
+  # FR-163: AIDE's own database is postgres:18 on the 18 data layout, with no 17 image or path left in the render.
+  DB_STATEFULSET="$(doc_of StatefulSet db <<<"$RENDERED")"
+  [[ -n "$DB_STATEFULSET" ]] || { echo "ERROR: $overlay has no StatefulSet 'db'." >&2; exit 1; }
+  if grep -qE 'postgres:17|/var/lib/postgresql/data' <<<"$RENDERED"; then
+    echo "ERROR: $overlay still references postgres:17 or its data path /var/lib/postgresql/data (FR-163)." >&2
+    exit 1
+  fi
+  for kv in 'image: postgres:18' 'value: /var/lib/postgresql/18/docker' 'readOnlyRootFilesystem: true'; do
+    grep -qF "$kv" <<<"$DB_STATEFULSET" || { echo "ERROR: $overlay db StatefulSet is missing '$kv' (FR-163)." >&2; exit 1; }
+  done
+  grep -qE 'mountPath: /var/lib/postgresql$' <<<"$DB_STATEFULSET" \
+    || { echo "ERROR: $overlay db StatefulSet must mount its volume at /var/lib/postgresql (FR-163)." >&2; exit 1; }
 
   if command -v kubeconform >/dev/null 2>&1; then
     kubeconform -strict -summary -ignore-missing-schemas <<<"$RENDERED"

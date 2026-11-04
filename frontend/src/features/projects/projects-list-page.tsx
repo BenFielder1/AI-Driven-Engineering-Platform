@@ -17,7 +17,7 @@ import { ErrorState } from '../../components/ui/states'
 import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
 import { cn } from '../../lib/utils'
-import { formatDateTime, formatNumber, phaseLabels, phases, roleLabels, statusLabels, statuses } from './labels'
+import { allPhases, formatDateTime, formatNumber, phaseLabels, roleLabels, statusLabels, statuses } from './labels'
 import { useStackCatalog } from '../stack/stack-api'
 import { catalogPacks, StackChips } from '../stack/stack-chips'
 import { PhaseBadge, StatusBadge } from './project-badges'
@@ -255,11 +255,11 @@ function ProjectFilters({ search, onChange }: { search: ProjectsSearch; onChange
         label="Phase"
         value={search.phase ?? ''}
         onChange={(e) => {
-          onChange({ phase: oneOf(phases, e.target.value) })
+          onChange({ phase: oneOf(allPhases, e.target.value) })
         }}
       >
         <option value="">All phases</option>
-        {phases.map((p) => (
+        {allPhases.map((p) => (
           <option key={p} value={p}>
             {phaseLabels[p]}
           </option>

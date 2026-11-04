@@ -40,8 +40,8 @@ public sealed class PresetMigrationCompositionTests
     {
         var validated = Valid(Equivalent(presetId, vercel));
 
-        Assert.Equal(StackCompositionJson.Serialize(validated with { CatalogHash = null! }), json);
-        Assert.Equal(RetirePresets.CatalogVersion, validated.CatalogVersion);
+        // The migration pinned the catalog of its day; the catalog has moved on since (FR-189: 1.2.0).
+        Assert.Equal(StackCompositionJson.Serialize(validated with { CatalogHash = null!, CatalogVersion = RetirePresets.CatalogVersion }), json);
         Assert.Equal($"{{{string.Join(",", StackPinning.PackIds(validated, Catalog))}}}", packs);
     }
 
@@ -64,6 +64,6 @@ public sealed class PresetMigrationCompositionTests
         Assert.Equal(json, StackCompositionJson.Serialize(stored));
         var revalidated = StackCompatibility.Validate(StackPinning.ToSelection(stored), Catalog);
         Assert.True(revalidated.IsValid, string.Join(" | ", revalidated.Violations.Select(v => $"{v.Layer} {v.Option} {v.Rule}")));
-        Assert.Equal(json, StackCompositionJson.Serialize(revalidated.Composition! with { CatalogHash = null! }));
+        Assert.Equal(json, StackCompositionJson.Serialize(revalidated.Composition! with { CatalogHash = null!, CatalogVersion = RetirePresets.CatalogVersion }));
     }
 }

@@ -53,6 +53,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<DeploymentTarget> DeploymentTargets => Set<DeploymentTarget>();
 
+    public DbSet<DeploymentGroup> DeploymentGroups => Set<DeploymentGroup>();
+
     public DbSet<DeploymentEnvVar> DeploymentEnvVars => Set<DeploymentEnvVar>();
 
     public DbSet<Deployment> Deployments => Set<Deployment>();
@@ -60,6 +62,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
     public DbSet<ManagedDatabase> ManagedDatabases => Set<ManagedDatabase>();
 
     public DbSet<DatabaseMigrationRun> DatabaseMigrationRuns => Set<DatabaseMigrationRun>();
+
+    public DbSet<TrackerImport> TrackerImports => Set<TrackerImport>();
 
     public DbSet<Artifact> Artifacts => Set<Artifact>();
 
@@ -114,6 +118,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<LlmProvider>(configurationBuilder);
         MapEnum<LlmCredentialStatus>(configurationBuilder);
         MapEnum<GitProvider>(configurationBuilder);
+        MapEnum<StackSource>(configurationBuilder);
+        MapEnum<DeploymentGroupStatus>(configurationBuilder);
         MapEnum<GitHubOwnerType>(configurationBuilder);
         MapEnum<GitHubConnectionStatus>(configurationBuilder);
         MapEnum<GitHostKind>(configurationBuilder);
@@ -144,6 +150,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<NotificationDeliveryStatus>(configurationBuilder);
         MapEnum<ApprovalLinkDecision>(configurationBuilder);
         MapEnum<NotificationType>(configurationBuilder);
+        MapEnum<Domain.Trackers.TrackerProvider>(configurationBuilder);
+        MapEnum<Domain.Trackers.TrackerImportStatus>(configurationBuilder);
 
         // UTC timestamptz everywhere.
         configurationBuilder.Properties<DateTimeOffset>().HaveColumnType("timestamp with time zone");

@@ -50,10 +50,25 @@ public static class InvalidationCascade
 
             // FR-70: an input to every stage, auto-locked without approval; a new summary invalidates nothing.
             ArtifactType.CodebaseSummary => (Array.Empty<ArtifactType>(), StepReset.None),
+
+            // FR-173: a new snapshot invalidates nothing by itself; the cascade follows when a new project request is approved.
+            ArtifactType.SourceItems => (Array.Empty<ArtifactType>(), StepReset.None),
+
+            // §4.27: a new profile (only reachable after a rollback) invalidates everything built on the old stack.
+            ArtifactType.StackProfile => (
+                new[] { ArtifactType.ProjectRequest, ArtifactType.TechnicalSpecification, ArtifactType.ImplementationPlan, ArtifactType.OptimizationPlan },
+                StepReset.AllSteps),
             _ => throw new ArgumentOutOfRangeException(nameof(approved), approved, null),
         };
 
         var producingPhases = types.Select(ArtifactRules.ProducingPhase).ToList();
+
+        // §4.27: the stack_profile cascade falls back to analysis, where the profile itself is produced.
+        if (approved == ArtifactType.StackProfile)
+        {
+            producingPhases.Add(Phase.Analysis);
+        }
+
         if (steps != StepReset.None)
         {
             producingPhases.Add(Phase.Execution);

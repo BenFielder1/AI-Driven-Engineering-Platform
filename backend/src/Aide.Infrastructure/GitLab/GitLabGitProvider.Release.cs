@@ -341,7 +341,7 @@ internal sealed partial class GitLabGitProvider
             var merge = await ApiAsync(
                 settings,
                 access,
-                (c, t) => c.MergeAsync(t, repoId, iid, head, squash, ReleaseRules.MergeTitle(request.ProjectName, request.Tag), cancellationToken),
+                (c, t) => c.MergeAsync(t, repoId, iid, head, squash, request.MergeMessage, cancellationToken),
                 cancellationToken,
                 conflictStatuses: MergeRefusals);
             if (merge.Conflict)
@@ -469,7 +469,7 @@ internal sealed partial class GitLabGitProvider
             request.Tag,
             commit,
             ReleaseNotes.Name(string.IsNullOrEmpty(request.Version) ? request.Tag : request.Version),
-            ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version),
+            request.TagMessage,
             request.Notes ?? ReleaseRules.TagMessage(request.ProjectName, request.Tag, request.Version));
 
     /// <summary>The fetched project branch head (the remote-tracking ref, else the local branch).</summary>

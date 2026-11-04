@@ -1,21 +1,28 @@
 /**
  * §7, FR-144, FR-152: the wizard's flat per-host fields (flat, like the stack fields, so the error summary and field ids
- * stay one level): `host<Slot><Prop>`, one set per target and database. No dependencies: `schemas.ts` builds on it.
+ * stay one level): `host<Slot><Prop>`, one set per target and database, and one for the group (FR-188; three parts form at
+ * most one group, §4.28), which also has an existing resource per part. No dependencies: `schemas.ts` builds on it.
  */
-export const hostSlots = ['Frontend', 'Backend', 'DbProduction', 'DbPreview'] as const
+export const hostSlots = ['Group', 'Frontend', 'Backend', 'DbProduction', 'DbPreview'] as const
 export type HostSlot = (typeof hostSlots)[number]
 
 const hostProps = ['Mode', 'ConnectionId', 'Name', 'Region', 'Plan', 'ResourceId', 'ConnectionString'] as const
 export type HostProp = (typeof hostProps)[number]
 
-export type HostFieldName = `host${HostSlot}${HostProp}`
+export const hostGroupLinkFieldOf = { frontend: 'hostGroupLinkFrontend', backend: 'hostGroupLinkBackend', database: 'hostGroupLinkDatabase' } as const
+export type HostGroupLinkField = (typeof hostGroupLinkFieldOf)[keyof typeof hostGroupLinkFieldOf]
+
+export type HostFieldName = `host${HostSlot}${HostProp}` | HostGroupLinkField
 
 export const hostField = <S extends HostSlot, P extends HostProp>(slot: S, prop: P): `host${S}${P}` => `host${slot}${prop}`
 
 /** The mode of a host left for Settings → Deployment (the default: the Deployment step stays optional, FR-88). */
 export const HOST_SKIP = 'skip'
 
-export const hostFieldNames: readonly HostFieldName[] = hostSlots.flatMap((slot) => hostProps.map((prop) => hostField(slot, prop)))
+export const hostFieldNames: readonly HostFieldName[] = [
+  ...hostSlots.flatMap((slot) => hostProps.map((prop) => hostField(slot, prop))),
+  ...Object.values(hostGroupLinkFieldOf),
+]
 
 /** The External connection strings: secrets, never kept in the wizard's draft. */
 export const hostSecretFields = [hostField('DbProduction', 'ConnectionString'), hostField('DbPreview', 'ConnectionString')] as const

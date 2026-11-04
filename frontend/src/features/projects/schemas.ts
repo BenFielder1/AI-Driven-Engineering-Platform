@@ -1,3 +1,4 @@
+import { IDEA_REQUIRED_WITH_ITEMS, parsePicks } from '../trackers/tracker-picks'
 import { z } from 'zod'
 
 import { checkRootDirectory, checkVercelProjectName } from '../deployments/vercel-project-rules'
@@ -141,6 +142,7 @@ export const wizardAgentModelFields = {
   planGenerator: 'llmModelPlanGenerator',
   codeGenerator: 'llmModelCodeGenerator',
   codeReview: 'llmModelCodeReview',
+  stackAnalyst: 'llmModelStackAnalyst',
 } as const satisfies Record<(typeof agentKeys)[number], string>
 
 const modelTooLong = `Model ids are at most ${String(limits.modelMax)} characters.`
@@ -151,6 +153,8 @@ export const wizardShape = z.object({
   source: z.enum(['scratch', 'import']),
   name: str,
   idea: str,
+  /** FR-171: the tracker items to import, as JSON (tracker-picks.ts): kept in the FR-159 draft, sent as `sourceImports[]`. */
+  sourceImports: str,
   approvalMode: z.enum(approvalModes),
   complianceThreshold: str,
   maxFilesPerStep: str,
@@ -193,9 +197,10 @@ export const wizardShape = z.object({
   localSourcePath: str,
   /**
    * FR-114 Stack step: "No stack (general)" or a composition from the five sub-steps (FR-129: presets are retired).
-   * The composition is one option id per choice ('' = not chosen yet) and the layer paths (FR-119).
+   * The composition is one option id per choice ('' = not chosen yet) and the layer paths (FR-119). FR-178: `infer`
+   * (an import with code) leaves the stack and hosts to the Analysis page.
    */
-  stackKind: z.enum(['general', 'compose']),
+  stackKind: z.enum(['general', 'compose', 'infer']),
   stackFrontend: str,
   stackBackend: str,
   stackData: str,
@@ -219,6 +224,13 @@ export const wizardShape = z.object({
   vercelProjectId: str,
   /** §7 Deployment step of a composed stack: one set of flat fields per target and database (wizard-host-fields). */
   ...(Object.fromEntries(hostFieldNames.map((name) => [name, str])) as Record<HostFieldName, typeof str>),
+  /** §4.28: the composition's `deploy.separateParts` (`database,frontend`). */
+  stackSeparateParts: str,
+  /** FR-188: the last `windows[]` of `POST /api/stack/options` (JSON), which decide the step's windows (D-V4-19). */
+  hostWindows: str,
+  /** R10: the origin model a split invalidated and the server's reason; asked again when the parts change. */
+  hostClearedOrigin: str,
+  hostOriginNote: str,
   /** FR-159 AI model section: '' until a usable provider is chosen (an unusable one is never preselected). */
   llmProvider: z.enum(['anthropic', 'openai', 'ollama', 'fake', '']),
   /** One of the caller's own connections for the provider, or '' (system key, keyless, or none shown). */
@@ -229,6 +241,7 @@ export const wizardShape = z.object({
   llmModelPlanGenerator: str,
   llmModelCodeGenerator: str,
   llmModelCodeReview: str,
+  llmModelStackAnalyst: str,
 })
 
 /** One loose object plus one refinement, so every field is checked together (per-step checks use RHF `trigger`). */
@@ -266,9 +279,11 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
     ctx,
     'idea',
     !v.idea.trim()
-      ? importing
-        ? 'Describe what this version should deliver.'
-        : 'Describe your idea: what should the software do, and for whom?'
+      ? parsePicks(v.sourceImports).length > 0
+        ? IDEA_REQUIRED_WITH_ITEMS
+        : importing
+          ? 'Describe what this version should deliver.'
+          : 'Describe your idea: what should the software do, and for whom?'
       : v.idea.length > limits.ideaMax
         ? `The ${importing ? 'request' : 'idea'} is at most ${limits.ideaMax.toLocaleString()} characters.`
         : null,
@@ -345,6 +360,7 @@ export const wizardDefaults: WizardValues = {
   source: 'scratch',
   name: '',
   idea: '',
+  sourceImports: '[]',
   approvalMode: projectDefaults.approvalMode,
   complianceThreshold: projectDefaults.complianceThreshold,
   maxFilesPerStep: projectDefaults.maxFilesPerStep,
@@ -387,6 +403,10 @@ export const wizardDefaults: WizardValues = {
   vercelRootDirectory: '',
   vercelProjectId: '',
   ...hostFieldDefaults,
+  stackSeparateParts: '',
+  hostWindows: '',
+  hostClearedOrigin: '',
+  hostOriginNote: '',
   llmProvider: '',
   llmCredentialId: '',
   llmDefaultModel: '',
@@ -395,6 +415,7 @@ export const wizardDefaults: WizardValues = {
   llmModelPlanGenerator: '',
   llmModelCodeGenerator: '',
   llmModelCodeReview: '',
+  llmModelStackAnalyst: '',
 }
 
 // ---- Settings → General (FR-7) ---------------------------------------------------------------------------------

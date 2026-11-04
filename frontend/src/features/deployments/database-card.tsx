@@ -239,7 +239,18 @@ function PausedNotice({ project, database: db, canManage }: { project: Project; 
  * when a rollback removed migrations or the database diverged (`resetRecommended`). Owners provision, link or enter an External database and unlink it; other
  * members read it.
  */
-export function DatabaseCardView({ project, database: db, canManage }: { project: Project; database: DatabaseCard; canManage: boolean }) {
+export function DatabaseCardView({
+  project,
+  database: db,
+  canManage,
+  joinGroup,
+}: {
+  project: Project
+  database: DatabaseCard
+  canManage: boolean
+  /** FR-191: the group this part left, which its setup form can rejoin. */
+  joinGroup?: { id: string } | undefined
+}) {
   const env = environmentLabels[db.environment]
   const providerName = databaseProviderLabel(db.provider)
   const active = isProvisioningActive(db)
@@ -304,6 +315,7 @@ export function DatabaseCardView({ project, database: db, canManage }: { project
         <DatabaseSetupForm
           project={project}
           database={db}
+          joinGroup={joinGroup}
           onDone={() => {
             setEditing(false)
           }}

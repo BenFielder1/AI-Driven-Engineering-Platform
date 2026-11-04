@@ -560,6 +560,7 @@ public sealed class Fr156StackCommandTests : IDisposable
             path.EndsWith("/state", StringComparison.Ordinal) ? StateWithUrls
             : path.EndsWith("/stack", StringComparison.Ordinal) ? Stack
             : path.EndsWith("/migrations", StringComparison.Ordinal) ? migrations
+            : path.EndsWith("/sources", StringComparison.Ordinal) ? Samples.EmptySources
             : Samples.Project);
     });
 

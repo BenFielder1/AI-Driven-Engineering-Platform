@@ -15,7 +15,7 @@ using Npgsql;
 
 namespace Aide.IntegrationTests.Persistence;
 
-/// <summary>SPEC §5 data model against real PostgreSQL 17 with the migrations applied (CoreSchema).</summary>
+/// <summary>SPEC §5 data model against real PostgreSQL 18 with the migrations applied (CoreSchema).</summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class CoreSchemaTests(AideApiFactory factory)
 {

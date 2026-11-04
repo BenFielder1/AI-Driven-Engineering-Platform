@@ -25,6 +25,8 @@ public sealed partial class DeploymentSetupJobHandler(
     DeploymentInventoryService inventory,
     DeploymentEnvSync envSync,
     Databases.ManagedDatabaseService databases,
+    Databases.ManagedDatabaseSecrets secrets,
+    JobEnqueuer jobs,
     TimeProvider time,
     ILogger<DeploymentSetupJobHandler> logger) : IJobHandler
 {
@@ -36,6 +38,12 @@ public sealed partial class DeploymentSetupJobHandler(
         if (DeploymentTargetService.TryPayload(job.Payload) is not { } payload)
         {
             throw new JobFailedException("The deployment setup job payload can't be read.", transient: false, ErrorCodes.Validation);
+        }
+
+        if (payload.GroupId is not null)
+        {
+            await HandleGroupAsync(job, payload, cancellationToken);
+            return;
         }
 
         var target = await db.DeploymentTargets.FirstOrDefaultAsync(t => t.Id == payload.TargetId && t.ProjectId == payload.ProjectId, cancellationToken);
@@ -53,13 +61,26 @@ public sealed partial class DeploymentSetupJobHandler(
 
         target.StatusReason = payload.Create ? DeploymentTargetService.StepCreating : DeploymentTargetService.StepLinking;
         await db.SaveChangesAsync(cancellationToken);
+
+        // FR-191: a part set up in a group goes in the group's project; FR-192: alone, the name decides, and only a redelivery adopts.
+        var sharedProject = target.GroupId is { } groupId
+            ? await db.DeploymentGroups.AsNoTracking().Where(g => g.Id == groupId).Select(g => g.SharedResourceId).FirstOrDefaultAsync(cancellationToken)
+            : null;
         var now = time.GetUtcNow();
         DeploymentSetupResult result;
         try
         {
+            if (sharedProject is null && payload.Create && target.GroupId is null && target.Provider == DeploymentProvider.Railway)
+            {
+                sharedProject = await OwnProjectAsync(context.Value, target, payload.Name!, cancellationToken);
+            }
+
             result = await context.Value.Provider.SetupTargetAsync(
                 context.Value.Auth,
-                new DeploymentSetupRequest(context.Value.TargetRef, payload.Create, payload.Name, payload.Region, payload.Plan, payload.ResourceId),
+                new DeploymentSetupRequest(context.Value.TargetRef, payload.Create, payload.Name, payload.Region, payload.Plan, payload.ResourceId)
+                {
+                    SharedProjectId = sharedProject,
+                },
                 cancellationToken);
         }
         catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.RateLimited)
@@ -105,7 +126,47 @@ public sealed partial class DeploymentSetupJobHandler(
             await transaction.CommitAsync(cancellationToken);
         }
 
-        // §4.22: derived values follow the targets' URLs; FR-145: the inventory is synced to the targets on change.
+        await SyncAfterSetupAsync(target, cancellationToken);
+        await DeploymentGroups.RefreshAsync(db, target.ProjectId, target.GroupId, SystemActor.Name, time.GetUtcNow(), cancellationToken);
+    }
+
+    /// <summary>
+    /// FR-192: a standalone create's project: the one this target already made under this name, else a new one (an existing
+    /// name is refused). The id is written in its own statement as soon as it exists, whatever happens next: a rate limit,
+    /// a restart or a refused service resumes from it.
+    /// </summary>
+    private async Task<string> OwnProjectAsync(DeploymentContext context, DeploymentTarget target, string name, CancellationToken cancellationToken)
+    {
+        if (target.PlatformProjectId is { } stored)
+        {
+            SharedProject? found;
+            try
+            {
+                found = await context.Provider.GetSharedProjectAsync(context.Auth, stored, cancellationToken);
+            }
+            catch (DeploymentProviderException ex) when (ex.Failure is DeploymentFailure.NotFound or DeploymentFailure.Rejected or DeploymentFailure.Forbidden)
+            {
+                found = null;
+            }
+
+            if (found?.Name == name)
+            {
+                return stored;
+            }
+        }
+
+        var created = await context.Provider.CreateSharedProjectAsync(context.Auth, new SharedProjectRequest(name, null), cancellationToken);
+        await db.DeploymentTargets.Where(t => t.Id == target.Id).ExecuteUpdateAsync(s => s.SetProperty(t => t.PlatformProjectId, created.Id), CancellationToken.None);
+        await db.Entry(target).ReloadAsync(CancellationToken.None);
+        return created.Id;
+    }
+
+    /// <summary>
+    /// §4.22: derived values follow the targets' URLs; FR-145: the inventory is synced to the targets on change. Then the
+    /// target is ready (saved), with its events.
+    /// </summary>
+    private async Task SyncAfterSetupAsync(DeploymentTarget target, CancellationToken cancellationToken)
+    {
         var recomputed = await inventory.RecomputeDerivedAsync(target.ProjectId, await inventory.FactsAsync(target.ProjectId, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await envSync.DeleteOnTargetsAsync(target.ProjectId, recomputed.Removed, cancellationToken);
@@ -187,6 +248,7 @@ public sealed partial class DeploymentSetupJobHandler(
             await transaction.CommitAsync(cancellationToken);
         }
 
+        await DeploymentGroups.RefreshAsync(db, target.ProjectId, target.GroupId, SystemActor.Name, time.GetUtcNow(), cancellationToken);
         LogFailed(logger, target.ProjectId, target.Component, code);
         throw new JobFailedException(SecretRedaction.SanitizeProviderError(message), transient: false, code);
     }
@@ -202,7 +264,7 @@ public sealed partial class DeploymentSetupJobHandler(
 }
 
 /// <summary>A setup job that ended without succeeding (retries used up) leaves its target <c>error</c> instead of <c>configuring</c>.</summary>
-public sealed class DeploymentSetupJobEndedHook(TimeProvider time) : IJobEndedHook
+public sealed class DeploymentSetupJobEndedHook(Databases.ManagedDatabaseSecrets secrets, TimeProvider time) : IJobEndedHook
 {
     public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
     {
@@ -219,6 +281,12 @@ public sealed class DeploymentSetupJobEndedHook(TimeProvider time) : IJobEndedHo
             return;
         }
 
+        if (parsed.GroupId is { } groupId)
+        {
+            await EndGroupAsync(db, job, projectId, groupId, cancellationToken);
+            return;
+        }
+
         var target = await db.DeploymentTargets.FirstOrDefaultAsync(t => t.Id == parsed.TargetId && t.ProjectId == projectId, cancellationToken);
         var newest = (await db.Jobs.AsNoTracking()
                 .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
@@ -232,6 +300,44 @@ public sealed class DeploymentSetupJobEndedHook(TimeProvider time) : IJobEndedHo
             target.StatusReason = ErrorCodes.UpstreamError;
             target.UpdatedAt = time.GetUtcNow();
             DeploymentTargetEvents.Failed(db, target, DeploymentTargetFailureReasons.SetupFailed, ErrorCodes.UpstreamError, SystemActor.Name, target.UpdatedAt);
+            if (target.GroupId is { } partOf && await db.DeploymentGroups.FirstOrDefaultAsync(g => g.Id == partOf, cancellationToken) is { } group)
+            {
+                await DeploymentGroups.ApplyStatusAsync(db, group, SystemActor.Name, target.UpdatedAt, cancellationToken);
+            }
         }
+    }
+
+    /// <summary>FR-190: the group's job gave up: unfinished parts fail, and queued databases carry on through their own jobs.</summary>
+    private async Task EndGroupAsync(AideDbContext db, JobEnded job, Guid projectId, Guid groupId, CancellationToken cancellationToken)
+    {
+        var group = await db.DeploymentGroups.FirstOrDefaultAsync(g => g.Id == groupId && g.ProjectId == projectId, cancellationToken);
+        if (group is not { Status: DeploymentGroupStatus.Configuring })
+        {
+            return;
+        }
+
+        var newest = (await db.Jobs.AsNoTracking()
+                .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
+                .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
+                .Take(50)
+                .ToListAsync(cancellationToken))
+            .FirstOrDefault(j => DeploymentTargetService.TryPayload(j.Payload)?.GroupId == groupId)?.Id;
+        if (newest != job.JobId)
+        {
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        foreach (var target in await db.DeploymentTargets.Where(t => t.GroupId == groupId && t.Status == DeploymentTargetStatus.Configuring).ToListAsync(cancellationToken))
+        {
+            target.Status = DeploymentTargetStatus.Error;
+            target.StatusReason = ErrorCodes.UpstreamError;
+            target.UpdatedAt = now;
+            DeploymentTargetEvents.Failed(db, target, DeploymentTargetFailureReasons.SetupFailed, ErrorCodes.UpstreamError, SystemActor.Name, now);
+        }
+
+        await DeploymentGroups.FailUnqueuedDatabasesAsync(db, secrets, groupId, ErrorCodes.UpstreamError, job.Error ?? "The group's setup gave up.", now, cancellationToken);
+        group.StatusReason = ErrorCodes.UpstreamError;
+        await DeploymentGroups.ApplyStatusAsync(db, group, SystemActor.Name, now, cancellationToken);
     }
 }

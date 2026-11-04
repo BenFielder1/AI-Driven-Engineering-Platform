@@ -56,6 +56,7 @@ public sealed partial class ProjectCreator(
     IWorkspaceStore workspaces,
     JobEnqueuer jobs,
     ProjectStackService stacks,
+    Trackers.SourceImportService imports,
     IOptions<LocalGitOptions> localGit,
     TimeProvider time,
     ILogger<ProjectCreator> logger)
@@ -94,7 +95,8 @@ public sealed partial class ProjectCreator(
                 GitProvider.Bitbucket => BitbucketProjectRules.ValidateCreate(git.InstanceId, git.ConnectionId, git.RepoId, git.RepoFullName, git.RepoUrl, git.Token, git.InstallationId, prefix: "git."),
                 _ => BitbucketProjectRules.ValidateNotSent(gitProvider, git.InstanceId, git.ConnectionId, git.RepoId, prefix: "git."),
             },
-            ImportRules.ValidateSource(request.Source, request.Import is not null, request.InitialVersion is not null, git.LocalSourcePath is not null, gitProvider));
+            ImportRules.ValidateSource(request.Source, request.Import is not null, request.InitialVersion is not null, git.LocalSourcePath is not null, gitProvider),
+            ProjectRules.ValidateStackSource(request.StackSource == StackSource.Infer, request.Stack is not null, request.Deployment is not null));
         if (validation.IsFailure)
         {
             return Result.Failure<Project>(validation.Error!);
@@ -123,6 +125,13 @@ public sealed partial class ProjectCreator(
             stack = resolved.Value;
         }
 
+        // FR-171: the imports are checked now and queued with the project; a failed import never blocks creation.
+        var plannedImports = await imports.PlanAsync(ownerId, request.SourceImports, "sourceImports", connectionRequired: false, cancellationToken);
+        if (plannedImports.IsFailure)
+        {
+            return Result.Failure<Project>(plannedImports.Error!);
+        }
+
         var now = time.GetUtcNow();
         var project = new Project
         {
@@ -148,9 +157,24 @@ public sealed partial class ProjectCreator(
             return Result.Failure<Project>(start.Error!);
         }
 
+        // FR-178, §4.27: a version that infers its stack starts in analysis, and needs a base commit with code.
+        var initial = LifecycleStateMachine.Start(request.StackSource == StackSource.Infer, (start.Value.ReleasedCommit ?? start.Value.HeadCommit) is not null);
+        if (initial.IsFailure)
+        {
+            if (start.Value.LocalCopy)
+            {
+                workspaces.TryDelete(project.Id);
+            }
+
+            return Result.Failure<Project>(initial.Error!);
+        }
+
+        project.CurrentPhase = initial.Value.Phase;
+        project.Status = initial.Value.Status;
+
         try
         {
-            return await SaveAsync(request, project, start.Value, stack, llmPlan.Value, gitProvider, ownerId, actor, now, cancellationToken);
+            return await SaveAsync(request, project, start.Value, stack, llmPlan.Value, gitProvider, plannedImports.Value, ownerId, actor, now, cancellationToken);
         }
         catch
         {
@@ -550,6 +574,7 @@ public sealed partial class ProjectCreator(
         StackComposition? stack,
         LlmPlan llmPlan,
         GitProvider gitProvider,
+        IReadOnlyList<Trackers.PlannedImport> plannedImports,
         Guid ownerId,
         string actor,
         DateTimeOffset now,
@@ -593,6 +618,9 @@ public sealed partial class ProjectCreator(
             // so does a scratch project on a repository with code. The Repository Analyst reads the repo at this commit.
             BaseTag = start.ReleasedTag,
             BaseCommitSha = start.ReleasedCommit ?? start.HeadCommit,
+
+            // FR-178: the composition stays null until the stack_profile is approved in analysis.
+            StackSource = request.StackSource ?? StackSource.Manual,
         };
         ProjectStackService.Pin(version, stack);
         stacks.SyncPacks(project, stack);
@@ -672,6 +700,11 @@ public sealed partial class ProjectCreator(
         if (version.BaseCommitSha is not null)
         {
             await jobs.EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, version.Id), project.Id, cancellationToken, now);
+        }
+
+        foreach (var planned in plannedImports)
+        {
+            imports.Queue(project.Id, version.Id, planned, ownerId, now);
         }
 
         await db.SaveChangesAsync(cancellationToken);

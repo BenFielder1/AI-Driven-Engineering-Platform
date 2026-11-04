@@ -39,6 +39,12 @@ public sealed record TransitionRequest(TransitionKind Kind, Phase? TargetPhase =
 
     /// <summary>§4.10, FR-60: start a new release version (<c>release → refinement</c>, checkpoint 1).</summary>
     public static TransitionRequest NewVersion(string? reason = null) => new(TransitionKind.NewVersion, Phase.Refinement, Reason: reason);
+
+    /// <summary>
+    /// FR-186, §4.27: start a new release version in <paramref name="entering"/>: <c>analysis</c> for a version that infers its
+    /// stack (<see cref="LifecycleSnapshot.InfersStack"/>), else <c>refinement</c>.
+    /// </summary>
+    public static TransitionRequest NewVersionInto(Phase entering, string? reason = null) => new(TransitionKind.NewVersion, entering, Reason: reason);
 }
 
 /// <summary>
@@ -96,6 +102,21 @@ public sealed record LifecycleSnapshot
 
     /// <summary>§4.10: a release version is <c>in_development</c> or <c>awaiting_merge</c> (blocks <see cref="TransitionKind.NewVersion"/>).</summary>
     public bool DevelopmentVersionExists { get; init; }
+
+    /// <summary>FR-179, §4.27: the release version's <c>stack_profile</c> has a locked version (leaving <c>analysis</c>).</summary>
+    public bool StackProfileLocked { get; init; }
+
+    /// <summary>FR-179, §4.27: the release version has a pinned stack composition (leaving <c>analysis</c>).</summary>
+    public bool StackCompositionPinned { get; init; }
+
+    /// <summary>FR-181, §4.27: the locked <c>stack_profile</c> chose "No stack (general)" (<c>generalist: true</c>), so no composition is needed.</summary>
+    public bool StackProfileGeneralist { get; init; }
+
+    /// <summary>FR-178, FR-186: the version being started infers its stack (<c>stack_source = infer</c>), so it starts in <c>analysis</c>.</summary>
+    public bool InfersStack { get; init; }
+
+    /// <summary>FR-178, §4.27: the version being started has a base commit with code (inference needs one).</summary>
+    public bool BaseHasCode { get; init; }
 }
 
 /// <summary>An applied lifecycle move: what to write as the state transition and the new project state.</summary>

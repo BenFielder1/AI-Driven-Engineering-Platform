@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '../../api/client'
 import { checkNewVersion, normalizeVersion } from '../../features/versions/semver'
 import { authDb } from './auth'
+import { setPreviousComposition } from './analysis'
 import { addEvent } from './lifecycle'
 import { problem } from './problem'
 import {
@@ -92,6 +93,16 @@ export const versionHandlers = [
       return problem(409, 'TAG_EXISTS', `The tag ${tag} already exists.`)
     }
 
+    // FR-186: inference needs a released base commit with code; a stack alongside it is VALIDATION.
+    const inferring = body?.stackSource === 'infer'
+    if (inferring && body.stack) {
+      return problem(400, 'VALIDATION', 'One or more validation errors occurred.', {
+        errors: { stack: ["A stack can't be sent with stackSource infer."] },
+      })
+    }
+    if (inferring && !released?.mergeCommitSha) {
+      return problem(400, 'STACK_INFER_NO_CODE', 'The released version has no code to analyse.')
+    }
     const user = authDb.users.find((u) => u.id === a.userId)
     const started = makeReleaseVersion({
       version,
@@ -103,12 +114,21 @@ export const versionHandlers = [
       startedBy: { id: a.userId, name: user?.name ?? 'Unknown', isSystem: false },
       createdAt: new Date().toISOString(),
     })
+    if (inferring) {
+      started.stackSource = 'infer'
+    }
     p.releaseVersions.push(started)
-    p.currentPhase = 'refinement'
+    if (inferring) {
+      // FR-186: the base version's composition is the comparison; the new version's stack comes from its profile.
+      setPreviousComposition(p, p.stack?.composition ?? null)
+      p.stack = { ...p.stack, composition: null }
+    }
+    const firstPhase = inferring ? 'analysis' : 'refinement'
+    p.currentPhase = firstPhase
     p.status = 'active'
     p.checkpoint = 1
     p.idea = requestText
-    p.phaseAtVersion = { 1: 'refinement' }
+    p.phaseAtVersion = { 1: firstPhase }
     p.updatedAt = new Date().toISOString()
     addEvent(p, {
       type: 'VERSION_STARTED',

@@ -77,7 +77,7 @@ public static class GitHubRules
     /// §4.14: the App's repository permissions in the manifest: Contents, Pull requests, Workflows and Administration
     /// write (Administration is for "Create repository"; the Admin may untick it), Pages write (FR-143: GitHub Pages
     /// deployments), Variables write (FR-145, FR-146: GitHub Pages build-time values), Actions write (FR-145: re-running a
-    /// Pages build that started before its variables were synced), Metadata, Checks and Commit statuses read. User permission: email addresses read (sign-in needs a
+    /// Pages build that started before its variables were synced), Metadata, Checks, Commit statuses and Issues read (FR-167: tracker imports). User permission: email addresses read (sign-in needs a
     /// verified email).
     /// </summary>
     public static IReadOnlyDictionary<string, string> ManifestPermissions { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -92,6 +92,7 @@ public static class GitHubRules
         ["metadata"] = "read",
         ["checks"] = "read",
         ["statuses"] = "read",
+        ["issues"] = "read",
         ["emails"] = "read",
     };
 
@@ -141,6 +142,15 @@ public static class GitHubRules
     public static GitHubPagesAccess VariablesPermission(IReadOnlyDictionary<string, string>? permissions) =>
         permissions is null ? GitHubPagesAccess.Unknown
         : permissions.TryGetValue("actions_variables", out var level) && level == "write" ? GitHubPagesAccess.Granted
+        : GitHubPagesAccess.Missing;
+
+    /// <summary>
+    /// FR-167: whether permissions GitHub reported include Issues (read or write), which tracker imports need. App registrations
+    /// and installations from before this permission report <c>missing</c> until updated and accepted.
+    /// </summary>
+    public static GitHubPagesAccess IssuesPermission(IReadOnlyDictionary<string, string>? permissions) =>
+        permissions is null ? GitHubPagesAccess.Unknown
+        : permissions.TryGetValue("issues", out var level) && level is "read" or "write" ? GitHubPagesAccess.Granted
         : GitHubPagesAccess.Missing;
 
     /// <summary>GitHub's account type (<c>User</c>, <c>Organization</c>; <c>Bot</c> and others count as users).</summary>

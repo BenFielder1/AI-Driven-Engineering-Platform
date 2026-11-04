@@ -195,7 +195,7 @@ public sealed partial class RefinementService(
     }
 
     /// <summary>FR-70: the Repository Analyst's state for release version <paramref name="versionId"/>.</summary>
-    private async Task<CodebaseSummaryStatusDto> CodebaseSummaryAsync(Guid projectId, Guid? versionId, CancellationToken cancellationToken)
+    internal async Task<CodebaseSummaryStatusDto> CodebaseSummaryAsync(Guid projectId, Guid? versionId, CancellationToken cancellationToken)
     {
         var version = versionId is { } id
             ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == id).Select(v => new { v.Id, v.BaseCommitSha, v.CreatedAt }).FirstOrDefaultAsync(cancellationToken)

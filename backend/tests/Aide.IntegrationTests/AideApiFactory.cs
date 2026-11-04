@@ -17,12 +17,12 @@ using Testcontainers.PostgreSql;
 
 namespace Aide.IntegrationTests;
 
-/// <summary>Boots the API against a real PostgreSQL 17 container with the EF Core migrations applied.
+/// <summary>Boots the API against a real PostgreSQL 18 container with the EF Core migrations applied.
 /// One container per test collection (<see cref="ApiTestGroup"/>). A bootstrap Admin exists from the start, so
 /// accounts registered by tests are Users (FR-3 first-user behaviour is tested on a fresh database).</summary>
 public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    public const string PostgresImage = "postgres:17";
+    public const string PostgresImage = "postgres:18";
     public const string AdminEmail = "bootstrap-admin@aide.test";
     public const string Password = "Passw0rd-test";
 
@@ -98,6 +98,12 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             // a stub API and stub DNS (GitLabHarness).
             services.AddHttpClient(Aide.Infrastructure.GitLab.GitLabClients.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddSingleton<Aide.Infrastructure.GitLab.IGitHostDns>(new StubGitHostDns());
+
+            // FR-165, §4.26: no test reaches a real tracker; tests use the Fake (Trackers:Provider=Fake) or stubs.
+            foreach (var name in Aide.Infrastructure.Trackers.TrackerHosts.AllClients)
+            {
+                services.AddHttpClient(name).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+            }
 
         });
 

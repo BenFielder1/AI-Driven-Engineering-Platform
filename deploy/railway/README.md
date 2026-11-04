@@ -6,7 +6,7 @@ One Railway project, `aide`, with two environments: `preview` and `production`. 
   `/healthz`
 - **`api`:** the ASP.NET API from `backend/Dockerfile`, private only, with a 500 MB volume at `/data` (5 GB after a plan upgrade), migrations as its
   pre-deploy command, and healthcheck `/api/health/ready`
-- **`postgres`:** Railway Postgres 18 (`postgres-ssl:18`; local and CI use 17, SPEC D-V3-13)
+- **`postgres`:** Railway Postgres 18 (`postgres-ssl:18`, SPEC D-V3-13; local and CI run 18 too, D-V5-1)
 
 The browser only talks to `web`, which proxies `/api` and the SignalR WebSockets to
 `http://api.railway.internal:8080`.
@@ -308,7 +308,7 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 | Usage | Each environment runs 3 always-on containers (web, api, postgres). RAM ($10/GB/month) dominates: .NET + Next.js + Postgres use roughly 0.6–1 GB per environment. Set usage limits and alerts (Workspace → Usage) |
 | Volumes | $0.15/GB/month. `api-data` is 500 MB, the current plan's maximum (SPEC Q2 wants 5 GB after an upgrade). Watch the size: Data Protection keys are small, but `/data/workspaces` (Git working copies) can fill it |
 | Backups | Billed as volume storage |
-| Egress | $0.05/GB. LLM calls and Git clones count. Keep Postgres private (no TCP proxy) |
+| Egress | $0.05/GB. LLM calls, Git clones and issue-tracker imports count. Keep Postgres private (no TCP proxy). v5 issue imports call `*.atlassian.net` (Jira site check only), `api.atlassian.com`, `api.linear.app`, plus the GitHub and GitLab hosts already used; Railway doesn't restrict egress, so nothing to open |
 | Downtime on deploy | A service with a volume can't overlap deployments, so each `api` deploy has a short gap. SignalR clients reconnect. `web` deploys have no gap |
 | Replicas | `api` must stay at 1 (volume, and the v1 job leases assume one worker). `web` can scale later |
 | Image retention | Rollback without a rebuild only within 72 h (Hobby) or 120 h (Pro) |

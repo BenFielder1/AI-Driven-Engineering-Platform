@@ -52,6 +52,7 @@ public sealed partial class ReleaseJobHandler(
     ProductionMigrationGate gate,
     Deployments.DeploymentEnvSync envSync,
     IWorkingCopies workingCopies,
+    Git.CommitCredit commitCredit,
     TimeProvider time,
     ILogger<ReleaseJobHandler> logger) : IJobHandler
 {
@@ -143,6 +144,7 @@ public sealed partial class ReleaseJobHandler(
             (sha, ct) => RecordMergeAsync(release.Id, sha, ct))
         {
             Merge = merge,
+            CoAuthorLine = await commitCredit.ForReleaseAsync(release, cancellationToken),
             Strategy = project.MergeStrategy,
             Notes = await publisher.HostNotesAsync(release, working.Provider.Kind, working.Connection.RepoUrl, cancellationToken),
             RecordedMergeCommitSha = release.MergeCommitSha,

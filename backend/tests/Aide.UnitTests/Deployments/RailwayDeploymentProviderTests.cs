@@ -98,7 +98,8 @@ public class RailwayDeploymentProviderTests
             ("variableCollectionUpsert", """{"data":{"variableCollectionUpsert":true}}"""),
             ("domains(", """{"data":{"domains":{"serviceDomains":[{"domain":"todo-api.up.railway.app"}]}}}"""));
 
-        var result = await provider.SetupTargetAsync(Auth, new DeploymentSetupRequest(Backend(null, null), true, "todo-api", null, null, null), Ct);
+        // FR-192 (amends §4.20): a second part shares the project through its group, not through the repository's name.
+        var result = await provider.SetupTargetAsync(Auth, new DeploymentSetupRequest(Backend(null, null), true, "todo-api", null, null, null) { SharedProjectId = "p1" }, Ct);
 
         Assert.Equal(("p1:s2:e-prod", "e-prev"), (result.ResourceId, result.PreviewResourceId));
         Assert.Empty(Bodies(stub, "environmentCreate"));
@@ -141,7 +142,7 @@ public class RailwayDeploymentProviderTests
             ("serviceCreate", """{"errors":[{"message":"GitHub repo acme/todo not found: is the Railway app installed with access to it?"}]}"""));
 
         var ex = await Assert.ThrowsAsync<DeploymentProviderException>(
-            () => provider.SetupTargetAsync(Auth, new DeploymentSetupRequest(Backend(null, null), true, "todo-api", null, null, null), Ct));
+            () => provider.SetupTargetAsync(Auth, new DeploymentSetupRequest(Backend(null, null), true, "todo-api", null, null, null) { SharedProjectId = "p1" }, Ct));
 
         Assert.Equal(DeploymentFailure.GitNotConnected, ex.Failure);
         Assert.Equal(DeploymentPlatforms.GitConnectUrl(DeploymentProvider.Railway, "github"), ex.InstallUrl);

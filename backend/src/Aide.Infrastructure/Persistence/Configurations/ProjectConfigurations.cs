@@ -63,6 +63,9 @@ internal sealed class ReleaseVersionConfiguration : IEntityTypeConfiguration<Rel
         builder.Property(v => v.PullRequestUrl).HasMaxLength(500);
         builder.Property(v => v.Request).HasColumnType("text").IsRequired();
         builder.Property(v => v.StackComposition).HasColumnType("jsonb");
+
+        // FR-178, §5: existing rows become manual; additive, safe for rolling updates.
+        builder.Property(v => v.StackSource).HasDefaultValue(StackSource.Manual).HasSentinel(StackSource.Manual).IsRequired();
         builder.Property(v => v.CatalogVersion).HasColumnType("text");
         builder.Property(v => v.CatalogHash).HasColumnType("text");
         builder.Property(v => v.PresetId).HasMaxLength(100);
@@ -110,6 +113,9 @@ internal sealed class ProjectGitSettingsConfiguration : IEntityTypeConfiguration
                 "ck_project_git_settings_git_host_repo",
                 "provider NOT IN ('gitlab', 'bitbucket') OR (instance_id IS NOT NULL AND external_repo_id IS NOT NULL AND repo_full_name IS NOT NULL)");
         });
+
+        // FR-177: the sentinel makes EF write an explicit false, which a plain bool default would swallow on insert.
+        builder.Property(s => s.CommitCreditEnabled).IsRequired().HasDefaultValue(true).HasSentinel(true);
         builder.HasKey(s => s.ProjectId);
         builder.Property(s => s.RepoUrl).HasMaxLength(500);
         builder.Property(s => s.DefaultBranch).HasMaxLength(255).IsRequired();

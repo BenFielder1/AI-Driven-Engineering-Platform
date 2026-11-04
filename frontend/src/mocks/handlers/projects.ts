@@ -171,6 +171,8 @@ export interface StoredDeploymentSettings {
   /** AIDE-written rows (§4.22): read-only. */
   derived: Schemas['DeploymentEnvVarDto'][]
   fakeMode: boolean
+  /** FR-187: what the composition groups, as cards; `id` null until a PUT. Unset: none. */
+  groups?: Schemas['DeploymentGroupDto'][]
 }
 
 /** An env var with its plaintext value (the mock's stand-in for the encrypted column). */
@@ -232,6 +234,7 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
     canSwitchToApp: false,
     mergeStrategy: 'aide_merges',
     tagPrefix: 'v',
+    commitCreditEnabled: true,
     ...overrides,
     repoFullName,
     provider,
@@ -391,6 +394,8 @@ export const projectsDb = {
   providers: defaultProviders(),
   gitTestResult: { ok: true, reachable: true, writable: true, defaultBranchExists: true, reason: null } as Schemas['GitTestResultDto'],
   requests: [] as RecordedRequest[],
+  /** FR-178 test knob: `false` makes `stackSource: infer` answer STACK_INFER_NO_CODE. */
+  inferHasCode: true as boolean,
 }
 
 export function resetProjectsDb() {
@@ -398,6 +403,7 @@ export function resetProjectsDb() {
   projectsDb.providers = defaultProviders()
   projectsDb.gitTestResult = { ok: true, reachable: true, writable: true, defaultBranchExists: true, reason: null }
   projectsDb.requests = []
+  projectsDb.inferHasCode = true
 }
 
 const emptyState = (): StoredProject['state'] => ({
@@ -1077,6 +1083,14 @@ export const projectHandlers = [
     if (versions instanceof Response) {
       return versions
     }
+    // FR-178: inference takes no stack and no deployment, and needs a repository with code (an import here).
+    const inferring = body.stackSource === 'infer'
+    if (inferring && (body.stack || body.deployment)) {
+      return validation({ stack: ["A stack or deployment can't be sent with stackSource infer."] })
+    }
+    if (inferring && (!importing || !projectsDb.inferHasCode)) {
+      return problem(400, 'STACK_INFER_NO_CODE', 'The repository has no code to analyse.')
+    }
     // FR-114–FR-117: the stack composition, validated (STACK_INCOMPATIBLE, VCS_MISMATCH, paths).
     let composition: Schemas['StackCompositionDto'] | null = null
     if (body.stack) {
@@ -1133,7 +1147,7 @@ export const projectHandlers = [
       ...(composition ? { stack: { composition }, stackPacks: packsOf(composition) } : {}),
     })
     if (composition) {
-      seedHostsFromComposition(project, composition.deploy)
+      seedHostsFromComposition(project, composition.deploy, composition.groups)
     }
     // FR-88: the optional Deployment step (one of the caller's own Vercel connections; Local can't deploy).
     if (body.deployment) {
@@ -1150,6 +1164,12 @@ export const projectHandlers = [
     const development = developmentVersionOf(project)
     if (importing && development) {
       project.analyst = { [development.id]: { status: 'queued', runId: null, artifactId: null, artifactVersion: null } }
+    }
+    // FR-178: the version infers its stack and starts in analysis.
+    if (inferring && development) {
+      development.stackSource = 'infer'
+      development.baseCommitSha ??= 'c0ffee1234567'
+      project.currentPhase = 'analysis'
     }
     return HttpResponse.json<Project>(projectDto(project, user.id), { status: 201 })
   }),
@@ -1345,6 +1365,7 @@ export const projectHandlers = [
     git.defaultBranch = body.defaultBranch ?? git.defaultBranch
     git.mergeStrategy = body.mergeStrategy ?? git.mergeStrategy
     git.tagPrefix = body.tagPrefix ?? git.tagPrefix
+    git.commitCreditEnabled = body.commitCreditEnabled ?? git.commitCreditEnabled
     if (body.clearToken) {
       git.hasToken = false
     } else if (body.token) {

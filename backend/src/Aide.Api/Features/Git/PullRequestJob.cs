@@ -463,6 +463,7 @@ public static class PullRequestServiceCollectionExtensions
     public static IServiceCollection AddPullRequests(this IServiceCollection services)
     {
         services.AddScoped<PullRequestJobs>();
+        services.AddScoped<CommitCredit>();
         services.AddScoped<IExecutionCompletionHook, GitCompletionHook>();
         services.AddScoped<IJobEndedHook, PullRequestJobEndedHook>();
         services.AddScoped<PullRequestReader>();

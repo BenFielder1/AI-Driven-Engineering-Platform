@@ -31,6 +31,8 @@ const allTypes: readonly NotificationType[] = [
   'database_expiring',
   'migration_failed',
   'deployment_target_attention',
+  'stack_profile_ready',
+  'tracker_import_failed',
 ]
 
 interface StoredNotification extends Notification {

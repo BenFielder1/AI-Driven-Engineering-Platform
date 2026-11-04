@@ -58,6 +58,12 @@ public static class ApiProblems
             extensions[ErrorsKey] = new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [error.Message] };
         }
 
+        if (error.Code == ErrorCodes.TrackerPermissionMissing && error.Reason is { } settingsLink)
+        {
+            // FR-167: the App settings link; the frontend reads it as it does PLATFORM_PERMISSION_MISSING's.
+            extensions[InstallUrlKey] = settingsLink;
+        }
+
         if (error.UnverifiableScopes.Count > 0)
         {
             extensions[UnverifiableScopesKey] = error.UnverifiableScopes;
@@ -111,6 +117,11 @@ public static class ApiProblems
         if (error.Reason is { } link && error.Code is ErrorCodes.PlatformGitNotConnected or ErrorCodes.PlatformPermissionMissing)
         {
             extensions[InstallUrlKey] = link;
+        }
+
+        if (error.Reason is { } reason && error.Code == ErrorCodes.DeploymentGroupInvalid)
+        {
+            extensions[ReasonKey] = reason;
         }
 
         if (error.Details.Count > 0)

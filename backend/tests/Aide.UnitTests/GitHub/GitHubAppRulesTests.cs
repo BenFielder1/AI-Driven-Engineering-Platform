@@ -33,6 +33,7 @@ public class GitHubAppRulesTests
                 ["metadata"] = "read",
                 ["checks"] = "read",
                 ["statuses"] = "read",
+                ["issues"] = "read",
                 ["emails"] = "read",
             },
             GitHubRules.ManifestPermissions);

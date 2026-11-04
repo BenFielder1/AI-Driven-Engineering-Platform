@@ -14,6 +14,9 @@ namespace Aide.Infrastructure.Deployments;
 /// <c>autoDeployTrigger: commit</c>), then the <c>&lt;name&gt;-preview</c> service (<c>autoDeployTrigger: off</c>), whose id
 /// is the target's <c>preview_resource_id</c>. A repository Render can't reach: <c>PLATFORM_GIT_NOT_CONNECTED</c>.</item>
 /// <item>Link: <c>GET /v1/services/{id}</c> (linked to this repository), then find or create its <c>-preview</c>.</item>
+/// <item>Group (§4.28, FR-192): <c>POST /v1/projects {name, ownerId, environments: [production, preview]}</c>; each service
+/// is then placed in its environment (<see cref="RenderProjectPlacement"/>). Placement that fails never blocks: the group
+/// still shares workspace, region and name.</item>
 /// <item>Env: per service, <c>GET</c> then <c>PUT /v1/services/{id}/env-vars</c> with the full merged set (never deploys);
 /// a static site's <c>/api/*</c> rewrite follows <c>API_ORIGIN</c> (<c>PUT /routes</c>).</item>
 /// </list>
@@ -74,7 +77,51 @@ public sealed partial class RenderDeploymentProvider(PlatformHttp http, RenderLo
             target,
             RenderRules.ServiceSpec(target.Component, target.BuildConfig, target.RootDirectory, production.Name, true, request.Plan ?? production.Plan, request.Region ?? production.Region, target.Repo.DefaultBranch),
             cancellationToken);
-        return new DeploymentSetupResult(production.Id, production.Name, production.Url, preview.Id, preview.Url) { Plan = production.Plan };
+        var placed = request.SharedProjectId is not { } projectId
+            || (await RenderProjectPlacement.PlaceAsync(http, auth.Token, projectId, RenderProjectPlacement.ProductionEnvironment, production.Id, cancellationToken)
+                & await RenderProjectPlacement.PlaceAsync(http, auth.Token, projectId, RenderProjectPlacement.PreviewEnvironment, preview.Id, cancellationToken));
+        return new DeploymentSetupResult(production.Id, production.Name, production.Url, preview.Id, preview.Url) { Plan = production.Plan, PlacementUnavailable = !placed };
+    }
+
+    public async Task<SharedProject?> FindSharedProjectAsync(DeploymentAuth auth, string name, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        var query = $"projects?limit=100&name={Uri.EscapeDataString(name)}" + (auth.AccountId is { } owner ? $"&ownerId={Uri.EscapeDataString(owner)}" : string.Empty);
+        return (await ReadAllAsync(auth, query, "project", cancellationToken))
+            .Where(p => Text(p, "name") == name && Text(p, "id") is not null)
+            .Select(p => new SharedProject(Text(p, "id")!, name))
+            .FirstOrDefault();
+    }
+
+    public async Task<SharedProject?> GetSharedProjectAsync(DeploymentAuth auth, string projectId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        using var project = await SendAsync(auth, HttpMethod.Get, $"projects/{Uri.EscapeDataString(projectId)}", null, cancellationToken);
+        return Text(project.RootElement, "id") is { } id ? new SharedProject(id, Text(project.RootElement, "name") ?? id) : null;
+    }
+
+    /// <summary>§4.28: <c>POST /v1/projects</c> with the <c>production</c> and <c>preview</c> environments.</summary>
+    public async Task<SharedProject> CreateSharedProjectAsync(DeploymentAuth auth, SharedProjectRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        ArgumentNullException.ThrowIfNull(request);
+        if (await FindSharedProjectAsync(auth, request.Name, cancellationToken) is { } existing)
+        {
+            throw new DeploymentProviderException(
+                DeploymentFailure.ResourceExists, 409, $"Render already has a project named {existing.Name}. Link it instead, or choose another name.", platform: Render);
+        }
+
+        var owner = auth.AccountId
+            ?? throw new DeploymentProviderException(DeploymentFailure.Rejected, 400, "The Render connection has no workspace; choose one in Settings → Connections.", platform: Render);
+        using var created = await SendAsync(
+            auth,
+            HttpMethod.Post,
+            "projects",
+            new { name = request.Name, ownerId = owner, environments = new[] { new { name = RenderProjectPlacement.ProductionEnvironment }, new { name = RenderProjectPlacement.PreviewEnvironment } } },
+            cancellationToken);
+        return Text(created.RootElement, "id") is { } id
+            ? new SharedProject(id, request.Name)
+            : throw new DeploymentProviderException(DeploymentFailure.Upstream, null, "Render created the project but returned no id.", platform: Render);
     }
 
     public async Task<ProviderTargetCheck> VerifyTargetAsync(DeploymentAuth auth, DeploymentTargetRef target, CancellationToken cancellationToken)

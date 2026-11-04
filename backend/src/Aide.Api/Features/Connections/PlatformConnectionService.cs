@@ -1,10 +1,13 @@
 using Aide.Api.Features.Deployments;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.GitHosts;
 using Aide.Domain.Platforms;
+using Aide.Domain.Trackers;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Platforms;
 using Aide.Infrastructure.Security;
+using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Api.Features.Connections;
@@ -29,7 +32,9 @@ public sealed partial class PlatformConnectionService(
     TimeProvider time,
     ILogger<PlatformConnectionService> logger)
 {
-    private ISecretProtector Protector => protectors.ForPurpose(SecretPurposes.PlatformToken);
+    /// <summary>§8: tracker tokens have their own purpose; the other platforms share the v4 one.</summary>
+    private ISecretProtector ProtectorFor(PlatformProvider provider) =>
+        protectors.ForPurpose(PlatformConnectionRules.IsTracker(provider) ? SecretPurposes.TrackerToken : SecretPurposes.PlatformToken);
 
     public async Task<IReadOnlyList<PlatformConnectionDto>> ListAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -39,7 +44,8 @@ public sealed partial class PlatformConnectionService(
             .ThenByDescending(c => c.Id)
             .ToListAsync(cancellationToken);
         var bound = await BoundProjectsAsync([.. rows.Select(c => c.Id)], cancellationToken);
-        return [.. rows.Select(c => ToDto(c, bound.GetValueOrDefault(c.Id) ?? []))];
+        var now = time.GetUtcNow();
+        return [.. rows.Select(c => ToDto(c, bound.GetValueOrDefault(c.Id) ?? [], now))];
     }
 
     /// <summary>FR-142: checks the token with the platform, then saves it; nothing is saved when the check fails.</summary>
@@ -50,6 +56,13 @@ public sealed partial class PlatformConnectionService(
         if (valid.IsFailure)
         {
             return Result.Failure<PlatformConnectionDto>(valid.Error!);
+        }
+
+        // FR-165: the site rule comes before any network call.
+        var tracker = ValidateTracker(request);
+        if (tracker.IsFailure)
+        {
+            return Result.Failure<PlatformConnectionDto>(tracker.Error!);
         }
 
         var kind = PlatformConnectionRules.CheckTokenKind(request.Provider, request.Token);
@@ -65,16 +78,18 @@ public sealed partial class PlatformConnectionService(
             UserId = userId,
             Provider = request.Provider,
             Label = request.Label.Trim(),
-            SecretEncrypted = Protector.Protect(request.Token),
+            SecretEncrypted = ProtectorFor(request.Provider).Protect(TrackerSecrets.Encode(request.Provider, request.Email, request.Token)),
             Last4 = PlatformConnectionRules.Last4(request.Token),
             AccountId = request.AccountId,
             LastValidatedAt = now,
             CreatedAt = now,
+            ExpiresAt = PlatformConnectionRules.IsTracker(request.Provider) ? request.ExpiresAt : null,
+            Metadata = new PlatformConnectionMetadata { Site = tracker.Value, AcceptanceCriteriaField = request.AcceptanceCriteriaField },
         };
         try
         {
             var check = await validators.ForProvider(request.Provider)
-                .ValidateAsync(new PlatformCredential(request.Token, request.AccountId, new PlatformConnectionMetadata()), cancellationToken);
+                .ValidateAsync(new PlatformCredential(request.Token, request.AccountId, connection.Metadata) { Email = request.Email?.Trim() }, cancellationToken);
             var applied = Apply(connection, check, request.AccountId);
             if (applied.IsFailure)
             {
@@ -97,15 +112,32 @@ public sealed partial class PlatformConnectionService(
         db.PlatformConnections.Add(connection);
         await db.SaveChangesAsync(cancellationToken);
         LogCreated(logger, connection.Id, connection.Provider, connection.Status);
-        return Result.Success(ToDto(connection, []));
+        return Result.Success(ToDto(connection, [], now));
     }
 
-    public async Task<Result<PlatformConnectionDto>> RenameAsync(Guid userId, Guid id, string label, CancellationToken cancellationToken)
+    /// <summary>
+    /// FR-142: renames a connection; FR-165: on Jira and Linear also sets the user-entered expiry and, on Jira, the acceptance criteria
+    /// field (an empty string clears it). A request that changes nothing asks for the label.
+    /// </summary>
+    public async Task<Result<PlatformConnectionDto>> UpdateAsync(Guid userId, Guid id, UpdatePlatformConnectionRequest request, CancellationToken cancellationToken)
     {
-        var valid = PlatformConnectionRules.ValidateLabel(label);
-        if (valid.IsFailure)
+        ArgumentNullException.ThrowIfNull(request);
+        var changesTrackerField = request.ExpiresAt is not null || request.ClearExpiresAt || request.AcceptanceCriteriaField is not null;
+        if (request.Label is not null || !changesTrackerField)
         {
-            return Result.Failure<PlatformConnectionDto>(valid.Error!);
+            var valid = PlatformConnectionRules.ValidateLabel(request.Label);
+            if (valid.IsFailure)
+            {
+                return Result.Failure<PlatformConnectionDto>(valid.Error!);
+            }
+        }
+
+        if (!TrackerRules.IsFieldId(request.AcceptanceCriteriaField))
+        {
+            return Result.Failure<PlatformConnectionDto>(new DomainError(ErrorCodes.Validation, "The connection is invalid.")
+            {
+                Details = ["acceptanceCriteriaField: Pick a field from the list."],
+            });
         }
 
         var connection = await OwnAsync(userId, id, cancellationToken);
@@ -114,7 +146,33 @@ public sealed partial class PlatformConnectionService(
             return NotFound<PlatformConnectionDto>();
         }
 
-        connection.Label = label.Trim();
+        // FR-165: these fields exist only on trackers; accepting them elsewhere would say 200 and change nothing.
+        var expiryOnNonTracker = (request.ExpiresAt is not null || request.ClearExpiresAt) && !PlatformConnectionRules.IsTracker(connection.Provider);
+        var fieldOnNonJira = request.AcceptanceCriteriaField is not null && connection.Provider != PlatformProvider.Jira;
+        if (expiryOnNonTracker || fieldOnNonJira)
+        {
+            return Result.Failure<PlatformConnectionDto>(new DomainError(ErrorCodes.Validation, "The connection is invalid.")
+            {
+                Details = [expiryOnNonTracker
+                    ? $"expiresAt: {PlatformConnectionRules.DisplayName(connection.Provider)} reports its own expiry."
+                    : $"acceptanceCriteriaField: {PlatformConnectionRules.DisplayName(connection.Provider)} has no such field."],
+            });
+        }
+
+        if (request.Label is not null)
+        {
+            connection.Label = request.Label.Trim();
+        }
+
+        if (PlatformConnectionRules.IsTracker(connection.Provider))
+        {
+            connection.ExpiresAt = request.ClearExpiresAt ? null : request.ExpiresAt ?? connection.ExpiresAt;
+            if (request.AcceptanceCriteriaField is { } field)
+            {
+                connection.Metadata = connection.Metadata with { AcceptanceCriteriaField = field.Length == 0 ? null : field };
+            }
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success(await DtoAsync(connection, cancellationToken));
     }
@@ -158,7 +216,7 @@ public sealed partial class PlatformConnectionService(
         }
 
         var now = Now();
-        if (!Protector.TryUnprotect(connection.SecretEncrypted, out var token) || token.Length == 0)
+        if (!TryReadCredential(connection, out var credential))
         {
             // A token that can't be decrypted (lost key ring) can never work again: it has to be added anew.
             await SetStatusAsync(connection, PlatformConnectionStatus.Invalid, null, "unreadable", actor, now, cancellationToken);
@@ -168,7 +226,7 @@ public sealed partial class PlatformConnectionService(
             try
             {
                 var check = await validators.ForProvider(connection.Provider)
-                    .ValidateAsync(new PlatformCredential(token, connection.AccountId, connection.Metadata), cancellationToken);
+                    .ValidateAsync(credential, cancellationToken);
                 if (Apply(connection, check, connection.AccountId).IsFailure)
                 {
                     // The token no longer reaches the account it was saved for.
@@ -277,7 +335,7 @@ public sealed partial class PlatformConnectionService(
         }
 
         var now = Now();
-        if (!Protector.TryUnprotect(connection.SecretEncrypted, out var token) || token.Length == 0)
+        if (!TryReadCredential(connection, out var credential))
         {
             await SetStatusAsync(connection, PlatformConnectionStatus.Invalid, null, "unreadable", actor, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
@@ -286,7 +344,7 @@ public sealed partial class PlatformConnectionService(
 
         try
         {
-            return Result.Success(await call(validators.ForProvider(connection.Provider), new PlatformCredential(token, connection.AccountId, connection.Metadata)));
+            return Result.Success(await call(validators.ForProvider(connection.Provider), credential));
         }
         catch (PlatformApiException ex)
         {
@@ -324,9 +382,51 @@ public sealed partial class PlatformConnectionService(
         connection.AccountName = account?.Name ?? check.UserName;
         connection.Metadata = check.Metadata with { Accounts = check.Accounts };
         connection.Scopes = check.Scopes;
-        connection.ExpiresAt = check.ExpiresAt;
+
+        // FR-165: Jira and Linear don't report expiry through these calls; the expiry is what the user entered.
+        connection.ExpiresAt = PlatformConnectionRules.IsTracker(connection.Provider) ? connection.ExpiresAt : check.ExpiresAt;
         connection.Status = PlatformConnectionRules.StatusAfter(null, check.Metadata.MissingPermissions.Count)!.Value;
         return Result.Success();
+    }
+
+    /// <summary>The connection's decrypted credential; <c>false</c> when it can't be read any more.</summary>
+    private bool TryReadCredential(PlatformConnection connection, out PlatformCredential credential)
+    {
+        credential = new PlatformCredential(string.Empty);
+        if (!ProtectorFor(connection.Provider).TryUnprotect(connection.SecretEncrypted, out var secret))
+        {
+            return false;
+        }
+
+        var (email, token) = TrackerSecrets.Decode(connection.Provider, secret);
+        if (token.Length == 0)
+        {
+            return false;
+        }
+
+        credential = new PlatformCredential(token, connection.AccountId, connection.Metadata) { Email = email };
+        return true;
+    }
+
+    /// <summary>
+    /// FR-165: what a new tracker connection needs beyond the token: a Jira site passing the rule (<c>TRACKER_SITE_NOT_ALLOWED</c>, nothing
+    /// fetched), its email and field. Returns the normalised site; <c>null</c> for other providers.
+    /// </summary>
+    private static Result<string?> ValidateTracker(CreatePlatformConnectionRequest request)
+    {
+        if (request.Provider != PlatformProvider.Jira)
+        {
+            return Result.Success<string?>(null);
+        }
+
+        var site = TrackerRules.NormalizeJiraSite(request.Site);
+        if (site.IsFailure)
+        {
+            return Result.Failure<string?>(site.Error!);
+        }
+
+        var fields = TrackerRules.ValidateJiraConnection(request.Email, request.AcceptanceCriteriaField);
+        return fields.IsFailure ? Result.Failure<string?>(fields.Error!) : Result.Success<string?>(site.Value);
     }
 
     /// <summary>Sets the status (with the missing permissions for <c>insufficient_scope</c>); becoming invalid notifies the owner.</summary>
@@ -367,7 +467,7 @@ public sealed partial class PlatformConnectionService(
         db.PlatformConnections.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId, cancellationToken);
 
     private async Task<PlatformConnectionDto> DtoAsync(PlatformConnection connection, CancellationToken cancellationToken) =>
-        ToDto(connection, (await BoundProjectsAsync([connection.Id], cancellationToken)).GetValueOrDefault(connection.Id) ?? []);
+        ToDto(connection, (await BoundProjectsAsync([connection.Id], cancellationToken)).GetValueOrDefault(connection.Id) ?? [], time.GetUtcNow());
 
     private async Task<Dictionary<Guid, List<PlatformBoundProjectDto>>> BoundProjectsAsync(IReadOnlyList<Guid> connectionIds, CancellationToken cancellationToken)
     {
@@ -388,7 +488,7 @@ public sealed partial class PlatformConnectionService(
             .ToDictionary(g => g.Key, g => g.DistinctBy(r => r.Id).Select(r => new PlatformBoundProjectDto(r.Id, r.Name)).ToList());
     }
 
-    internal static PlatformConnectionDto ToDto(PlatformConnection c, IReadOnlyList<PlatformBoundProjectDto> boundProjects) =>
+    internal static PlatformConnectionDto ToDto(PlatformConnection c, IReadOnlyList<PlatformBoundProjectDto> boundProjects, DateTimeOffset now) =>
         new(
             c.Id,
             c.Provider,
@@ -402,13 +502,19 @@ public sealed partial class PlatformConnectionService(
                 [.. c.Metadata.Accounts.Select(ToDto)],
                 c.Metadata.Policies,
                 c.Metadata.MissingPermissions,
-                c.Metadata.TokenKind),
+                c.Metadata.TokenKind,
+                c.Metadata.Site,
+                c.Metadata.CloudId,
+                c.Metadata.AcceptanceCriteriaField,
+                c.Metadata.Organization,
+                c.Metadata.OrganizationUrlKey),
             c.Scopes,
             c.ExpiresAt,
             c.Status,
             c.LastValidatedAt,
             c.CreatedAt,
-            boundProjects);
+            boundProjects,
+            GitTokenRules.ShouldWarnExpiry(c.ExpiresAt, now));
 
     private static PlatformAccountDto ToDto(PlatformAccountRef a) => new(a.Id, a.Name, a.Slug, a.Kind);
 

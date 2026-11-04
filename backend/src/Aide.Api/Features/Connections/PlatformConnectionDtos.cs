@@ -19,7 +19,8 @@ public sealed record PlatformAccountDto(string Id, string Name, string? Slug, st
 /// <c>accounts</c>: the teams, accounts, workspaces or organisations it reaches. <c>policies</c>: a Cloudflare token's
 /// permission groups (empty when the token can't read them). <c>missingPermissions</c>: what the platform said is missing
 /// (Supabase <c>missing_permissions</c>; non-empty with status <c>insufficient_scope</c>). <c>tokenKind</c>: e.g. Railway
-/// <c>workspace</c> or <c>account</c>, Cloudflare <c>user</c> (<c>null</c> when it doesn't matter).
+/// <c>workspace</c> or <c>account</c>, Cloudflare <c>user</c> (<c>null</c> when it doesn't matter). FR-165, FR-166: <c>site</c>, <c>cloudId</c> and
+/// <c>acceptanceCriteriaField</c> for Jira; <c>organization</c> and <c>organizationUrlKey</c> for Linear.
 /// </summary>
 public sealed record PlatformConnectionMetadataDto(
     string? TeamId,
@@ -27,7 +28,12 @@ public sealed record PlatformConnectionMetadataDto(
     IReadOnlyList<PlatformAccountDto> Accounts,
     IReadOnlyList<string> Policies,
     IReadOnlyList<string> MissingPermissions,
-    string? TokenKind);
+    string? TokenKind,
+    string? Site = null,
+    string? CloudId = null,
+    string? AcceptanceCriteriaField = null,
+    string? Organization = null,
+    string? OrganizationUrlKey = null);
 
 /// <summary>
 /// One of the caller's platform connections (FR-142). The token is never returned: only the label and its last 4
@@ -35,7 +41,8 @@ public sealed record PlatformConnectionMetadataDto(
 /// account, Render workspace, Railway workspace, Supabase organisation; <c>null</c> when not chosen or unknown),
 /// <c>metadata</c> what else the token reaches, <c>scopes</c> its scopes where the platform reports them, <c>expiresAt</c>
 /// its expiry (<c>null</c>: none or unknown), <c>status</c> (<c>valid</c>, <c>invalid</c>, <c>insufficient_scope</c>,
-/// <c>unchecked</c>) and when it was last checked, plus the projects whose deployment targets are bound to it.
+/// <c>unchecked</c>) and when it was last checked, plus the projects whose deployment targets are bound to it. <c>expiryWarning</c>: the token
+/// expires within 14 days (FR-165).
 /// </summary>
 public sealed record PlatformConnectionDto(
     Guid Id,
@@ -50,7 +57,8 @@ public sealed record PlatformConnectionDto(
     PlatformConnectionStatus Status,
     DateTimeOffset? LastValidatedAt,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<PlatformBoundProjectDto> BoundProjects);
+    IReadOnlyList<PlatformBoundProjectDto> BoundProjects,
+    bool ExpiryWarning = false);
 
 /// <summary>
 /// Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it
@@ -72,14 +80,38 @@ public sealed record CreatePlatformConnectionRequest
 
     [MaxLength(PlatformConnectionRules.MaxAccountIdLength)]
     public string? AccountId { get; init; }
+
+    /// <summary>FR-165 Jira: the site, e.g. <c>acme.atlassian.net</c> (else 400 <c>TRACKER_SITE_NOT_ALLOWED</c>, nothing fetched).</summary>
+    [MaxLength(300)]
+    public string? Site { get; init; }
+
+    /// <summary>FR-165 Jira: the Atlassian account email; stored encrypted with the token.</summary>
+    [MaxLength(Domain.Trackers.TrackerRules.MaxEmailLength)]
+    public string? Email { get; init; }
+
+    /// <summary>FR-165: Jira and Linear don't report token expiry, so the dialog asks. AIDE warns 14 days before it.</summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>FR-165 Jira: the custom field holding acceptance criteria, from <c>GET …/resources?type=fields</c>.</summary>
+    [MaxLength(Domain.Trackers.TrackerRules.MaxFieldIdLength)]
+    public string? AcceptanceCriteriaField { get; init; }
 }
 
-/// <summary>Rename a platform connection (FR-142).</summary>
+/// <summary>
+/// Rename a platform connection (FR-142). FR-165: on Jira and Linear, set the expiry (<c>clearExpiresAt</c> removes it) and, on Jira, the
+/// acceptance criteria field (an empty string clears it). Omitted fields are unchanged; at least one is needed.
+/// </summary>
 public sealed record UpdatePlatformConnectionRequest
 {
-    [Required]
     [MaxLength(PlatformConnectionRules.MaxLabelLength)]
-    public required string Label { get; init; }
+    public string? Label { get; init; }
+
+    public DateTimeOffset? ExpiresAt { get; init; }
+
+    public bool ClearExpiresAt { get; init; }
+
+    [MaxLength(Domain.Trackers.TrackerRules.MaxFieldIdLength)]
+    public string? AcceptanceCriteriaField { get; init; }
 }
 
 /// <summary>

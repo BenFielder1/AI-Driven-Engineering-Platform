@@ -1,3 +1,4 @@
+using Aide.Domain.Entities;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Bitbucket;
 using Aide.Infrastructure.Deployments;
@@ -9,6 +10,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Platforms;
 using Aide.Infrastructure.RepoTools;
 using Aide.Infrastructure.Stack;
+using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -91,6 +93,7 @@ public static class DependencyInjection
         services.AddSingleton<IFakeAgentResponder, FakePlanGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakeCodeGeneratorResponder>();
         services.AddSingleton<IFakeAgentResponder, FakeRepositoryAnalystResponder>();
+        services.AddSingleton<IFakeAgentResponder, FakeStackAnalystResponder>();
         services.AddSingleton<IFakeAgentResponder>(_ => new FakeCodeReviewResponder(FakeCodeReviewScript.Default));
         // FR-71: the Fake provider's scripted repo tool calls (last registered per agent wins; tests override them).
         foreach (var script in FakeToolScripts.Defaults())
@@ -266,6 +269,48 @@ public static class DependencyInjection
         services.AddSingleton<IPlatformConnectionValidator, RailwayConnectionValidator>();
         services.AddSingleton<IPlatformConnectionValidator, SupabaseConnectionValidator>();
         services.AddSingleton<IPlatformConnectionValidators, PlatformConnectionValidators>();
+
+        // Issue trackers (FR-165–FR-173, §8): fixed hosts or Admin-registered GitLab instances, read-only, with every header value
+        // redacted from HTTP logs (Jira's Authorization, the raw Linear key). Jira's site client follows no redirects.
+        services.AddOptions<TrackerOptions>()
+            .BindConfiguration(TrackerOptions.SectionName)
+            .Validate(o => o.HasKnownProvider, "Trackers:Provider must be unset (the real trackers), 'Real' or 'Fake'.")
+            .Validate(o => o.SearchTimeout > TimeSpan.Zero && o.SearchTimeout <= TrackerOptions.MaxSearchTimeout, "Trackers:SearchTimeout must be positive and at most 2 minutes.")
+            .Validate(o => o.CheckTimeout > TimeSpan.Zero && o.CheckTimeout <= Aide.Domain.Trackers.SourceItemDriftRules.CheckTimeout, "Trackers:CheckTimeout must be positive and at most 10 seconds.")
+            .ValidateOnStart();
+        services.AddHttpClient(TrackerHosts.JiraGatewayClient, client =>
+            {
+                client.BaseAddress = new Uri(TrackerHosts.JiraGatewayBaseUrl);
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            })
+            .RedactLoggedHeaders(_ => true)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false });
+        services.AddHttpClient(TrackerHosts.JiraSiteClient, client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(10);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            })
+            .RedactLoggedHeaders(_ => true)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false });
+        services.AddHttpClient(TrackerHosts.LinearClient, client =>
+            {
+                client.BaseAddress = new Uri(TrackerHosts.LinearBaseUrl);
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            })
+            .RedactLoggedHeaders(_ => true)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false });
+        services.AddSingleton<TrackerHttp>();
+        services.AddSingleton<FakeTrackerScript>();
+        services.AddSingleton<IIssueTrackerProvider, JiraIssueTrackerProvider>();
+        services.AddSingleton<IIssueTrackerProvider, LinearIssueTrackerProvider>();
+        services.AddSingleton<IIssueTrackerProvider, GitHubIssueTrackerProvider>();
+        services.AddSingleton<IIssueTrackerProvider, GitLabIssueTrackerProvider>();
+        services.AddSingleton<IIssueTrackers, IssueTrackers>();
+        services.AddScoped<GitHubTrackerAccess>();
+        services.AddSingleton<IPlatformConnectionValidator>(sp => new TrackerConnectionValidator(PlatformProvider.Jira, sp.GetRequiredService<IIssueTrackers>()));
+        services.AddSingleton<IPlatformConnectionValidator>(sp => new TrackerConnectionValidator(PlatformProvider.Linear, sp.GetRequiredService<IIssueTrackers>()));
 
         return services;
     }

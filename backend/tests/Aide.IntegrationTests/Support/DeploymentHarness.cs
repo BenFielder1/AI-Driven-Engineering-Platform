@@ -187,6 +187,32 @@ public static class DeploymentHarness
         return maxRuns;
     }
 
+    /// <summary>
+    /// FR-190: runs the project's queued <c>database_provisioning</c> jobs in rounds until none is left, as the worker would.
+    /// A Railway preview's job defers until production's has made the service, and jobs queued in one instant have no fixed order.
+    /// </summary>
+    public static async Task SettleDatabasesAsync(WebApplicationFactory<Program> app, Guid projectId, int maxRounds = 10)
+    {
+        for (var round = 1; round <= maxRounds; round++)
+        {
+            var queued = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
+                .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DatabaseProvisioning && j.Status == JobStatus.Queued)
+                .Select(j => j.Id)
+                .ToListAsync(Ct));
+            if (queued.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var id in queued)
+            {
+                await RunOnceAsync(app, id);
+            }
+        }
+
+        Assert.Fail($"Project {projectId} still has queued database jobs after {maxRounds} rounds.");
+    }
+
     /// <summary>FR-147, FR-149: the project's newest rollout job of <paramref name="type"/> (<c>preview_rollout</c> by default).</summary>
     public static Task<Job> RolloutJobAsync(WebApplicationFactory<Program> app, Guid projectId, string type = JobTypes.PreviewRollout) =>
         ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()

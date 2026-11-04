@@ -87,7 +87,7 @@ export function StackSettingsTab({ project, canChange }: { project: Project; can
   const save = (value: typeof selection) => {
     setServerError(null)
     setFieldErrors({})
-    update.mutate(toStackRequest(value, { omitVcs: s.repoVcs !== null }), {
+    update.mutate(toStackRequest(value, { omitVcs: s.repoVcs !== null, separateParts: s.composition?.deploy.separateParts ?? [] }), {
       onSuccess: () => {
         setEditing(false)
         toast.success('Stack saved.')

@@ -135,6 +135,9 @@ public static class NotificationMessages
             NotificationType.PreviewReady => (
                 $"{project}: preview{VersionText(facts)} is ready",
                 $"The preview of {project}{VersionText(facts)} is ready{(facts.DeploymentUrl is { } url ? $" at {OneLine(url, 300)}" : string.Empty)}."),
+            NotificationType.ConnectionInvalid when facts.Reason == NotificationRules.ConnectionExpiringReason => (
+                $"Your {ConnectionName(facts.Provider)} connection expires{DateText(facts)}",
+                $"The token of your {ConnectionName(facts.Provider)} connection expires{DateText(facts)}. Create a new token and replace it on the Connections page before then, or imports from {ConnectionName(facts.Provider)} stop working."),
             NotificationType.ConnectionInvalid => (
                 $"Your {ConnectionName(facts.Provider)} connection is invalid",
                 $"{ProviderName(facts.Provider)} rejected the credentials of your {ConnectionName(facts.Provider)} connection{(project.Length > 0 ? $" while it was used for {project}" : string.Empty)}, so it is marked invalid. Reconnect it or replace its key on the Connections page."),
@@ -162,6 +165,15 @@ public static class NotificationMessages
             NotificationType.DeploymentTargetAttention => (
                 $"{project}: {facts.Component ?? "deployment"} target needs attention",
                 $"{ProviderName(facts.Provider)} can no longer access the repository of the {facts.Component ?? "deployment"} target of {project}. Connect it on the platform, then verify the target in Settings → Deployment."),
+            NotificationType.StackProfileReady when facts.Reason == NotificationRules.StackProfileRunFailedReason => (
+                $"{project}: the Stack Analyst run failed",
+                $"The Stack Analyst couldn't draft the stack profile of {project}{CodeText(facts)}. An Owner can retry it, or fill in the profile, on the Analysis page."),
+            NotificationType.StackProfileReady => (
+                $"{project}: stack profile{version} is ready for review",
+                $"A draft of the stack profile{version} of {project} waits for an Owner's review on the Analysis page. Answer anything it needs, then approve it to pin the stack."),
+            NotificationType.TrackerImportFailed => (
+                $"{project}: import from {TrackerName(facts.Provider)} failed",
+                $"Importing items from {TrackerName(facts.Provider)} into {project} failed{CodeText(facts)}, so no source items were added. Retry it from the Refinement page."),
             _ => ($"{project}: update", $"There is an update on {project}."),
         };
 
@@ -192,8 +204,21 @@ public static class NotificationMessages
         "render" => "Render",
         "railway" => "Railway",
         "supabase" => "Supabase",
+        "jira" => "Jira",
+        "linear" => "Linear",
         null or "" => "LLM",
         _ => $"LLM ({ProviderName(provider)})",
+    };
+
+    /// <summary>FR-193: the tracker of an import (<c>jira</c>, <c>linear</c>, <c>github</c>, <c>gitlab</c>).</summary>
+    private static string TrackerName(string? provider) => provider switch
+    {
+        "jira" => "Jira",
+        "linear" => "Linear",
+        "github" => "GitHub Issues",
+        "gitlab" => "GitLab Issues",
+        null or "" => "the tracker",
+        _ => OneLine(provider, 40),
     };
 
     private static string ProviderName(string? provider) => provider switch
@@ -209,6 +234,8 @@ public static class NotificationMessages
         "render" => "Render",
         "railway" => "Railway",
         "supabase" => "Supabase",
+        "jira" => "Jira",
+        "linear" => "Linear",
         "github_pages" => "GitHub Pages",
         null or "" => "The provider",
         _ => OneLine(provider, 40),

@@ -4,6 +4,7 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Admin;
+using Aide.Api.Features.Analysis;
 using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
@@ -28,6 +29,7 @@ using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Tokens;
+using Aide.Api.Features.Trackers;
 using Aide.Api.Features.Versions;
 using Aide.Api.Health;
 using Aide.Api.Hosting;
@@ -178,11 +180,17 @@ builder.Services.AddMergeReadiness();
 builder.Services.AddScoped<RollbackService>();
 builder.Services.AddReleaseVersions();
 
+// FR-180–FR-185: the Stack Analyst, its trigger after the Repository Analyst, and the Analysis page.
+builder.Services.AddStackAnalysis();
+
 // Vercel deployments (FR-87–FR-91, §4.15): settings, env sync, previews, production and the poll job.
 builder.Services.AddDeployments();
 
 // Platform connections (FR-142): Vercel, Netlify, Cloudflare, Render, Railway and Supabase tokens and picker data.
 builder.Services.AddScoped<PlatformConnectionService>();
+
+// Issue trackers (FR-165–FR-173): browsing with personal connections, project imports and the import job.
+builder.Services.AddTrackers();
 
 
 // Stack compositions on projects and versions, Settings → Stack and import detection (FR-114–FR-119).
@@ -220,6 +228,7 @@ app.MapApiTokenEndpoints();
 app.MapLlmConnectionEndpoints();
 app.MapLlmProviderEndpoints();
 app.MapPlatformConnectionEndpoints();
+app.MapTrackerEndpoints();
 app.MapGitHubEndpoints();
 app.MapGitLabEndpoints();
 app.MapBitbucketEndpoints();
@@ -237,6 +246,7 @@ app.MapActivityEndpoints();
 app.MapArtifactEndpoints();
 app.MapRunEndpoints();
 app.MapRefinementEndpoints();
+app.MapAnalysisEndpoints();
 app.MapExecutionEndpoints();
 app.MapGitEndpoints();
 app.MapReviewEndpoints();

@@ -2,7 +2,8 @@ namespace Aide.Domain.Notifications;
 
 /// <summary>
 /// The kind of an in-app notification (FR-47, FR-15). The project channel events (<c>NotificationEvent</c>) plus
-/// <c>gate_reminder</c>, the 24-hour reminder of a pending gate, and the personal <c>connection_invalid</c> (FR-92).
+/// <c>gate_reminder</c>, the 24-hour reminder of a pending gate, and the personal <c>connection_invalid</c> (FR-92; also the
+/// FR-165 warning that a Jira or Linear token expires within 14 days).
 /// Wire values are snake_case.
 /// </summary>
 public enum NotificationType
@@ -48,4 +49,10 @@ public enum NotificationType
 
     /// <summary>FR-144, FR-155: the platform lost Git access, or the target's token is invalid (Owners; the component and platform).</summary>
     DeploymentTargetAttention = 20,
+
+    /// <summary>FR-193: a <c>stack_profile</c> draft waits for review, or the Stack Analyst run failed (Owners; the Analysis page).</summary>
+    StackProfileReady = 21,
+
+    /// <summary>FR-193: a tracker import ended without a snapshot (Owners and the importer; the Refinement page).</summary>
+    TrackerImportFailed = 22,
 }

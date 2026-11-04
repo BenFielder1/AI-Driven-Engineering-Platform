@@ -162,6 +162,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
         var guard = new FakeDeploymentProviderGuard(
             Options.Create(new DeploymentOptions { Provider = deployments, AllowFake = allowFake }),
             Options.Create(new Aide.Infrastructure.Databases.DatabaseOptions { Provider = databases }),
+            Options.Create(new Aide.Infrastructure.Trackers.TrackerOptions()),
             new Env(environment),
             new CapturingLoggerProvider(logs).CreateLogger(nameof(FakeDeploymentProviderGuard)) is var logger ? new Logger(logger) : NullLogger<FakeDeploymentProviderGuard>.Instance);
 

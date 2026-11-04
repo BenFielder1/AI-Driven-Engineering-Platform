@@ -40,6 +40,8 @@ export const NOTIFYING_EVENT_TYPES: ReadonlySet<string> = new Set([
   'DATABASE_EXPIRING',
   'MIGRATION_RUN_FAILED',
   'DEPLOYMENT_TARGET_FAILED',
+  // FR-193 (stack_profile_ready rides on ARTIFACT_CREATED and RUN_FAILED).
+  'TRACKER_IMPORT_FAILED',
 ])
 
 /** Trailing debounce for the notification refresh, so a burst of events (a draft, an execution run) refetches once. */

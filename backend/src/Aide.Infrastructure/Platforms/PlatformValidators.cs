@@ -289,6 +289,19 @@ public sealed class RenderConnectionValidator(PlatformHttp http) : IPlatformConn
             ];
         }
 
+        if (type == PlatformResourceType.Projects)
+        {
+            // §4.28, FR-190: the projects this connection reaches, for a group's link picker.
+            using var projects = await SendAsync(owner is null ? "projects?limit=100" : $"projects?limit=100&ownerId={Uri.EscapeDataString(owner)}", credential, cancellationToken);
+            return
+            [
+                .. Json.Items(projects.RootElement)
+                    .Select(p => Json.Property(p, "project").ValueKind == JsonValueKind.Object ? Json.Property(p, "project") : p)
+                    .Where(p => Json.Text(p, "id") is not null)
+                    .Select(p => new PlatformResource(Json.Text(p, "id")!, Json.Text(p, "name") ?? Json.Text(p, "id")!)),
+            ];
+        }
+
         var path = owner is null ? "services?limit=100" : $"services?limit=100&ownerId={Uri.EscapeDataString(owner)}";
         using var json = await SendAsync(path, credential, cancellationToken);
         return
@@ -320,6 +333,8 @@ public sealed class RailwayConnectionValidator(PlatformHttp http) : IPlatformCon
     private const string WorkspaceQuery = "query($id: String!) { workspace(workspaceId: $id) { id name } }";
     private const string ProjectsQuery = "query($id: String!) { projects(workspaceId: $id, first: 100) { edges { node { id name } } } }";
     private const string RegionsQuery = "query { regions { name country location } }";
+
+    private const string ServicesQuery = "query($id: String!) { projects(workspaceId: $id, first: 100) { edges { node { id name services { edges { node { id name } } } } } } }";
 
     /// <summary>FR-152: every project's services with their image, to list the Postgres ones (§11: from the schema, unverified against a live account).</summary>
     private const string PostgresServicesQuery =
@@ -411,6 +426,21 @@ public sealed class RailwayConnectionValidator(PlatformHttp http) : IPlatformCon
                             && Json.Items(Json.Property(s, "serviceInstances"), "edges")
                                 .Any(i => PlatformConnectionRules.IsPostgresImage(Json.Text(Json.Property(Json.Property(i, "node"), "source"), "image"))))
                         .Select(s => new PlatformResource(Json.Text(s, "id")!, Json.Text(s, "name") ?? Json.Text(s, "id")!, null, Json.Text(project, "name")))),
+            ];
+        }
+
+        if (type == PlatformResourceType.Services)
+        {
+            // §4.28, FR-190: every service as project:service, with its project's name, for a group's per-part link picker.
+            using var services = await QueryAsync(ServicesQuery, new { id = workspace }, credential, cancellationToken);
+            return
+            [
+                .. Json.Items(Json.Property(Json.Property(services.RootElement, "data"), "projects"), "edges")
+                    .Select(e => Json.Property(e, "node"))
+                    .SelectMany(project => Json.Items(Json.Property(project, "services"), "edges")
+                        .Select(e => Json.Property(e, "node"))
+                        .Where(s => Json.Text(s, "id") is not null)
+                        .Select(s => new PlatformResource($"{Json.Text(project, "id")}:{Json.Text(s, "id")}", Json.Text(s, "name") ?? Json.Text(s, "id")!, null, Json.Text(project, "name")))),
             ];
         }
 
@@ -629,7 +659,8 @@ public sealed class PlatformConnectionValidators(IOptions<DeploymentOptions> opt
 
     public IPlatformConnectionValidator ForProvider(PlatformProvider provider)
     {
-        if (provider != PlatformProvider.Vercel && options.Value.UseFake)
+        // Jira and Linear follow Trackers:Provider through their own adapter, not Deployments:Provider.
+        if (provider != PlatformProvider.Vercel && !PlatformConnectionRules.IsTracker(provider) && options.Value.UseFake)
         {
             return new FakePlatformConnectionValidator { Provider = provider };
         }

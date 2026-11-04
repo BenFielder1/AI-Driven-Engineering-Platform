@@ -1,5 +1,5 @@
 import type { Schemas } from '../../api/client'
-import { phases } from '../projects/labels'
+import { allPhases, phases } from '../projects/labels'
 
 type Phase = Schemas['Phase']
 type ProjectState = Schemas['ProjectStateDto']
@@ -30,6 +30,8 @@ const artifactStage: Record<ArtifactType, Phase> = {
   implementation_plan: 'planning',
   optimization_plan: 'review',
   codebase_summary: 'refinement',
+  source_items: 'refinement',
+  stack_profile: 'analysis',
 }
 
 /** The gate that already stands for a draft of this type (so the draft isn't counted twice). */
@@ -42,8 +44,13 @@ const artifactGate: Partial<Record<ArtifactType, GateType>> = {
  * FR-54: each lifecycle stage's state and needs-action count, from GET /state (phase, status, pending gates and the
  * latest artifact versions). Stages before the current phase are done; a released project has every stage done.
  */
-export function stageStatuses(state: Pick<ProjectState, 'phase' | 'status' | 'pendingGates' | 'artifacts'>): StageStatus[] {
-  const currentIndex = phases.indexOf(state.phase)
+export function stageStatuses(
+  state: Pick<ProjectState, 'phase' | 'status' | 'pendingGates' | 'artifacts'>,
+  { analysis = false }: { analysis?: boolean } = {},
+): StageStatus[] {
+  // §4.27: Analysis is a stage only on a version that infers its stack. Elsewhere, in analysis every stage is upcoming.
+  const stages: readonly Phase[] = analysis ? allPhases : phases
+  const currentIndex = stages.indexOf(state.phase)
   const released = state.status === 'released'
   const counts = new Map<Phase, number>()
   const bump = (stage: Phase) => counts.set(stage, (counts.get(stage) ?? 0) + 1)
@@ -60,7 +67,7 @@ export function stageStatuses(state: Pick<ProjectState, 'phase' | 'status' | 'pe
     }
   }
 
-  return phases.map((stage, index) => ({
+  return stages.map((stage, index) => ({
     stage,
     state: released || index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
     needsAction: counts.get(stage) ?? 0,

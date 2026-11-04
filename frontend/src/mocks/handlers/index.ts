@@ -1,4 +1,5 @@
 import { adminHandlers } from './admin'
+import { analysisHandlers } from './analysis'
 import { artifactHandlers } from './artifacts'
 import { authHandlers } from './auth'
 import { bitbucketHandlers } from './bitbucket'
@@ -19,6 +20,7 @@ import { projectHandlers } from './projects'
 import { reviewHandlers } from './review'
 import { runHandlers } from './runs'
 import { stackHandlers } from './stack'
+import { trackerHandlers } from './trackers'
 import { versionHandlers } from './versions'
 
 export const handlers = [
@@ -29,12 +31,15 @@ export const handlers = [
   ...connectionHandlers,
   ...llmHandlers,
   ...platformConnectionHandlers,
+  ...trackerHandlers,
   ...deploymentHandlers,
   ...migrationHandlers,
   ...githubHandlers,
   ...gitlabHandlers,
   ...bitbucketHandlers,
   ...lifecycleHandlers,
+  // Before artifactHandlers: the stack_profile cases of the generic artifact routes (FR-183).
+  ...analysisHandlers,
   ...artifactHandlers,
   ...runHandlers,
   ...refinementHandlers,

@@ -1,13 +1,16 @@
 import { errorMessage, isApiError, stackIncompatibleMessage, type ErrorContext } from '../../lib/errors'
-import { databaseRequestBody, targetRequestBody } from '../deployments/host-setup-body'
+import { deploymentProviderLabels } from '../deployments/deployment-format'
+import { deploymentPartsTitle, groupReasonText } from '../deployments/deployment-group-format'
+import { databaseRequestBody, groupRequestBody, targetRequestBody } from '../deployments/host-setup-body'
 import {
   deploymentSettingsPolling,
   fetchDeploymentSettings,
+  putDeploymentGroup,
   putDeploymentTarget,
   putManagedDatabase,
   type DeploymentSettings,
 } from '../deployments/deployments-api'
-import { hostValues, isHostChosen, wizardHosts, type HostFormValues, type WizardHost } from './wizard-hosts'
+import { hostGroupValues, hostValues, isHostChosen, wizardHosts, type HostFormValues, type WizardHost } from './wizard-hosts'
 
 export interface HostSetupFailure {
   title: string
@@ -51,10 +54,12 @@ async function settledTargets(projectId: string): Promise<DeploymentSettings['ta
 }
 
 /**
- * §7: after the project is created, sets up the hosts chosen in the Deployment step through the same endpoints as Settings
- * → Deployment. Targets first; Render and Railway databases then wait for their target's setup job, as they read its
- * region or Railway project (§4.21). Each host is tried once and a failure never stops the others, so the project stays
- * usable and the caller can list what's left for Settings → Deployment. The API's 202s only queue the jobs.
+ * §7, FR-188: after the project is created, sets up the hosts chosen in the Deployment step through the same endpoints as
+ * Settings → Deployment. A group takes one PUT, and its job resolves the order inside (FR-190), so nothing waits for it.
+ * Of the rest, targets go first; a Render database outside a group then waits for its target's setup job, as it reads its
+ * region (§4.21). A Railway database outside a group has its own project (§4.28), so it waits for nothing. Each host is
+ * tried once and a failure never stops the others, so the project stays usable and the caller can list what's left for
+ * Settings → Deployment. The API's 202s only queue the jobs.
  */
 export async function applyHostSetups(projectId: string, values: HostFormValues): Promise<HostSetupFailure[]> {
   const chosen = wizardHosts(values).filter((h) => isHostChosen(values, h.slot))
@@ -62,6 +67,23 @@ export async function applyHostSetups(projectId: string, values: HostFormValues)
   const databases = chosen.filter((h): h is Extract<WizardHost, { kind: 'database' }> => h.kind === 'database')
   const failures: HostSetupFailure[] = []
   const queued: typeof targets = []
+
+  for (const host of chosen) {
+    if (host.kind !== 'group') {
+      continue
+    }
+    try {
+      const group = await putDeploymentGroup(projectId, host.provider, groupRequestBody(host, hostGroupValues(values)))
+      for (const part of group.partStatuses.filter((p) => p.status === 'error')) {
+        failures.push({
+          title: deploymentPartsTitle([part.part], deploymentProviderLabels[host.provider]),
+          message: groupReasonText(part.statusReason, host.provider) ?? 'The setup failed.',
+        })
+      }
+    } catch (error) {
+      failures.push({ title: host.title, message: failureText(error, 'deploymentGroup') })
+    }
+  }
 
   for (const host of targets) {
     try {
@@ -72,7 +94,7 @@ export async function applyHostSetups(projectId: string, values: HostFormValues)
     }
   }
 
-  const dependsOnTargets = databases.some((d) => d.provider === 'render' || d.provider === 'railway')
+  const dependsOnTargets = databases.some((d) => d.provider === 'render')
   const needsWait = queued.length > 0 && dependsOnTargets
   const settled = needsWait ? await settledTargets(projectId) : null
   if (settled) {
@@ -85,10 +107,9 @@ export async function applyHostSetups(projectId: string, values: HostFormValues)
   }
 
   for (const host of databases) {
-    const dependent = host.provider === 'render' || host.provider === 'railway'
-    const blocked = dependent && targets.some((t) => t.provider === host.provider) && !settled?.some((t) => t.provider === host.provider && t.resourceId !== null)
+    const blocked = host.provider === 'render' && targets.some((t) => t.provider === 'render') && !settled?.some((t) => t.provider === 'render' && t.resourceId !== null)
     if (blocked) {
-      failures.push({ title: host.title, message: `Not started: it needs the ${host.provider === 'render' ? 'Render' : 'Railway'} target to finish its setup first.` })
+      failures.push({ title: host.title, message: 'Not started: it needs the Render target to finish its setup first.' })
       continue
     }
     try {

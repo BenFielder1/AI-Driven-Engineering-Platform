@@ -31,13 +31,19 @@ internal static class Samples
          "stackChange":{"baseHasCode":false,"layersChanged":[],"isStackChange":false},"legacyPreset":null,"repoVcs":null}
         """;
 
-    /// <summary>The body `aide status` gets for each request: the state, the project, no stack and no migration runs (FR-156).</summary>
+    /// <summary>GET /sources with no imports (FR-194).</summary>
+    public const string EmptySources = """
+        {"releaseVersionId":"0199f2a0-6666-7000-8000-000000000001","imports":[],"currentSnapshot":null,"draft":null,"canChange":true}
+        """;
+
+    /// <summary>The body `aide status` gets for each request: the state, the project, no stack, no migration runs (FR-156) and no imports (FR-194).</summary>
     public static string StatusBody(HttpRequestMessage request, string state, string project)
     {
         var path = request.RequestUri!.AbsolutePath;
         return path.EndsWith("/state", StringComparison.Ordinal) ? state
             : path.EndsWith("/stack", StringComparison.Ordinal) ? EmptyStack
             : path.EndsWith("/migrations", StringComparison.Ordinal) ? "[]"
+            : path.EndsWith("/sources", StringComparison.Ordinal) ? EmptySources
             : project;
     }
 

@@ -51,6 +51,19 @@ public static class JobTypes
     public const string RepositoryAnalysis = "repository_analysis";
 
     /// <summary>
+    /// FR-180: the Stack Analyst writes a <c>stack_profile</c> draft for a version that infers its stack. Queued when that
+    /// version's <see cref="RepositoryAnalysis"/> job ends (succeeded or not), by <c>POST /analysis/run</c>, and on a
+    /// rejected or corrupted profile.
+    /// </summary>
+    public const string StackAnalysis = "stack_analysis";
+
+    /// <summary>
+    /// FR-170: fetches one import's items once, stores them and writes a new locked <c>source_items</c> version. A rate limit defers
+    /// it (<c>Retry-After</c>) without using an attempt.
+    /// </summary>
+    public const string TrackerImport = "tracker_import";
+
+    /// <summary>
     /// FR-90, FR-91, §4.15, NFR-REL2: one deployment row: creates it at the provider (a production deployment first adopts the
     /// one Vercel made for the merge commit) and polls it — every 10 seconds for 2 minutes, then every 30, up to 30 minutes —
     /// by deferring itself between polls, so polling survives restarts.
@@ -108,6 +121,7 @@ public static class JobTypes
         AgentKind.CodeGenerator => Execution,
         AgentKind.CodeReview => Review,
         AgentKind.RepositoryAnalyst => RepositoryAnalysis,
+        AgentKind.StackAnalyst => StackAnalysis,
         _ => throw new ArgumentOutOfRangeException(nameof(agent), agent, null),
     };
 

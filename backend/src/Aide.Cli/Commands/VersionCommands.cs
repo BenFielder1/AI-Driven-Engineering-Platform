@@ -34,14 +34,18 @@ internal static class VersionCommands
             HelpName = "id",
             Hidden = true,
         };
+        var inferStack = new Option<bool>("--infer-stack")
+        {
+            Description = "Infer the new version's stack from the repository at the new base (FR-186): the version starts in analysis, and an Owner approves the Stack Analyst's profile. Not with the stack options.",
+        };
         var command = new Command(
             "start",
             "Start a new release version of a released project (Owner only). The project goes back to refinement at checkpoint 1 " +
-            "with the request as its idea. Exit 4 for VERSION_INVALID, VERSION_NOT_GREATER, VERSION_IN_PROGRESS, TAG_EXISTS, " +
-            "RELEASE_NOT_MERGED, NOT_RELEASED or STACK_INCOMPATIBLE. Stack options change the named layers of the current composition; " +
+            "with the request as its idea (analysis with --infer-stack). Exit 4 for VERSION_INVALID, VERSION_NOT_GREATER, VERSION_IN_PROGRESS, TAG_EXISTS, " +
+            "RELEASE_NOT_MERGED, NOT_RELEASED, STACK_INCOMPATIBLE or STACK_INFER_NO_CODE. Stack options change the named layers of the current composition; " +
             "without any, the new version keeps it.")
         {
-            id, version, request, preset,
+            id, version, request, preset, inferStack,
         };
 
         // FR-156: the stack flags replace --preset, also under the names --stack-frontend and so on.
@@ -60,7 +64,16 @@ internal static class VersionCommands
             var body = new JsonObject { ["version"] = context.Get(version)?.Trim(), ["request"] = text };
             var picks = stackFlags.Read(context);
             string? originWarning = null;
-            if (picks.Any)
+            if (context.Get(inferStack))
+            {
+                if (picks.Any)
+                {
+                    throw new UsageException("--infer-stack can't be combined with stack options: the Stack Analyst proposes the layers.");
+                }
+
+                body["stackSource"] = "infer";
+            }
+            else if (picks.Any)
             {
                 var current = await context.Api().GetAsync<ProjectStackDto>($"api/projects/{projectId}/stack", cancellationToken).ConfigureAwait(false);
                 var merged = StackFlags.Merge(current.Value.Composition, picks);
@@ -84,7 +97,7 @@ internal static class VersionCommands
             var state = started.Value.State;
             await context.Out.WriteLineAsync(
                 $"Started version {v.Version}{(v.BaseTag is { } baseTag ? $" (from {baseTag})" : string.Empty)}: phase {state.Phase}, checkpoint {Output.Num(state.Checkpoint)}.").ConfigureAwait(false);
-            await context.Out.WriteLineAsync($"Next: aide status {projectId}").ConfigureAwait(false);
+            await context.Out.WriteLineAsync(state.Phase == "analysis" ? $"Next: aide analysis show {projectId}" : $"Next: aide status {projectId}").ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
@@ -130,7 +143,8 @@ internal static class VersionCommands
         environment.AcceptOnlyFromAmong("preview", "production");
         var component = new Option<string?>("--component") { Description = "Only the frontend's or the backend's deployments." };
         component.AcceptOnlyFromAmong("frontend", "backend");
-        var command = new Command("deployments", "List a project's deployments, newest first: target, component, version, SHA, state, URL, time and who triggered it.") { id, target, environment, component };
+        var command = new Command("deployments", "List a project's deployments, newest first: target, component, version, SHA, state, URL, time and who triggered it. 'aide deployments groups <id>' lists its deployment groups.") { id, target, environment, component };
+        command.Subcommands.Add(BuildGroups(factory));
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var path = AideApiClient.WithQuery($"api/projects/{context.Get(id)}/deployments", ("target", context.Get(target)), ("environment", context.Get(environment)), ("component", context.Get(component)));
@@ -150,6 +164,70 @@ internal static class VersionCommands
             return ExitCodes.Success;
         });
         return command;
+    }
+
+    /// <summary>FR-194: `aide deployments groups &lt;id&gt;` — the deployment groups of Settings → Deployment (FR-191).</summary>
+    private static Command BuildGroups(CommandFactory factory)
+    {
+        var id = ProjectCommands.ProjectIdArgument();
+        var command = new Command(
+            "groups",
+            "List a project's deployment groups (parts on one platform sharing a project): platform, parts, status, name, connection, shared project and each part's status.")
+        {
+            id,
+        };
+        factory.SetHandler(command, async (context, cancellationToken) =>
+        {
+            var result = await context.Api().GetAsync<DeploymentGroupsDto>($"api/projects/{context.Get(id)}/settings/deployment", cancellationToken).ConfigureAwait(false);
+            if (context.Json)
+            {
+                await context.Out.WriteLineAsync(ApiJson.ToIndentedJson(JsonNode.Parse(result.Raw)?["groups"] ?? new JsonArray())).ConfigureAwait(false);
+                return ExitCodes.Success;
+            }
+
+            await context.Out.WriteLineAsync(FormatGroups(result.Value.Groups ?? [])).ConfigureAwait(false);
+            return ExitCodes.Success;
+        });
+        return command;
+    }
+
+    internal static string FormatGroups(IReadOnlyList<DeploymentGroupDto> groups)
+    {
+        if (groups.Count == 0)
+        {
+            return "No deployment groups.";
+        }
+
+        var lines = new List<string>
+        {
+            Output.Table(
+                ["PROVIDER", "PARTS", "STATUS", "NAME", "CONNECTION", "SHARED PROJECT"],
+                groups.Select(g => (IReadOnlyList<string>)
+                [
+                    g.Provider,
+                    string.Join(", ", g.Parts),
+                    g.StatusReason is { } reason ? $"{g.Status} ({reason})" : g.Status,
+                    g.Name ?? "-",
+                    g.Binding is { } b ? $"{b.Label}{(b.BoundBy is { } by ? $" (connected by {by.Name})" : string.Empty)}" : "-",
+                    g.SharedResourceUrl ?? g.SharedResourceId ?? (g.Capability == "shared_setup" ? "one project per part" : "-"),
+                ])),
+        };
+
+        foreach (var group in groups)
+        {
+            foreach (var part in group.PartStatuses ?? [])
+            {
+                var where = part.Environment is { } environment ? $"{part.Part} ({environment})" : part.Part;
+                lines.Add($"{group.Provider} {where}: {part.Status}{(part.StatusReason is { } why ? $" ({why})" : string.Empty)}");
+            }
+
+            if (group.CanRetry)
+            {
+                lines.Add($"{group.Provider}: a part failed or is missing; retry it in Settings → Deployment.");
+            }
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>`@path` reads the file (`@-` stdin); anything else is the request text itself.</summary>

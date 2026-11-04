@@ -9,6 +9,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Jobs;
 using Aide.Domain.Specs;
 using Aide.Domain.Stack;
+using Aide.Domain.Trackers;
 
 namespace Aide.Api.Agents;
 
@@ -46,6 +47,10 @@ public sealed class IdeaRefinementJobHandler(
 
         var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
         var waitWarning = await SummaryWaiter.WaitAsync(iterations, iteration, project.Id, time, cancellationToken);
+
+        // FR-172: a queued or running import is waited for like the summary (re-queued, up to 10 minutes).
+        var sourceWarning = await SourceItemsWaiter.WaitAsync(inputs, iteration.Version?.Id, time, cancellationToken);
+        var sourceItems = await inputs.CurrentAsync(project.Id, ArtifactType.SourceItems, cancellationToken);
         var draft = await inputs.PreviousAsync(payload, ArtifactType.ProjectRequest, cancellationToken)
             ?? await inputs.LatestIntactAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var answers = RefinementRules.FormatAnswers(payload.Answers);
@@ -61,6 +66,7 @@ public sealed class IdeaRefinementJobHandler(
             {
                 ["PROJECT_NAME"] = project.Name,
                 ["IDEA"] = project.Idea,
+                ["SOURCE_ITEMS"] = sourceItems?.Content,
                 ["CURRENT_DRAFT"] = draft?.Content,
                 ["ANSWERS"] = answers,
                 ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
@@ -71,10 +77,11 @@ public sealed class IdeaRefinementJobHandler(
                 [AgentRunner.FeedbackInput] = feedback,
             },
             Stack = stack.Stack,
-            InputArtifacts = [.. new[] { draft }.OfType<Artifact>().Concat(iteration.Artifacts).Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { draft, sourceItems }.OfType<Artifact>().Concat(iteration.Artifacts).Select(AgentJobInputs.Ref)],
             UserFeedback = RefinementRules.RunFeedback(payload.Answers, feedback),
             Repo = RepoScope.BaseCommit,
-            Warnings = waitWarning is null ? [] : [waitWarning],
+            Warnings = [.. new[] { waitWarning, sourceWarning }.OfType<string>()],
+            SourceItemsBytes = SourceItemsWaiter.ByteCount(sourceItems),
         };
 
         await agentJob.RunAsync(
@@ -125,6 +132,7 @@ public sealed class SpecGenerationJobHandler(
         var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
         var previous = await inputs.PreviousAsync(payload, ArtifactType.TechnicalSpecification, cancellationToken);
         var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
+        var sourceItems = await inputs.CurrentAsync(project.Id, ArtifactType.SourceItems, cancellationToken);
 
         // FR-123, FR-128: with a composition, its required sections (with "Stack Migration" for a stack change, or when the
         // imported code doesn't match it).
@@ -145,6 +153,7 @@ public sealed class SpecGenerationJobHandler(
             Inputs = new Dictionary<string, string?>
             {
                 ["PROJECT_REQUEST"] = projectRequest?.Content,
+                ["SOURCE_ITEMS"] = sourceItems?.Content,
                 ["SPEC_MODE"] = context.Mode,
                 ["BASELINE_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
                 ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
@@ -152,9 +161,10 @@ public sealed class SpecGenerationJobHandler(
                 ["STACK_GUIDANCE"] = guidance,
             },
             Stack = stack.Stack,
-            InputArtifacts = [.. new[] { projectRequest, previous, iteration.CodebaseSummary, iteration.BaselineSpecification }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            InputArtifacts = [.. new[] { projectRequest, previous, sourceItems, iteration.CodebaseSummary, iteration.BaselineSpecification }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = feedback,
             Repo = RepoScope.BaseCommit,
+            SourceItemsBytes = SourceItemsWaiter.ByteCount(sourceItems),
         };
 
         await agentJob.RunAsync(
@@ -277,6 +287,30 @@ internal static class SummaryWaiter
         var decision = CodebaseSummaryWait.Decide(hasExistingCode: true, summaryExists: false, state, version.CreatedAt, time.GetUtcNow());
         return decision.Wait ? throw new JobDeferredException(WaitingMessage, decision.RetryAt!.Value) : decision.Warning;
     }
+}
+
+/// <summary>
+/// FR-172: a refinement run with a queued or running import waits (<see cref="JobDeferredException"/>, no attempt counted), up to 10 minutes after
+/// the oldest such import was queued (<see cref="SourceItemsWait"/>); then it goes on with <c>source_items_unavailable</c>.
+/// </summary>
+internal static class SourceItemsWaiter
+{
+    public const string WaitingMessage = "Waiting for the tracker import (FR-172).";
+
+    public static async Task<string?> WaitAsync(AgentJobInputs inputs, Guid? releaseVersionId, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (releaseVersionId is not { } id)
+        {
+            return null;
+        }
+
+        var (oldest, failed) = await inputs.ImportStateAsync(id, cancellationToken);
+        var decision = SourceItemsWait.Decide(oldest, failed, time.GetUtcNow());
+        return decision.Wait ? throw new JobDeferredException(WaitingMessage, decision.RetryAt!.Value) : decision.Warning;
+    }
+
+    /// <summary>The snapshot's size, for the run-time budget check.</summary>
+    public static int? ByteCount(Artifact? sourceItems) => sourceItems is null ? null : System.Text.Encoding.UTF8.GetByteCount(sourceItems.Content);
 }
 
 public static class AgentJobServiceCollectionExtensions

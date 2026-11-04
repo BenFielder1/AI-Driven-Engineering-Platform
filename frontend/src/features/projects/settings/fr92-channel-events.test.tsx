@@ -34,7 +34,7 @@ describe('Settings → Notifications: FR-92 channel events', () => {
     }
     // Personal: never a project channel event.
     expect(within(events).queryByLabelText('Connection invalid')).not.toBeInTheDocument()
-    expect(within(events).getAllByRole('checkbox')).toHaveLength(19)
+    expect(within(events).getAllByRole('checkbox')).toHaveLength(21)
 
     await user.click(within(events).getByLabelText('Release awaiting a merge on the Git host'))
     await user.click(within(events).getByLabelText('Deployment failed'))

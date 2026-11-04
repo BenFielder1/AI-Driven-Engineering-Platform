@@ -160,7 +160,8 @@ public class DatabaseProviderTests
     // ------------------------------------------------------------------ Render
 
     [Fact]
-    public async Task FR152_Render_create_posts_version_17_in_the_backends_region_with_a_database_name()
+    // FR-195 amends FR-152: the version is 18 (was 17).
+    public async Task FR195_FR152_Render_create_posts_version_18_in_the_backends_region_with_a_database_name()
     {
         var stub = new PlatformStub()
             .On("GET", "postgres?", "[]")
@@ -172,7 +173,7 @@ public class DatabaseProviderTests
 
         Assert.Equal(("dpg-1", "frankfurt"), (result.ResourceId, result.Region));
         using var body = JsonDocument.Parse(Assert.Single(stub.Where("POST", "postgres")).Body);
-        Assert.Equal(("todo-preview", "tea-1", "17", "frankfurt", "todo_preview", "free"), (
+        Assert.Equal(("todo-preview", "tea-1", "18", "frankfurt", "todo_preview", "free"), (
             body.RootElement.GetProperty("name").GetString(),
             body.RootElement.GetProperty("ownerId").GetString(),
             body.RootElement.GetProperty("version").GetString(),
@@ -230,6 +231,28 @@ public class DatabaseProviderTests
         Assert.Contains("pw-123", create, StringComparison.Ordinal);
         Assert.Contains(bodies, b => b.Contains("volumeCreate", StringComparison.Ordinal) && b.Contains(RailwayPostgresProvider.MountPath, StringComparison.Ordinal));
         Assert.Contains(bodies, b => b.Contains("serviceInstanceDeployV2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FR195_Railway_create_sends_postgres_ssl_18_with_the_templates_volume_mount_and_PGDATA()
+    {
+        var stub = new PlatformStub().On("POST", "/graphql/v2", call => PlatformStub.Json(
+            call.Body.Contains("serviceCreate", StringComparison.Ordinal) ? """{"data":{"serviceCreate":{"id":"svc-pg","name":"Postgres"}}}"""
+            : call.Body.Contains("volumes", StringComparison.Ordinal) ? """{"data":{"project":{"volumes":{"edges":[]}}}}"""
+            : call.Body.Contains("services", StringComparison.Ordinal) ? """{"data":{"project":{"id":"p1","services":{"edges":[]}}}}"""
+            : """{"data":{}}"""));
+
+        await new RailwayPostgresProvider(Http(stub)).SetupAsync(
+            new DatabaseAuth("rw_x", "ws-1"), Request(DatabaseSetupMode.Create, host: new DatabaseHostContext(null, "p1:svc-api:e-prod", "e-prev")), Ct);
+
+        var bodies = stub.Where("POST", "/graphql/v2").Select(c => c.Body).ToList();
+        using var create = JsonDocument.Parse(Assert.Single(bodies, b => b.Contains("serviceCreate", StringComparison.Ordinal)));
+        var input = create.RootElement.GetProperty("variables").GetProperty("input");
+        Assert.Equal("ghcr.io/railwayapp-templates/postgres-ssl:18", input.GetProperty("source").GetProperty("image").GetString());
+        Assert.Equal("/var/lib/postgresql/data/pgdata", input.GetProperty("variables").GetProperty("PGDATA").GetString());
+        using var volume = JsonDocument.Parse(Assert.Single(bodies, b => b.Contains("volumeCreate", StringComparison.Ordinal)));
+        Assert.Equal("/var/lib/postgresql/data", volume.RootElement.GetProperty("variables").GetProperty("input").GetProperty("mountPath").GetString());
+        Assert.DoesNotContain(bodies, b => b.Contains("serviceInstanceUpdate", StringComparison.Ordinal));
     }
 
     [Fact]

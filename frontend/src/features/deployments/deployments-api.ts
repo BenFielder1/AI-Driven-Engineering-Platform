@@ -29,6 +29,10 @@ export type RolloutStepState = Schemas['RolloutStepState']
 export type PreviewEnvironment = Schemas['PreviewEnvironmentDto']
 export type LiveTarget = Schemas['LiveTargetDto']
 export type PreviewResetMethod = Schemas['PreviewResetMethod']
+/** FR-191: a group card of Settings → Deployment. */
+export type DeploymentGroup = Schemas['DeploymentGroupDto']
+export type DeploymentPart = Schemas['DeploymentPart']
+export type DeploymentProvider = Schemas['DeploymentProvider']
 
 export const deploymentComponents = ['frontend', 'backend'] as const satisfies readonly DeploymentComponent[]
 
@@ -80,6 +84,16 @@ export async function putManagedDatabase(projectId: string, environment: Deploym
   )
 }
 
+/** FR-190 `PUT …/groups/:provider`; answers 202 with the group card (one setup job; a rebind runs no job). */
+export async function putDeploymentGroup(projectId: string, provider: DeploymentProvider, body: Schemas['PutDeploymentGroupRequest']) {
+  return unwrap(
+    await api.PUT('/api/projects/{id}/settings/deployment/groups/{provider}', {
+      params: { path: { id: projectId, provider } },
+      body,
+    }),
+  )
+}
+
 /** While a deployment is queued or building, refetch every 10 s as a fallback to the live events (§4.15 cadence). */
 const ACTIVE_REFETCH_MS = 10_000
 
@@ -114,9 +128,14 @@ export const deploymentSettingsPolling = { setupMs: 2_000 }
 
 const jobActive = (state: string | undefined) => state === 'queued' || state === 'running'
 
-/** A target's setup job or a database's provisioning job (FR-152) is still working. */
+/**
+ * A target's setup job or a database's provisioning job (FR-152) is still working, or a group is still `configuring`
+ * (which can outlast its own job: databases provision in theirs, FR-190).
+ */
 const setupRunning = (s: DeploymentSettings | undefined) =>
-  (s?.targets.some((t) => jobActive(t.setup?.state)) ?? false) || (s?.databases.some((d) => jobActive(d.provisioning?.state)) ?? false)
+  (s?.targets.some((t) => jobActive(t.setup?.state)) ?? false) ||
+  (s?.databases.some((d) => jobActive(d.provisioning?.state)) ?? false) ||
+  (s?.groups.some((g) => g.status === 'configuring') ?? false)
 
 /** FR-144: Settings → Deployment (targets, databases, env inventory, origin model), for any member. */
 export function useDeploymentSettings(projectId: string, enabled = true) {
@@ -134,6 +153,16 @@ function useReplaceTarget(projectId: string) {
   return (target: TargetCard) => {
     queryClient.setQueryData<DeploymentSettings>(deploymentKeys.settings(projectId), (old) =>
       old ? { ...old, targets: old.targets.map((t) => (t.component === target.component ? target : t)) } : old,
+    )
+  }
+}
+
+/** Replaces one group in the cached settings (after PUT or retry), so the card updates before the refetch. */
+function useReplaceGroup(projectId: string) {
+  const queryClient = useQueryClient()
+  return (group: DeploymentGroup) => {
+    queryClient.setQueryData<DeploymentSettings>(deploymentKeys.settings(projectId), (old) =>
+      old ? { ...old, groups: old.groups.map((g) => (g.provider === group.provider ? group : g)) } : old,
     )
   }
 }
@@ -167,6 +196,49 @@ export function useDeleteDeploymentTarget(projectId: string, component: Deployme
     mutationFn: async () => {
       const { error, response } = await api.DELETE('/api/projects/{id}/settings/deployment/targets/{component}', {
         params: { path: { id: projectId, component } },
+      })
+      if (!response.ok) {
+        throw toApiError(error, response)
+      }
+    },
+    onSettled: invalidate,
+  })
+}
+
+/** FR-190, FR-191 (Owner): create or link the group's project, or (neither) rebind every part to a new connection. */
+export function usePutDeploymentGroup(projectId: string, provider: DeploymentProvider) {
+  const replace = useReplaceGroup(projectId)
+  const invalidate = useInvalidateTargets(projectId)
+  return useMutation({
+    mutationFn: (body: Schemas['PutDeploymentGroupRequest']) => putDeploymentGroup(projectId, provider, body),
+    onSuccess: replace,
+    onSettled: invalidate,
+  })
+}
+
+/** FR-190 (Owner): resume only the failed or missing parts; answers 202 with the group card. */
+export function useRetryDeploymentGroup(projectId: string, provider: DeploymentProvider) {
+  const replace = useReplaceGroup(projectId)
+  const invalidate = useInvalidateTargets(projectId)
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.POST('/api/projects/{id}/settings/deployment/groups/{provider}/retry', {
+          params: { path: { id: projectId, provider } },
+        }),
+      ),
+    onSuccess: replace,
+    onSettled: invalidate,
+  })
+}
+
+/** FR-191 (Owner): clears the group and its parts in AIDE; every platform resource stays. */
+export function useDeleteDeploymentGroup(projectId: string, provider: DeploymentProvider) {
+  const invalidate = useInvalidateTargets(projectId)
+  return useMutation({
+    mutationFn: async () => {
+      const { error, response } = await api.DELETE('/api/projects/{id}/settings/deployment/groups/{provider}', {
+        params: { path: { id: projectId, provider } },
       })
       if (!response.ok) {
         throw toApiError(error, response)

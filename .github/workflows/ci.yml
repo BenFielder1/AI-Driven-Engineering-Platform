@@ -3,7 +3,7 @@
 # root FS, /healthz, CSP nonce, 502 when the API is absent; api: setpriv drop to uid 1654, efbundle as non-root) and
 # Playwright E2E against the API + a production Next.js server (`next build && npm start`) in E2E mode (v1 specs, v2 specs and a11y as parallel shards).
 # Nothing is pushed: images are built and discarded. No registry, repository or LLM/GitHub secrets are used:
-# E2E runs with the offline Fake LLM and Fake deployment providers and the Local Git provider, and the database is a
+# E2E runs with the offline Fake LLM, Fake deployment and Fake issue tracker providers and the Local Git provider, and the database is a
 # throwaway service.
 name: CI
 
@@ -285,7 +285,7 @@ jobs:
 
   # NFR-TEST / NFR-TEST2 / NFR-A11Y2: Playwright against the API on 5080 + the production Next.js server on 3000
   # (`npm run build && npm start` = node server.ts, started by playwright.config.ts's webServer because BASE_URL is unset
-  # and CI is set; it proxies /api and the SignalR WebSockets to BACKEND_URL), in E2E mode: Fake LLM, Fake deployments, Local Git with an import root holding the seeded
+  # and CI is set; it proxies /api and the SignalR WebSockets to BACKEND_URL), in E2E mode: Fake LLM, Fake deployments, Fake trackers, Local Git with an import root holding the seeded
   # "existing" repo (same content as deploy/scripts/seed-e2e-repo.sh, seeded locally: no kubectl in CI).
   # Three parallel shards, each with its own throwaway database and API:
   #   v1    chromium, every spec except the v2 and a11y ones (new specs land here automatically)
@@ -302,7 +302,7 @@ jobs:
         suite: [v1, v2, a11y]
     services:
       db:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: aide
           POSTGRES_DB: aide
@@ -360,6 +360,9 @@ jobs:
           Deployments__Provider: Fake
           Databases__Provider: Fake
           Deployments__AllowFake: "true"
+          # §9 (FR-165..FR-168): Fake issue trackers (recorded fixtures, no network) for the wizard import E2E. AllowFake
+          # above also covers trackers outside Development.
+          Trackers__Provider: Fake
           Git__Local__ImportRoot: ${{ env.AIDE_IMPORT_ROOT }}
           # Registration/login limits (5/min per IP) are honoured by the specs' register lock; raising them only
           # removes the waiting. Rate limiting itself is covered by the backend integration tests.

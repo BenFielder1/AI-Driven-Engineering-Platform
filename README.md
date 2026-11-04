@@ -35,17 +35,28 @@ Added in v4:
 - **LLM choice.** Providers are enabled per deployment. The wizard chooses provider, connection and model. Calls stream, each model has its own output limit, and a cut-off answer is continued up to 5 times.
 - **Events and CLI.** New events and notifications (binding cleared, database expiring, migration failed, target needs attention). The CLI gains stack, deployment, database and migration commands.
 
+Added in v5:
+
+- **Issue tracker imports.** Connect Jira, Linear, GitHub Issues or GitLab Issues under Account → Connections → Issue trackers. Browse and pick items in the wizard, the new-version dialog or Refinement. Each import is a read-only snapshot (`source_items` artifact) that agents read. Re-import, remove and a drift check keep it honest. Jira and Linear tokens can carry an expiry date, and AIDE warns 14 days before it.
+- **Commit co-authorship.** Commits, merges and tags AIDE makes carry a `Co-authored-by` trailer for the accountable person, using their host noreply address (Bitbucket's primary email). Switch it off per project in Settings → Git, or per person on Account.
+- **Stack inference and the Analysis phase.** For a repo with code, the wizard can infer the stack. The version starts in a new `analysis` phase before Refinement. A Stack Analyst writes a `stack_profile`, and an Owner fills the blanks, edits and approves it, in every approval mode. Hosts and deployment setup live on the Analysis page.
+- **Shared deployment projects.** Parts on one platform (frontend, backend, database) form a deployment group with one platform project, one window in the wizard and one card in Settings. Parts can be split into separate projects. Vercel keeps one project per part.
+- **PostgreSQL 18** for AIDE's own database, with an upgrade procedure for local data (below).
+- **Events and CLI.** New events and notifications (`stack_profile_ready`, `tracker_import_failed`, connection expiring). New `aide analysis`, `aide sources` and `aide deployments groups` commands.
+
+The lifecycle is Refinement, Specification, Planning, Execution, Review, Release. A version that infers its stack starts one step earlier, in **Analysis**.
+
 `SPEC.md` is the source of truth for behaviour. `CLAUDE.md` holds the conventions. `PROGRESS.md` logs build decisions.
 
 ## Stack
 
-AIDE's own stack is unchanged in v4. [`STACK.md`](STACK.md) holds the packs and shared conventions.
+AIDE's own stack is unchanged in v5 except PostgreSQL 18. [`STACK.md`](STACK.md) holds the packs and shared conventions.
 
 | Layer | Summary |
 | --- | --- |
 | Frontend | Next.js 16 App Router, React 19, TypeScript strict, TanStack Query, Tailwind 4, Vitest and Playwright. A custom Node server serves it and proxies `/api` |
 | Backend | ASP.NET Core on .NET 10, minimal APIs, hosted background workers, xUnit v3 |
-| Data | EF Core 10 on PostgreSQL 17 (Railway: 18). EF owns the migrations |
+| Data | EF Core 10 on PostgreSQL 18. EF owns the migrations |
 | VCS / CI | Git on GitHub, with GitHub Actions |
 | Deploy | Railway `preview` and `production`, defined in `.railway/railway.ts` and deployed by GitHub Actions |
 | Local | Docker Desktop Kubernetes with Kustomize at http://localhost:8080 |
@@ -59,7 +70,7 @@ flowchart LR
   Browser -->|"http://localhost:8080"| Web["web: Next.js server (Node)"]
   Web -->|"/api (same origin, incl. WebSocket /api/hubs)"| Api["api: ASP.NET Core<br/>endpoints + hosted workers + SignalR"]
   CLI["aide CLI"] -->|"Bearer API token"| Web
-  Api --> Db[("PostgreSQL 17<br/>data + job/outbox table")]
+  Api --> Db[("PostgreSQL 18<br/>data + job/outbox table")]
   Api --> Vol[/"aide-data volume<br/>working copies, Data Protection keys"/]
   Api -.-> LLM["Anthropic / OpenAI / Ollama"]
   Api -.-> GH["GitHub / GitLab / Bitbucket (Git, API)"]
@@ -135,7 +146,7 @@ One-off setup:
 
 ```bash
 cp .env.example .env                 # pick your own POSTGRES_PASSWORD (git-ignored)
-docker compose up -d db              # PostgreSQL 17 on 127.0.0.1:5432
+docker compose up -d db              # PostgreSQL 18 on 127.0.0.1:5432
 cd backend
 dotnet tool restore
 dotnet user-secrets set "ConnectionStrings:Aide" "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<POSTGRES_PASSWORD from .env>" --project src/Aide.Api
@@ -160,6 +171,8 @@ npm --prefix frontend run dev                # http://localhost:3000 (Next.js de
 The Development environment enables the seed. On first start it creates the Admin `admin@aide.local`, the project "Demo: Todo API" (Fake provider, Local Git, released at `0.1.0`, so you can try "Start new version" at once) and "Demo: Recipe Finder" (a migrated v2 preset project, in planning), plus "Demo: Vue Notes" (Vue + Supabase BaaS, in specification). A v1 database keeps its demo project, and an untouched one is upgraded to a released `0.1.0`. The generated password is logged once at Warning in the `dotnet run` console. Look for `Seeded admin admin@aide.local with password ...`. If you missed it, sign in with another account (the first registered user is Admin) or reset the database volume.
 
 New migration: `dotnet ef migrations add <Name> --project src/Aide.Infrastructure --startup-project src/Aide.Api` (from `backend/`). Never edit a committed migration.
+
+If you used the dev loop before the move to PostgreSQL 18, `docker compose up` now starts on a new, empty volume. See [Upgrade local data from PostgreSQL 17 to 18](#upgrade-local-data-from-postgresql-17-to-18).
 
 ## Local Kubernetes (Docker Desktop)
 
@@ -191,6 +204,7 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
 | Symptom | Cause and fix |
 | --- | --- |
 | `No 'docker-desktop' kubectl context` | Enable Kubernetes in Docker Desktop settings and wait until it is running |
+| `holds a pre-18 PostgreSQL data directory` | The database volume still has PostgreSQL 17 data. Nothing was changed. Follow [Upgrade local data from PostgreSQL 17 to 18](#upgrade-local-data-from-postgresql-17-to-18) |
 | `secrets.env is missing but the database volume already exists` | Restore your old `secrets.env`, or run `teardown-local.sh --wipe-data` (deletes all data) |
 | `secrets.env has Windows (CRLF) line endings` | Convert the file to LF (`sed -i 's/\r$//' deploy/k8s/overlays/local/secrets.env`) and re-run |
 | `still contains the 'change-me' POSTGRES_PASSWORD` | Set a real password that matches the one in `ConnectionStrings__Aide` |
@@ -205,10 +219,147 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
 | `/api/...` returns 502 `UPSTREAM_ERROR` | The web server can't reach the API. Check the `api` pod, and that `BACKEND_URL` in `app-config` is `http://api:8080` |
 | web pod crash-loops with `Invalid web server environment` | `BACKEND_URL` (or `PORT`) is not a valid URL or number. Fix it in `deploy/k8s/base/configmap.yaml` and redeploy |
 
+## Upgrade local data from PostgreSQL 17 to 18
+
+PostgreSQL 18 can't open a 17 data directory, and the `postgres:18` image keeps its data at a new path (`/var/lib/postgresql/18/docker`). So the upgrade is a dump from 17 and a restore into 18. Neither procedure deletes your 17 data, and you only need one if you have local data worth keeping.
+
+Run these in Git Bash or WSL, not PowerShell, whose `>` and `<` can change the dump's encoding. The commands assume the default user `aide`. The dump holds all your data and the role's password hash, so keep it outside the repo and never commit it.
+
+The restore also brings back the role's old password. That matches `.env` and `secrets.env` as long as you haven't changed them since the 17 database was created.
+
+### Dev loop (compose)
+
+The old data stays in the volume `aide_aide-db-data`. Compose now uses `aide_aide-db-data-18`. Stop `dotnet run` first.
+
+```bash
+export MSYS_NO_PATHCONV=1                  # Git Bash only: keeps /var/lib/... paths intact
+docker compose stop db
+
+# Start 17 on the old volume, with no network, and dump it.
+docker run -d --name aide-db-17 --network none -v aide_aide-db-data:/var/lib/postgresql/data postgres:17
+until docker exec aide-db-17 pg_isready -U aide; do sleep 2; done
+docker exec aide-db-17 pg_dumpall -U aide --clean --if-exists > ~/aide-17.sql
+grep -c 'PostgreSQL database cluster dump complete' ~/aide-17.sql   # must print 1
+docker rm -f aide-db-17
+
+# Start 18 on the new volume, ready for the restore.
+docker compose up -d --wait db
+PSQL="docker compose exec -T db psql -U aide"
+```
+
+Now follow [Restore and check](#restore-and-check). Then run `dotnet run` as usual. It keeps working with the same connection string.
+
+### Local Kubernetes
+
+`deploy-local.sh` stops if the database volume (PVC `data-db-0`) has a `pgdata/` directory, which is where the 17 layout keeps its data. This procedure dumps that directory, then renames it to `pgdata-17` on the same volume, so 18 starts cleanly beside it. Skip any `scale` command that reports `NotFound`, which happens after `teardown-local.sh`.
+
+```bash
+export MSYS_NO_PATHCONV=1                  # Git Bash only: keeps /var/lib/... paths intact
+K="kubectl --context docker-desktop -n aide"
+
+# 1. Stop the app and the database. The volume is kept.
+$K scale deploy/api deploy/web --replicas=0
+$K scale statefulset/db --replicas=0
+$K wait --for=delete pod/db-0 --timeout=120s
+
+# 2. Start 17 on the old data directory and dump it.
+$K create -f - <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-17-dump
+spec:
+  restartPolicy: Never
+  securityContext: { runAsNonRoot: true, runAsUser: 999, runAsGroup: 999 }
+  containers:
+    - name: postgres
+      image: postgres:17
+      env:
+        - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+      volumeMounts:
+        - { name: data, mountPath: /var/lib/postgresql/data }
+  volumes:
+    - name: data
+      persistentVolumeClaim: { claimName: data-db-0 }
+EOF
+$K wait --for=condition=Ready pod/db-17-dump --timeout=180s
+until $K exec db-17-dump -- pg_isready -U aide; do sleep 2; done
+$K exec db-17-dump -- pg_dumpall -U aide --clean --if-exists > ~/aide-17.sql
+grep -c 'PostgreSQL database cluster dump complete' ~/aide-17.sql   # must print 1; stop here if it doesn't
+$K delete pod db-17-dump
+
+# 3. Keep the 17 directory, under a new name, so the deploy check passes.
+$K create -f - <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-17-rename
+spec:
+  restartPolicy: Never
+  securityContext: { runAsNonRoot: true, runAsUser: 999, runAsGroup: 999 }
+  containers:
+    - name: rename
+      image: postgres:18
+      command: ["mv", "/vol/pgdata", "/vol/pgdata-17"]
+      volumeMounts:
+        - { name: data, mountPath: /vol }
+  volumes:
+    - name: data
+      persistentVolumeClaim: { claimName: data-db-0 }
+EOF
+$K wait --for=jsonpath='{.status.phase}'=Succeeded pod/db-17-rename --timeout=180s
+$K delete pod db-17-rename
+
+# 4. Deploy 18, which starts with a new database, then stop the app and wait until nothing is connected.
+./deploy/scripts/deploy-local.sh
+$K scale deploy/api deploy/web --replicas=0
+$K wait --for=delete pod -l 'app.kubernetes.io/name in (api,web)' --timeout=120s   # "no matching resources" means they've already gone
+PSQL="$K exec -i db-0 -c postgres -- psql -U aide"
+```
+
+Now follow [Restore and check](#restore-and-check). When the checks pass, run `./deploy/scripts/deploy-local.sh` again to bring the app back on the restored data.
+
+To go back, stop the database, rename `pgdata-17` to `pgdata` with the pod from step 3 (swap the two paths), and deploy from a commit before the move to 18.
+
+### Restore and check
+
+Run this in the same shell, with `PSQL` set by the procedure above and the app stopped. The first command removes the database that 18 started with, and stops the restore if anything is still connected, so the dump can't merge into live data.
+
+```bash
+# 1. Restore. Skipped if the DROP fails.
+$PSQL -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS aide' \
+  && $PSQL -d postgres < ~/aide-17.sql > ~/aide-restore.log 2>&1
+
+# 2. Show unexpected errors. Must print nothing.
+grep -E 'ERROR:|FATAL:' ~/aide-restore.log | grep -vE 'current user cannot be dropped|role "aide" already exists'
+
+# 3. Compare every table's row count with the dump. Must print nothing.
+awk '/^COPY public\./ {t=$2; n=0; f=1; next} f && /^\\\.$/ {print t, n; f=0; next} f {n++}' ~/aide-17.sql |
+  while read -r t n; do
+    c="$($PSQL -d aide -Atc "SELECT count(*) FROM $t" </dev/null | tr -d '\r')"
+    [ "$c" = "$n" ] || echo "MISMATCH $t: dump $n, database $c"
+  done
+
+# 4. Must print 18.x.
+$PSQL -d aide -Atc 'SHOW server_version' </dev/null
+```
+
+| What you see | What it means |
+| --- | --- |
+| Step 2 hides `current user cannot be dropped` and `role "aide" already exists` | Expected: `aide` is the user running the restore, so its role can't be dropped and already exists. Both are harmless |
+| `DROP DATABASE` fails with `is being accessed by other users` | Something is still connected, and nothing was restored. Stop it, then redo from step 1 |
+| Step 2 prints any line, or step 3 prints `MISMATCH` | The restore is incomplete. Don't start the app. Fix the cause and redo from step 1 |
+
+Redoing is safe: the dump is unchanged, and step 1 starts again from an empty database. Your 17 data is still there too. `~/aide-restore.log` can contain table and role names, so delete it along with the dump when you've finished.
+
+### After you've checked your data
+
+Your 17 data takes up disk space until you remove it, and nothing removes it for you. Remove it only when you're sure you don't need it: `docker volume rm aide_aide-db-data` for compose, and `rm -rf /vol/pgdata-17` from a pod like the one in step 3 for Kubernetes.
+
 ## Deploy to Railway
 
 AIDE runs on Railway as one project with two environments, `preview` and `production`. Each has a public `web`, a
-private `api` with a `/data` volume, and its own Postgres 18 (local and CI use 17). The project is defined as code in
+private `api` with a `/data` volume, and its own Postgres 18. The project is defined as code in
 [`.railway/railway.ts`](.railway/railway.ts) (`railway config plan` / `apply`). GitHub Actions deploys `preview` after
 green CI on `main`, and `production` on manual dispatch. `deploy/scripts/smoke-remote.sh <web-url>` checks each
 deploy.
@@ -225,7 +376,7 @@ ASP.NET Core reads `appsettings.json`, `appsettings.Development.json`, user-secr
 
 - **Dev loop:** non-secrets in `backend/src/Aide.Api/appsettings*.json` or environment variables; secrets with `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` (run from the repo root).
 - **Kubernetes:** secrets and any extra key go in `deploy/k8s/overlays/local/secrets.env` (`KEY=value`, no quotes). Non-secrets are in `deploy/k8s/base/configmap.yaml` and `deploy/k8s/overlays/local/app-config-local.yaml`. The API loads both as environment variables. Re-run `deploy-local.sh` after a change.
-- **Railway (FR-112):** every variable per service and environment, and whether it is a literal, a reference, a secret or operator-set, is in [`deploy/railway/variables.md`](deploy/railway/variables.md). Literals and references live in [`.railway/railway.ts`](.railway/railway.ts). Secrets and optional values are set per environment in Railway (`railway variable set <NAME> --stdin ...`) and declared `preserve()` in `railway.ts`.
+- **Railway (FR-112):** every variable per service and environment, and whether it is a literal, a reference, a secret or operator-set, is in [`deploy/railway/variables.md`](deploy/railway/variables.md). Literals and references live in [`.railway/railway.ts`](.railway/railway.ts). Secrets and optional values are set per environment in Railway (`railway variable set <NAME> --stdin ...`) and listed in `variables.ignore` in `railway.ts`, so IaC doesn't plan to delete them.
 
 Values are never shown here. "Secret" means: never commit it, set it only through user-secrets, `secrets.env` or Railway variables.
 
@@ -262,7 +413,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Llm:Providers:OpenAI:ApiKey` | OpenAI system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
 | `Llm:Providers:<Name>:BaseUrl` | Endpoint override (`Anthropic`, `OpenAI`, `Ollama`, `Fake`). Ollama: `Llm__Providers__Ollama__BaseUrl` | Ollama: `http://localhost:11434` (Development, no container) or `http://host.docker.internal:11434` (container) | no |
 | `Llm:Providers:<Name>:DefaultModel` | Model when an agent has no own entry | see section below | no |
-| `Llm:Providers:<Name>:Models:<Agent>` | Model per agent | see section below | no |
+| `Llm:Providers:<Name>:Models:<Agent>` | Model per agent, e.g. `Llm__Providers__Anthropic__Models__StackAnalyst` for the v5 Stack Analyst (FR-180) | see section below | no |
 | `Llm:Pricing:<model>:InputPerMTok`, `OutputPerMTok` | USD per million tokens, for cost estimates | see appsettings; unpriced = 0 | no |
 | `GitHub:App:AppId` | AIDE GitHub App id (FR-80). All five `GitHub:App:*` values together override the App registered from Admin → Integrations → GitHub; set none or all | none: the registered App, if any | no |
 | `GitHub:App:ClientId` | The App's client id (sign-in and connections) | none | no |
@@ -283,7 +434,7 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Bitbucket:RequestTimeout` | One Bitbucket API request | `00:00:20` | no |
 | `Git:Local:ImportRoot` | Folder under which a Local import (`git.localSourcePath`) must live. Empty disables Local import. E2E and dev only | unset (`/data/import` in the E2E overlay) | no |
 | `Deployments:Provider` | `Vercel` (the real platform APIs of every deployment provider; the name is historical) or `Fake`. Fake makes every deployment check deterministic and lets Local Git projects use deployments | `Vercel` (`Fake` in the E2E overlay) | no |
-| `Deployments:AllowFake` | Allows `Fake` (for deployments and databases) outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
+| `Deployments:AllowFake` | Allows `Fake` (for deployments, databases and trackers) outside Development and Testing. Without it the API refuses to start with Fake | `false` (`true` in the E2E overlay) | no |
 | `Databases:Provider` | `Platform` or `Fake`. Fake makes database provisioning and the migration runner deterministic, with no network and no real database. Set it with `Deployments:Provider`: each is read on its own | `Platform` (`Fake` in Development and the E2E overlay) | no |
 | `Notifications:AllowPrivateTargets` | Let Slack, Teams, webhooks reach private addresses (local testing only) | `false` | no |
 | `Notifications:RequestTimeout` | One webhook request, at most 60 s | `00:00:10` | no |
@@ -291,6 +442,9 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 | `Notifications:DeliverySweepInterval` | How often due retries run | `00:01:00` | no |
 | `Notifications:GateSweepInterval` | How often gates are checked for reminders | `01:00:00` | no |
 | `Notifications:DatabaseExpirySweepInterval` | How often the `database_expiry_sweep` job is queued: it reads each database's state to raise "database expiring" and mark `expiring`/`paused` (FR-155). Positive | `01:00:00` | no |
+| `Notifications:ConnectionExpirySweepInterval` | How often Jira and Linear connections are checked for a user-entered expiry within 14 days, raising "connection expiring" (FR-165). No provider calls. Positive | `01:00:00` | no |
+| `Trackers:Provider` | Issue trackers for imports (Jira, Linear, GitHub, GitLab; FR-165..FR-169): unset or `Real` = the real APIs with each user's own connection, `Fake` = recorded fixtures with no network. Any other value stops the API at start-up. `Fake` outside Development and Testing also needs `Deployments:AllowFake=true`. Never set on Railway | unset (real; `Fake` in CI E2E and the E2E overlay) | no |
+| `Trackers:SearchTimeout` | One tracker search or fetch; over it the call fails with `UPSTREAM_ERROR`. Greater than zero and at most `00:02:00` | `00:00:15` | no |
 | `Notifications:SweepBatchSize` | Deliveries retried per sweep | `50` | no |
 | `Smtp:Host` | SMTP server. Blank: email skipped, other channels still send | blank | no |
 | `Smtp:Port` | SMTP port | `587` | no |
@@ -308,13 +462,15 @@ Values are never shown here. "Secret" means: never commit it, set it only throug
 
 `GitHub:AllowInsecureGitBaseUrl` exists for tests only. Do not set it.
 
+**Egress (v5 issue imports):** with real trackers the API calls `*.atlassian.net` (only `https://<site>/_edge/tenant_info`, to resolve a Jira site), `api.atlassian.com` (Jira REST) and `api.linear.app` (Linear GraphQL). GitHub and GitLab issues use the hosts AIDE already reaches (`api.github.com`, registered GitLab instances). Allow these if outbound traffic is filtered. `Trackers:Provider=Fake` makes no tracker calls.
+
 Where each value lives:
 
 | Kind | Dev loop | Kubernetes |
 | --- | --- | --- |
 | Secrets (marked "yes") | `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` | `deploy/k8s/overlays/local/secrets.env`, as `Key__Sub=value` |
 | `App:PublicBaseUrl` | `appsettings.Development.json` (`http://localhost:3000`) | `app-config-local.yaml` |
-| `Deployments:*`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
+| `Deployments:*`, `Databases:Provider`, `Trackers:Provider`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
 | Other non-secrets | `appsettings*.json` or environment variables | `deploy/k8s/base/configmap.yaml` |
 
 Platform tokens (Vercel, Netlify, Cloudflare, Render, Railway, Supabase), database connection strings, user LLM keys, GitHub, GitLab and Bitbucket user tokens, registered GitLab instances and the Bitbucket consumer, the registered GitHub App and deployment env values are not configuration. They are stored encrypted in the database and are never shown.
@@ -385,6 +541,7 @@ Override per agent with `Llm__Providers__<Name>__Models__<Agent>`. Agent names: 
 
 ### c2. Deployment platforms and managed databases
 
+- Issue trackers sit in their own Connections section. Jira takes a site (`*.atlassian.net`), account email and scoped read-only token. Linear takes a read-only API key. GitHub Issues uses the GitHub connection and the AIDE App's `issues: read` permission (update the App in GitHub, then accept on each installation). GitLab Issues uses the GitLab connection. AIDE only reads from trackers.
 - Each user adds a token per platform under Account, Connections: Vercel, Netlify, Cloudflare, Render, Railway, and Supabase for databases. The connection dialog lists the token type and permissions to create. AIDE checks the token, stores it encrypted and never shows it again. GitHub Pages uses the GitHub App instead, which needs its Pages permission (update the App in GitHub after upgrading).
 - A project Owner binds connections in Settings, Deployment: one target per component (frontend, backend) and one database per environment. AIDE can create the resource or link an existing one. The page shows readiness checks with fix links, the origin model, and the environment inventory. Derived variables (database URLs, Supabase keys, API origin) are written by AIDE.
 - A platform must build from the repo's Git host, so some combinations are refused (for example Railway needs GitHub). The stack step shows the reason.
@@ -462,6 +619,12 @@ Create the token on the Account page of the app (shown once). Then:
 | `aide status <id>` | Phase, status, released and in-development versions, checkpoint, stack composition, production URLs, latest deployment, latest migration run, artifacts, execution, review, gates. `--json` adds `stack` and `latestMigrationRun` |
 | `aide version start <id> <semver> --request <text\|@file> [stack flags]` | Start a new version of a released project (Owner). `@-` reads stdin. Stack flags are those of `aide stack set`, also as `--stack-frontend` etc. `--preset` exits 2: presets were removed in v4 |
 | `aide versions <id>` | List release versions |
+| `aide project create --infer-stack`, `aide version start --infer-stack` | Start in the Analysis phase and infer the stack from the repository. `project create` also takes `--import-version`, `--released-tag` and `--local-path` for an imported repo |
+| `aide analysis show\|approve\|reject\|retry <id>` | Work with the inferred stack profile. `approve` and `reject` take `--comment`. An unresolved layer exits 4 |
+| `aide sources list\|check <id>` | List tracker imports, or run the drift check |
+| `aide sources import <id> --connection <id> --tracker <p> (--keys <k,…> \| --query <q>) [--comments]` | Import tracker items as a snapshot |
+| `aide sources reimport\|remove <id> <importId>` | Re-run or remove an import |
+| `aide deployments groups <id>` | List deployment groups |
 | `aide stack catalog` | List the catalog's layers and options |
 | `aide stack show <id>` | Show a project's composition and whether it is locked |
 | `aide stack set <id> [--frontend <opt>] [--backend <opt>] [--data <opt>[:baas]] [--vcs <opt>] [--frontend-host <opt>] [--backend-host <opt>] [--database-host <opt>] [--local compose\|none]` | Change the version in development's stack (Owner). Named layers merge into the current composition; `none` clears a layer. Changing frontend, backend or their hosts resets the origin model, with a warning on stderr. Exit 4 prints `STACK_INCOMPATIBLE` violations or `STACK_LOCKED` |

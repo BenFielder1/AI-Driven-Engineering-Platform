@@ -312,6 +312,63 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
         Assert.Equal((Phase.Release, ProjectStatus.Releasing), ((await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(app, id)).Status));
     }
 
+    // ---------- FR-174: the co-author trailer on the wire ----------
+
+    [Fact]
+    public async Task FR174_A_Bitbucket_merge_and_tag_carry_the_account_email_trailer_and_the_stored_notes_do_not()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var bitbucket = new BitbucketState(remote);
+        var (app, fixture) = await SetUpAsync(bitbucket, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+        var line = await SeedCommitEmailAsync(app, fixture);
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var requests = bitbucket.Api.Requests.ToList();
+        var merge = GitLabHarness.Body(Assert.Single(requests, r => r.Method == "POST" && r.Path == PullRequest + "/merge"));
+        Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}\n\n{line}", merge.GetProperty("message").GetString());
+        var tag = GitLabHarness.Body(Assert.Single(requests, r => r.Method == "POST" && r.Path == Repo + "/refs/tags"));
+        Assert.EndsWith($"\n\n{line}", tag.GetProperty("message").GetString(), StringComparison.Ordinal);
+
+        var released = await LatestAsync(fixture.Viewer.Client, id);
+        var stored = await ProjectApi.ReadAsync<ReleaseNotesDto>(await fixture.Viewer.Client.GetAsync(new Uri($"/api/projects/{id}/releases/{released.Id}/notes", UriKind.Relative), Ct));
+        Assert.DoesNotContain("Co-authored-by", stored.Notes, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR174_The_merge_poll_tags_a_Bitbucket_merge_made_elsewhere_with_the_trailer()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var bitbucket = new BitbucketState(remote);
+        var (app, fixture) = await SetUpManualAsync(bitbucket, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+        var line = await SeedCommitEmailAsync(app, fixture);
+
+        bitbucket.MergedExternally(ReleaseFlowTests.MergeInBare(remote, bitbucket.Branch!));
+        await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
+
+        var tag = GitLabHarness.Body(Assert.Single(bitbucket.Api.Requests, r => r.Method == "POST" && r.Path == Repo + "/refs/tags"));
+        Assert.EndsWith($"\n\n{line}", tag.GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>Gives the Owner's connection a commit email; the trailer that then credits them.</summary>
+    private static async Task<string> SeedCommitEmailAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
+    {
+        var encrypted = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+            .GetRequiredService<Aide.Infrastructure.Security.ISecretProtectors>(app.Services)
+            .ForPurpose(Aide.Infrastructure.Security.SecretPurposes.GitHostCommitEmail)
+            .Protect("ana@bitbucket.example");
+        var owner = fixture.Owner.User!;
+        await ProjectApi.WithDbAsync(app, db => db.GitConnections.Where(c => c.UserId == owner.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.CommitEmailEncrypted, encrypted), Ct));
+        return $"Co-authored-by: {owner.Name} <ana@bitbucket.example>";
+    }
+
     // ---------- FR-140: manual ----------
 
     [Fact]

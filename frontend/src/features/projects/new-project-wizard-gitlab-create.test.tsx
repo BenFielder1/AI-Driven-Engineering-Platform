@@ -65,15 +65,17 @@ async function openRepository({
   return { user, connection, me, repos: seeded }
 }
 
-/** Version → Stack → Configuration → Deployment → Review & create. */
+/** Version → Stack → Configuration → Deployment → Review & create (FR-178: an import with code infers, skipping Deployment). */
 async function versionToReview(user: User) {
   await next(user)
   await stepHeading(/Step 5 of 8: Stack/)
   await next(user)
   await stepHeading(/Step 6 of 8: Configuration/)
   await next(user)
-  await stepHeading(/Step 7 of 8: Deployment/)
-  await next(user)
+  const heading = await stepHeading(/Step (7 of 8: Deployment|8 of 8: Review & create)/)
+  if (heading.textContent.includes('Deployment')) {
+    await next(user)
+  }
   await stepHeading(/Step 8 of 8: Review & create/)
 }
 
@@ -300,8 +302,6 @@ describe('Wizard → import from GitLab (FR-141)', () => {
 
     await next(user)
     await stepHeading(/Step 6 of 8: Configuration/)
-    await next(user)
-    await stepHeading(/Step 7 of 8: Deployment/)
     await next(user)
     await stepHeading(/Step 8 of 8: Review & create/)
     await user.click(screen.getByRole('button', { name: 'Create project' }))

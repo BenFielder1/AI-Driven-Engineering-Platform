@@ -14,7 +14,9 @@ namespace Aide.Infrastructure.Deployments;
 /// URL. A deployment is <c>ready</c> after 2 polls at <c>https://fake-&lt;sha8&gt;-&lt;component&gt;.&lt;platform&gt;.test</c>;
 /// it fails when the deployed commit contains <c>.aide-fake/fail-build</c>, and a backend's pre-deploy fails on
 /// <c>.aide-fake/fail-migration</c>. The outcome is encoded in the deployment id (survives a restart); polls are counted in
-/// memory. Deployments are recorded with provider <c>fake</c>.
+/// memory. Deployments are recorded with provider <c>fake</c>. Groups (§4.28): one shared id,
+/// <c>fake_&lt;platform&gt;_project_&lt;name&gt;</c>; a name starting <c>fake-exists</c> already exists; a token containing
+/// <c>no_access</c> reaches no project; a token starting <c>fake_fail_web</c> fails to create a <c>-web</c> part.
 /// </summary>
 public sealed class FakeDeploymentProvider(DeploymentProvider platform, IWorkingCopies workingCopies, ConcurrentDictionary<string, int> polls) : IDeploymentProvider
 {
@@ -37,6 +39,11 @@ public sealed class FakeDeploymentProvider(DeploymentProvider platform, IWorking
     public Task<DeploymentSetupResult> SetupTargetAsync(DeploymentAuth auth, DeploymentSetupRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.Create && request.Name?.EndsWith("-web", StringComparison.Ordinal) == true && auth?.Token.StartsWith("fake_fail_web", StringComparison.Ordinal) == true)
+        {
+            throw new DeploymentProviderException(DeploymentFailure.Rejected, 400, "The Fake platform refused the frontend service.", platform: platform);
+        }
+
         var name = request.Create
             ? request.Name ?? request.Target.Repo.Name ?? "app"
             : request.LinkResourceId is { } link && link.StartsWith($"fake_{Label}_", StringComparison.Ordinal) ? link[$"fake_{Label}_".Length..] : request.LinkResourceId ?? "app";
@@ -49,6 +56,20 @@ public sealed class FakeDeploymentProvider(DeploymentProvider platform, IWorking
             string.Create(CultureInfo.InvariantCulture, $"https://{name}-{component}.{Label}.test"),
             previews && platform is DeploymentProvider.Render or DeploymentProvider.Railway ? $"{resourceId}-preview" : null,
             previews ? string.Create(CultureInfo.InvariantCulture, $"https://{name}-{component}-preview.{Label}.test") : null));
+    }
+
+    public Task<SharedProject?> FindSharedProjectAsync(DeploymentAuth auth, string name, CancellationToken cancellationToken) =>
+        Task.FromResult(name.StartsWith("fake-exists", StringComparison.Ordinal) ? new SharedProject($"fake_{Label}_project_{name}", name) : null);
+
+    public Task<SharedProject?> GetSharedProjectAsync(DeploymentAuth auth, string projectId, CancellationToken cancellationToken) =>
+        Task.FromResult(auth.Token.Contains("no_access", StringComparison.Ordinal) ? null : new SharedProject(projectId, projectId.Split('_')[^1]));
+
+    public Task<SharedProject> CreateSharedProjectAsync(DeploymentAuth auth, SharedProjectRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return request.Name.StartsWith("fake-exists", StringComparison.Ordinal)
+            ? throw new DeploymentProviderException(DeploymentFailure.ResourceExists, 409, $"{DeploymentPlatforms.DisplayName(platform)} already has a project named {request.Name}.", platform: platform)
+            : Task.FromResult(new SharedProject($"fake_{Label}_project_{request.Name}", request.Name));
     }
 
     public Task<ProviderTargetCheck> VerifyTargetAsync(DeploymentAuth auth, DeploymentTargetRef target, CancellationToken cancellationToken) =>

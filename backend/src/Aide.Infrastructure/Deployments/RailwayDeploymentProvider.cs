@@ -11,12 +11,13 @@ namespace Aide.Infrastructure.Deployments;
 /// FR-144, FR-145, FR-147, FR-149, FR-150, §4.20 Railway through a workspace (or account) token against the public GraphQL
 /// API (<c>backboard.railway.com/graphql/v2</c>, Bearer), in the connection's workspace (<see cref="DeploymentAuth.AccountId"/>):
 /// <list type="bullet">
-/// <item>Create: the project named after the repository (found or <c>projectCreate {workspaceId, prDeploys: false}</c>, so
-/// a frontend and backend on Railway share one project and its private network), <c>serviceCreate {projectId, source:
-/// {repo}, branch: "main"}</c>, <c>serviceInstanceUpdate</c> (<see cref="RailwayRules.InstanceSettings"/>, with
+/// <item>Create (FR-192, amends §4.20): in the group's project (<see cref="DeploymentSetupRequest.SharedProjectId"/>), or a
+/// new project named by the standalone window (<c>projectCreate {workspaceId, prDeploys: false}</c>; an existing name is
+/// <c>PLATFORM_RESOURCE_EXISTS</c>; never found by repository name; the job stores the new id at once and resumes from it). Then
+/// <c>serviceCreate {projectId, source: {repo}, branch: "main"}</c>, <c>serviceInstanceUpdate</c> (<see cref="RailwayRules.InstanceSettings"/>, with
 /// <c>preDeployCommand</c>), <c>PORT</c> on a backend, and <c>serviceDomainCreate</c>. Not reachable by the Railway GitHub
 /// app: <c>PLATFORM_GIT_NOT_CONNECTED</c>.</item>
-/// <item>Link: a project (its service built from this repository) or <c>project:service</c>.</item>
+/// <item>Link: a project (its service built from this repository; an empty project gets a new service) or <c>project:service</c>.</item>
 /// <item>Preview: the <c>aide-preview</c> environment, created once from production with <c>skipInitialDeploys</c>, with
 /// its own domain; its id is the target's <c>preview_resource_id</c>.</item>
 /// <item><c>resource_id</c> = <c>project:service:production environment</c> (<see cref="RailwayRules.ResourceId"/>).</item>
@@ -64,12 +65,14 @@ public sealed partial class RailwayDeploymentProvider(PlatformHttp http) : IDepl
         string projectId;
         string? serviceId = null;
         string serviceName;
+        var createService = request.Create;
         if (request.Create)
         {
             serviceName = string.IsNullOrEmpty(request.Name)
                 ? throw new DeploymentProviderException(DeploymentFailure.Rejected, 400, "A new Railway service needs a name.", platform: Railway)
                 : request.Name;
-            projectId = await FindOrCreateProjectAsync(auth, target.Repo.Name ?? serviceName, cancellationToken);
+            projectId = request.SharedProjectId
+                ?? (await CreateSharedProjectAsync(auth, new SharedProjectRequest(serviceName, request.Region), cancellationToken)).Id;
         }
         else
         {
@@ -80,20 +83,28 @@ public sealed partial class RailwayDeploymentProvider(PlatformHttp http) : IDepl
             var linked = link is not null ? services.FirstOrDefault(s => s.Id == link.ServiceId)
                 : services.FirstOrDefault(s => s.Repo is not null && string.Equals(s.Repo, target.Repo.FullName, StringComparison.OrdinalIgnoreCase))
                     ?? services.FirstOrDefault(s => s.Name == request.Name);
-            if (linked is null)
+            if (linked is null && link is null && services.Count == 0)
+            {
+                // What a failed create leaves behind: nothing to link to yet, so the service is made in it.
+                createService = true;
+                serviceName = request.Name ?? (await GetSharedProjectAsync(auth, projectId, cancellationToken))?.Name ?? target.Repo.Name ?? projectId;
+            }
+            else if (linked is null)
             {
                 throw new DeploymentProviderException(
                     DeploymentFailure.NotFound, 404, $"The Railway project has no service built from {target.Repo.FullName}; pick another or create one.", platform: Railway);
             }
 
-            if (linked.Repo is not null && !string.Equals(linked.Repo, target.Repo.FullName, StringComparison.OrdinalIgnoreCase))
+            else if (linked.Repo is not null && !string.Equals(linked.Repo, target.Repo.FullName, StringComparison.OrdinalIgnoreCase))
             {
                 throw new DeploymentProviderException(
                     DeploymentFailure.Rejected, 400, $"The Railway service is linked to {linked.Repo}, not {target.Repo.FullName}.", platform: Railway);
             }
-
-            serviceId = linked.Id;
-            serviceName = linked.Name;
+            else
+            {
+                serviceId = linked.Id;
+                serviceName = linked.Name;
+            }
         }
 
         var environments = await EnvironmentsAsync(auth, projectId, cancellationToken);
@@ -103,7 +114,7 @@ public sealed partial class RailwayDeploymentProvider(PlatformHttp http) : IDepl
         // same settings (an environment created now copies them from production).
         var existingPreview = environments.FirstOrDefault(e => e.Name == RailwayRules.PreviewEnvironmentName)?.Id;
         string[] configured = existingPreview is null ? [production.Id] : [production.Id, existingPreview];
-        if (request.Create)
+        if (createService)
         {
             serviceId = await FindOrCreateServiceAsync(auth, projectId, serviceName, target.Repo, cancellationToken);
             foreach (var environmentId in configured)
@@ -118,7 +129,7 @@ public sealed partial class RailwayDeploymentProvider(PlatformHttp http) : IDepl
             // the backend needs PORT: set on create, and on link only where the service has none.
             foreach (var environmentId in configured)
             {
-                await EnsurePortAsync(auth, projectId, environmentId, serviceId!, onlyIfMissing: !request.Create, cancellationToken);
+                await EnsurePortAsync(auth, projectId, environmentId, serviceId!, onlyIfMissing: !createService, cancellationToken);
             }
         }
 
@@ -152,20 +163,39 @@ public sealed partial class RailwayDeploymentProvider(PlatformHttp http) : IDepl
             : new ProviderTargetCheck(false, $"The Railway service isn't built from {target.Repo.FullName}. Connect it in Railway, then verify again.", previewReady);
     }
 
-    private async Task<string> FindOrCreateProjectAsync(DeploymentAuth auth, string name, CancellationToken cancellationToken)
+    public async Task<SharedProject?> FindSharedProjectAsync(DeploymentAuth auth, string name, CancellationToken cancellationToken)
     {
-        if ((await ProjectsAsync(auth, cancellationToken)).FirstOrDefault(p => p.Name == name) is { } existing)
+        ArgumentNullException.ThrowIfNull(auth);
+        return (await ProjectsAsync(auth, cancellationToken)).FirstOrDefault(p => p.Name == name) is { } found ? new SharedProject(found.Id, found.Name) : null;
+    }
+
+    public async Task<SharedProject?> GetSharedProjectAsync(DeploymentAuth auth, string projectId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        var data = await QueryAsync(auth, "query($id: String!) { project(id: $id) { id name } }", new { id = projectId }, cancellationToken);
+        var project = Property(data, "project");
+        return Text(project, "id") is { } id ? new SharedProject(id, Text(project, "name") ?? id) : null;
+    }
+
+    /// <summary>FR-192: <c>projectCreate</c>; the name decides, so an existing one is refused (except on a redelivery).</summary>
+    public async Task<SharedProject> CreateSharedProjectAsync(DeploymentAuth auth, SharedProjectRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auth);
+        ArgumentNullException.ThrowIfNull(request);
+        if (await FindSharedProjectAsync(auth, request.Name, cancellationToken) is { } existing)
         {
-            return existing.Id;
+            throw new DeploymentProviderException(
+                DeploymentFailure.ResourceExists, 409, $"Railway already has a project named {existing.Name}. Link it instead, or choose another name.", platform: Railway);
         }
 
         var data = await QueryAsync(
             auth,
             "mutation($input: ProjectCreateInput!) { projectCreate(input: $input) { id name } }",
-            new { input = new { name, workspaceId = Workspace(auth), prDeploys = false, defaultEnvironmentName = RailwayRules.ProductionEnvironmentName } },
+            new { input = new { name = request.Name, workspaceId = Workspace(auth), prDeploys = false, defaultEnvironmentName = RailwayRules.ProductionEnvironmentName } },
             cancellationToken);
-        return Text(Property(data, "projectCreate"), "id")
-            ?? throw new DeploymentProviderException(DeploymentFailure.Upstream, null, "Railway created the project but returned no id.", platform: Railway);
+        return Text(Property(data, "projectCreate"), "id") is { } id
+            ? new SharedProject(id, request.Name)
+            : throw new DeploymentProviderException(DeploymentFailure.Upstream, null, "Railway created the project but returned no id.", platform: Railway);
     }
 
     private async Task<string> FindOrCreateServiceAsync(DeploymentAuth auth, string projectId, string name, DeploymentRepoRef repo, CancellationToken cancellationToken)

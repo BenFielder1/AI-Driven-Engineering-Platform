@@ -21,6 +21,7 @@ import {
 } from './database-format'
 import { usePutManagedDatabase, type DatabaseCard, type ManagedDatabaseProvider } from './deployments-api'
 import { databaseRequestBody } from './host-setup-body'
+import { JoinGroupField } from './group-setup-fields'
 import { HostSetupFields } from './host-setup-fields'
 
 interface DatabaseValues {
@@ -112,7 +113,20 @@ function SetupError({ error }: { error: unknown }) {
  * FR-152 (Owner): bind one of the caller's connections and provision or link the database, or enter an External
  * connection string (a secret: a password field, sent once and never shown again).
  */
-export function DatabaseSetupForm({ project, database: db, onDone }: { project: Project; database: DatabaseCard; onDone: () => void }) {
+export function DatabaseSetupForm({
+  project,
+  database: db,
+  joinGroup,
+  onDone,
+}: {
+  project: Project
+  database: DatabaseCard
+  /** FR-191: the group this part left, which this form can rejoin. */
+  joinGroup?: { id: string } | undefined
+  onDone: () => void
+}) {
+  const [joining, setJoining] = useState(false)
+  const groupId = db.groupId ?? (joining ? (joinGroup?.id ?? null) : null)
   const put = usePutManagedDatabase(project.id, db.environment)
   const me = useCurrentUser()
   const env = environmentLabels[db.environment]
@@ -158,7 +172,8 @@ export function DatabaseSetupForm({ project, database: db, onDone }: { project: 
 
   const onSubmit = handleSubmit((v) => {
     setFailure(null)
-    put.mutate(databaseRequestBody(db.provider as ManagedDatabaseProvider, db.needsConnection, v), {
+    // FR-191: a change of setup keeps the part in its group; a part outside one joins only when the Owner says so.
+    put.mutate({ ...databaseRequestBody(db.provider as ManagedDatabaseProvider, db.needsConnection, v), ...(groupId ? { groupId } : {}) }, {
       onSuccess: () => {
         setValue('connectionString', '')
         toast.success(external ? `The ${db.environment} database is saved.` : `Setting up the ${db.environment} database on ${providerName}.`)
@@ -244,6 +259,7 @@ export function DatabaseSetupForm({ project, database: db, onDone }: { project: 
           planField={db.provider === 'render' ? { hint: "Render's default (free) when empty." } : null}
         />
       )}
+      {joinGroup && <JoinGroupField platform={platformName} checked={joining} onChange={setJoining} />}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" pending={put.isPending} pendingLabel="Starting…">
           {external ? 'Save the connection string' : db.resourceId ? 'Save database' : `Set up ${providerName}`}

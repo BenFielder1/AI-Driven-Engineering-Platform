@@ -45,6 +45,7 @@ export function StageArtifact({
   notStarted,
   expectedLatest = null,
   awaitingDraft = false,
+  actions = true,
   children,
 }: {
   stage: Phase
@@ -61,6 +62,11 @@ export function StageArtifact({
    * optimisation plan. Only then does an empty history poll; otherwise nothing is coming and the page waits for events.
    */
   awaitingDraft?: boolean
+  /**
+   * `false` when the page decides and edits the artifact itself (Analysis, FR-183: a form over the profile): the panel
+   * then only shows the versions.
+   */
+  actions?: boolean
   /** The stage panel for the shown version (outline, step table…). */
   children?: (artifact: Artifact) => ReactNode
 }) {
@@ -145,9 +151,9 @@ export function StageArtifact({
     )
   } else {
     const artifact = shown.data
-    const canEdit = progress === 'current' && can('createDraft')
+    const canEdit = actions && progress === 'current' && can('createDraft')
     const canDecide =
-      progress === 'current' && can('approveArtifacts') && artifact?.status === 'draft' && artifact.integrity === 'ok'
+      actions && progress === 'current' && can('approveArtifacts') && artifact?.status === 'draft' && artifact.integrity === 'ok'
     body = (
       <>
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -199,7 +205,7 @@ export function StageArtifact({
             </div>
           )}
         </div>
-        {progress === 'current' && !can('approveArtifacts') && artifact?.status === 'draft' && !readOnly && (
+        {actions && progress === 'current' && !can('approveArtifacts') && artifact?.status === 'draft' && !readOnly && (
           <p className="text-sm text-muted-foreground">This draft is waiting for a project Owner to approve or reject it.</p>
         )}
         {progress === 'done' && !readOnly && (

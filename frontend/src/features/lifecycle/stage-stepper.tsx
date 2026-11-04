@@ -12,7 +12,7 @@ import { adjacentStages } from './stage-nav'
 const stateText = { done: 'done', current: 'current stage', upcoming: 'upcoming' } as const
 
 /**
- * FR-54 horizontal stage stepper: the six stages with the sidebar's states (done ✓, current with a pulsing dot,
+ * FR-54 horizontal stage stepper: the six stages (seven with Analysis on a version that infers its stack, §4.27) with the sidebar's states (done ✓, current with a pulsing dot,
  * upcoming muted, needs-action count). Every stage is a link (later stages stay navigable); Left/Right, Home and End
  * move between them. The project's current stage is `aria-current="step"`, the page being viewed `aria-current="page"`.
  */
@@ -127,8 +127,8 @@ export function StageStepper({
  * FR-54 "Previous stage" / "Next stage": move between stage pages, relative to the stage on screen (or the project's
  * current stage on other project pages). Disabled at either end.
  */
-export function StageNavButtons({ projectId, from }: { projectId: string; from: Phase }) {
-  const { previous, next } = adjacentStages(from)
+export function StageNavButtons({ projectId, from, analysis = false }: { projectId: string; from: Phase; analysis?: boolean }) {
+  const { previous, next } = adjacentStages(from, { analysis })
   const base = buttonClasses('secondary', 'min-h-11 px-3')
   return (
     <div className="flex shrink-0 items-center gap-2">

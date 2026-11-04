@@ -38,6 +38,9 @@ public sealed class ManagedDatabase
     /// <summary>When the database expires (Render free Postgres, 30 days); <c>null</c> when it doesn't.</summary>
     public DateTimeOffset? ExpiresAt { get; set; }
 
+    /// <summary>§4.28: the deployment group the database is part of; <c>null</c> for standalone and v4 rows.</summary>
+    public Guid? GroupId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

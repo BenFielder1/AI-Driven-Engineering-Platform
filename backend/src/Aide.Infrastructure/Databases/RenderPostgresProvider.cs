@@ -10,12 +10,14 @@ namespace Aide.Infrastructure.Databases;
 /// <summary>
 /// FR-152, §4.21 Render Postgres through an account API key, in the connection's workspace (<c>ownerId</c>):
 /// <list type="bullet">
-/// <item>Create: <c>POST /v1/postgres {name, ownerId, plan, version: "17", region, databaseName}</c>, the region being the
+/// <item>Create: <c>POST /v1/postgres {name, ownerId, plan, version: "18", region, databaseName}</c> (FR-195), the region being the
 /// Owner's choice or the backend service's; an instance of that name is adopted, so a retried job doesn't create two. The
 /// preview is a second instance named <c>&lt;name&gt;-preview</c>. Render's one-free-database limit is <c>PLATFORM_PLAN_LIMIT</c>.</item>
 /// <item>Poll: <c>GET /v1/postgres/{id}</c> until <c>available</c> (<see cref="ManagedDatabaseRules.RenderState"/>; free plans
 /// carry <c>expiresAt</c>), then <c>GET /v1/postgres/{id}/connection-info</c>: <c>internalConnectionString</c> when the
 /// backend runs on Render, else <c>externalConnectionString</c>.</item>
+/// <item>Group (§4.28): the instance is placed in the project's environment (<see cref="Deployments.RenderProjectPlacement"/>);
+/// when that fails the group still shares workspace, region and name.</item>
 /// </list>
 /// </summary>
 public sealed class RenderPostgresProvider(PlatformHttp http, TimeProvider time) : IDatabaseProvider
@@ -31,7 +33,7 @@ public sealed class RenderPostgresProvider(PlatformHttp http, TimeProvider time)
         if (request.Mode == DatabaseSetupMode.Link)
         {
             using var linked = await SendAsync(auth, HttpMethod.Get, $"postgres/{Uri.EscapeDataString(request.LinkResourceId!)}", null, cancellationToken);
-            return Result(linked.RootElement, request.LinkResourceId!);
+            return await PlacedAsync(auth, request, Result(linked.RootElement, request.LinkResourceId!), cancellationToken);
         }
 
         var owner = auth.AccountId ?? throw new DatabaseProviderException(
@@ -42,7 +44,7 @@ public sealed class RenderPostgresProvider(PlatformHttp http, TimeProvider time)
             var match = Items(existing.RootElement).Select(i => Property(i, "postgres")).FirstOrDefault(p => Text(p, "name") == request.Name);
             if (Text(match, "id") is { } found)
             {
-                return Result(match, found);
+                return await PlacedAsync(auth, request, Result(match, found), cancellationToken);
             }
         }
 
@@ -60,7 +62,19 @@ public sealed class RenderPostgresProvider(PlatformHttp http, TimeProvider time)
             auth, HttpMethod.Post, "postgres", body, cancellationToken, ex => IsPlanLimit(ex) ? DeploymentFailure.PlanLimit : null);
         var id = Text(created.RootElement, "id")
             ?? throw new DatabaseProviderException(DeploymentFailure.Upstream, null, "Render created the database but returned no id.", Render);
-        return Result(created.RootElement, id);
+        return await PlacedAsync(auth, request, Result(created.RootElement, id), cancellationToken);
+    }
+
+    /// <summary>§11 Q5: never blocks; the result says when placement wasn't possible.</summary>
+    private async Task<DatabaseSetupResult> PlacedAsync(DatabaseAuth auth, DatabaseSetupRequest request, DatabaseSetupResult result, CancellationToken cancellationToken)
+    {
+        if (request.Host.SharedProjectId is not { } projectId || result.ResourceId is not { } id)
+        {
+            return result;
+        }
+
+        var environment = request.Environment == DeploymentEnvironment.Preview ? Deployments.RenderProjectPlacement.PreviewEnvironment : Deployments.RenderProjectPlacement.ProductionEnvironment;
+        return result with { PlacementUnavailable = !await Deployments.RenderProjectPlacement.PlaceAsync(http, auth.Token, projectId, environment, id, cancellationToken) };
     }
 
     public async Task<DatabasePoll> PollAsync(DatabaseAuth auth, DatabaseRef database, CancellationToken cancellationToken)

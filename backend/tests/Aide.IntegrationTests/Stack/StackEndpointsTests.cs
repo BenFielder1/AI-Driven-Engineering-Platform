@@ -29,7 +29,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
 
         var catalog = await ProjectApi.ReadAsync<StackCatalogDto>(await user.Client.GetAsync(Route("/api/stack/catalog"), Ct));
 
-        Assert.Equal("1.1.0", catalog.Version);
+        Assert.Equal("1.2.0", catalog.Version);
         Assert.Matches("^[0-9a-f]{64}$", catalog.ContentHash);
         Assert.Equal(["frontend", "backend", "data", "vcs", "deploy"], catalog.Layers.Select(l => l.Id));
         Assert.Equal(StackChoices.Order, catalog.Choices.Select(c => c.Id));
@@ -51,7 +51,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
         var nextjs = Packs(StackChoices.Frontend).Single(o => o.Id == "fe-nextjs");
         Assert.Equal(["full-stack", "ui"], nextjs.Modes.Select(m => m.Id));
         Assert.Equal("baas", Packs(StackChoices.Data).Single(o => o.Id == "data-supabase").Mode);
-        Assert.Equal(Enumerable.Range(1, 12).Select(i => $"R{i}"), catalog.Rules.Select(r => r.Id));
+        Assert.Equal(Enumerable.Range(1, 13).Select(i => $"R{i}"), catalog.Rules.Select(r => r.Id));
         Assert.Contains(catalog.Recommendations, r => r.Choices["backend"].Contains("be-aspnet"));
 
         using var anonymous = factory.CreateClient();
@@ -131,10 +131,10 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
             deploy = new { frontendHost = "deploy-netlify", backendHost = "deploy-render", databaseHost = "render-postgres" },
         }, Ct));
 
-        Assert.Equal("1.1.0", composition.CatalogVersion);
+        Assert.Equal("1.2.0", composition.CatalogVersion);
         Assert.Equal(new StackComponentDto("fe-react-vite", "frontend"), composition.Frontend);
         Assert.Equal(new StackComponentDto("be-aspnet", "backend"), composition.Backend);
-        Assert.Equal(new StackDeployDto("deploy-netlify", "deploy-render", "render-postgres", "compose"), composition.Deploy);
+        Assert.Equal(("deploy-netlify", "deploy-render", "render-postgres", "compose"), (composition.Deploy.FrontendHost, composition.Deploy.BackendHost, composition.Deploy.DatabaseHost, composition.Deploy.Local));
         Assert.Equal("proxy", composition.OriginModel);
         Assert.Equal(["proxy", "cross-origin"], composition.Derived.OriginModelOptions);
         Assert.Contains(StackAgents.BackendEngineer, composition.Derived.Agents);
@@ -172,7 +172,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
 
         var catalog = await ProjectApi.ReadAsync<AdminStackCatalogDto>(await admin.Client.GetAsync(Route("/api/admin/stack"), Ct));
 
-        Assert.Equal(("1.1.0", "loaded"), (catalog.Version, catalog.Status));
+        Assert.Equal(("1.2.0", "loaded"), (catalog.Version, catalog.Status));
         Assert.Empty(catalog.Errors);
         Assert.Equal(27, catalog.Packs.Count);
         var aspnet = catalog.Packs.Single(p => p.Id == "be-aspnet");

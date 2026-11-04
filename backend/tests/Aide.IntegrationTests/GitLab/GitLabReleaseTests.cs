@@ -273,6 +273,50 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
         Assert.Equal(0, gitlab.Api.Count(HttpMethod.Post, Project + "/releases"));
     }
 
+    // ---------- FR-174: the co-author trailer on the wire ----------
+
+    [Fact]
+    public async Task FR174_A_GitLab_merge_and_tag_carry_the_noreply_trailer_with_the_instance_host_and_the_notes_do_not()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var gitlab = new GitLabState(remote);
+        var (app, fixture) = await SetUpAsync(gitlab, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+        var line = $"Co-authored-by: {fixture.Owner.User!.Name} <4242-ana@users.noreply.{new Uri(gitlab.BaseUrl).Host}>";
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var merge = GitLabHarness.Body(Assert.Single(gitlab.Api.Requests, r => r.Method == "PUT" && r.Path == MergeRequest + "/merge"));
+        Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}\n\n{line}", merge.GetProperty("merge_commit_message").GetString());
+        var release = GitLabHarness.Body(Assert.Single(gitlab.Api.Requests, r => r.Method == "POST" && r.Path == Project + "/releases"));
+        Assert.EndsWith($"\n\n{line}", release.GetProperty("tag_message").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Co-authored-by", release.GetProperty("description").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR174_The_merge_poll_tags_a_GitLab_merge_made_elsewhere_with_the_trailer()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var gitlab = new GitLabState(remote);
+        var (app, fixture) = await SetUpAsync(gitlab, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+        await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { mergeStrategy = "manual" }));
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+        await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        gitlab.MergedExternally(ReleaseFlowTests.MergeInBare(remote, gitlab.Branch!));
+        await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
+
+        var release = GitLabHarness.Body(Assert.Single(gitlab.Api.Requests, r => r.Method == "POST" && r.Path == Project + "/releases"));
+        Assert.EndsWith($"<4242-ana@users.noreply.{new Uri(gitlab.BaseUrl).Host}>", release.GetProperty("tag_message").GetString(), StringComparison.Ordinal);
+    }
+
     // ---------- FR-140: manual strategy, the merge poll, PR_CLOSED ----------
 
     [Fact]

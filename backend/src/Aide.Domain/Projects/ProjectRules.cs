@@ -20,6 +20,31 @@ public static class ProjectRules
     public const string CreatedReason = "project created";
 
     /// <summary>
+    /// FR-178, FR-186: with stack inference (<paramref name="infer"/>) the stack and its hosts are chosen on the Analysis
+    /// page, so a <c>stack</c> (or a create-time <c>deployment</c>) sent alongside is <c>VALIDATION</c> on <c>stackSource</c>.
+    /// </summary>
+    public static Result ValidateStackSource(bool infer, bool stackSent, bool deploymentSent)
+    {
+        if (!infer || (!stackSent && !deploymentSent))
+        {
+            return Result.Success();
+        }
+
+        var details = new List<string>();
+        if (stackSent)
+        {
+            details.Add("stackSource: 'infer' can't be sent with a stack; the stack is inferred and approved on the Analysis page.");
+        }
+
+        if (deploymentSent)
+        {
+            details.Add("stackSource: 'infer' can't be sent with a deployment; hosts and deployment are set up on the Analysis page.");
+        }
+
+        return Result.Failure(new DomainError(ErrorCodes.Validation, "The stack choices are invalid.") { Details = details });
+    }
+
+    /// <summary>
     /// <c>kebab(name)</c> (lowercase ASCII letters and digits, accented Latin letters folded to ASCII, other runs become one '-', at most
     /// <see cref="SlugBaseMaxLength"/> characters) + '-' + the last <paramref name="suffixLength"/> hex characters of
     /// the id (the random part of a UUIDv7). A name with no ASCII letters or digits uses <see cref="SlugFallback"/>.

@@ -92,6 +92,25 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         var developmentVersionExists = await db.ReleaseVersions.AsNoTracking()
             .AnyAsync(v => v.ProjectId == id && (v.Status == ReleaseVersionStatus.InDevelopment || v.Status == ReleaseVersionStatus.AwaitingMerge), cancellationToken);
 
+        // FR-179, §4.27: leaving analysis needs the locked stack_profile and the composition it pinned (or its No stack choice).
+        var profileLocked = IsLocked(ArtifactType.StackProfile);
+        var compositionPinned = false;
+        var generalist = false;
+        if (project.CurrentPhase == Phase.Analysis)
+        {
+            compositionPinned = await db.ReleaseVersions.AsNoTracking()
+                .AnyAsync(v => v.Id == currentVersionId && v.StackComposition != null, cancellationToken);
+            if (profileLocked)
+            {
+                var content = await db.Artifacts.AsNoTracking()
+                    .Where(a => a.ProjectId == id && a.ReleaseVersionId == currentVersionId && a.Type == ArtifactType.StackProfile && a.Status == ArtifactStatus.Locked)
+                    .OrderByDescending(a => a.Version)
+                    .Select(a => a.Content)
+                    .FirstAsync(cancellationToken);
+                generalist = Domain.Stack.StackProfile.Parse(content) is { IsSuccess: true } parsed && parsed.Value.Document.Generalist;
+            }
+        }
+
         return new LifecycleSnapshot
         {
             Mode = project.ApprovalMode,
@@ -109,6 +128,9 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
             EntryGateApproved = false,
             PendingGates = pending,
             DevelopmentVersionExists = developmentVersionExists,
+            StackProfileLocked = profileLocked,
+            StackCompositionPinned = compositionPinned,
+            StackProfileGeneralist = generalist,
         };
     }
 

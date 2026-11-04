@@ -1,14 +1,19 @@
 namespace Aide.Domain.Lifecycle;
 
-/// <summary>The six lifecycle phases, in order (§4.1). Stored as snake_case strings.</summary>
+/// <summary>
+/// The lifecycle phases, in order (§4.1; v5 §4.27 adds <see cref="Analysis"/> first). Stored as snake_case strings, so the
+/// numeric values only give the order (<see cref="PhaseOrder"/>) and may be renumbered.
+/// </summary>
 public enum Phase
 {
-    Refinement = 0,
-    Specification = 1,
-    Planning = 2,
-    Execution = 3,
-    Review = 4,
-    Release = 5,
+    /// <summary>FR-179, §4.27: the optional first phase of a version that infers its stack (<c>stack_source = infer</c>).</summary>
+    Analysis = 0,
+    Refinement = 1,
+    Specification = 2,
+    Planning = 3,
+    Execution = 4,
+    Review = 5,
+    Release = 6,
 }
 
 /// <summary>Project status (§4.1: status follows phase; <c>released</c>, <c>rolled_back</c> and <c>awaiting_merge</c> are special).</summary>

@@ -266,6 +266,21 @@ public sealed record CreateProjectRequest
     public Stack.StackCompositionRequest? Stack { get; init; }
 
     /// <summary>
+    /// FR-178 (wizard Stack step, "Infer from the repository"): <c>infer</c> starts the version in the <c>analysis</c> phase
+    /// with no composition; the Stack Analyst writes a <c>stack_profile</c> to approve on the Analysis page, where hosts and
+    /// deployment are chosen. Needs a repository with code (400 <c>STACK_INFER_NO_CODE</c>); <c>stack</c> or
+    /// <c>deployment</c> alongside it is 400 <c>VALIDATION</c>. Omitted or <c>manual</c>: as before.
+    /// </summary>
+    public StackSource? StackSource { get; init; }
+
+    /// <summary>
+    /// FR-171 (wizard Idea step): tracker items to import, each a <c>tracker_import</c> job queued with the project. The idea stays required (D-V5-6).
+    /// A failed import never blocks creation. <c>VALIDATION</c> on <c>sourceImports[i].selection.*</c>; another user's connection is
+    /// 403 <c>CREDENTIAL_NOT_OWNER</c>.
+    /// </summary>
+    public IReadOnlyList<Trackers.SourceImportRequest>? SourceImports { get; init; }
+
+    /// <summary>
     /// FR-88 (wizard Deployment step): deploy to Vercel with one of the caller's own Vercel connections, linking an existing
     /// Vercel project or creating one; omitted or <c>null</c> = no deployment (it can be set later in Settings →
     /// Deployment). Needs a GitHub-backed project (400 <c>VALIDATION</c> on <c>deployment.provider</c> for Local).
@@ -443,6 +458,9 @@ public sealed record GitSettingsDto(
 
     /// <summary>FR-136: the caller may re-bind their own connection (<c>connectionId</c>): an Owner of a GitLab or Bitbucket project.</summary>
     public bool CanRebind { get; init; }
+
+    /// <summary>FR-177: AIDE credits the accountable person on later commits (default on).</summary>
+    public bool CommitCreditEnabled { get; init; } = true;
 }
 
 /// <summary>A Git host instance as project settings show it (FR-136).</summary>
@@ -474,6 +492,10 @@ public sealed record AgentModelsDto
 
     [MaxLength(ProjectLimits.ModelMaxLength)]
     public string? CodeReview { get; init; }
+
+    /// <summary>FR-180: the Stack Analyst's model (D-V5-7: its own setting).</summary>
+    [MaxLength(ProjectLimits.ModelMaxLength)]
+    public string? StackAnalyst { get; init; }
 }
 
 /// <summary>Whether a provider can be used: an allowed system key is configured or the project has a bound connection for it (Ollama and Fake are always configured).</summary>
@@ -570,6 +592,9 @@ public sealed record UpdateGitSettingsRequest
     /// development. 409 <c>CONFLICT</c> while that version is <c>awaiting_merge</c> or a release attempt is in progress.</summary>
     [MaxLength(ReleaseVersionRules.TagPrefixMaxLength)]
     public string? TagPrefix { get; init; }
+
+    /// <summary>FR-177: credit people on later commits (Owner). Never rewrites history.</summary>
+    public bool? CommitCreditEnabled { get; init; }
 }
 
 /// <summary>
@@ -674,7 +699,8 @@ public static class ProjectLimits
     public const int ModelMaxLength = 200;
     public const int EmailMaxLength = 256;
     public const int MaxNotificationChannels = 20;
-    public const int MaxNotificationEvents = 14;
+    /// <summary>A channel may subscribe to every selectable event (FR-47, FR-193): the size of <see cref="NotificationEvent"/>.</summary>
+    public const int MaxNotificationEvents = NotificationEvents.Count;
     public const int MaxPageLimit = 100;
     public const int SearchMaxLength = 200;
 }
