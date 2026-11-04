@@ -22,26 +22,26 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-201 | Compatibility (cookies, tokens, headers, branches, theme key) | 3.1 | backend + frontend | M39 | done | CI 41855800502 |
 | FR-202 | Tokens / palette, AA test, no orbs | 3.2, 4.31 | frontend | M38 | done | CI 41855800502 |
 | FR-203 | Geist typography, self-hosted, type scale | 3.2 | frontend | M38 | done | CI 41855800502 |
-| FR-204 | Theme Light/Dark/System (default System) | 3.2 | frontend | M38 | partial (user menu done in CI 41883105618; footer → M41) | CI 41883105618 |
+| FR-204 | Theme Light/Dark/System (default System) | 3.2 | frontend | M38 | done | CI 41899659376 |
 | FR-205 | Restyled shared components | 3.2 | frontend | M38 | done | CI 41855800502 |
 | FR-206 | App shell refinements | 3.3 | frontend | M40 | done | CI 41883105618 |
 | FR-207 | Home `/home` + checklist | 3.3, 4.30 | frontend | M40 | done | CI 41883105618 |
 | FR-208 | Page consistency, Projects filter/sort | 3.3 | frontend | M40 | done | CI 41883105618 |
 | FR-209 | Command palette actions | 3.3 | frontend | M40 | done | CI 41883105618 |
-| FR-210 | Marketing shell | 3.4 | frontend | M41 | todo | |
-| FR-211 | Root/auth routing | 3.4, 4.32 | frontend | M41 | todo | |
-| FR-212 | Marketing Home `/` | 3.4 | frontend | M41 | todo | |
-| FR-213 | Product page | 3.4 | frontend | M41 | todo | |
-| FR-214 | How it works page | 3.4 | frontend | M41 | todo | |
-| FR-215 | Integrations page | 3.4 | frontend | M41 | todo | |
-| FR-216 | Self-host page | 3.4 | frontend | M41 | todo | |
-| FR-217 | Security page | 3.4 | frontend | M41 | todo | |
-| FR-218 | FAQ page | 3.4 | frontend | M41 | todo | |
-| FR-219 | Changelog page | 3.4 | frontend | M41 | todo | |
-| FR-220 | Product previews | 3.4 | frontend | M41 | todo | |
-| FR-221 | SEO, robots, sitemap, noindex | 3.4 | frontend | M41 | todo | |
-| FR-222 | Content modules, truthfulness, shared self-host commands | 3.4 | frontend + docs | M41 | todo | |
-| FR-223 | Sign in / sign up pages | 3.5 | frontend | M41 | todo | |
+| FR-210 | Marketing shell | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-211 | Root/auth routing | 3.4, 4.32 | frontend | M41 | done | CI 41899659376 |
+| FR-212 | Marketing Home `/` | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-213 | Product page | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-214 | How it works page | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-215 | Integrations page | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-216 | Self-host page | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-217 | Security page | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-218 | FAQ page | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-219 | Changelog page | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-220 | Product previews | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-221 | SEO, robots, sitemap, noindex | 3.4 | frontend | M41 | done | CI 41899659376 |
+| FR-222 | Content modules, truthfulness, shared self-host commands | 3.4 | frontend + docs | M41 | done | CI 41899659376 |
+| FR-223 | Sign in / sign up pages | 3.5 | frontend | M41 | done | CI 41899659376 |
 | FR-224 | README ≤ 150 lines | 3.6 | docs | M42 | done | CI 41855800502 |
 | FR-225 | Docs site content | 3.6, 4.33 | docs | M42 | done | CI 41855800502 |
 | FR-226 | GitHub Pages workflow + link check | 3.6 | deploy (CI) | M42 | built; first run when a PR is opened (workflow_dispatch needs it on main) | — |
@@ -52,7 +52,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M38 Brand and design system: FR-196, FR-202–FR-205 ([CI 41855800502](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41855800502), head 134f907); ThemeSelector placement in M40/M41
 - [x] M39 Rename: FR-197–FR-201 ([CI 41859664771](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41859664771), head 965dc73)
 - [x] M40 App shell and Home: FR-206–FR-209 ([CI 41883105618](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41883105618), head d674af3)
-- [ ] M41 Marketing site and auth: FR-210–FR-223
+- [x] M41 Marketing site and auth: FR-210–FR-223 ([CI 41899659376](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41899659376), head bdebfdf)
 - [x] M42 Documentation: FR-224–FR-227 (content in 134f907; `docs.yml` runs first on the PR)
 - [ ] M43 Integrate and harden: E2E, axe both themes, JS budget, audit over v1–v6
 
@@ -62,6 +62,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-04 (M39 backend): CLI is package `Tevrin.Cli` (command `tevrin`, `src/Aide.Cli`); the deprecated `aide` command is package `Aide.Cli` from `src/Aide.Cli.Alias` (same sources). `TEVRIN_GIT_TOKEN` → `AIDE_GIT_TOKEN` added for consistency with the other three variables. Stack catalog agent text named AIDE and feeds the codegen prompt, so it was renamed and the catalog bumped 1.2.0 → 1.2.1. Commit subjects read `[Tevrin][Phase:…]` (nothing parses them; step detection uses the `AIDE-Step-Id` trailer, kept). Prompt versions: idea 6, spec 7, plan 6, codegen 5, review 8, repo analyst 3, stack analyst 3.
 - 2026-11-04 (M40): the user menu's theme control is menu radio items built from `ThemeSelector`'s `THEME_OPTIONS` and `useTheme()` (native radios can't take Tab focus inside a menu). FR-208's Projects "client-side name filter" is met by the existing server-side `search` (debounced, in the URL) and the default `sortBy=updated desc`; no second filter. Collapsed-rail tooltips are native `title` attributes (sr-only labels name each item). Checklist rules: Git done = OAuth GitHub link, GitHub App link or usable installation, or any GitLab/Bitbucket connection; AI provider needs a saved LLM credential (keyless providers don't count); Jira/Linear aren't deployment platforms; "member of a project" = `myRole` set on any of the 6 most recently updated projects (no member filter exists on `/api/projects`; an Admin whose memberships are all older sees the item as not done — accepted, no API change in v6). Signed-in `/` redirects to `/home` until M41's marketing Home replaces it. `?source=import` on `/projects/new` preselects Import.
 - 2026-11-04 (M41): the root `not-found.tsx` renders the marketing shell for every unmatched URL (signed-in users see Open app); `notFound()` inside the app still uses `(app)/not-found.tsx`. robots.txt and sitemap.xml are route handlers built from the validated request Host (malformed → `http://localhost`). `X-Robots-Tag: noindex` on `/home`, `/projects`, `/account`, `/connections`, `/notifications`, `/approvals`, `/admin`. Signed-in `/` redirects to `/home` client-side once `me` resolves; content is never blocked.
+- 2026-11-04 (M41 CI): Zod's `new Function` probe tripped the strict CSP (`script-src eval`) on project pages once chunk order changed; `src/instrumentation-client.ts` now sets Zod jitless before hydration. To meet the 200 KB first-load budget for `/`, the root layout no longer renders `Providers`: `(app)` and `(public)` group layouts wrap themselves (one browser QueryClient shared across groups), marketing pages read `me` via `marketing-session.tsx` (generated client, no TanStack), the root `error.tsx` is plain markup, the mobile sheet is lazy. Budget enforced in CI by `scripts/ci/check-js-budget.mjs` (first measured 192.6 KB gz of 200 KB, CI 41899659376 — little headroom). Home lifecycle labels the Execution→Review gap "Guardian checks on every step" (no human gate exists there). `/integrations` also lists Local Git and PostgreSQL. Simple Icons lacks OpenAI, Slack and Teams marks (neutral icons used).
 - 2026-11-04 (M42): docs link check skips the frozen `docs/v1`–`v5` pages as link *sources* (their repo-root links break on the site; fixing them is allowed later), but checks links into them from `history/`.
 
 ## Known issues
