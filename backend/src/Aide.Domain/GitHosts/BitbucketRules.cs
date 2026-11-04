@@ -167,7 +167,7 @@ public static partial class BitbucketRules
 
         if (verdict.Unverifiable.Count > 0)
         {
-            parts.Add($"AIDE couldn't confirm these permissions: {string.Join(", ", verdict.Unverifiable)}. Use \"Connect with Bitbucket\" (OAuth) instead, or create a repository in the workspace first and try again.");
+            parts.Add($"Tevrin couldn't confirm these permissions: {string.Join(", ", verdict.Unverifiable)}. Use \"Connect with Bitbucket\" (OAuth) instead, or create a repository in the workspace first and try again.");
         }
 
         return Result.Failure(new DomainError(ErrorCodes.ConnectionScopeInsufficient, string.Join(" ", parts))
@@ -193,7 +193,7 @@ public static partial class BitbucketRules
     };
 
     /// <summary>
-    /// FR-134 sign-in: the email AIDE may trust: the primary address if Bitbucket confirmed it, else the first confirmed one;
+    /// FR-134 sign-in: the email Tevrin may trust: the primary address if Bitbucket confirmed it, else the first confirmed one;
     /// <c>null</c> when none is confirmed.
     /// </summary>
     public static string? VerifiedEmail(IEnumerable<BitbucketEmail> emails)
@@ -349,7 +349,7 @@ public static partial class BitbucketRules
     }
 
     /// <summary>
-    /// FR-135: the AIDE error for a failed <c>POST /repositories/{ws}/{slug}</c>: a slug that already exists (Bitbucket's
+    /// FR-135: the Tevrin error for a failed <c>POST /repositories/{ws}/{slug}</c>: a slug that already exists (Bitbucket's
     /// 400 "… already exists") is <c>REPO_NAME_TAKEN</c>; 429 <c>UPSTREAM_RATE_LIMITED</c>; 403 <c>FORBIDDEN</c>; 404
     /// <c>NOT_FOUND</c> (no such workspace); another 400 <c>VALIDATION</c>; anything else <c>UPSTREAM_ERROR</c>.
     /// </summary>

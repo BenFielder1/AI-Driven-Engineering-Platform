@@ -13,7 +13,7 @@ public enum GitOAuthMode
 /// <summary>What the OAuth callback does with the host identity (FR-131, D-V4-18).</summary>
 public enum GitSignInAction
 {
-    /// <summary>The identity is linked to an AIDE account: sign in as it (and store the connection).</summary>
+    /// <summary>The identity is linked to a Tevrin account: sign in as it (and store the connection).</summary>
     SignInLinked = 0,
 
     /// <summary>Link the identity to the signed-in user (connect, or sign-in while signed in) and store the connection.</summary>
@@ -56,7 +56,7 @@ public static class GitSignInRules
     /// <param name="currentUserId">The user signed in at the callback, if any.</param>
     /// <param name="linkedUserId">The account the identity is already linked to, if any.</param>
     /// <param name="verifiedEmail">The host's verified email for the identity, if any.</param>
-    /// <param name="emailOwnerUserId">The AIDE account with <paramref name="verifiedEmail"/>, if any.</param>
+    /// <param name="emailOwnerUserId">The Tevrin account with <paramref name="verifiedEmail"/>, if any.</param>
     public static GitSignInDecision Decide(
         GitOAuthMode mode,
         Guid? startedByUserId,

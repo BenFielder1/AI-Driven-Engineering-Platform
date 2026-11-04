@@ -4,7 +4,7 @@
 
 | Mode | Use when | Schema owner |
 | --- | --- | --- |
-| **BaaS** | No backend; the frontend uses Supabase Auth, the database (RLS and grants), Storage | `supabase/migrations/*.sql`, applied by AIDE's runner |
+| **BaaS** | No backend; the frontend uses Supabase Auth, the database (RLS and grants), Storage | `supabase/migrations/*.sql`, applied by Tevrin's runner |
 | **Host** | A backend or Next.js full-stack plus an ORM data pack | The ORM pack; never Supabase migrations too |
 
 ## Detect
@@ -14,7 +14,7 @@ Mirror `supabase/config.toml`, `supabase/migrations/`, `@supabase/supabase-js`/`
 BaaS: every frontend pack with Backend None (`fe-nextjs` via `@supabase/ssr`). Host: database host for the ORM data packs.
 
 ## Setup
-- `supabase/config.toml` (local ports, `[auth]` local redirect URLs), `migrations/`, `seed.sql`, `tests/`. AIDE manages the remote project, keys and Auth URLs.
+- `supabase/config.toml` (local ports, `[auth]` local redirect URLs), `migrations/`, `seed.sql`, `tests/`. Tevrin manages the remote project, keys and Auth URLs.
 - `@supabase/supabase-js` (+ `@supabase/ssr`); current stable versions you are confident exist, Node pinned.
 - Public env with the frontend prefix: `<prefix>SUPABASE_URL`, `<prefix>SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`). The secret key (`sb_secret_…`) never reaches frontend code; Next.js server code reads `SUPABASE_SECRET_KEY` only for spec-required admin actions.
 - One typed client `createClient<Database>` in `src/lib/supabase.ts`. Next.js: SSR clients with cookies; authorise with `auth.getUser()`, never `getSession()`.
@@ -28,7 +28,7 @@ BaaS: every frontend pack with Backend None (`fe-nextjs` via `@supabase/ssr`). H
 
 ## Migrations
 - **One migration per step:** `supabase/migrations/<yyyyMMddHHmmss>_<name>.sql`, later than every existing version. Each file runs in one transaction (no `CONCURRENTLY`).
-- AIDE's runner applies them over the session pooler (preview during rollout, production just before merge) and records CLI-compatible history. Agents never `link` or `db push`.
+- Tevrin's runner applies them over the session pooler (preview during rollout, production just before merge) and records CLI-compatible history. Agents never `link` or `db push`.
 - **Never edit a base-commit migration** (`MIGRATION_HISTORY_DIVERGED`). **Expand/contract**: the schema reaches production before the code.
 - Update `<frontend>/src/lib/database.types.ts` in the same step, in the `supabase gen types typescript` shape (`Tables` with `Row`/`Insert`/`Update`/`Relationships`, `Views`, `Functions`, `Enums`).
 - `seed.sql` is local only. Host mode: nothing in `supabase/migrations/`.
@@ -43,7 +43,7 @@ BaaS: pgTAP in `supabase/tests/` (or supabase-js integration tests) as `anon`, u
 ## Production notes
 - Never the direct host `db.<ref>.supabase.co` (IPv6-only). Long-lived servers and migrations: session pooler `:5432`. Serverless apps: transaction pooler `:6543` with prepared statements off, plus `DIRECT_URL` = session pooler. SSL required.
 - Host mode: the ORM's migrate command runs on the platform (pre-deploy, or the build when `AIDE_RUN_MIGRATIONS=true`); without a preview project, preview skips migrations.
-- AIDE sets Auth `site_url` and redirect URLs; code builds redirects from the current origin. Free projects pause when idle.
+- Tevrin sets Auth `site_url` and redirect URLs; code builds redirects from the current origin. Free projects pause when idle.
 
 ## Checklist
 - [ ] Mode matches the composition; one migrations owner.

@@ -7,7 +7,7 @@ namespace Aide.Api.Features.Databases;
 
 /// <summary>
 /// §4.21: the preview database must never be production's (<see cref="DatabaseSeparationRules"/>). Checked when a database
-/// is linked or set up (either environment), and again right before AIDE resets or migrates a preview database.
+/// is linked or set up (either environment), and again right before Tevrin resets or migrates a preview database.
 /// </summary>
 public sealed class DatabaseSeparation(AideDbContext db, ManagedDatabaseSecrets secrets)
 {
@@ -25,7 +25,7 @@ public sealed class DatabaseSeparation(AideDbContext db, ManagedDatabaseSecrets 
     }
 
     /// <summary>
-    /// Whether AIDE may reset or run unmerged migrations on <paramref name="row"/> as the preview database: it is a
+    /// Whether Tevrin may reset or run unmerged migrations on <paramref name="row"/> as the preview database: it is a
     /// <c>preview</c> row and is not production's database.
     /// </summary>
     public async Task<bool> IsSeparatePreviewAsync(ManagedDatabase row, CancellationToken cancellationToken)

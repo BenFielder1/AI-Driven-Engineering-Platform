@@ -2,14 +2,14 @@ using Aide.Domain.Entities;
 
 namespace Aide.Domain.Deployments;
 
-/// <summary>How AIDE resets a preview database (FR-148).</summary>
+/// <summary>How Tevrin resets a preview database (FR-148).</summary>
 public enum PreviewResetMethod
 {
-    /// <summary>No preview database AIDE can reset (none, removed, or preview uses the production database).</summary>
+    /// <summary>No preview database Tevrin can reset (none, removed, or preview uses the production database).</summary>
     None = 0,
 
     /// <summary>
-    /// Supabase (and External, Fake): AIDE connects and drops the <c>public</c> schema and the migration history, recreates
+    /// Supabase (and External, Fake): Tevrin connects and drops the <c>public</c> schema and the migration history, recreates
     /// <c>public</c> with Supabase's default grants, then (Supabase BaaS) re-applies the migrations of the base commit.
     /// </summary>
     ResetSchema = 1,
@@ -21,8 +21,8 @@ public enum PreviewResetMethod
     ResetSchemaExternal = 2,
 
     /// <summary>
-    /// Railway: the preview Postgres is only reachable on Railway's private network and AIDE has no verified API call to
-    /// wipe its volume, so the Owner empties it in Railway; AIDE records the reset (clearing the divergence) and the next
+    /// Railway: the preview Postgres is only reachable on Railway's private network and Tevrin has no verified API call to
+    /// wipe its volume, so the Owner empties it in Railway; Tevrin records the reset (clearing the divergence) and the next
     /// backend preview's pre-deploy re-applies every migration.
     /// </summary>
     Manual = 3,

@@ -29,7 +29,7 @@ export function RadioGroup({ legend, options, inputProps, id, error, disabled }:
         const inputId = index === 0 && id ? id : `${base}-${option.value}`
         const descId = option.description ? `${inputId}-desc` : undefined
         return (
-          <div key={option.value} className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3 transition-colors has-checked:border-primary/60 has-checked:bg-primary/10">
+          <div key={option.value} className="flex items-start gap-3 rounded-lg border border-border bg-background p-3 transition-colors has-checked:border-primary/60 has-checked:bg-primary/10">
             <input
               type="radio"
               id={inputId}

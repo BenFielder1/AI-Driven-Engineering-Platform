@@ -10,7 +10,7 @@ using Npgsql;
 namespace Aide.Infrastructure.GitLab;
 
 /// <summary>
-/// A GitLab instance as AIDE uses it (FR-130): the <c>git_host_instances</c> row with configuration
+/// A GitLab instance as Tevrin uses it (FR-130): the <c>git_host_instances</c> row with configuration
 /// (<c>GitLab:Instances:*</c>) applied on top. <see cref="BaseUrl"/> is the effective base URL (<c>https://gitlab.com</c> for
 /// gitlab.com, whose row stores NULL). The client secret is never on this record (<see cref="IGitLabInstances.GetClientSecret"/>).
 /// </summary>

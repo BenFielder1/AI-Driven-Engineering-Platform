@@ -3,14 +3,14 @@ using Aide.Domain.Entities;
 
 namespace Aide.Domain.GitHub;
 
-/// <summary>Whether the AIDE GitHub App is registered (FR-80). Wire values: <c>not_configured</c>, <c>configured</c>.</summary>
+/// <summary>Whether the Tevrin GitHub App is registered (FR-80). Wire values: <c>not_configured</c>, <c>configured</c>.</summary>
 public enum GitHubAppStatus
 {
     NotConfigured = 0,
     Configured = 1,
 }
 
-/// <summary>Where the AIDE GitHub App comes from (FR-80): the manifest flow (<c>database</c>) or <c>GitHub__App__*</c>
+/// <summary>Where the Tevrin GitHub App comes from (FR-80): the manifest flow (<c>database</c>) or <c>GitHub__App__*</c>
 /// configuration (<c>configuration</c>), which takes precedence.</summary>
 public enum GitHubAppSource
 {
@@ -34,7 +34,7 @@ public enum GitHubRepositorySelection
     Selected = 1,
 }
 
-/// <summary>FR-143: whether GitHub reports the AIDE App's Pages permission. Wire values: <c>granted</c>, <c>missing</c>,
+/// <summary>FR-143: whether GitHub reports the Tevrin App's Pages permission. Wire values: <c>granted</c>, <c>missing</c>,
 /// <c>unknown</c>.</summary>
 public enum GitHubPagesAccess
 {
@@ -96,10 +96,10 @@ public static class GitHubRules
         ["emails"] = "read",
     };
 
-    /// <summary>FR-80: the App's name in the manifest, <c>AIDE (&lt;host&gt;)</c>, cut to GitHub's 34-character limit.</summary>
+    /// <summary>FR-80: the App's name in the manifest, <c>Tevrin (&lt;host&gt;)</c>, cut to GitHub's 34-character limit.</summary>
     public static string ManifestAppName(string host)
     {
-        var name = $"AIDE ({host})";
+        var name = $"Tevrin ({host})";
         return name.Length <= MaxAppNameLength ? name : name[..(MaxAppNameLength - 1)] + ")";
     }
 

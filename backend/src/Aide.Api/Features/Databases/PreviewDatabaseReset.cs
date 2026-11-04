@@ -16,9 +16,9 @@ namespace Aide.Api.Features.Databases;
 public sealed record PreviewDatabaseResetPayload(Guid ProjectId, Guid? DatabaseId, PreviewResetMethod Method, string Actor);
 
 /// <summary>
-/// FR-148: the queued reset: its <c>jobId</c> and <c>method</c> (<c>reset_schema</c>: AIDE empties the schema, Supabase BaaS
+/// FR-148: the queued reset: its <c>jobId</c> and <c>method</c> (<c>reset_schema</c>: Tevrin empties the schema, Supabase BaaS
 /// then re-applies the base commit's migrations; <c>reset_schema_external</c>: Render, over its external URL;
-/// <c>manual</c>: Railway — empty the preview Postgres in Railway, AIDE records the reset). The next backend preview's
+/// <c>manual</c>: Railway — empty the preview Postgres in Railway, Tevrin records the reset). The next backend preview's
 /// pre-deploy re-applies every migration. Progress: <c>GET …/deployments/preview</c> (<c>databaseDiverged</c>).
 /// </summary>
 public sealed record PreviewDatabaseResetDto(Guid JobId, PreviewResetMethod Method);
@@ -73,7 +73,7 @@ public sealed class PreviewDatabaseResetService(AideDbContext db, RolloutSchedul
 }
 
 /// <summary>
-/// FR-148: the <c>preview_database_reset</c> job. Empties the preview schema (<see cref="IDatabaseSchemaReset"/>) where AIDE
+/// FR-148: the <c>preview_database_reset</c> job. Empties the preview schema (<see cref="IDatabaseSchemaReset"/>) where Tevrin
 /// can reach it, writes <c>DATABASE_RESET</c> (the divergence baseline restarts there), then for Supabase BaaS re-applies the
 /// migrations of the version's base commit (recorded as a preview run). A Railway reset only records the reset.
 /// </summary>
@@ -106,7 +106,7 @@ public sealed partial class PreviewDatabaseResetJobHandler(
         if (row is not null && (row.ProjectId != payload.ProjectId || !await separation.IsSeparatePreviewAsync(row, cancellationToken)))
         {
             LogRefused(logger, payload.ProjectId);
-            throw new JobFailedException($"{DatabaseSeparationRules.NotSeparateMessage}: AIDE didn't reset it. Link a separate preview database, then reset again.", transient: false, ErrorCodes.Validation);
+            throw new JobFailedException($"{DatabaseSeparationRules.NotSeparateMessage}: Tevrin didn't reset it. Link a separate preview database, then reset again.", transient: false, ErrorCodes.Validation);
         }
 
         if (payload.Method is PreviewResetMethod.ResetSchema or PreviewResetMethod.ResetSchemaExternal)
@@ -124,7 +124,7 @@ public sealed partial class PreviewDatabaseResetJobHandler(
                     : MigrationConnections.ToNpgsql(connection.Url);
             if (connectionString is null)
             {
-                throw new JobFailedException("AIDE can't connect to the preview database (no connection details or password). Link it again.", transient: false, ErrorCodes.Validation);
+                throw new JobFailedException("Tevrin can't connect to the preview database (no connection details or password). Link it again.", transient: false, ErrorCodes.Validation);
             }
 
             try

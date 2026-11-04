@@ -35,7 +35,7 @@ public sealed class SecurityFixTests : IDisposable
         Assert.Equal(ExitCodes.Auth, run.ExitCode);
         Assert.Empty(_cli.Requests);
         Assert.Contains("saved token belongs to http://localhost:8080", run.Error, StringComparison.Ordinal);
-        Assert.Contains("AIDE_TOKEN", run.Error, StringComparison.Ordinal);
+        Assert.Contains("TEVRIN_TOKEN", run.Error, StringComparison.Ordinal); // FR-200
     }
 
     [Theory]
@@ -206,7 +206,7 @@ public sealed class SecurityFixTests : IDisposable
         var run = await _cli.RunAsync("config", "set", "token", CliTestHarness.Token);
 
         Assert.Equal(ExitCodes.Usage, run.ExitCode);
-        Assert.Contains("aide login", run.Error, StringComparison.Ordinal);
+        Assert.Contains("tevrin login", run.Error, StringComparison.Ordinal); // FR-200
         Assert.Contains("shell history", run.Error, StringComparison.Ordinal);
         Assert.DoesNotContain(CliTestHarness.Token, run.Out + run.Error, StringComparison.Ordinal);
         Assert.False(File.Exists(_cli.DefaultConfigPath));

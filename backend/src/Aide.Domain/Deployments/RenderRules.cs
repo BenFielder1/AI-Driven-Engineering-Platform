@@ -7,7 +7,7 @@ namespace Aide.Domain.Deployments;
 public sealed record RenderRoute(string Type, string Source, string Destination);
 
 /// <summary>
-/// FR-144, §4.20: the Render service AIDE creates for a target: a <c>static_site</c> (<see cref="BuildCommand"/>,
+/// FR-144, §4.20: the Render service Tevrin creates for a target: a <c>static_site</c> (<see cref="BuildCommand"/>,
 /// <see cref="PublishPath"/>) or a <c>web_service</c> (<see cref="Runtime"/> <c>docker</c>/<c>node</c>/<c>python</c>, the
 /// Dockerfile or build/start commands, pre-deploy, health check, plan and region), in <see cref="RootDir"/>, tracking
 /// <see cref="Branch"/> with <see cref="AutoDeployTrigger"/> (<c>commit</c> for production, <c>off</c> for the preview).
@@ -32,7 +32,7 @@ public sealed record RenderServiceSpec(
 
 /// <summary>
 /// FR-144, FR-145, FR-147, FR-150, §4.20 Render rules: the service spec from the build configuration, the
-/// <c>-preview</c> service, deploy states, the AIDE deployment id (<c>service|deploy</c>), env ids, the proxy route and
+/// <c>-preview</c> service, deploy states, the Tevrin deployment id (<c>service|deploy</c>), env ids, the proxy route and
 /// the log rate limit (30 a minute per user). Pure.
 /// </summary>
 public static class RenderRules
@@ -164,12 +164,12 @@ public static class RenderRules
     }
 
     /// <summary>
-    /// The AIDE deployment id of a Render deploy: <c>&lt;service id&gt;|&lt;deploy id&gt;</c>, so polls, logs and rollback
+    /// The Tevrin deployment id of a Render deploy: <c>&lt;service id&gt;|&lt;deploy id&gt;</c>, so polls, logs and rollback
     /// reach the right service (production or <c>-preview</c>).
     /// </summary>
     public static string DeploymentId(string serviceId, string deployId) => $"{serviceId}|{deployId}";
 
-    /// <summary>The service and deploy of an AIDE deployment id; a bare deploy id belongs to <paramref name="defaultService"/>.</summary>
+    /// <summary>The service and deploy of a Tevrin deployment id; a bare deploy id belongs to <paramref name="defaultService"/>.</summary>
     public static (string ServiceId, string DeployId) ParseDeploymentId(string id, string? defaultService)
     {
         ArgumentNullException.ThrowIfNull(id);
@@ -177,7 +177,7 @@ public static class RenderRules
         return bar > 0 ? (id[..bar], id[(bar + 1)..]) : (defaultService ?? string.Empty, id);
     }
 
-    /// <summary>The env id AIDE records for a Render variable: the environment and key (Render has no ids).</summary>
+    /// <summary>The env id Tevrin records for a Render variable: the environment and key (Render has no ids).</summary>
     public static string EnvId(string key, DeploymentEnvironment environment) =>
         $"{(environment == DeploymentEnvironment.Preview ? "preview" : "production")}:{key}";
 

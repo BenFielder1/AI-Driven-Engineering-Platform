@@ -330,7 +330,7 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
 
         var requests = bitbucket.Api.Requests.ToList();
         var merge = GitLabHarness.Body(Assert.Single(requests, r => r.Method == "POST" && r.Path == PullRequest + "/merge"));
-        Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}\n\n{line}", merge.GetProperty("message").GetString());
+        Assert.Equal($"[Tevrin] Release {Tag}: {fixture.Project.Name}\n\n{line}", merge.GetProperty("message").GetString());
         var tag = GitLabHarness.Body(Assert.Single(requests, r => r.Method == "POST" && r.Path == Repo + "/refs/tags"));
         Assert.EndsWith($"\n\n{line}", tag.GetProperty("message").GetString(), StringComparison.Ordinal);
 

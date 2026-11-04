@@ -26,7 +26,8 @@ describe('FR-53: app shell', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
     const aside = sidebar()
-    expect(within(aside).getByRole('link', { name: 'AIDE home' })).toHaveTextContent('AIDE')
+    // FR-196: the lockup reads "Tevrin" (the link's own label is renamed with the rest of the app copy, FR-197).
+    expect(within(aside).getByRole('link', { name: /home$/ })).toHaveTextContent('Tevrin')
     expect(within(aside).getByRole('button', { name: 'Search pages' })).toHaveAttribute('aria-keyshortcuts', 'Meta+K Control+K')
     const nav = within(aside).getByRole('navigation', { name: 'Main' })
     expect(within(nav).getByRole('list', { name: 'Workspace' })).toBeInTheDocument()
@@ -152,7 +153,8 @@ describe('FR-53: app shell', () => {
     expect(drawer.className).toMatch(/overflow-x-hidden/)
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth)
     // Same nav-config as the sidebar: lockup and workspace nav; choosing a page closes the drawer.
-    expect(within(drawer).getByText('AIDE')).toBeInTheDocument()
+    // FR-196: the drawer's lockup reads "Tevrin".
+    expect(within(drawer).getByText('Tevrin')).toBeInTheDocument()
     await user.click(within(within(drawer).getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Notifications' }))
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/notifications')
@@ -291,7 +293,7 @@ describe('FR-53: app shell', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('FR53_theme: the theme menu applies and persists System / Light / Dark', async () => {
+  it('FR53_theme / FR204: the theme menu applies and persists System / Light / Dark', async () => {
     signInAs()
     await renderRoute('/projects')
     const user = userEvent.setup()
@@ -310,9 +312,9 @@ describe('FR-53: app shell', () => {
 
     await user.click(within(sidebar()).getByRole('button', { name: 'Theme: Dark' }))
     await user.click(await screen.findByRole('menuitemradio', { name: 'System' }))
-    expect(localStorage.getItem('aide.theme')).toBeNull()
-    // Dark first: with no system preference for light, System is dark.
-    expect(document.documentElement).toHaveClass('dark')
+    // FR-204 (amends FR-53): System is stored as `system`, and follows the OS (here not dark), so the page is light.
+    expect(localStorage.getItem('aide.theme')).toBe('system')
+    expect(document.documentElement).toHaveClass('light')
   })
 
   it('NFR-OBS: the footer shows API readiness', async () => {

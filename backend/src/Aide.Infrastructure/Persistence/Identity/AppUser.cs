@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Aide.Infrastructure.Persistence.Identity;
 
-/// <summary>An AIDE user (SPEC §5 <c>user</c>, table <c>users</c>) on top of ASP.NET Core Identity.
+/// <summary>A Tevrin user (SPEC §5 <c>user</c>, table <c>users</c>) on top of ASP.NET Core Identity.
 /// <see cref="IdentityUser{TKey}.Email"/> is <c>citext</c> with a unique index (case-insensitive uniqueness).</summary>
 public sealed class AppUser : IdentityUser<Guid>
 {
@@ -22,7 +22,7 @@ public sealed class AppUser : IdentityUser<Guid>
 
     public string? AvatarUrl { get; set; }
 
-    /// <summary>FR-177: "Credit me on commits made by AIDE" turned off; commit credit then skips this person (§4.25).</summary>
+    /// <summary>FR-177: "Credit me on commits made by Tevrin" turned off; commit credit then skips this person (§4.25).</summary>
     public bool CommitCreditOptOut { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

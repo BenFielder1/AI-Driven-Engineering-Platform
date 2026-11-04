@@ -311,7 +311,7 @@ public sealed partial class GitLabConnectionService(
         return Result.Failure<T>(new DomainError(ErrorCodes.GitNotConnected, "GitLab rejected the connection. Connect GitLab again under Account → Connections → GitLab."));
     }
 
-    /// <summary>The AIDE error for a GitLab failure other than 401.</summary>
+    /// <summary>The Tevrin error for a GitLab failure other than 401.</summary>
     public static DomainError UpstreamError(GitLabApiException exception)
     {
         ArgumentNullException.ThrowIfNull(exception);

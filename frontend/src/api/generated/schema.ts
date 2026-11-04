@@ -103,7 +103,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** FR-177: change the signed-in user's own preferences: commitCreditOptOut ("Credit me on commits made by AIDE"). Browser session only. */
+        /** FR-177: change the signed-in user's own preferences: commitCreditOptOut ("Credit me on commits made by Tevrin"). Browser session only. */
         patch: operations["UpdateCurrentUser"];
         trace?: never;
     };
@@ -148,7 +148,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Redirects to GitHub to sign in (FR-2). Once an AIDE GitHub App exists this uses its user authorization flow with PKCE, which also connects GitHub (FR-80, FR-81, D-V2-7). 404 when GitHub sign-in isn't configured. */
+        /** Redirects to GitHub to sign in (FR-2). Once a Tevrin GitHub App exists this uses its user authorization flow with PKCE, which also connects GitHub (FR-80, FR-81, D-V2-7). 404 when GitHub sign-in isn't configured. */
         get: operations["StartGitHubSignIn"];
         put?: never;
         post?: never;
@@ -529,7 +529,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** FR-81: redirects to the AIDE GitHub App's user authorization (PKCE) to connect GitHub to the signed-in account without signing in again, then back to returnUrl (a same-origin path). 404 when no App is registered. Browser session only. */
+        /** FR-81: redirects to the Tevrin GitHub App's user authorization (PKCE) to connect GitHub to the signed-in account without signing in again, then back to returnUrl (a same-origin path). 404 when no App is registered. Browser session only. */
         get: operations["ConnectGitHub"];
         put?: never;
         post?: never;
@@ -546,7 +546,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** FR-81: the repositories the AIDE GitHub App is installed on that the caller can access, searchable by name, 30 per page. */
+        /** FR-81: the repositories the Tevrin GitHub App is installed on that the caller can access, searchable by name, 30 per page. */
         get: operations["ListGitHubRepos"];
         put?: never;
         /** FR-81: create a repository for the caller or an organisation where the App is installed, initialised with a README (auto_init) so the default branch exists, and check the App can access it. Needs the App's Administration permission (403 FORBIDDEN otherwise). */
@@ -1121,7 +1121,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** FR-80: the AIDE GitHub App's status (not_configured or configured, from the database or GitHub__App__* configuration), slug, owner, install URL, granted permissions and whether repositories can be created. Admins only; secrets are never returned. */
+        /** FR-80: the Tevrin GitHub App's status (not_configured or configured, from the database or GitHub__App__* configuration), slug, owner, install URL, granted permissions and whether repositories can be created. Admins only; secrets are never returned. */
         get: operations["GetAdminGitHubApp"];
         put?: never;
         post?: never;
@@ -1302,7 +1302,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off. */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off. */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -1315,7 +1315,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** FR-83: move a github_pat project onto the AIDE GitHub App (Owner): stores the installation and repository ids and drops the PAT. The caller's own GitHub connection must be able to push to the repo (403 FORBIDDEN otherwise; 409 GITHUB_NOT_CONNECTED without a connection). 409 GITHUB_APP_NOT_INSTALLED (extension installUrl) when the App can't access the repo. */
+        /** FR-83: move a github_pat project onto the Tevrin GitHub App (Owner): stores the installation and repository ids and drops the PAT. The caller's own GitHub connection must be able to push to the repo (403 FORBIDDEN otherwise; 409 GITHUB_NOT_CONNECTED without a connection). 409 GITHUB_APP_NOT_INSTALLED (extension installUrl) when the App can't access the repo. */
         post: operations["SwitchGitToApp"];
         delete?: never;
         options?: never;
@@ -1455,7 +1455,7 @@ export interface paths {
         /** Create or replace a user environment variable (Owner, FR-145): key ^[A-Za-z_][A-Za-z0-9_]*$ (up to 256), value up to 64 KB, targets preview and/or production, sensitive, appliesTo (frontend, backend; default frontend) and public (default: the key has the frontend's public prefix). VALIDATION for a derived key or a public value that looks secret ("secret values can't be public"). The value is encrypted and synced to the targets of its components; a failed sync keeps the value with syncError and answers 502 UPSTREAM_ERROR. */
         put: operations["PutDeploymentEnv"];
         post?: never;
-        /** Delete a user environment variable in AIDE and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION). */
+        /** Delete a user environment variable in Tevrin and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION). */
         delete: operations["DeleteDeploymentEnv"];
         options?: never;
         head?: never;
@@ -1575,7 +1575,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. AIDE polls it (§4.15). */
+        /** Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. Tevrin polls it (§4.15). */
         post: operations["RedeployDeployment"];
         delete?: never;
         options?: never;
@@ -1627,7 +1627,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: AIDE connects; Render: over its external URL; Railway: the Owner empties it in Railway and AIDE records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method. */
+        /** Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: Tevrin connects; Render: over its external URL; Railway: the Owner empties it in Railway and Tevrin records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method. */
         post: operations["ResetPreviewDatabase"];
         delete?: never;
         options?: never;
@@ -2118,7 +2118,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project pull request (members, FR-36): provider, base and head branch, GitHub number and URL (null for Local), and the branch comparison read from the working copy — commits (newest first, at most 250) and changed files (at most 1000). For a Local project the comparison is the "PR". 404 NOT_FOUND until AIDE has opened it (when every step of the plan is completed). */
+        /** The project pull request (members, FR-36): provider, base and head branch, GitHub number and URL (null for Local), and the branch comparison read from the working copy — commits (newest first, at most 250) and changed files (at most 1000). For a Local project the comparison is the "PR". 404 NOT_FOUND until Tevrin has opened it (when every step of the plan is completed). */
         get: operations["GetPullRequest"];
         put?: never;
         /** Open the project pull request again (Contributor or Owner, FR-36), e.g. after the pull request job failed or its retries ran out: queues the pull request job. Allowed in execution once every step of the current plan is completed, or in review, while no pull request is recorded for the current plan. In review the job only records the PR; in execution it then advances to review. Returns 202; the outcome arrives as PULL_REQUEST_OPENED or PULL_REQUEST_FAILED on the live channel. */
@@ -2136,7 +2136,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "AIDE will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65). */
+        /** Merge readiness of the version's PR (members, FR-84): whether Tevrin's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "Tevrin will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65). */
         get: operations["GetMergeReadiness"];
         put?: never;
         post?: never;
@@ -2306,7 +2306,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** FR-140, D-V4-7: AIDE's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded. */
+        /** FR-140, D-V4-7: Tevrin's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded. */
         get: operations["GetReleaseNotes"];
         put?: never;
         post?: never;
@@ -2708,7 +2708,7 @@ export interface components {
             createdAt: string;
         };
         /**
-         * @description The AIDE GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never
+         * @description The Tevrin GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never
          *     returned. `source` is `configuration` when `GitHub__App__*` is set (it takes precedence), `database`
          *     for an App registered through the manifest flow, and `null` when `status` is `not_configured` (then every
          *     App field is `null` and `permissions` is empty). `installUrl` is
@@ -3189,7 +3189,7 @@ export interface components {
         };
         /**
          * @description Which sign-in providers are available (the frontend hides "Continue with GitHub" when `github` is false).
-         *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the AIDE GitHub App's user authorization flow
+         *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the Tevrin GitHub App's user authorization flow
          *     with PKCE), `oauth` (the v1 OAuth App, only while no App is registered) or `none`; `github` is
          *     `githubMode != none`. `gitlab` (FR-131) lists the enabled GitLab instances with an OAuth application: one
          *     "Continue with GitLab" button each (`GET /api/auth/gitlab/start` with `instanceId` and `mode=signin`).
@@ -3232,8 +3232,8 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description FR-134 sign-in: Bitbucket's verified email belongs to an existing AIDE account that isn't linked to this Bitbucket
-         *     identity. AIDE never links silently (D-V4-18): the user signs in to that account (any method) and confirms with
+         * @description FR-134 sign-in: Bitbucket's verified email belongs to an existing Tevrin account that isn't linked to this Bitbucket
+         *     identity. Tevrin never links silently (D-V4-18): the user signs in to that account (any method) and confirms with
          *     `POST /api/auth/bitbucket/link`, or cancels with `DELETE /api/auth/bitbucket/link`. Expires after 10 minutes.
          */
         BitbucketPendingLinkDto: {
@@ -3547,7 +3547,7 @@ export interface components {
         };
         /**
          * @description Create a Bitbucket repository (FR-135) with the caller's connection `connectionId` in workspace `owner` and
-         *     project `project` (its key; Bitbucket requires one). The slug is Bitbucket's slug of `name`. AIDE then pushes an
+         *     project `project` (its key; Bitbucket requires one). The slug is Bitbucket's slug of `name`. Tevrin then pushes an
          *     initial commit with a README to `main`, so the default branch exists. `private` defaults to true.
          */
         CreateBitbucketRepoRequest: {
@@ -3665,7 +3665,7 @@ export interface components {
             email?: null | string;
             /**
              * Format: date-time
-             * @description FR-165: Jira and Linear don't report token expiry, so the dialog asks. AIDE warns 14 days before it.
+             * @description FR-165: Jira and Linear don't report token expiry, so the dialog asks. Tevrin warns 14 days before it.
              */
             expiresAt?: null | string;
             /** @description FR-165 Jira: the custom field holding acceptance criteria, from `GET …/resources?type=fields`. */
@@ -3685,7 +3685,7 @@ export interface components {
         };
         /**
          * @description Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). `mode` picks the Git provider.
-         *     `github_app`: a repo picked or created through the AIDE GitHub App; send `installationId` and
+         *     `github_app`: a repo picked or created through the Tevrin GitHub App; send `installationId` and
          *     `repoFullName` (`owner/name`), no `repoUrl` or `token` (409 `GITHUB_APP_NOT_INSTALLED` when the
          *     App can't access the repo). `github_pat`: `repoUrl` plus an optional `token` (FR-83, the v1 behaviour).
          *     `local`: no remote. `provider` is the v1 name of `mode`, kept so v1 clients work: send one of the two;
@@ -3893,7 +3893,7 @@ export interface components {
             action: components["schemas"]["FileAction"];
             protected: boolean;
         };
-        /** @description The build configuration AIDE derived from the composition (§4.20); each field is `null` when it doesn't apply. */
+        /** @description The build configuration Tevrin derived from the composition (§4.20); each field is `null` when it doesn't apply. */
         DeploymentBuildConfigDto: {
             framework: null | string;
             buildCommand: null | string;
@@ -3963,7 +3963,7 @@ export interface components {
          *     and `gitSha` are what was deployed; `releaseVersion` is the version (e.g. `1.2.0`) of
          *     `releaseVersionId`; `releaseId` is the release attempt of a production deployment (`null` for previews).
          *     A failed deployment carries `errorCode` (`PLATFORM_ERROR`, formerly `VERCEL_ERROR`; `DEPLOYMENT_TIMEOUT`), `errorMessage` and
-         *     `buildLogTail` (the end of the build log). `trigger` is `auto` (AIDE, after execution or the release
+         *     `buildLogTail` (the end of the build log). `trigger` is `auto` (Tevrin, after execution or the release
          *     merge), `manual`, `promote` or `redeploy`; `triggeredBy` is `null` for `auto` (or a
          *     deleted user). `promotedFromDeploymentId` is the earlier production deployment a `promote` (or
          *     `rollback`) row made current again.
@@ -4222,7 +4222,7 @@ export interface components {
          */
         DeploymentTargetStatus: "not_configured" | "configuring" | "ready" | "attention" | "error";
         /**
-         * @description Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (AIDE after execution or release),
+         * @description Why a deployment row exists (FR-90, FR-91). Wire values: `auto` (Tevrin after execution or release),
          *                 `manual`, `promote`, `redeploy`.
          * @enum {unknown}
          */
@@ -4593,7 +4593,7 @@ export interface components {
         };
         /**
          * @description A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the
-         *     `manifest` form field, JSON-encoded): name `AIDE ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under
+         *     `manifest` form field, JSON-encoded): name `Tevrin ({host})` (the host of `App:PublicBaseUrl`); `url` and `setup_url` under
          *     `App:PublicBaseUrl`; `redirect_url` the manifest callback (`/api/admin/integrations/github/callback`);
          *     `callback_urls` the sign-in callback (`/api/auth/github/callback`); no `hook_attributes` (GitHub rejects a
          *     localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and
@@ -4628,7 +4628,7 @@ export interface components {
         /** @enum {unknown} */
         GitHubAppSource: "database" | "configuration" | null;
         /**
-         * @description Whether the AIDE GitHub App is registered (FR-80). Wire values: `not_configured`, `configured`.
+         * @description Whether the Tevrin GitHub App is registered (FR-80). Wire values: `not_configured`, `configured`.
          * @enum {unknown}
          */
         GitHubAppStatus: "not_configured" | "configured";
@@ -4636,7 +4636,7 @@ export interface components {
          * @description The caller's GitHub connection (FR-81). Tokens are never returned. When `connected` is false, `login`,
          *     `githubUserId`, `status` and `accessExpiresAt` are `null` and `installations` is empty.
          *     `status` is `invalid` after a failed token refresh (§4.14); `accessExpiresAt` is `null` when the
-         *     App's tokens don't expire. `installUrl` is the App's "Install AIDE on more repositories" link (`null` when no
+         *     App's tokens don't expire. `installUrl` is the App's "Install Tevrin on more repositories" link (`null` when no
          *     App is registered).
          */
         GitHubConnectionDto: {
@@ -4653,7 +4653,7 @@ export interface components {
         /** @enum {unknown} */
         GitHubConnectionStatus: "valid" | "invalid" | null;
         /**
-         * @description An installation of the AIDE GitHub App that the caller can access (FR-81, `GET /user/installations`):
+         * @description An installation of the Tevrin GitHub App that the caller can access (FR-81, `GET /user/installations`):
          *     `repositorySelection` is `all` or `selected`; `manageUrl` is where the user adds repositories to it.
          *     `pagesPermission` (FR-143) is whether the installation grants the App's Pages write permission (`granted`,
          *     `missing`: the Owner has to accept the updated permissions on the installation, or `unknown`).
@@ -4668,7 +4668,7 @@ export interface components {
         };
         /**
          * @description A possible owner for "Create repository" (FR-81): the caller (`user`) or an organisation they belong to.
-         *     `appInstalled` / `installationId`: whether (and where) the AIDE GitHub App is installed on it;
+         *     `appInstalled` / `installationId`: whether (and where) the Tevrin GitHub App is installed on it;
          *     `canCreate`: the App is installed, has Administration write, and (for an organisation) the caller may create
          *     repositories there.
          */
@@ -4686,7 +4686,7 @@ export interface components {
          */
         GitHubOwnerType: "user" | "organization";
         /**
-         * @description FR-143: whether GitHub reports the AIDE App's Pages permission. Wire values: `granted`, `missing`,
+         * @description FR-143: whether GitHub reports the Tevrin App's Pages permission. Wire values: `granted`, `missing`,
          *                 `unknown`.
          * @enum {unknown}
          */
@@ -4700,7 +4700,7 @@ export interface components {
             isLatest: boolean;
         };
         /**
-         * @description A repository the AIDE GitHub App can access for the caller (FR-81, FR-86). `installationId` is the installation
+         * @description A repository the Tevrin GitHub App can access for the caller (FR-81, FR-86). `installationId` is the installation
          *     that grants it (send it with `repoFullName` in `POST /api/projects`). `empty` is whether the repo has
          *     no commits (`null`: not checked in the list; `GET …/refs` always says). `canPush`: the caller may push to it
          *     (push, maintain or admin); only such repositories can back a project (FR-82, FR-83).
@@ -4817,8 +4817,8 @@ export interface components {
          */
         GitLabOwnerKind: "user" | "group";
         /**
-         * @description FR-131 sign-in: GitLab's verified email belongs to an existing AIDE account that isn't linked to this GitLab identity.
-         *     AIDE never links silently: the user signs in to that account (any method) and confirms with
+         * @description FR-131 sign-in: GitLab's verified email belongs to an existing Tevrin account that isn't linked to this GitLab identity.
+         *     Tevrin never links silently: the user signs in to that account (any method) and confirms with
          *     `POST /api/auth/gitlab/link`, or cancels with `DELETE /api/auth/gitlab/link`. Expires after 10 minutes.
          */
         GitLabPendingLinkDto: {
@@ -4895,7 +4895,7 @@ export interface components {
          * @description Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the
          *     project branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).
          *     For `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else
-         *     `null`). `appInstalledOnRepo` says whether the AIDE GitHub App can access a `github_pat` project's repo
+         *     `null`). `appInstalledOnRepo` says whether the Tevrin GitHub App can access a `github_pat` project's repo
          *     (`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an
          *     Owner ("Switch to GitHub App"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and
          *     `tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings.
@@ -4924,7 +4924,7 @@ export interface components {
             binding?: null | components["schemas"]["GitBindingDto"];
             /** @description FR-136: the caller may re-bind their own connection (`connectionId`): an Owner of a GitLab or Bitbucket project. */
             canRebind?: boolean;
-            /** @description FR-177: AIDE credits the accountable person on later commits (default on). */
+            /** @description FR-177: Tevrin credits the accountable person on later commits (default on). */
             commitCreditEnabled?: boolean;
         };
         /** @description Result of testing the saved Git settings (FR-10); `reason` says why when `ok` is false. */
@@ -4969,7 +4969,7 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the Tevrin GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the Tevrin GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
             /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
             platform?: string;
@@ -5183,10 +5183,10 @@ export interface components {
             createdAt: string;
         };
         /**
-         * @description FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether AIDE's token may merge it
+         * @description FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether Tevrin's token may merge it
          *     now (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and
          *     `reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy
-         *     ("AIDE will merge automatically"); otherwise "A merge on GitHub will be needed" with `reasons` (empty when
+         *     ("Tevrin will merge automatically"); otherwise "A merge on GitHub will be needed" with `reasons` (empty when
          *     `canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.
          *     `mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,
          *     `BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a GitLab project (FR-138)
@@ -5207,7 +5207,7 @@ export interface components {
             checkedAt: string;
         };
         /**
-         * @description FR-84: why AIDE can't merge the version's PR itself (wire values `review_required`, `changes_requested`,
+         * @description FR-84: why Tevrin can't merge the version's PR itself (wire values `review_required`, `changes_requested`,
          *     `checks_failing`, `checks_pending`, `branch_protected`, `merge_conflict`, `no_permission`,
          *     `merge_method_not_allowed`, `pr_not_open`, `manual_strategy`), plus FR-138's GitLab/Bitbucket reasons
          *     `draft`, `discussions_unresolved` and `rebase_required`. Also recorded on an `awaiting_merge`
@@ -5215,7 +5215,7 @@ export interface components {
          * @enum {unknown}
          */
         MergeReadinessReasonCode: "review_required" | "changes_requested" | "checks_failing" | "checks_pending" | "branch_protected" | "merge_conflict" | "no_permission" | "merge_method_not_allowed" | "pr_not_open" | "manual_strategy" | "draft" | "discussions_unresolved" | "rebase_required";
-        /** @description FR-84: one reason AIDE can't merge the version's PR itself, with copy for the Release page and the gate. */
+        /** @description FR-84: one reason Tevrin can't merge the version's PR itself, with copy for the Release page and the gate. */
         MergeReadinessReasonDto: {
             code: components["schemas"]["MergeReadinessReasonCode"];
             message: string;
@@ -5551,9 +5551,9 @@ export interface components {
             rollout?: null | components["schemas"]["RolloutDto"];
         };
         /**
-         * @description FR-148: the queued reset: its `jobId` and `method` (`reset_schema`: AIDE empties the schema, Supabase BaaS
+         * @description FR-148: the queued reset: its `jobId` and `method` (`reset_schema`: Tevrin empties the schema, Supabase BaaS
          *     then re-applies the base commit's migrations; `reset_schema_external`: Render, over its external URL;
-         *     `manual`: Railway — empty the preview Postgres in Railway, AIDE records the reset). The next backend preview's
+         *     `manual`: Railway — empty the preview Postgres in Railway, Tevrin records the reset). The next backend preview's
          *     pre-deploy re-applies every migration. Progress: `GET …/deployments/preview` (`databaseDiverged`).
          */
         PreviewDatabaseResetDto: {
@@ -5574,7 +5574,7 @@ export interface components {
             divergedMessage: null | string;
         };
         /**
-         * @description How AIDE resets a preview database (FR-148).
+         * @description How Tevrin resets a preview database (FR-148).
          * @enum {unknown}
          */
         PreviewResetMethod: "none" | "reset_schema" | "reset_schema_external" | "manual";
@@ -5593,7 +5593,7 @@ export interface components {
             details?: string[];
             /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
             reason?: string;
-            /** @description GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144). */
+            /** @description GITHUB_APP_NOT_INSTALLED: the Tevrin GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the Tevrin GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
             /** @description PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT, PLATFORM_PERMISSION_MISSING, PLATFORM_ERROR, PLATFORM_RESOURCE_EXISTS: the platform (vercel, netlify, cloudflare, render, railway, github_pages, fake) for the copy's {platform} (FR-144, D-V4-4). */
             platform?: string;
@@ -5756,7 +5756,7 @@ export interface components {
         /**
          * @description Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`
          *     counts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the
-         *     execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once AIDE has opened
+         *     execution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once Tevrin has opened
          *     it (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,
          *     FR-43), else `null`. Artifacts, steps, review and gates are those of the current release version
          *     `releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was
@@ -5865,7 +5865,7 @@ export interface components {
         PullRequestFileStatus: "added" | "modified" | "deleted" | "renamed" | "copied" | "changed";
         /**
          * @description The project PR once recorded (FR-36): provider, base (default) and head (project) branch, and for GitHub its number and
-         *     web URL (both `null` for Local, whose "PR" is the recorded branch comparison). `openedAt` is when AIDE last
+         *     web URL (both `null` for Local, whose "PR" is the recorded branch comparison). `openedAt` is when Tevrin last
          *     opened or reused it.
          */
         PullRequestSummaryDto: {
@@ -5882,7 +5882,7 @@ export interface components {
          * @description Create or replace a user environment variable (FR-88, FR-145): the value (up to 64 KB; encrypted, never returned), its
          *     environments (`targets`: `preview`, `production`), whether it is sensitive, the components it applies to
          *     (`appliesTo`, default `["frontend"]`) and whether it is public (default: the key has the frontend pack's public
-         *     prefix; a prefixed key is always public). A public variable that looks secret, or a key AIDE derives, is
+         *     prefix; a prefixed key is always public). A public variable that looks secret, or a key Tevrin derives, is
          *     `VALIDATION`.
          */
         PutDeploymentEnvRequest: {
@@ -6083,7 +6083,7 @@ export interface components {
          *     `MERGE_TIMEOUT` (not merged within 14 days); after either the project stays in `release` and an Owner can
          *     retry with `POST /release`. `githubReleaseUrl` is the host release created for the tag: the GitHub Release
          *     (FR-64), the GitLab Release, or the Bitbucket annotated tag's page (FR-140; Bitbucket has no Releases); `null` for
-         *     Local or before it exists. AIDE's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,
+         *     Local or before it exists. Tevrin's full release notes of a succeeded Bitbucket release (the tag's message, FR-140,
          *     D-V4-7) are read with `GET …/releases/{releaseId}/notes`. A GitLab merge refused because the
          *     merge request's head moved since review (409) fails with `GIT_ERROR`. `mergeStrategy` is the project's current merge strategy (FR-65).
          *     `productionDeployment` is the release's production deployment (FR-91: the newest for this release attempt, including
@@ -6128,7 +6128,7 @@ export interface components {
             liveOn?: null | components["schemas"]["LiveTargetDto"][];
         };
         /**
-         * @description FR-140, D-V4-7: AIDE's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated
+         * @description FR-140, D-V4-7: Tevrin's full release notes of a release attempt, for a host without Releases (Bitbucket: the annotated
          *     tag's message), rebuilt from the version's locked spec, completed steps and latest review; `null` for other hosts
          *     or an attempt that hasn't succeeded.
          */
@@ -7010,7 +7010,7 @@ export interface components {
             updatedAt: string;
         };
         /**
-         * @description An issue tracker AIDE imports from (FR-165–FR-168). Wire values: `jira`, `linear`, `github`, `gitlab`.
+         * @description An issue tracker Tevrin imports from (FR-165–FR-168). Wire values: `jira`, `linear`, `github`, `gitlab`.
          * @enum {unknown}
          */
         TrackerProvider: "jira" | "linear" | "github" | "gitlab";
@@ -7093,7 +7093,7 @@ export interface components {
             /**
              * Format: uuid
              * @description FR-136: re-binds a GitLab or Bitbucket project to one of the caller's own connections on the project's instance
-             *     (Owner). AIDE first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
+             *     (Owner). Tevrin first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
              *     `write` or `admin` (else 403 `FORBIDDEN`). Another user's connection is 403 `CREDENTIAL_NOT_OWNER`;
              *     an invalid one 409 `GIT_NOT_CONNECTED`; one on another instance, or `connectionId` on a project that isn't
              *     on GitLab or Bitbucket, 400 `VALIDATION`.
@@ -7178,7 +7178,7 @@ export interface components {
             systemRole: components["schemas"]["SystemRole"];
             avatarUrl: null | string;
             githubLinked: boolean;
-            /** @description FR-177: the user turned off "Credit me on commits made by AIDE". */
+            /** @description FR-177: the user turned off "Credit me on commits made by Tevrin". */
             commitCreditOptOut?: boolean;
         };
         /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
@@ -10821,7 +10821,7 @@ export interface operations {
                     "application/json": components["schemas"]["BitbucketConnectionDto"];
                 };
             };
-            /** @description VALIDATION; CREDENTIAL_INVALID (Bitbucket rejected the token and email); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details, scopes AIDE couldn't confirm in unverifiableScopes; both in the title). A token is saved only when all nine scopes are verified */
+            /** @description VALIDATION; CREDENTIAL_INVALID (Bitbucket rejected the token and email); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details, scopes Tevrin couldn't confirm in unverifiableScopes; both in the title). A token is saved only when all nine scopes are verified */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -13010,7 +13010,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description PLATFORM_PERMISSION_MISSING (GitHub Pages: the AIDE GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT */
+            /** @description PLATFORM_PERMISSION_MISSING (GitHub Pages: the Tevrin GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -13256,7 +13256,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description UPSTREAM_ERROR (saved in AIDE with syncError; a platform failed or couldn't be reached) */
+            /** @description UPSTREAM_ERROR (saved in Tevrin with syncError; a platform failed or couldn't be reached) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -14179,7 +14179,7 @@ export interface operations {
                     "application/json": components["schemas"]["PreviewDatabaseResetDto"];
                 };
             };
-            /** @description VALIDATION (the preview database isn't separate from production: AIDE never resets it) */
+            /** @description VALIDATION (the preview database isn't separate from production: Tevrin never resets it) */
             400: {
                 headers: {
                     [name: string]: unknown;

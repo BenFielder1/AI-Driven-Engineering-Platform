@@ -233,7 +233,7 @@ public sealed class Fr194CommandTests : IDisposable
         AssertJson(
             """{"name":"Todo","idea":"Add tags","git":{"provider":"local","localSourcePath":"todo"},"stackSource":"infer","source":"import","import":{"developmentVersion":"1.1.0","releasedTag":"v1.0.0"}}""",
             Assert.Single(_cli.Requests).Body);
-        Assert.Contains($"Next: aide analysis show {Samples.ProjectId}", run.Out, StringComparison.Ordinal);
+        Assert.Contains($"Next: tevrin analysis show {Samples.ProjectId}", run.Out, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -460,7 +460,7 @@ public sealed class Fr194CommandTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, run.ExitCode);
         Assert.Matches(@"Phase:\s+analysis", run.Out);
-        Assert.Matches(@"Stack:\s+being inferred: see 'aide analysis show'", run.Out);
+        Assert.Matches(@"Stack:\s+being inferred: see 'tevrin analysis show'", run.Out); // FR-200
         Assert.Matches(@"Source items:\s+2 items from 1 import \(snapshot v1\), 1 failed", run.Out);
     }
 

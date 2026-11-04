@@ -108,7 +108,7 @@ builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, _, _) =>
     {
-        document.Info.Title = "AIDE Platform API";
+        document.Info.Title = "Tevrin API";
         document.Info.Version = "v1";
         return Task.CompletedTask;
     });

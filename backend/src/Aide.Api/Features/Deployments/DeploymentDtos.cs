@@ -13,7 +13,7 @@ public sealed record DeploymentUserDto(Guid Id, string Name);
 /// and <c>gitSha</c> are what was deployed; <c>releaseVersion</c> is the version (e.g. <c>1.2.0</c>) of
 /// <c>releaseVersionId</c>; <c>releaseId</c> is the release attempt of a production deployment (<c>null</c> for previews).
 /// A failed deployment carries <c>errorCode</c> (<c>PLATFORM_ERROR</c>, formerly <c>VERCEL_ERROR</c>; <c>DEPLOYMENT_TIMEOUT</c>), <c>errorMessage</c> and
-/// <c>buildLogTail</c> (the end of the build log). <c>trigger</c> is <c>auto</c> (AIDE, after execution or the release
+/// <c>buildLogTail</c> (the end of the build log). <c>trigger</c> is <c>auto</c> (Tevrin, after execution or the release
 /// merge), <c>manual</c>, <c>promote</c> or <c>redeploy</c>; <c>triggeredBy</c> is <c>null</c> for <c>auto</c> (or a
 /// deleted user). <c>promotedFromDeploymentId</c> is the earlier production deployment a <c>promote</c> (or
 /// <c>rollback</c>) row made current again.

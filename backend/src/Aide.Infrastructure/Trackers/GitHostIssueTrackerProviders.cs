@@ -28,7 +28,7 @@ public sealed class GitHubTrackerAccess(GitHubApi api, IGitHubInstallationTokens
             var installation = await api.FindRepoInstallationAsync(jwt, owner, repo, cancellationToken);
             if (installation is not { } id || visible.All(i => i.Id != id))
             {
-                throw new TrackerApiException(TrackerFailure.NotConnected, 404, "The AIDE GitHub App isn't installed on that repository, or your account can't see the installation.");
+                throw new TrackerApiException(TrackerFailure.NotConnected, 404, "The Tevrin GitHub App isn't installed on that repository, or your account can't see the installation.");
             }
 
             var token = await tokens.GetAsync(app, id, repository.Id, cancellationToken);
@@ -50,7 +50,7 @@ public sealed class GitHubTrackerAccess(GitHubApi api, IGitHubInstallationTokens
     public static TrackerApiException PermissionMissing(GitHubAppCredentials app)
     {
         ArgumentNullException.ThrowIfNull(app);
-        return new TrackerApiException(TrackerFailure.AppPermissionMissing, 403, "The AIDE GitHub App needs the Issues permission.")
+        return new TrackerApiException(TrackerFailure.AppPermissionMissing, 403, "The Tevrin GitHub App needs the Issues permission.")
         {
             Link = app.HtmlUrl ?? GitHubRules.AppHtmlUrl(app.Slug),
         };
@@ -103,7 +103,7 @@ public sealed class GitHubIssueTrackerProvider(GitHubApi api) : IIssueTrackerPro
         var readable = installations.Where(i => GitHubRules.IssuesPermission(i.Permissions) == GitHubPagesAccess.Granted).ToList();
         if (installations.Count > 0 && readable.Count == 0)
         {
-            throw new TrackerApiException(TrackerFailure.AppPermissionMissing, 403, "The AIDE GitHub App needs the Issues permission.");
+            throw new TrackerApiException(TrackerFailure.AppPermissionMissing, 403, "The Tevrin GitHub App needs the Issues permission.");
         }
 
         var parts = (cursor ?? "0:1").Split(':');

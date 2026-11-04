@@ -10,7 +10,7 @@ public interface IMigrationSqlExecutor
 }
 
 /// <summary>
-/// A migration session: holds AIDE's advisory lock (one run per database at a time), creates the CLI's history table when
+/// A migration session: holds Tevrin's advisory lock (one run per database at a time), creates the CLI's history table when
 /// missing and reads it, and applies one file in its own transaction together with its history row.
 /// </summary>
 public interface IMigrationSession : IAsyncDisposable

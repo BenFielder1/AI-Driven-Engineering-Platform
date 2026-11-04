@@ -101,7 +101,7 @@ public enum SortOrder
 
 /// <summary>
 /// Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). <c>mode</c> picks the Git provider.
-/// <c>github_app</c>: a repo picked or created through the AIDE GitHub App; send <c>installationId</c> and
+/// <c>github_app</c>: a repo picked or created through the Tevrin GitHub App; send <c>installationId</c> and
 /// <c>repoFullName</c> (<c>owner/name</c>), no <c>repoUrl</c> or <c>token</c> (409 <c>GITHUB_APP_NOT_INSTALLED</c> when the
 /// App can't access the repo). <c>github_pat</c>: <c>repoUrl</c> plus an optional <c>token</c> (FR-83, the v1 behaviour).
 /// <c>local</c>: no remote. <c>provider</c> is the v1 name of <c>mode</c>, kept so v1 clients work: send one of the two;
@@ -367,7 +367,7 @@ public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset Creat
 /// <summary>
 /// Deterministic project state for the overview page and the CLI (§6 <c>/api/projects/:id/state</c>). <c>tokensUsed</c>
 /// counts every agent run's tokens; a <c>null</c> <c>tokenBudget</c> means unlimited (FR-26). <c>executionStatus</c> is the
-/// execution runner's state over the current plan (FR-31, FR-37). <c>pullRequest</c> is the project PR once AIDE has opened
+/// execution runner's state over the current plan (FR-31, FR-37). <c>pullRequest</c> is the project PR once Tevrin has opened
 /// it (FR-36), else <c>null</c>. <c>latestRelease</c> is the latest release attempt of the current release version (FR-42,
 /// FR-43), else <c>null</c>. Artifacts, steps, review and gates are those of the current release version
 /// <c>releaseVersionId</c> (the version in development, else the latest released; §4.10). <c>checkpoint</c> was
@@ -421,7 +421,7 @@ public sealed record UpdateMemberRoleRequest
 /// Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only <c>hasToken</c>. <c>branchName</c> is the
 /// project branch, once the working copy has been prepared. <c>mode</c> is the v2 name of <c>provider</c> (always equal).
 /// For <c>github_app</c>, <c>installationId</c>, <c>repoId</c> and <c>repoFullName</c> identify the repo (else
-/// <c>null</c>). <c>appInstalledOnRepo</c> says whether the AIDE GitHub App can access a <c>github_pat</c> project's repo
+/// <c>null</c>). <c>appInstalledOnRepo</c> says whether the Tevrin GitHub App can access a <c>github_pat</c> project's repo
 /// (<c>null</c>: not checked, no App, or not a PAT project); <c>canSwitchToApp</c> is true when it can and the caller is an
 /// Owner ("Switch to GitHub App"). <c>mergeStrategy</c> (FR-65: <c>aide_merges</c>, the default, or <c>manual</c>) and
 /// <c>tagPrefix</c> (§4.10, FR-64: default <c>v</c>, so tags read <c>v1.2.0</c>) are the project's release settings.
@@ -459,7 +459,7 @@ public sealed record GitSettingsDto(
     /// <summary>FR-136: the caller may re-bind their own connection (<c>connectionId</c>): an Owner of a GitLab or Bitbucket project.</summary>
     public bool CanRebind { get; init; }
 
-    /// <summary>FR-177: AIDE credits the accountable person on later commits (default on).</summary>
+    /// <summary>FR-177: Tevrin credits the accountable person on later commits (default on).</summary>
     public bool CommitCreditEnabled { get; init; } = true;
 }
 
@@ -573,16 +573,16 @@ public sealed record UpdateGitSettingsRequest
 
     /// <summary>
     /// FR-136: re-binds a GitLab or Bitbucket project to one of the caller's own connections on the project's instance
-    /// (Owner). AIDE first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
+    /// (Owner). Tevrin first checks the connection's access to the repository: GitLab Developer or higher, Bitbucket
     /// <c>write</c> or <c>admin</c> (else 403 <c>FORBIDDEN</c>). Another user's connection is 403 <c>CREDENTIAL_NOT_OWNER</c>;
     /// an invalid one 409 <c>GIT_NOT_CONNECTED</c>; one on another instance, or <c>connectionId</c> on a project that isn't
     /// on GitLab or Bitbucket, 400 <c>VALIDATION</c>.
     /// </summary>
     public Guid? ConnectionId { get; init; }
 
-    /// <summary>FR-65: <c>aide_merges</c> (AIDE merges the PR on release) or <c>manual</c> (AIDE never merges; the release
+    /// <summary>FR-65: <c>aide_merges</c> (Tevrin merges the PR on release) or <c>manual</c> (Tevrin never merges; the release
     /// marks the PR ready for review and waits for the merge on the Git host). FR-140, Bitbucket projects only (else 400
-    /// <c>VALIDATION</c>): <c>fast_forward</c> or <c>squash</c>, AIDE merging with that Bitbucket merge strategy
+    /// <c>VALIDATION</c>): <c>fast_forward</c> or <c>squash</c>, Tevrin merging with that Bitbucket merge strategy
     /// (<c>aide_merges</c> merges with <c>merge_commit</c>); a project that leaves Bitbucket goes back to <c>aide_merges</c>.
     /// Applies to the next release attempt.</summary>
     public MergeStrategy? MergeStrategy { get; init; }

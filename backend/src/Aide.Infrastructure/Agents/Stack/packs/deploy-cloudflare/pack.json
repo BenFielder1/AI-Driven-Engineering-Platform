@@ -129,7 +129,7 @@
       ],
       "sensitive": false,
       "public": false,
-      "description": "The backend target URL for this environment; the frontend platform proxies /api/* to it (FR-146). Derived by AIDE.",
+      "description": "The backend target URL for this environment; the frontend platform proxies /api/* to it (FR-146). Derived by Tevrin.",
       "when": "originModel == proxy"
     },
     {
@@ -143,7 +143,7 @@
       ],
       "sensitive": false,
       "public": false,
-      "description": "true where the environment has its own database (production; preview when a preview database exists), else false. The build runs the data pack's migrate command only when true (FR-154, D-V4-13). Derived by AIDE.",
+      "description": "true where the environment has its own database (production; preview when a preview database exists), else false. The build runs the data pack's migrate command only when true (FR-154, D-V4-13). Derived by Tevrin.",
       "when": "nextjsMode == full-stack && data != none && data != data-supabase && databaseHost != none"
     }
   ],
@@ -175,7 +175,7 @@
         "severity": "critical"
       },
       {
-        "item": "No CI job, script or package script deploys with the Wrangler CLI; AIDE triggers every deploy",
+        "item": "No CI job, script or package script deploys with the Wrangler CLI; Tevrin triggers every deploy",
         "category": "architecture",
         "severity": "major"
       },

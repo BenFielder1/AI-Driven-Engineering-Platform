@@ -40,7 +40,7 @@ public sealed record BitbucketSrcPage(IReadOnlyList<BitbucketSrcEntry> Entries, 
 /// FR-136–FR-141, §4.19: repository, ref, pull request, mergeability, CI status, merge and tag calls. Every path is under
 /// <c>/2.0/repositories/{workspace}/{slug}</c> of the fixed API host; a <c>next</c> or <c>Location</c> link Bitbucket sends is
 /// followed only when it is on that host (<see cref="ToRelative"/>). A 404 on a lookup is <c>null</c>; other failures throw
-/// <see cref="BitbucketApiException"/> (an answer AIDE can't use is a 200 failure with a reason).
+/// <see cref="BitbucketApiException"/> (an answer Tevrin can't use is a 200 failure with a reason).
 /// </summary>
 public sealed partial class BitbucketClient
 {

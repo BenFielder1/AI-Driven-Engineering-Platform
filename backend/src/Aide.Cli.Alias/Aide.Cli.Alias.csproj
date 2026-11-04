@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- FR-200: the deprecated `aide` command, kept for v6 under the old package id (Aide.Cli) so existing installs keep
+       working after `dotnet tool update`. It is built from the `tevrin` sources (src/Aide.Cli) and differs only in its
+       entry point, which prints the deprecation notice to stderr first. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>aide</AssemblyName>
+    <RootNamespace>Aide.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>aide</ToolCommandName>
+    <PackageId>Aide.Cli</PackageId>
+    <Version>0.2.0</Version>
+    <Description>Deprecated alias of the Tevrin command-line client: use the tevrin command (package Tevrin.Cli).</Description>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../Aide.Cli/**/*.cs" Exclude="../Aide.Cli/Program.cs;../Aide.Cli/obj/**;../Aide.Cli/bin/**" LinkBase="Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+</Project>

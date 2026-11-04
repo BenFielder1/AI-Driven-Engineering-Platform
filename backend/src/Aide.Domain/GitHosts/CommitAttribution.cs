@@ -32,7 +32,7 @@ public sealed record CommitHost(CommitHostKind Kind, string? InstanceHost = null
 }
 
 /// <summary>
-/// A person's identity on the project's Git host (FR-176), read from their connection to that host, never from their AIDE
+/// A person's identity on the project's Git host (FR-176), read from their connection to that host, never from their Tevrin
 /// sign-in. <see cref="ExternalId"/> is the host's numeric user id (GitHub, GitLab); <see cref="Email"/> is the account's
 /// primary confirmed email (Bitbucket only).
 /// </summary>
@@ -105,7 +105,7 @@ public static class CommitAttribution
     public static Guid? Person(string? actor) => Guid.TryParse(actor, CultureInfo.InvariantCulture, out var id) ? id : null;
 }
 
-/// <summary>§4.25, FR-174: the <c>Co-authored-by</c> trailer. AIDE alone writes it; agents can't set or change trailers.</summary>
+/// <summary>§4.25, FR-174: the <c>Co-authored-by</c> trailer. Tevrin alone writes it; agents can't set or change trailers.</summary>
 public static class CommitTrailers
 {
     public const string CoAuthorKey = "Co-authored-by";
@@ -129,7 +129,7 @@ public static class CommitTrailers
             : null;
     }
 
-    /// <summary>§4.25 emails: the host's noreply address, or Bitbucket's confirmed email; never an AIDE sign-in email.</summary>
+    /// <summary>§4.25 emails: the host's noreply address, or Bitbucket's confirmed email; never a Tevrin sign-in email.</summary>
     public static string? Address(CommitIdentity identity, CommitHost host)
     {
         ArgumentNullException.ThrowIfNull(identity);

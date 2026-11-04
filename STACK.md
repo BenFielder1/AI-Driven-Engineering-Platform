@@ -2,10 +2,10 @@
 
 2026-10-23 · composed with `compose-stack`
 
-This file records the stack of **AIDE itself**. v5 adds no pack and changes only the data engine (PostgreSQL 18). It is
+This file records the stack of **Tevrin itself** (formerly AIDE). v6 adds no pack either; it renames the product and adds a docs site. v5 added no pack and changes only the data engine (PostgreSQL 18). It is
 otherwise the v3 stack (Next.js frontend, Railway deploy). v2 used React + Vite with Docker Desktop Kubernetes only. v3 made two stack changes: **deploy to
 Railway**, and **convert the frontend to Next.js**. v4 adds no pack: its stack catalog describes the stacks of the
-projects AIDE builds, not AIDE's own. `SPEC.md` gives the requirements. This file names the packs and the shared
+projects Tevrin builds, not Tevrin's own. `SPEC.md` gives the requirements. This file names the packs and the shared
 conventions.
 
 ## Packs
@@ -17,6 +17,7 @@ conventions.
 | VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for v5: `build/aide-v5` |
 | Deploy | `deploy-railway` (web + api + Postgres) | `.railway/railway.ts` | Added in v3. See Deploy below |
 | Local | `local-docker-desktop-k8s` | `deploy/k8s/`, `deploy/scripts/` | app URL: http://localhost:8080. Kept from v2; the `web` image becomes the Next.js standalone server |
+| Docs | Jekyll + `just-the-docs`, published to GitHub Pages | `docs/`, `.github/workflows/docs.yml` | Added in v6 (SPEC FR-225, FR-226). No stack pack: a static site built in CI |
 
 ## Conventions shared by every pack
 - **API prefix:** backend routes live under `/api`, including SignalR hubs at `/api/hubs/`. Health: `/api/health/live`

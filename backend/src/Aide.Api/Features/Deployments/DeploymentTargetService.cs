@@ -186,7 +186,7 @@ public sealed partial class DeploymentTargetService(
         return candidates.FirstOrDefault(j => TryPayload(j.Payload) is { } payload && (payload.TargetId == row.Id || (row.GroupId is not null && payload.GroupId == row.GroupId)));
     }
 
-    /// <summary>The fix link of a setup or readiness failure: the platform's Git connect link, or the AIDE GitHub App's page.</summary>
+    /// <summary>The fix link of a setup or readiness failure: the platform's Git connect link, or the Tevrin GitHub App's page.</summary>
     internal async Task<string?> FixUrlAsync(DeploymentProvider provider, string code, string? vcsHost, CancellationToken cancellationToken) => code switch
     {
         ErrorCodes.PlatformGitNotConnected => DeploymentPlatforms.GitConnectUrl(provider, vcsHost),
@@ -195,7 +195,7 @@ public sealed partial class DeploymentTargetService(
         _ => null,
     };
 
-    /// <summary>FR-143: the AIDE GitHub App's page (its permissions are updated from there), or <c>null</c> without an App.</summary>
+    /// <summary>FR-143: the Tevrin GitHub App's page (its permissions are updated from there), or <c>null</c> without an App.</summary>
     internal async Task<string?> AppSettingsUrlAsync(CancellationToken cancellationToken) =>
         await apps.GetAsync(cancellationToken) is { } app ? GitHubRules.AppHtmlUrl(app.Slug) : null;
 
@@ -220,7 +220,7 @@ public sealed partial class DeploymentTargetService(
     private static string? ConnectionFixUrl(DeploymentProvider provider) =>
         DeploymentPlatforms.NeedsConnection(provider) ? "/account/connections" : null;
 
-    /// <summary>The branch-control file AIDE reads (Vercel <c>vercel.json</c>, Netlify <c>netlify.toml</c>); <c>null</c> where the platform manages it.</summary>
+    /// <summary>The branch-control file Tevrin reads (Vercel <c>vercel.json</c>, Netlify <c>netlify.toml</c>); <c>null</c> where the platform manages it.</summary>
     internal static string? BranchControlPath(DeploymentProvider provider, string rootDirectory) => provider switch
     {
         DeploymentProvider.Vercel or DeploymentProvider.Fake => VercelConfigRules.ConfigPath(rootDirectory),
@@ -228,7 +228,7 @@ public sealed partial class DeploymentTargetService(
         _ => null,
     };
 
-    /// <summary>The preview environment from AIDE's data: per-branch previews (Vercel, Netlify, Cloudflare) once the resource exists; else a preview resource.</summary>
+    /// <summary>The preview environment from Tevrin's data: per-branch previews (Vercel, Netlify, Cloudflare) once the resource exists; else a preview resource.</summary>
     private static bool? PreviewReady(DeploymentTarget? row) => row?.ResourceId is null ? null
         : row.Provider is DeploymentProvider.Render or DeploymentProvider.Railway ? row.PreviewResourceId is not null || row.PreviewUrl is not null
         : true;

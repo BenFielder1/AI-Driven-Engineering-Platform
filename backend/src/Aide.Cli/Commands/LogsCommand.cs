@@ -5,7 +5,7 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide logs &lt;id&gt;` — the project activity feed (FR-50), oldest first; `--follow` polls for new events.</summary>
+/// <summary>`tevrin logs &lt;id&gt;` — the project activity feed (FR-50), oldest first; `--follow` polls for new events.</summary>
 internal static class LogsCommand
 {
     private static readonly string[] Categories = ["transition", "gate", "artifact", "run", "step", "review", "release", "rollback", "project", "integrity"];

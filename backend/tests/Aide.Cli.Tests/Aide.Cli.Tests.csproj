@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- `aide` CLI tests (FR-52): parsing, exit codes, output and config, against a fake HttpMessageHandler (no network). -->
+  <!-- `tevrin` CLI tests (FR-52, FR-200; the `aide` alias runs the same code): parsing, exit codes, output and config, against a fake HttpMessageHandler (no network). -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>Aide.Cli.Tests</RootNamespace>

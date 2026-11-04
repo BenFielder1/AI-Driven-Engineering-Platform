@@ -24,10 +24,10 @@ internal sealed class ConfigStore(string path)
 
     public string FilePath { get; } = path;
 
-    /// <summary>AIDE_CONFIG (a file path) wins; otherwise `&lt;user config root&gt;/aide/config.json`.</summary>
+    /// <summary>TEVRIN_CONFIG, then AIDE_CONFIG (a file path) wins; otherwise `&lt;user config root&gt;/aide/config.json`.</summary>
     public static string ResolvePath(Func<string, string?> getEnvironmentVariable, string userConfigRoot)
     {
-        var overridePath = getEnvironmentVariable(EnvironmentVariables.Config);
+        var overridePath = EnvironmentVariables.Config.Read(getEnvironmentVariable);
         return !string.IsNullOrWhiteSpace(overridePath)
             ? Path.GetFullPath(overridePath)
             : Path.Combine(userConfigRoot, "aide", "config.json");

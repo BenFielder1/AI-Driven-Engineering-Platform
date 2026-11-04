@@ -4,7 +4,7 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide execute`, `aide review`, `aide release`, `aide rollback`.</summary>
+/// <summary>`tevrin execute`, `tevrin review`, `tevrin release`, `tevrin rollback`.</summary>
 internal static class LifecycleCommands
 {
     public static Command BuildExecute(CommandFactory factory)
@@ -90,7 +90,7 @@ internal static class LifecycleCommands
                     return ExitCodes.Success;
                 }
 
-                await context.Out.WriteLineAsync($"Pre-release gate {approved.Value.Id} approved; the release is queued. Follow it with 'aide status {projectId}'.").ConfigureAwait(false);
+                await context.Out.WriteLineAsync($"Pre-release gate {approved.Value.Id} approved; the release is queued. Follow it with 'tevrin status {projectId}'.").ConfigureAwait(false);
                 return ExitCodes.Success;
             }
 

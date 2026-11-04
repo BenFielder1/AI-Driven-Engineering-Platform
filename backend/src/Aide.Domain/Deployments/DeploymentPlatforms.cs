@@ -14,7 +14,7 @@ public sealed record DeploymentCapabilities(bool ShaPinned, bool Previews, bool 
 
 /// <summary>
 /// §4.20, FR-144: the deployment providers: which composition host each one is, its capabilities, its display name, the
-/// platform connection it binds, and whether AIDE calls it for real (Vercel and GitHub Pages in M29; Netlify and
+/// platform connection it binds, and whether Tevrin calls it for real (Vercel and GitHub Pages in M29; Netlify and
 /// Cloudflare in M29 slice 3; Render and Railway in M30). Pure.
 /// </summary>
 public static class DeploymentPlatforms
@@ -116,7 +116,7 @@ public static class DeploymentPlatforms
     public static bool NeedsConnection(DeploymentProvider provider) => ConnectionProvider(provider) is not null;
 
     /// <summary>
-    /// §4.20 build seam: whether AIDE calls the provider's real API in this release (every provider since M30: Render and
+    /// §4.20 build seam: whether Tevrin calls the provider's real API in this release (every provider since M30: Render and
     /// Railway joined Vercel, Netlify, Cloudflare and GitHub Pages). A provider without one works only in Fake mode
     /// (<c>Deployments:Provider=Fake</c>); a real call is <c>PLATFORM_ERROR</c> "not supported yet".
     /// </summary>
@@ -176,8 +176,8 @@ public static class DeploymentPlatforms
 }
 
 /// <summary>
-/// FR-146, §4.17 R10: the origin model. AIDE has three (<c>same-origin</c>, <c>proxy</c>, <c>cross-origin</c>); the
-/// stack-packs vocabulary has two, so AIDE <c>same-origin</c> and <c>proxy</c> are pack "same-origin" and <c>cross-origin</c>
+/// FR-146, §4.17 R10: the origin model. Tevrin has three (<c>same-origin</c>, <c>proxy</c>, <c>cross-origin</c>); the
+/// stack-packs vocabulary has two, so Tevrin <c>same-origin</c> and <c>proxy</c> are pack "same-origin" and <c>cross-origin</c>
 /// matches. Pure.
 /// </summary>
 public static class OriginModels
@@ -186,7 +186,7 @@ public static class OriginModels
     public const string Proxy = "proxy";
     public const string CrossOrigin = "cross-origin";
 
-    /// <summary>The pack vocabulary's model for an AIDE model; <c>null</c> without one (API only).</summary>
+    /// <summary>The pack vocabulary's model for a Tevrin model; <c>null</c> without one (API only).</summary>
     public static string? ToPackVocabulary(string? model) => model switch
     {
         SameOrigin or Proxy => SameOrigin,

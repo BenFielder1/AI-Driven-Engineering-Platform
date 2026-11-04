@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.Api.Features.Databases;
 
 /// <summary>
-/// FR-153, §4.21: running AIDE's Supabase BaaS migration runner for an environment and recording the run
+/// FR-153, §4.21: running Tevrin's Supabase BaaS migration runner for an environment and recording the run
 /// (<c>database_migration_runs</c>): the working copy is synced to the commit first, the run row is saved as <c>running</c>,
 /// then the runner applies the pending files over the session pooler (the Fake's <c>*.test</c> host in Fake mode) and the
 /// result is recorded with <see cref="MigrationRunReader.Record"/>. FR-155: <c>MIGRATION_RUN_STARTED</c>, then
@@ -116,9 +116,9 @@ public sealed partial class MigrationRunService(
             run.StartedAt);
         await db.SaveChangesAsync(cancellationToken);
         var result = target == DatabaseMigrationTarget.Unavailable
-            ? Failed($"The {environment.ToWire()} database is {row.Status.ToWire()}: AIDE didn't run the migrations. Restore or fix it in Settings → Deployment, then try again.")
+            ? Failed($"The {environment.ToWire()} database is {row.Status.ToWire()}: Tevrin didn't run the migrations. Restore or fix it in Settings → Deployment, then try again.")
             : environment == DeploymentEnvironment.Preview && !await separation.IsSeparatePreviewAsync(row, cancellationToken)
-            ? Failed($"{DatabaseSeparationRules.NotSeparateMessage}: AIDE didn't run the migrations. Link a separate preview database.", ErrorCodes.Validation)
+            ? Failed($"{DatabaseSeparationRules.NotSeparateMessage}: Tevrin didn't run the migrations. Link a separate preview database.", ErrorCodes.Validation)
             : await ExecuteAsync(row, projectId, gitSha, cancellationToken);
         MigrationRunReader.Record(run, result, time.GetUtcNow());
         if (run.Status == MigrationRunStatus.Failed)
@@ -162,7 +162,7 @@ public sealed partial class MigrationRunService(
             : MigrationConnections.ToNpgsql(connection.Url ?? connection.ExternalUrl);
         if (connectionString is null)
         {
-            return Failed($"AIDE can't connect to the {row.Environment.ToWire()} database: its connection details or password are missing. Link it again.");
+            return Failed($"Tevrin can't connect to the {row.Environment.ToWire()} database: its connection details or password are missing. Link it again.");
         }
 
         var auth = await databases.AuthAsync(row, cancellationToken);
@@ -185,5 +185,5 @@ public sealed partial class MigrationRunService(
     private static partial void LogNotPrepared(ILogger logger, Guid projectId);
 }
 
-/// <summary>The environment has no database AIDE can migrate.</summary>
+/// <summary>The environment has no database Tevrin can migrate.</summary>
 public sealed class MigrationTargetMissingException(string message) : Exception(message);

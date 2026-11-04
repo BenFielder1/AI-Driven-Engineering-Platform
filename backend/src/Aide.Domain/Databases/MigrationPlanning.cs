@@ -39,7 +39,7 @@ public sealed record MigrationPlan(
 /// <item>Pending: versions not recorded, applied in version order (numeric, then ordinal).</item>
 /// <item>A recorded version is never edited or re-applied. If its file disappeared (<c>missing</c>) or its SQL differs from
 /// the recorded statements (<c>changed</c>; compared ignoring whitespace and statement separators, so the CLI's split
-/// statements and AIDE's whole-file statement both match), the history has diverged. A recorded row without statements
+/// statements and Tevrin's whole-file statement both match), the history has diverged. A recorded row without statements
 /// (e.g. <c>supabase migration repair</c>) is only checked for presence.</item>
 /// </list>
 /// </summary>
@@ -130,7 +130,7 @@ public static partial class MigrationPlanning
         return new MigrationPlan(pending, diverged, ignored, [.. unreadable.OrderBy(u => u.Version, VersionComparer.Instance)]);
     }
 
-    /// <summary>The statements AIDE records for a file: the whole file as one statement (the CLI splits; both compare equal).</summary>
+    /// <summary>The statements Tevrin records for a file: the whole file as one statement (the CLI splits; both compare equal).</summary>
     public static IReadOnlyList<string> Statements(MigrationFile file)
     {
         ArgumentNullException.ThrowIfNull(file);

@@ -36,8 +36,8 @@ public class PullRequestAndGitHubTests
     [Fact]
     public void FR36_Title_follows_the_old_stack_project_PR_title()
     {
-        Assert.Equal("[AIDE] Todo API — Implementation (2 steps)", PullRequestDescription.Title("Todo API", 2));
-        Assert.Equal("[AIDE] Todo API — Implementation (1 step)", PullRequestDescription.Title("Todo API", 1));
+        Assert.Equal("[Tevrin] Todo API — Implementation (2 steps)", PullRequestDescription.Title("Todo API", 2));
+        Assert.Equal("[Tevrin] Todo API — Implementation (1 step)", PullRequestDescription.Title("Todo API", 1));
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class PullRequestAndGitHubTests
     {
         var body = PullRequestDescription.Body(Input());
 
-        Assert.Contains("## AIDE — Todo API (implementation complete)", body, StringComparison.Ordinal);
+        Assert.Contains("## Tevrin — Todo API (implementation complete)", body, StringComparison.Ordinal);
         Assert.Contains("Technical specification v2:", body, StringComparison.Ordinal);
         Assert.Contains("> Manage todos over HTTP.", body, StringComparison.Ordinal);
         Assert.Contains("### Plan: implementation_plan v3 (2 steps)", body, StringComparison.Ordinal);

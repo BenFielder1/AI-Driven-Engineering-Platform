@@ -23,17 +23,6 @@ export function SkipLink() {
   )
 }
 
-/** SPEC §7.1 ambient blurred orbs behind the shell (decorative, static). */
-export function AmbientOrbs() {
-  return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div className="absolute -top-40 -left-32 size-[28rem] rounded-full bg-primary/10 blur-3xl" />
-      <div className="absolute top-1/3 -right-40 size-[32rem] rounded-full bg-chart-2/10 blur-3xl" />
-      <div className="absolute -bottom-48 left-1/3 size-[26rem] rounded-full bg-chart-3/5 blur-3xl" />
-    </div>
-  )
-}
-
 /**
  * SPEC §8 bundle budget: the ⌘K palette (cmdk) is not part of the initial chunks. It is mounted on first open, and its
  * chunk is fetched while the browser is idle after the shell renders, so the first ⌘K or button press opens it at once
@@ -65,7 +54,7 @@ const contentPadding: Record<SidebarMode, string> = {
 }
 
 /**
- * FR-53 signed-in shell (SPEC §7.1): skip link, ambient orbs, the collapsible sidebar (lg and up), the mobile drawer,
+ * FR-53 signed-in shell (SPEC §7.1): skip link (no ambient orbs since FR-202), the collapsible sidebar (lg and up), the mobile drawer,
  * the sticky header with breadcrumbs and the bell, the ⌘K palette, the main landmark and a footer with API readiness.
  */
 export function AppShell({ user, children }: { user: User; children: ReactNode }) {
@@ -108,7 +97,6 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
   return (
     <div className="relative isolate min-h-dvh overflow-x-clip">
       <SkipLink />
-      <AmbientOrbs />
       <Sidebar
         user={user}
         nav={nav}
@@ -146,7 +134,6 @@ export function PublicShell({ children }: { children: ReactNode }) {
   return (
     <div className="relative isolate flex min-h-dvh flex-col overflow-x-clip">
       <SkipLink />
-      <AmbientOrbs />
       <header>
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-end gap-4 px-4">
           <ThemeMenu />

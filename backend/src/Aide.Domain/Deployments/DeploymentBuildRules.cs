@@ -9,7 +9,7 @@ public sealed record DeploymentBuildPlan(string RootDirectory, DeploymentBuildCo
 /// <summary>
 /// FR-144, §4.20: the build configuration of a target, derived from the composition: the root directory (the layer path,
 /// FR-119), build command, output directory, start command, Dockerfile, health check path (the backend pack's ready path)
-/// and pre-deploy migrate command (the data pack's, for a host-mode database on a container host). Platform settings AIDE
+/// and pre-deploy migrate command (the data pack's, for a host-mode database on a container host). Platform settings Tevrin
 /// sends when it creates the resource; the deploy-engineer writes the files they point at. Pure.
 /// </summary>
 public static class DeploymentBuildRules

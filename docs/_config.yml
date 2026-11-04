@@ -1,0 +1,110 @@
+# Tevrin docs site (FR-225, FR-226, SPEC D-V6-4). Built from docs/ by .github/workflows/docs.yml and published to
+# GitHub Pages at https://benfielder1.github.io/AI-Driven-Engineering-Platform/ (a custom domain is open question Q1).
+title: Tevrin docs
+description: Documentation for Tevrin, AI-driven software delivery with a governed lifecycle, approval gates and an audit trail.
+url: https://benfielder1.github.io
+baseurl: /AI-Driven-Engineering-Platform
+
+theme: just-the-docs
+permalink: pretty
+markdown: kramdown
+kramdown:
+  input: GFM
+strict_front_matter: true
+
+plugins:
+  - jekyll-optional-front-matter
+  - jekyll-relative-links
+  - jekyll-titles-from-headings
+  - jekyll-seo-tag
+  - jekyll-include-cache
+
+relative_links:
+  enabled: true
+  collections: false
+
+titles_from_headings:
+  enabled: true
+  strip_title: false
+
+logo: /v6/tevrin-logo.svg
+
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+
+heading_anchors: true
+enable_copy_code_button: true
+
+# Mermaid diagrams in ```mermaid fences, loaded as ESM from jsDelivr (pinned).
+mermaid:
+  version: "11.17.2"
+
+aux_links:
+  "Tevrin on GitHub":
+    - "https://github.com/BenFielder1/AI-Driven-Engineering-Platform"
+aux_links_new_tab: false
+
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: "https://github.com/BenFielder1/AI-Driven-Engineering-Platform"
+gh_edit_branch: "main"
+gh_edit_source: docs
+gh_edit_view_mode: "tree"
+
+back_to_top: true
+back_to_top_text: "Back to top"
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - .bundle/
+  - vendor/
+  - .jekyll-cache/
+  - .sass-cache/
+  - node_modules/
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+  # Frozen version docs (CLAUDE.md, SPEC D-V6-13): never edited, so no front matter. Built as plain pages
+  # (jekyll-optional-front-matter), kept out of the nav and search (linked from history/), and not run through Liquid
+  # because they contain literal `{{ ... }}` (prompt placeholders, Railway `${{ ... }}` references).
+  - scope:
+      path: v1
+    values:
+      nav_exclude: true
+      search_exclude: true
+      render_with_liquid: false
+  - scope:
+      path: v2
+    values:
+      nav_exclude: true
+      search_exclude: true
+      render_with_liquid: false
+  - scope:
+      path: v3
+    values:
+      nav_exclude: true
+      search_exclude: true
+      render_with_liquid: false
+  - scope:
+      path: v4
+    values:
+      nav_exclude: true
+      search_exclude: true
+      render_with_liquid: false
+  - scope:
+      path: v5
+    values:
+      nav_exclude: true
+      search_exclude: true
+      render_with_liquid: false

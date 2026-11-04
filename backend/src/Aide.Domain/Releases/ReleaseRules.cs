@@ -15,7 +15,7 @@ public sealed record ExistingReleaseTag(string Tag, bool ContainsRelease);
 /// </summary>
 public static partial class ReleaseRules
 {
-    /// <summary>The longest tag AIDE creates (a 20-character prefix plus a 64-character version).</summary>
+    /// <summary>The longest tag Tevrin creates (a 20-character prefix plus a 64-character version).</summary>
     public const int MaxTagLength = 100;
 
     /// <summary>
@@ -33,7 +33,7 @@ public static partial class ReleaseRules
         submittedAt is not { } since || now - since < SubmittedMergeCeiling;
 
     /// <summary>
-    /// A tag name AIDE may create or push: letters, digits and <c>. _ / + -</c>, a valid Git ref (no <c>..</c>, <c>//</c>,
+    /// A tag name Tevrin may create or push: letters, digits and <c>. _ / + -</c>, a valid Git ref (no <c>..</c>, <c>//</c>,
     /// <c>/.</c>, <c>@{</c>, no trailing <c>.</c>, <c>/</c> or <c>.lock</c>) that can't be read as an option (no leading <c>-</c>).
     /// Used to refuse anything else before it reaches git.
     /// </summary>
@@ -116,13 +116,13 @@ public static partial class ReleaseRules
         return Result.Success();
     }
 
-    /// <summary>The annotated tag's message, e.g. <c>AIDE release v1.2.0: Todo API (version 1.2.0)</c>.</summary>
+    /// <summary>The annotated tag's message, e.g. <c>Tevrin release v1.2.0: Todo API (version 1.2.0)</c>.</summary>
     public static string TagMessage(string projectName, string tag, string version) =>
-        string.Create(CultureInfo.InvariantCulture, $"AIDE release {RequireTag(tag)}: {Single(projectName)} (version {version})");
+        string.Create(CultureInfo.InvariantCulture, $"Tevrin release {RequireTag(tag)}: {Single(projectName)} (version {version})");
 
     /// <summary>The merge commit's subject (Local merge, GitHub merge commit title).</summary>
     public static string MergeTitle(string projectName, string tag) =>
-        string.Create(CultureInfo.InvariantCulture, $"[AIDE] Release {RequireTag(tag)}: {Single(projectName)}");
+        string.Create(CultureInfo.InvariantCulture, $"[Tevrin] Release {RequireTag(tag)}: {Single(projectName)}");
 
     private static string RequireTag(string tag) =>
         IsReleaseTag(tag) ? tag : throw new ArgumentException($"'{tag}' is not a valid release tag.", nameof(tag));

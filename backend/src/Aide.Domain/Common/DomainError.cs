@@ -25,7 +25,7 @@ public sealed record DomainError(string Code, string Message)
     public string? Field { get; init; }
 
     /// <summary>
-    /// For <see cref="ErrorCodes.ConnectionScopeInsufficient"/> (FR-134): the scopes AIDE couldn't confirm the token has (no
+    /// For <see cref="ErrorCodes.ConnectionScopeInsufficient"/> (FR-134): the scopes Tevrin couldn't confirm the token has (no
     /// harmless call could run for them), returned as the ProblemDetails <c>unverifiableScopes</c>, next to the missing
     /// scopes in <see cref="Details"/>.
     /// </summary>

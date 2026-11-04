@@ -6,7 +6,7 @@ using Aide.Domain.Projects;
 namespace Aide.Infrastructure.Git;
 
 /// <summary>
-/// FR-35: how AIDE reaches a GitHub repository with git. The URL is <c>{GitHub:GitBaseUrl}{owner}/{repo}.git</c> — the host
+/// FR-35: how Tevrin reaches a GitHub repository with git. The URL is <c>{GitHub:GitBaseUrl}{owner}/{repo}.git</c> — the host
 /// is system configuration, never the project's — and holds no credentials. The token travels only as a per-command
 /// <c>http.&lt;base&gt;.extraHeader</c> in the git child process's environment (<c>GIT_CONFIG_KEY_n</c>/<c>VALUE_n</c>), so it is
 /// never written to <c>.git/config</c>, the remote URL, the command line, logs, events or error text.

@@ -17,7 +17,7 @@ public sealed record GitTransportOverride(string? GitBaseUrlOverride, bool Allow
 }
 
 /// <summary>
-/// FR-136: how AIDE reaches a GitLab or Bitbucket repository with git. The URL is <c>{host base}/{full path}.git</c> (the
+/// FR-136: how Tevrin reaches a GitLab or Bitbucket repository with git. The URL is <c>{host base}/{full path}.git</c> (the
 /// host is a fixed or Admin-registered one, never a project field) and holds no credentials. The connection's token travels
 /// only as a per-command <c>http.&lt;base&gt;.extraHeader</c> Basic <c>&lt;user&gt;:&lt;token&gt;</c>
 /// (<see cref="GitTokenRules.GitBasicUser"/>: <c>oauth2</c>, <c>x-token-auth</c>, <c>x-bitbucket-api-token-auth</c>) in the

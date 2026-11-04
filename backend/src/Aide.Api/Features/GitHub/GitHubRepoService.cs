@@ -13,7 +13,7 @@ namespace Aide.Api.Features.GitHub;
 public sealed record VerifiedAppRepo(long InstallationId, long RepoId, string FullName, string DefaultBranch, bool HasCode, string? HeadSha);
 
 /// <summary>
-/// FR-81, FR-82, FR-83, FR-86: the repo picker, "Create repository" and the checks that the AIDE GitHub App can access a
+/// FR-81, FR-82, FR-83, FR-86: the repo picker, "Create repository" and the checks that the Tevrin GitHub App can access a
 /// project's repository. User tokens serve the picker, creation and identity; the App JWT only looks installations up
 /// (§4.14). Failures are domain errors with the spec's codes; rate limits propagate as
 /// <see cref="GitHubRateLimitedException"/> (429 <c>GITHUB_RATE_LIMITED</c>).
@@ -241,7 +241,7 @@ public sealed partial class GitHubRepoService(
         if (!await CanCreateRepositoriesAsync(user.App, cancellationToken))
         {
             return Result.Failure<GitHubRepoDto>(new DomainError(
-                ErrorCodes.Forbidden, "The AIDE GitHub App doesn't have the Administration permission, so it can't create repositories. Create it on GitHub and pick it instead."));
+                ErrorCodes.Forbidden, "The Tevrin GitHub App doesn't have the Administration permission, so it can't create repositories. Create it on GitHub and pick it instead."));
         }
 
         var forUser = string.Equals(request.Owner, user.Login, StringComparison.OrdinalIgnoreCase);
@@ -254,7 +254,7 @@ public sealed partial class GitHubRepoService(
             if (installation is null)
             {
                 return Result.Failure<GitHubRepoDto>(new DomainError(
-                    ErrorCodes.GitHubAppNotInstalled, $"Install the AIDE GitHub App on {request.Owner} first, then create the repository."));
+                    ErrorCodes.GitHubAppNotInstalled, $"Install the Tevrin GitHub App on {request.Owner} first, then create the repository."));
             }
 
             GitHubRepository created;
@@ -284,7 +284,7 @@ public sealed partial class GitHubRepoService(
             {
                 return Result.Failure<GitHubRepoDto>(new DomainError(
                     ErrorCodes.GitHubAppNotInstalled,
-                    $"{created.FullName} was created, but the AIDE GitHub App's installation on {request.Owner} covers selected repositories only. Add it to the installation, then pick it."));
+                    $"{created.FullName} was created, but the Tevrin GitHub App's installation on {request.Owner} covers selected repositories only. Add it to the installation, then pick it."));
             }
 
             // The creator owns (administers) the new repository.
@@ -295,7 +295,7 @@ public sealed partial class GitHubRepoService(
     /// <summary>
     /// FR-82, FR-86: checks a <c>github_app</c> project's repository: the caller can access it with the App (their user
     /// token sees it, and the App's installation for it is <paramref name="installationId"/>) and may push to it (push,
-    /// maintain or admin; else <c>FORBIDDEN</c>: AIDE never writes where the caller couldn't), and whether it has code.
+    /// maintain or admin; else <c>FORBIDDEN</c>: Tevrin never writes where the caller couldn't), and whether it has code.
     /// </summary>
     public async Task<Result<VerifiedAppRepo>> VerifyProjectRepoAsync(Guid userId, long installationId, string repoFullName, CancellationToken cancellationToken)
     {
@@ -318,7 +318,7 @@ public sealed partial class GitHubRepoService(
             if (repository is null)
             {
                 return Result.Failure<VerifiedAppRepo>(new DomainError(
-                    ErrorCodes.GitHubAppNotInstalled, $"The AIDE GitHub App can't access {name.Owner}/{name.Name} for you. Install it on the repository, then pick it again."));
+                    ErrorCodes.GitHubAppNotInstalled, $"The Tevrin GitHub App can't access {name.Owner}/{name.Name} for you. Install it on the repository, then pick it again."));
             }
 
             if (!repository.CanPush)
@@ -353,7 +353,7 @@ public sealed partial class GitHubRepoService(
             if (await api.FindRepoInstallationAsync(Jwt(user.App), owner, repo, cancellationToken) is not { } installationId)
             {
                 return Result.Failure<(long, long, string)>(new DomainError(
-                    ErrorCodes.GitHubAppNotInstalled, $"The AIDE GitHub App isn't installed on {owner}/{repo}. Install it on the repository, then switch."));
+                    ErrorCodes.GitHubAppNotInstalled, $"The Tevrin GitHub App isn't installed on {owner}/{repo}. Install it on the repository, then switch."));
             }
 
             var repository = await api.FindRepositoryAsync(user.Token, owner, repo, cancellationToken);
@@ -420,7 +420,7 @@ public sealed partial class GitHubRepoService(
     /// <summary>A repository the user token can't see: the App isn't installed on it, or it doesn't exist for the caller.</summary>
     private async Task<Result<T>> NotVisibleAsync<T>(GitHubAppCredentials app, string owner, string repo, CancellationToken cancellationToken) =>
         await api.FindRepoInstallationAsync(Jwt(app), owner, repo, cancellationToken) is null
-            ? Result.Failure<T>(new DomainError(ErrorCodes.GitHubAppNotInstalled, $"The AIDE GitHub App isn't installed on {owner}/{repo}. Install it, then pick the repository again."))
+            ? Result.Failure<T>(new DomainError(ErrorCodes.GitHubAppNotInstalled, $"The Tevrin GitHub App isn't installed on {owner}/{repo}. Install it, then pick the repository again."))
             : Result.Failure<T>(new DomainError(ErrorCodes.NotFound, "The repository was not found, or you can't access it."));
 
     private string Jwt(GitHubAppCredentials app) => GitHubAppJwt.Create(app.AppId, app.PrivateKeyPem, time.GetUtcNow());

@@ -16,7 +16,7 @@ namespace Aide.Api.Features.Databases;
 
 /// <summary>
 /// FR-152, FR-153, §4.21: the <c>database_provisioning</c> job of one database. Phase <c>setup</c> creates or links the
-/// resource (AIDE generates the password for a Supabase or Railway create, and resets a linked Supabase project's when it
+/// resource (Tevrin generates the password for a Supabase or Railway create, and resets a linked Supabase project's when it
 /// doesn't hold it), then phase <c>poll</c> reads its state every 10 seconds (deferring itself, so polling survives
 /// restarts) until it is available, within 10 minutes (<c>DATABASE_PROVISIONING_TIMEOUT</c>). Then the connection details
 /// are stored encrypted, a Supabase project's Auth URLs are set from the frontend URLs, and the derived env vars are

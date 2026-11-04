@@ -6,13 +6,13 @@ using Aide.Cli.Config;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide projects list`, `aide project init` (alias `aide project create`, FR-156), `aide status &lt;id&gt;`.</summary>
+/// <summary>`tevrin projects list`, `tevrin project init` (alias `tevrin project create`, FR-156), `tevrin status &lt;id&gt;`.</summary>
 internal static class ProjectCommands
 {
     private static readonly string[] Phases = ["analysis", "refinement", "specification", "planning", "execution", "review", "release"];
     private static readonly string[] Statuses = ["active", "building", "reviewing", "releasing", "released", "rolled_back"];
 
-    public static Argument<Guid> ProjectIdArgument() => new("id") { Description = "Project id (a GUID, shown by 'aide projects list')." };
+    public static Argument<Guid> ProjectIdArgument() => new("id") { Description = "Project id (a GUID, shown by 'tevrin projects list')." };
 
     public static Command BuildProjects(CommandFactory factory)
     {
@@ -99,7 +99,7 @@ internal static class ProjectCommands
         var llmConnection = new Option<Guid?>("--llm-connection") { Description = "Id of your LLM connection to bind (Account > Connections). Default: your newest one for the provider, when it needs a key." };
         var inferStack = new Option<bool>("--infer-stack")
         {
-            Description = "Infer the stack from the repository's code (FR-178): the project starts in analysis, and an Owner approves the Stack Analyst's profile with 'aide analysis approve'. Needs an imported repository with code (else exit 4, STACK_INFER_NO_CODE).",
+            Description = "Infer the stack from the repository's code (FR-178): the project starts in analysis, and an Owner approves the Stack Analyst's profile with 'tevrin analysis approve'. Needs an imported repository with code (else exit 4, STACK_INFER_NO_CODE).",
         };
         var importVersion = new Option<string?>("--import-version") { Description = "Import the existing repository (FR-73) and develop this version of it (semver), with the idea as its request." };
         var releasedTag = new Option<string?>("--released-tag") { Description = "With --import-version: the tag of the released version (omit for never released)." };
@@ -108,13 +108,13 @@ internal static class ProjectCommands
         var command = new Command(
             "init",
             "Create a project, like the web wizard. Missing values are prompted for when stdin is a terminal. " +
-            "For GitHub, the access token is read from AIDE_GIT_TOKEN (or prompted for), never from a flag.")
+            "For GitHub, the access token is read from TEVRIN_GIT_TOKEN or AIDE_GIT_TOKEN (or prompted for), never from a flag.")
         {
             name, idea, ideaFile, approvalMode, compliance, maxFiles, maxCycles, tokenBudget, gitProvider, repoUrl, defaultBranch, noInput,
             llmProvider, llmModel, llmConnection, inferStack, importVersion, releasedTag, localPath,
         };
 
-        // FR-156: `aide project create` is the v4 name of the same command.
+        // FR-156: `tevrin project create` is the v4 name of the same command.
         command.Aliases.Add("create");
 
         factory.SetHandler(command, async (context, cancellationToken) =>
@@ -176,7 +176,7 @@ internal static class ProjectCommands
             if (provider == "github")
             {
                 repo = Required(repo, "--repo-url", "GitHub repository URL: ");
-                gitToken = context.Host.GetEnvironmentVariable(EnvironmentVariables.GitToken);
+                gitToken = EnvironmentVariables.GitToken.Read(context.Host.GetEnvironmentVariable);
                 if (string.IsNullOrWhiteSpace(gitToken) && canPrompt)
                 {
                     gitToken = terminal.PromptSecret("GitHub access token (empty to add later in settings): ");
@@ -244,7 +244,7 @@ internal static class ProjectCommands
             var project = created.Value;
             await context.Out.WriteLineAsync(
                 $"Created project {project.Name} ({project.Id}): phase {project.CurrentPhase}, status {project.Status}, approval mode {project.ApprovalMode}.").ConfigureAwait(false);
-            await context.Out.WriteLineAsync(project.CurrentPhase == "analysis" ? $"Next: aide analysis show {project.Id}" : $"Next: aide status {project.Id}").ConfigureAwait(false);
+            await context.Out.WriteLineAsync(project.CurrentPhase == "analysis" ? $"Next: tevrin analysis show {project.Id}" : $"Next: tevrin status {project.Id}").ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
@@ -296,7 +296,7 @@ internal static class ProjectCommands
                 ("In development", s.DevelopmentVersion is { } development ? $"{development} (checkpoint {Output.Num(s.Checkpoint)})" : "-"),
                 ("Checkpoint", Output.Num(s.Checkpoint)),
                 ("Preset", VersionCommands.PresetText(project.PresetName ?? project.PresetId, project.PresetVersion)),
-                ("Stack", s.Phase == "analysis" && stack.Composition is null ? "being inferred: see 'aide analysis show'" : StackCommands.Summary(stack.Composition)),
+                ("Stack", s.Phase == "analysis" && stack.Composition is null ? "being inferred: see 'tevrin analysis show'" : StackCommands.Summary(stack.Composition)),
                 ("Source items", SourcesCommands.Summary(sources)),
                 .. ProductionUrlRows(s),
                 ("Approval mode", project.ApprovalMode),

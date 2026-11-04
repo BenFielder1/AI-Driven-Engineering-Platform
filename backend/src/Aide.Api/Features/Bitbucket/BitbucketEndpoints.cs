@@ -137,7 +137,7 @@ public static class BitbucketEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithRetryAfterOn429()
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION; CREDENTIAL_INVALID (Bitbucket rejected the token and email); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details, scopes AIDE couldn't confirm in unverifiableScopes; both in the title). A token is saved only when all nine scopes are verified"),
+                (StatusCodes.Status400BadRequest, "VALIDATION; CREDENTIAL_INVALID (Bitbucket rejected the token and email); CONNECTION_SCOPE_INSUFFICIENT (missing scopes in details, scopes Tevrin couldn't confirm in unverifiableScopes; both in the title). A token is saved only when all nine scopes are verified"),
                 (StatusCodes.Status409Conflict, "CONFLICT (connected concurrently; retry)"),
                 (StatusCodes.Status429TooManyRequests, "UPSTREAM_RATE_LIMITED (Bitbucket's 429, or the caller's budget of 900 Bitbucket requests an hour for token checks; Retry-After when known)"),
                 (StatusCodes.Status502BadGateway, Upstream502));

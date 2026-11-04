@@ -60,7 +60,7 @@ public sealed record SpecValidationContext
     /// <summary>
     /// The context of a release version's spec (§4.13): with the previous released version's locked spec
     /// (<paramref name="baselineSpecification"/>) a <see cref="NewVersion"/> against its requirement IDs; an iteration
-    /// without one (an import's first version, or a version that builds on code AIDE never specified) an
+    /// without one (an import's first version, or a version that builds on code Tevrin never specified) an
     /// <see cref="ImportFirstVersion"/>; otherwise the <see cref="FirstVersion"/>.
     /// </summary>
     public static SpecValidationContext ForVersion(bool isIteration, string? baselineSpecification, IEnumerable<string>? stackSections = null)

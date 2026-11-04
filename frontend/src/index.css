@@ -2,10 +2,11 @@
 @import 'tw-animate-css';
 
 /*
- * AIDE v2 design tokens (SPEC §7.1). Source of truth: src/lib/ui/tokens.ts; src/lib/ui/tokens.test.ts checks that
- * every value below matches it and meets WCAG AA (NFR-A11Y2).
- * Dark is the default: `:root` carries the dark palette, so first paint is dark until src/lib/theme-init.ts (an inline, nonce'd,
- * render-blocking script, allowed by the CSP nonce) puts `.dark` or `.light` on <html> from the stored preference or the system setting.
+ * Tevrin design tokens (SPEC §4.31, FR-202, FR-203, FR-205). Source of truth: src/lib/ui/tokens.ts;
+ * src/lib/ui/tokens.test.ts checks that every value below matches it and meets WCAG AA in both themes.
+ * Theme (FR-204): src/lib/theme-init.ts (an inline, nonce'd, render-blocking script) puts `.light` or `.dark` on <html>
+ * before first paint, from the stored choice or the OS setting (System is the default). `:root` carries the light
+ * palette for the moment before that class exists.
  */
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant light (&:where(.light, .light *));
@@ -35,6 +36,8 @@
   --color-input: var(--input);
   --color-field-border: var(--field-border);
   --color-ring: var(--ring);
+  --color-brand-from: var(--brand-from);
+  --color-brand-to: var(--brand-to);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -49,9 +52,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Self-hosted via @fontsource (src/app/layout.tsx): no font CDN, so the CSP stays same-origin. */
-  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-heading: 'Outfit', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  /* FR-203: Geist Sans and Geist Mono, self-hosted via @fontsource (src/app/layout.tsx): CSP stays font-src 'self'. */
+  --font-sans: 'Geist Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Geist Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -61,88 +64,123 @@
   --radius-2xl: calc(var(--radius) + 8px);
 }
 
-:root,
-.dark {
-  color-scheme: dark;
-  --radius: 0.75rem;
-  --background: oklch(0.06 0.01 260);
-  --foreground: oklch(0.97 0.005 260);
-  --card: oklch(0.10 0.015 260);
-  --card-foreground: oklch(0.97 0.005 260);
-  --popover: oklch(0.10 0.015 260);
-  --popover-foreground: oklch(0.97 0.005 260);
-  --primary: oklch(0.78 0.18 195);
-  --primary-foreground: oklch(0.10 0.02 195);
-  --secondary: oklch(0.16 0.015 260);
-  --secondary-foreground: oklch(0.97 0.005 260);
-  --muted: oklch(0.13 0.01 260);
-  --muted-foreground: oklch(0.63 0.01 260);
-  --accent: oklch(0.16 0.015 260);
-  --accent-foreground: oklch(0.97 0.005 260);
-  --destructive: oklch(0.62 0.25 25);
-  --destructive-foreground: oklch(0.10 0.02 25);
-  --success: oklch(0.72 0.19 155);
-  --success-foreground: oklch(0.10 0.02 155);
-  --warning: oklch(0.80 0.16 80);
-  --warning-foreground: oklch(0.15 0.02 80);
-  --border: oklch(0.18 0.015 260);
-  --input: oklch(0.18 0.015 260);
-  --field-border: oklch(0.50 0.015 260);
-  --ring: oklch(0.78 0.18 195);
-  --chart-1: oklch(0.78 0.18 195);
-  --chart-2: oklch(0.72 0.22 300);
-  --chart-3: oklch(0.74 0.18 165);
-  --chart-4: oklch(0.78 0.18 55);
-  --chart-5: oklch(0.70 0.22 340);
-  --sidebar: oklch(0.08 0.012 260);
-  --sidebar-foreground: oklch(0.97 0.005 260);
-  --sidebar-primary: oklch(0.78 0.18 195);
-  --sidebar-primary-foreground: oklch(0.10 0.02 195);
-  --sidebar-accent: oklch(0.14 0.015 260);
-  --sidebar-accent-foreground: oklch(0.97 0.005 260);
-  --sidebar-border: oklch(0.18 0.015 260);
-  --sidebar-ring: oklch(0.78 0.18 195);
+/* FR-203: the type scale (12/14/16/20/24/30/36/48/60 px), the only font sizes. Mirrors TYPE_SCALE in tokens.ts. */
+@theme {
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm: 0.875rem;
+  --text-sm--line-height: calc(1.25 / 0.875);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.5 / 1);
+  --text-lg: 1.25rem;
+  --text-lg--line-height: calc(1.75 / 1.25);
+  --text-xl: 1.25rem;
+  --text-xl--line-height: calc(1.75 / 1.25);
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: calc(2 / 1.5);
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: calc(2.25 / 1.875);
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: calc(2.5 / 2.25);
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1;
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1;
+
+  /* FR-205: motion durations (150-250 ms). Mirrors MOTION in tokens.ts. */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
+  --default-transition-duration: 150ms;
 }
 
+:root,
 .light {
   color-scheme: light;
-  --background: oklch(0.99 0.002 260);
-  --foreground: oklch(0.10 0.02 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.10 0.02 260);
+  --radius: 0.75rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.208 0.04 265.8);
+  --card: oklch(0.984 0.003 247.9);
+  --card-foreground: oklch(0.208 0.04 265.8);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.10 0.02 260);
-  --primary: oklch(0.44 0.15 195);
-  --primary-foreground: oklch(0.98 0.005 195);
-  --secondary: oklch(0.96 0.006 260);
-  --secondary-foreground: oklch(0.10 0.02 260);
-  --muted: oklch(0.97 0.006 260);
-  --muted-foreground: oklch(0.40 0.015 260);
-  --accent: oklch(0.96 0.006 260);
-  --accent-foreground: oklch(0.10 0.02 260);
-  --destructive: oklch(0.55 0.26 25);
-  --destructive-foreground: oklch(0.98 0.005 25);
-  --success: oklch(0.50 0.15 155);
-  --success-foreground: oklch(0.98 0.005 155);
-  --warning: oklch(0.68 0.18 80);
-  --warning-foreground: oklch(0.15 0.02 80);
-  --border: oklch(0.93 0.006 260);
-  --input: oklch(0.93 0.006 260);
-  --field-border: oklch(0.58 0.015 260);
-  --ring: oklch(0.44 0.15 195);
-  --chart-1: oklch(0.58 0.14 195);
-  --chart-2: oklch(0.55 0.22 300);
-  --chart-3: oklch(0.58 0.15 165);
-  --chart-4: oklch(0.62 0.17 55);
-  --chart-5: oklch(0.58 0.22 340);
-  --sidebar: oklch(0.98 0.003 260);
-  --sidebar-foreground: oklch(0.10 0.02 260);
-  --sidebar-primary: oklch(0.44 0.15 195);
-  --sidebar-primary-foreground: oklch(0.98 0.005 195);
-  --sidebar-accent: oklch(0.95 0.006 260);
-  --sidebar-accent-foreground: oklch(0.10 0.02 260);
-  --sidebar-border: oklch(0.93 0.006 260);
-  --sidebar-ring: oklch(0.44 0.15 195);
+  --popover-foreground: oklch(0.208 0.04 265.8);
+  --primary: oklch(0.511 0.23 277);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.968 0.007 247.9);
+  --secondary-foreground: oklch(0.208 0.04 265.8);
+  --muted: oklch(0.968 0.007 247.9);
+  --muted-foreground: oklch(0.446 0.037 257.3);
+  --accent: oklch(0.968 0.007 247.9);
+  --accent-foreground: oklch(0.208 0.04 265.8);
+  --destructive: oklch(0.514 0.198 16.9);
+  --destructive-foreground: oklch(1 0 0);
+  --success: oklch(0.508 0.105 165.6);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.769 0.165 70.1);
+  --warning-foreground: oklch(0.208 0.04 265.8);
+  --border: oklch(0.929 0.013 255.5);
+  --input: oklch(0.929 0.013 255.5);
+  --field-border: oklch(0.554 0.041 257.4);
+  --ring: oklch(0.609 0.111 221.7);
+  --brand-from: oklch(0.511 0.23 277);
+  --brand-to: oklch(0.715 0.126 215.2);
+  --chart-1: oklch(0.511 0.23 277);
+  --chart-2: oklch(0.609 0.111 221.7);
+  --chart-3: oklch(0.596 0.127 163.2);
+  --chart-4: oklch(0.666 0.157 58.3);
+  --chart-5: oklch(0.541 0.247 293);
+  --sidebar: oklch(0.984 0.003 247.9);
+  --sidebar-foreground: oklch(0.208 0.04 265.8);
+  --sidebar-primary: oklch(0.511 0.23 277);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.968 0.007 247.9);
+  --sidebar-accent-foreground: oklch(0.208 0.04 265.8);
+  --sidebar-border: oklch(0.929 0.013 255.5);
+  --sidebar-ring: oklch(0.609 0.111 221.7);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.129 0.041 264.7);
+  --foreground: oklch(0.984 0.003 247.9);
+  --card: oklch(0.18 0.032 266.6);
+  --card-foreground: oklch(0.984 0.003 247.9);
+  --popover: oklch(0.18 0.032 266.6);
+  --popover-foreground: oklch(0.984 0.003 247.9);
+  --primary: oklch(0.785 0.104 274.7);
+  --primary-foreground: oklch(0.129 0.041 264.7);
+  --secondary: oklch(0.279 0.037 260);
+  --secondary-foreground: oklch(0.984 0.003 247.9);
+  --muted: oklch(0.208 0.04 265.8);
+  --muted-foreground: oklch(0.711 0.035 256.8);
+  --accent: oklch(0.279 0.037 260);
+  --accent-foreground: oklch(0.984 0.003 247.9);
+  --destructive: oklch(0.719 0.169 13.4);
+  --destructive-foreground: oklch(0.129 0.041 264.7);
+  --success: oklch(0.773 0.153 163.2);
+  --success-foreground: oklch(0.129 0.041 264.7);
+  --warning: oklch(0.837 0.164 84.4);
+  --warning-foreground: oklch(0.129 0.041 264.7);
+  --border: oklch(0.279 0.037 260);
+  --input: oklch(0.279 0.037 260);
+  --field-border: oklch(0.554 0.041 257.4);
+  --ring: oklch(0.797 0.134 211.5);
+  --brand-from: oklch(0.68 0.158 276.9);
+  --brand-to: oklch(0.797 0.134 211.5);
+  --chart-1: oklch(0.68 0.158 276.9);
+  --chart-2: oklch(0.797 0.134 211.5);
+  --chart-3: oklch(0.773 0.153 163.2);
+  --chart-4: oklch(0.837 0.164 84.4);
+  --chart-5: oklch(0.709 0.159 293.5);
+  --sidebar: oklch(0.18 0.032 266.6);
+  --sidebar-foreground: oklch(0.984 0.003 247.9);
+  --sidebar-primary: oklch(0.785 0.104 274.7);
+  --sidebar-primary-foreground: oklch(0.129 0.041 264.7);
+  --sidebar-accent: oklch(0.279 0.037 260);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.9);
+  --sidebar-border: oklch(0.279 0.037 260);
+  --sidebar-ring: oklch(0.797 0.134 211.5);
 }
 
 @layer base {
@@ -154,7 +192,7 @@
     @apply bg-background font-sans text-foreground antialiased;
   }
 
-  /* SPEC 7.1: native checkboxes and radios take the primary colour. */
+  /* Native checkboxes and radios take the primary colour. */
   input[type='checkbox'],
   input[type='radio'] {
     accent-color: var(--primary);
@@ -169,25 +207,27 @@
   .font-heading {
     font-family: var(--font-heading);
     font-weight: 600;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.02em;
   }
 
+  /* FR-203: Geist Mono for numbers, IDs, hashes, versions and code. */
   .tabular,
   td[data-numeric],
   code,
   kbd,
-  pre {
+  pre,
+  samp {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
 
-  /* Visible keyboard focus everywhere (WCAG 2.4.7 / 2.4.11). */
+  /* FR-205: visible keyboard focus everywhere (WCAG 2.4.7 / 2.4.11): 2 px, offset, in the focus colour. */
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 
-  /* SPEC §7.1: the prefers-reduced-motion kill switch (pulsing dots, transitions, sheet and dialog animations). */
+  /* FR-205: the prefers-reduced-motion kill switch (pulsing dots, transitions, sheet and dialog animations). */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -201,11 +241,20 @@
 }
 
 @layer utilities {
-  /* SPEC §7.1: primary glow on primary CTAs. */
-  .glow-primary {
-    box-shadow:
-      0 0 0 1px color-mix(in oklch, var(--primary) 40%, transparent),
-      0 8px 24px -8px color-mix(in oklch, var(--primary) 60%, transparent);
+  /* FR-203: eyebrow labels above headings: Geist Mono, 12 px, upper case. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* FR-202: the brand gradient, only for the mark, the marketing hero glow, the active lifecycle stage and decorative
+     borders. Never put text on it. */
+  .bg-brand-gradient {
+    background-image: linear-gradient(135deg, var(--brand-from), var(--brand-to));
   }
 }
 
@@ -219,12 +268,12 @@
     margin-top: 0.75rem;
   }
   .markdown-body h3 {
-    font-size: 1.375rem;
+    font-size: var(--text-xl);
     font-weight: 600;
     margin-top: 1.5rem;
   }
   .markdown-body h4 {
-    font-size: 1.125rem;
+    font-size: var(--text-base);
     font-weight: 600;
     margin-top: 1.25rem;
   }

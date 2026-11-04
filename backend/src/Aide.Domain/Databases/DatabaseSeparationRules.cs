@@ -14,7 +14,7 @@ public sealed record DatabaseEndpoint(string Host, int Port, string Database, st
 
 /// <summary>
 /// What identifies a managed database for the separation check (§4.21): its provider, the platform resource id, the
-/// Supabase project ref, and the connection strings AIDE holds for it (URIs or Npgsql keyword strings).
+/// Supabase project ref, and the connection strings Tevrin holds for it (URIs or Npgsql keyword strings).
 /// </summary>
 public sealed record DatabaseIdentity(ManagedDatabaseProvider Provider, string? ResourceId, string? SupabaseRef, IReadOnlyList<string?> ConnectionStrings)
 {

@@ -103,7 +103,7 @@ internal sealed partial class BitbucketGitProvider(
     /// <summary>
     /// FR-137: reuses the open pull request from the project branch (its title and description brought up to date; its draft
     /// state untouched); otherwise opens it as a draft (<c>draft: true</c>, <c>close_source_branch: false</c>, the
-    /// description linking back to the AIDE project) to the default branch. A create that races another (400/409) looks it up
+    /// description linking back to the Tevrin project) to the default branch. A create that races another (400/409) looks it up
     /// again, so one pull request exists per release version. The outcome's number is the pull request id.
     /// </summary>
     public async Task<PullRequestOutcome> OpenPullRequestAsync(GitConnectionSettings settings, PullRequestRequest request, string? token, CancellationToken cancellationToken)
@@ -346,7 +346,7 @@ internal sealed partial class BitbucketGitProvider(
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 LogGitFailed(logger, settings.ProjectId, operation, ex.GetType().Name);
-                return GitOutcome.Failed("The working copy could not be written on the AIDE server. Ask an admin to check the server log and the Workspaces:Root volume.", transient: true, ErrorCodes.GitError);
+                return GitOutcome.Failed("The working copy could not be written on the Tevrin server. Ask an admin to check the server log and the Workspaces:Root volume.", transient: true, ErrorCodes.GitError);
             }
 
             if (error is null)
@@ -379,7 +379,7 @@ internal sealed partial class BitbucketGitProvider(
         }
     }
 
-    /// <summary>A request-path call with the caller's connection (already checked to be theirs): errors as AIDE codes.</summary>
+    /// <summary>A request-path call with the caller's connection (already checked to be theirs): errors as Tevrin codes.</summary>
     private async Task<Result<T>> UserCallAsync<T>(Guid connectionId, Func<BitbucketClient, BitbucketAuth, Task<Result<T>>> call, CancellationToken cancellationToken)
     {
         var access = await tokens.GetAccessTokenAsync(connectionId, cancellationToken);

@@ -131,7 +131,7 @@ public sealed partial class DeploymentEnvSync(AideDbContext db, DeploymentAccess
     }
 
     /// <summary>
-    /// FR-145, §4.22: deletes the platform vars of variables AIDE no longer writes under those ids (stale derived rows, user
+    /// FR-145, §4.22: deletes the platform vars of variables Tevrin no longer writes under those ids (stale derived rows, user
     /// rows replaced by derived ones) on each bound target of their components. Best effort: a failure is logged and
     /// returned, and the vars stay on the platform (Owners see them in the platform's dashboard).
     /// </summary>

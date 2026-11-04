@@ -60,7 +60,7 @@ public enum ReleaseVersionStatus
     AwaitingMerge = 1,
     Released = 2,
 
-    /// <summary>A baseline from import or migration; never developed in AIDE.</summary>
+    /// <summary>A baseline from import or migration; never developed in Tevrin.</summary>
     Imported = 3,
 }
 
@@ -74,10 +74,10 @@ public enum MergeStrategy
     AideMerges = 0,
     Manual = 1,
 
-    /// <summary>FR-140: AIDE merges with Bitbucket's <c>fast_forward</c> merge strategy (Bitbucket projects only).</summary>
+    /// <summary>FR-140: Tevrin merges with Bitbucket's <c>fast_forward</c> merge strategy (Bitbucket projects only).</summary>
     FastForward = 2,
 
-    /// <summary>FR-140: AIDE merges with Bitbucket's <c>squash</c> merge strategy (Bitbucket projects only).</summary>
+    /// <summary>FR-140: Tevrin merges with Bitbucket's <c>squash</c> merge strategy (Bitbucket projects only).</summary>
     Squash = 3,
 }
 

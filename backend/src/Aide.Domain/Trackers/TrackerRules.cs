@@ -21,7 +21,7 @@ public enum TrackerFailure
     /// <summary>The tracker refused the native query.</summary>
     QueryInvalid = 4,
 
-    /// <summary>The AIDE GitHub App doesn't have Issues: read on the installation (FR-167).</summary>
+    /// <summary>The Tevrin GitHub App doesn't have Issues: read on the installation (FR-167).</summary>
     AppPermissionMissing = 5,
 
     /// <summary>No usable connection reaches this (e.g. the App isn't installed where the repository lives).</summary>
@@ -49,7 +49,7 @@ public static partial class TrackerRules
     /// <summary>The phases where items can be imported or removed (D-V5-10, FR-171): <c>analysis</c> and <c>refinement</c>.</summary>
     public static IReadOnlyList<Phase> ImportPhases { get; } = [Phase.Analysis, Phase.Refinement];
 
-    /// <summary>FR-165: AIDE warns this long before a Jira or Linear connection's user-entered expiry.</summary>
+    /// <summary>FR-165: Tevrin warns this long before a Jira or Linear connection's user-entered expiry.</summary>
     public static readonly TimeSpan ExpiryWarningWindow = TimeSpan.FromDays(14);
 
     /// <summary>The platform connection providers that are issue trackers (FR-165, FR-166), whose expiry the user enters.</summary>

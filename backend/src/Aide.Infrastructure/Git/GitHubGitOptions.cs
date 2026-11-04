@@ -4,7 +4,7 @@ namespace Aide.Infrastructure.Git;
 
 /// <summary>
 /// GitHub provider settings (section <c>GitHub</c>, FR-35). Hosts are system configuration only: a project's repository URL
-/// supplies just the owner and repository name, so no project can point AIDE at another host (no SSRF).
+/// supplies just the owner and repository name, so no project can point Tevrin at another host (no SSRF).
 /// </summary>
 public sealed class GitHubGitOptions
 {

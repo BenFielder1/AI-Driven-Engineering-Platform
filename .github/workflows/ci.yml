@@ -60,7 +60,9 @@ jobs:
           --project src/Aide.Infrastructure --startup-project src/Aide.Api
           --configuration Release --no-build
       - name: CLI packs as a .NET tool (FR-52)
-        run: dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
+        run: |
+          dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
+          dotnet pack src/Aide.Cli.Alias -c Release --no-build -o "$RUNNER_TEMP/nupkg"
       - name: Test (unit, CLI)
         # Integration tests run in the backend-integration shards below.
         timeout-minutes: 10

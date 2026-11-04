@@ -18,7 +18,7 @@ public static class ApiProblems
     /// <summary>The field map of a VALIDATION problem; other codes carry it when the error names its field (<see cref="DomainError.Field"/>).</summary>
     public const string ErrorsKey = "errors";
 
-    /// <summary>FR-81, FR-83: the AIDE GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem; FR-144: the
+    /// <summary>FR-81, FR-83: the Tevrin GitHub App's install link on a <c>GITHUB_APP_NOT_INSTALLED</c> problem; FR-144: the
     /// platform's install or connect link on <c>PLATFORM_GIT_NOT_CONNECTED</c>, the App settings link on
     /// <c>PLATFORM_PERMISSION_MISSING</c>.</summary>
     public const string InstallUrlKey = "installUrl";
@@ -35,7 +35,7 @@ public static class ApiProblems
     /// <summary>FR-116: the broken rules on a <c>STACK_INCOMPATIBLE</c> problem, each <c>{layer, option, rule, reason}</c>.</summary>
     public const string ViolationsKey = "violations";
 
-    /// <summary>FR-134: the scopes AIDE couldn't confirm on a <c>CONNECTION_SCOPE_INSUFFICIENT</c> problem (missing ones are in <c>details</c>).</summary>
+    /// <summary>FR-134: the scopes Tevrin couldn't confirm on a <c>CONNECTION_SCOPE_INSUFFICIENT</c> problem (missing ones are in <c>details</c>).</summary>
     public const string UnverifiableScopesKey = "unverifiableScopes";
 
     /// <summary>A ProblemDetails result for a domain error (status from the domain's HTTP status map).</summary>
@@ -90,7 +90,7 @@ public static class ApiProblems
             extensions: new Dictionary<string, object?> { [ErrorCodeKey] = NotImplementedCode });
 
     /// <summary>409 <c>GITHUB_APP_NOT_INSTALLED</c> with the App's install link (when an App is registered).</summary>
-    public static ProblemHttpResult GitHubAppNotInstalled(string? installUrl, string title = "The AIDE GitHub App isn't installed on this account or repository.")
+    public static ProblemHttpResult GitHubAppNotInstalled(string? installUrl, string title = "The Tevrin GitHub App isn't installed on this account or repository.")
     {
         var extensions = new Dictionary<string, object?> { [ErrorCodeKey] = ErrorCodes.GitHubAppNotInstalled };
         if (installUrl is not null)

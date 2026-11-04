@@ -77,7 +77,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         // Git: a merge commit on main whose second parent is the branch head, an annotated tag on it, the branch checked out again.
         var main = await GitAsync(id, "rev-parse", "main");
         Assert.Equal(branchHead, await GitAsync(id, "rev-parse", "main^2"));
-        Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}", await GitAsync(id, "log", "-1", "--format=%s", "main"));
+        Assert.Equal($"[Tevrin] Release {Tag}: {fixture.Project.Name}", await GitAsync(id, "log", "-1", "--format=%s", "main"));
         Assert.Equal("tag", await GitAsync(id, "cat-file", "-t", Tag));
         Assert.Equal(main, await GitAsync(id, "rev-parse", $"{Tag}^{{commit}}"));
         Assert.Equal(branch, await GitAsync(id, "symbolic-ref", "--short", "HEAD"));
@@ -450,7 +450,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var merge = api.Requests.Single(r => r.Method == "PUT" && r.Path == Pull + "/merge");
         using (var body = JsonDocument.Parse(merge.Body))
         {
-            Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}", body.RootElement.GetProperty("commit_title").GetString());
+            Assert.Equal($"[Tevrin] Release {Tag}: {fixture.Project.Name}", body.RootElement.GetProperty("commit_title").GetString());
             Assert.Equal(line, body.RootElement.GetProperty("commit_message").GetString());
         }
 
@@ -499,7 +499,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         {
             Assert.Equal("merge", body.RootElement.GetProperty("merge_method").GetString());
             Assert.Equal(await TestGit.RunAsync(remote.BarePath, Ct, "rev-parse", $"refs/heads/{branch[0]}"), body.RootElement.GetProperty("sha").GetString());
-            Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}", body.RootElement.GetProperty("commit_title").GetString());
+            Assert.Equal($"[Tevrin] Release {Tag}: {fixture.Project.Name}", body.RootElement.GetProperty("commit_title").GetString());
 
             // FR-174: with no credited person GitHub keeps its default body.
             Assert.False(body.RootElement.TryGetProperty("commit_message", out _));

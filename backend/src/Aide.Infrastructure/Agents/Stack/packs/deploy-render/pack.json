@@ -21,7 +21,7 @@
   "specSections": [
     {
       "title": "Environments & Configuration",
-      "guidance": "Per environment (production services auto-deploying main; preview = <name>-preview services and database): each service's type, runtime, root directory, health path, pre-deploy (or start-time on free plans) migrate command and URL, the database (Render Postgres, internal DATABASE_URL), every env var per service, and the origin model (static-site /api route set by AIDE, or cross-origin). Note free-plan sleep and 30-day database expiry."
+      "guidance": "Per environment (production services auto-deploying main; preview = <name>-preview services and database): each service's type, runtime, root directory, health path, pre-deploy (or start-time on free plans) migrate command and URL, the database (Render Postgres, internal DATABASE_URL), every env var per service, and the origin model (static-site /api route set by Tevrin, or cross-origin). Note free-plan sleep and 30-day database expiry."
     }
   ],
   "ownership": {
@@ -153,12 +153,12 @@
         "severity": "major"
       },
       {
-        "item": "Any render.yaml is marked as documentation, mirrors the resources AIDE creates and uses sync: false or generateValue instead of literal secrets",
+        "item": "Any render.yaml is marked as documentation, mirrors the resources Tevrin creates and uses sync: false or generateValue instead of literal secrets",
         "category": "security",
         "severity": "critical"
       },
       {
-        "item": "No CI job, script or package script deploys with the Render CLI; AIDE triggers every deploy",
+        "item": "No CI job, script or package script deploys with the Render CLI; Tevrin triggers every deploy",
         "category": "architecture",
         "severity": "major"
       },

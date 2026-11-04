@@ -16,8 +16,8 @@ namespace Aide.Api.Features.Release;
 
 /// <summary>
 /// FR-64, §4.14: after the tag exists, the GitHub Release for it (<c>POST /repos/{o}/{r}/releases</c>, name = the version)
-/// with AIDE's notes (<see cref="ReleaseNotes"/>): the version, the spec's "Changes in this version", the plan step titles
-/// with commit links, the review score and a link back to AIDE (<c>&lt;App:PublicBaseUrl&gt;/projects/&lt;id&gt;/release</c>).
+/// with Tevrin's notes (<see cref="ReleaseNotes"/>): the version, the spec's "Changes in this version", the plan step titles
+/// with commit links, the review score and a link back to Tevrin (<c>&lt;App:PublicBaseUrl&gt;/projects/&lt;id&gt;/release</c>).
 /// Idempotent: a release that already exists for the tag (<c>GET /releases/tags/{tag}</c>) is reused. Local projects have
 /// none. GitHub failing (5xx, unreachable) retries the job (the tag is reused then); GitHub refusing (e.g. no permission) is
 /// logged and the release completes without a GitHub Release; a rate limit waits for the reset.
@@ -78,7 +78,7 @@ public sealed partial class GitHubReleasePublisher(
     }
 
     /// <summary>
-    /// FR-140: AIDE's release notes for a provider that creates its release together with the tag (GitLab: the Release's
+    /// FR-140: Tevrin's release notes for a provider that creates its release together with the tag (GitLab: the Release's
     /// description; Bitbucket: the annotated tag's message); <c>null</c> for GitHub (published here after tagging) and Local.
     /// </summary>
     public async Task<string?> HostNotesAsync(ReleaseEntity release, Domain.Entities.GitProvider provider, string? repoWebUrl, CancellationToken cancellationToken)

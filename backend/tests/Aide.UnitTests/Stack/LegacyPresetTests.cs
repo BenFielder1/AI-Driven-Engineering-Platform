@@ -37,7 +37,7 @@ public sealed class LegacyPresetTests
     [Fact]
     public void FR129_The_shipped_catalog_has_the_frozen_v2_presets_and_the_4_23_agent_key_table()
     {
-        Assert.Equal("1.2.0", Catalog.Version);
+        Assert.Equal("1.2.1", Catalog.Version); // FR-199
         Assert.Equal(
             ["project-scaffolder", "db-engineer", "domain-logic-engineer", "api-engineer", "ui-engineer", "test-engineer", "devops-engineer"],
             Legacy.AgentKeys.Select(r => r.From));

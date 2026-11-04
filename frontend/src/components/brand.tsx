@@ -1,60 +1,86 @@
 import { useId } from 'react'
 
 import { cn } from '../lib/utils'
+import { linePath, MARK, WORDMARK } from './brand-geometry'
 
 /**
- * The AIDE mark (docs/v2/brand/aide-mark.svg), inline so the gradient follows the theme: stops bound to --chart-1 and
- * --chart-2 (SPEC §7.1). Six hexagon segments = the six lifecycle stages; the gaps are the approval gates.
- * Decorative unless `title` is given.
+ * The Tevrin mark (FR-196, D-V6-6), inline so it follows the theme: six hexagon segments for the six lifecycle phases,
+ * the gaps between them for the approval gates, and a `T` monogram. The segments take the brand gradient
+ * (`--brand-from` → `--brand-to`, light #4F46E5 → #06B6D4, dark #818CF8 → #22D3EE); the `T` is `currentColor`, so it
+ * takes the text colour of where it sits (≥ 3:1 there, asserted in tokens.test.ts). `mono` draws everything in
+ * `currentColor` (no gradient). Decorative unless `title` is given.
  */
-export function BrandMark({ className, title }: { className?: string; title?: string }) {
-  // One gradient id per instance: the mark can appear more than once (sidebar, drawer).
-  const gradientId = `aide-mark-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
-  const stroke = `url(#${gradientId})`
+export function BrandMark({ className, title, mono = false }: { className?: string; title?: string; mono?: boolean }) {
+  // One gradient id per instance: the mark can appear more than once (sidebar, drawer, header).
+  const gradientId = `tevrin-mark-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
+  const ring = mono ? 'currentColor' : `url(#${gradientId})`
   return (
     <svg
-      viewBox="0 0 32 32"
+      viewBox="0 0 64 64"
+      data-slot="brand-mark"
       className={cn('size-8 shrink-0', className)}
       role={title ? 'img' : undefined}
       aria-hidden={title ? undefined : true}
       aria-label={title}
       focusable="false"
     >
-      <defs>
-        <linearGradient id={gradientId} x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="var(--chart-1)" />
-          <stop offset="1" stopColor="var(--chart-2)" />
-        </linearGradient>
-      </defs>
-      <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill={stroke} fillOpacity="0.16" />
-      <g fill="none" stroke={stroke} strokeWidth="2.2" strokeLinecap="round">
-        <path d="M17.43 5.83 L24.10 9.68" />
-        <path d="M25.53 12.15 L25.53 19.85" />
-        <path d="M24.10 22.33 L17.43 26.18" />
-        <path d="M14.57 26.18 L7.90 22.33" />
-        <path d="M6.47 19.85 L6.47 12.15" />
-        <path d="M7.90 9.68 L14.57 5.83" />
+      {!mono && (
+        <defs>
+          <linearGradient id={gradientId} x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="var(--brand-from)" />
+            <stop offset="1" stopColor="var(--brand-to)" />
+          </linearGradient>
+        </defs>
+      )}
+      <g fill="none" stroke={ring} strokeWidth={MARK.segmentWidth} strokeLinecap="round" data-part="segments">
+        {MARK.segments.map((s) => (
+          <path key={linePath(s)} d={linePath(s)} />
+        ))}
       </g>
-      <g fill="none" stroke={stroke} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M11.5 21 L16 10.5 L20.5 21" />
-        <path d="M13.3 17.3 L18.7 17.3" />
+      <g fill="none" stroke="currentColor" strokeWidth={MARK.monogramWidth} strokeLinecap="round" data-part="monogram">
+        {MARK.monogram.map((s) => (
+          <path key={linePath(s)} d={linePath(s)} />
+        ))}
       </g>
-      <circle cx="16" cy="5" r="1.9" fill="var(--chart-1)" />
+    </svg>
+  )
+}
+
+/** The wordmark "tevrin" (stroked letterforms in `currentColor`). Decorative: BrandLockup names the product in text. */
+function Wordmark({ className }: { className?: string }) {
+  const { cx, cy, r } = WORDMARK.dot
+  return (
+    <svg viewBox={WORDMARK.viewBox} className={cn('h-8 w-auto shrink-0', className)} aria-hidden focusable="false" data-slot="brand-wordmark">
+      <g fill="none" stroke="currentColor" strokeWidth={WORDMARK.strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+        {WORDMARK.paths.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
+      <circle cx={cx} cy={cy} r={r} fill="currentColor" />
     </svg>
   )
 }
 
 /**
- * The lockup (docs/v2/brand/aide-logo.svg): mark plus the two-line wordmark. `wordmarkClassName` can hide the text
- * visually (e.g. `sr-only` when the sidebar is collapsed) while the name is still announced.
+ * The lockup (FR-196): the mark plus the wordmark, no subtitle. It reads as "Tevrin" to assistive tech.
+ * `wordmarkClassName` can hide the wordmark visually (e.g. `sr-only` when the sidebar is collapsed) while the name is
+ * still announced. The ink is `text-foreground` unless `className` sets another text colour.
  */
-export function BrandLockup({ className, wordmarkClassName }: { className?: string; wordmarkClassName?: string }) {
+export function BrandLockup({
+  className,
+  wordmarkClassName,
+  mono = false,
+}: {
+  className?: string
+  wordmarkClassName?: string
+  mono?: boolean
+}) {
   return (
-    <span className={cn('flex items-center gap-2.5', className)}>
-      <BrandMark />
-      <span className={cn('flex flex-col leading-tight', wordmarkClassName)}>
-        <span className="font-heading text-[17px] text-foreground">AIDE</span>
-        <span className="text-[10px] font-medium text-muted-foreground">AI-Driven Engineering</span>
+    <span data-slot="brand-lockup" className={cn('flex items-center gap-2 text-foreground', className)}>
+      <BrandMark mono={mono} />
+      <span className={cn('flex items-center', wordmarkClassName)}>
+        <Wordmark className="h-8" />
+        <span className="sr-only">Tevrin</span>
       </span>
     </span>
   )

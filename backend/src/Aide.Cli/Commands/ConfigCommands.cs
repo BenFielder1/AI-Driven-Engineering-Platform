@@ -5,7 +5,7 @@ using Aide.Cli.Config;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide config set|get|path` — the token is never printed in full.</summary>
+/// <summary>`tevrin config set|get|path` — the token is never printed in full.</summary>
 internal static class ConfigCommands
 {
     private const string ApiUrlKey = "api-url";
@@ -32,7 +32,7 @@ internal static class ConfigCommands
         };
         var command = new Command(
             "set",
-            "Save a setting to the config file. Prefer 'aide login' for the token (it validates it); a token is never accepted as an argument.")
+            "Save a setting to the config file. Prefer 'tevrin login' for the token (it validates it); a token is never accepted as an argument.")
         {
             key, value,
         };
@@ -46,7 +46,7 @@ internal static class ConfigCommands
             {
                 if (given is null)
                 {
-                    throw new UsageException("Missing value: aide config set api-url <url> (an empty string clears it).");
+                    throw new UsageException("Missing value: tevrin config set api-url <url> (an empty string clears it).");
                 }
 
                 await SetApiUrlAsync(context, config, given.Trim()).ConfigureAwait(false);
@@ -86,7 +86,7 @@ internal static class ConfigCommands
         if (config.Token is not null && (config.TokenApiUrl is null || !CliSettings.SameApi(config.TokenApiUrl, effective)))
         {
             await context.Error.WriteLineAsync(
-                $"note: the saved token belongs to {config.TokenApiUrl ?? "(unknown)"} and will not be sent to {effective}; run 'aide login' for it.").ConfigureAwait(false);
+                $"note: the saved token belongs to {config.TokenApiUrl ?? "(unknown)"} and will not be sent to {effective}; run 'tevrin login' for it.").ConfigureAwait(false);
         }
     }
 
@@ -100,7 +100,7 @@ internal static class ConfigCommands
             {
                 throw new UsageException(
                     "Refusing a token as a command-line argument (it would be kept in shell history). " +
-                    "Use 'aide login' (validates it), or run 'aide config set token' with no value to type it at a hidden prompt or pipe it on stdin.");
+                    "Use 'tevrin login' (validates it), or run 'tevrin config set token' with no value to type it at a hidden prompt or pipe it on stdin.");
             }
 
             token = null;
@@ -112,7 +112,7 @@ internal static class ConfigCommands
                 : context.Host.Terminal.ReadAllInput())?.Trim();
             if (string.IsNullOrEmpty(token))
             {
-                throw new UsageException("No token given. Type it at the prompt or pipe it on stdin ('aide logout' removes the saved token).");
+                throw new UsageException("No token given. Type it at the prompt or pipe it on stdin ('tevrin logout' removes the saved token).");
             }
         }
 
@@ -179,7 +179,7 @@ internal static class ConfigCommands
 
     private static Command BuildPath(CommandFactory factory)
     {
-        var command = new Command("path", "Print the config file path (set AIDE_CONFIG to use another file).");
+        var command = new Command("path", "Print the config file path (set TEVRIN_CONFIG to use another file).");
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var path = context.ConfigStore.FilePath;

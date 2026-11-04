@@ -25,7 +25,7 @@ public sealed class BitbucketOAuthStates(IDataProtectionProvider dataProtection,
         IssueCore(expiresAt => new BitbucketOAuthFlow(mode, returnUrl, userId, expiresAt));
 }
 
-/// <summary>FR-134, D-V4-18: a Bitbucket sign-in whose verified email matches an existing, unlinked AIDE account.</summary>
+/// <summary>FR-134, D-V4-18: a Bitbucket sign-in whose verified email matches an existing, unlinked Tevrin account.</summary>
 public sealed record BitbucketPendingLink(
     Guid Id,
     Guid InstanceId,

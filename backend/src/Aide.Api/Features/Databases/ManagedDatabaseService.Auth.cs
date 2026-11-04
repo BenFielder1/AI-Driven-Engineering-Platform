@@ -10,7 +10,7 @@ public sealed partial class ManagedDatabaseService
 {
     /// <summary>
     /// FR-153: sets a Supabase project's Auth <c>site_url</c> and <c>uri_allow_list</c> from the frontend target
-    /// (<see cref="SupabaseAuthRules"/>) when they differ from what AIDE last applied; returns the connection with the applied
+    /// (<see cref="SupabaseAuthRules"/>) when they differ from what Tevrin last applied; returns the connection with the applied
     /// values (the caller saves). Best effort: a refusal is logged and the database stays as it is.
     /// </summary>
     public async Task<ManagedDatabaseConnection> ApplyAuthUrlsAsync(

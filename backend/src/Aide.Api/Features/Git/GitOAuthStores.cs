@@ -32,7 +32,7 @@ public interface IGitOAuthFlow
 /// <para>
 /// Starting is anonymous, so the held flows are bounded: at most <see cref="GitOAuthLimits.MaxPending"/> at once per host (a start beyond
 /// that is refused until flows are used or expire), and expired flows are swept at most once per
-/// <see cref="GitOAuthLimits.SweepInterval"/> rather than on every start. In memory: AIDE runs one API replica (M27 decision).
+/// <see cref="GitOAuthLimits.SweepInterval"/> rather than on every start. In memory: Tevrin runs one API replica (M27 decision).
 /// </para>
 /// </summary>
 public abstract class GitOAuthStateStore<TFlow>(IDataProtectionProvider dataProtection, TimeProvider time, string purpose)
@@ -145,7 +145,7 @@ public interface IGitPendingLink
 }
 
 /// <summary>
-/// FR-131, FR-134, D-V4-18: sign-ins whose verified email matches an existing, unlinked AIDE account, held in memory for 10
+/// FR-131, FR-134, D-V4-18: sign-ins whose verified email matches an existing, unlinked Tevrin account, held in memory for 10
 /// minutes (with the OAuth tokens, so confirming needs no second round trip to the host), referenced by an HttpOnly, Data
 /// Protection–protected cookie. Only the account a link was offered to can confirm it.
 /// </summary>

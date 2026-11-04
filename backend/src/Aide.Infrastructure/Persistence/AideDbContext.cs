@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aide.Infrastructure.Persistence;
 
-/// <summary>The AIDE database (PostgreSQL, snake_case names, plural table names). Entities are configured with
+/// <summary>The Tevrin database (PostgreSQL, snake_case names, plural table names). Entities are configured with
 /// <see cref="IEntityTypeConfiguration{TEntity}"/> classes in this assembly; Identity tables are renamed to
 /// <c>users</c>, <c>roles</c>, <c>user_claims</c>, … in <see cref="OnModelCreating"/>.</summary>
 public sealed class AideDbContext(DbContextOptions<AideDbContext> options)

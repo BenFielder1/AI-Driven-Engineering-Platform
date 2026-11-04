@@ -48,7 +48,7 @@ if (typeof win.ResizeObserver !== 'function') {
 if (typeof proto.scrollIntoView !== 'function') {
   Element.prototype.scrollIntoView = () => undefined
 }
-// No media queries match: below xl, system theme = dark (the dark-first default). Tests that need a match stub it.
+// No media queries match: below xl, and no OS dark preference, so System is light (FR-204). Tests that need a match stub it.
 if (typeof win.matchMedia !== 'function') {
   globalThis.matchMedia = (query: string): MediaQueryList => ({
     matches: false,

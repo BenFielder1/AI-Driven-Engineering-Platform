@@ -119,7 +119,7 @@ public sealed partial class MergePollJobHandler(
     /// §4.21, FR-153: a Supabase BaaS release waiting for its merge keeps production ahead of the code: its migrations run on
     /// the PR's current head once merge readiness passes, and again when the head moves (the runner is idempotent). Unknown
     /// readiness waits for the next poll here: unlike the release job's merge, nothing is about to happen. A failed run tells
-    /// Owners (<c>migration_failed</c>) and is recorded on the attempt, which keeps waiting; the human merge isn't AIDE's to
+    /// Owners (<c>migration_failed</c>) and is recorded on the attempt, which keeps waiting; the human merge isn't Tevrin's to
     /// block. Nothing here may end the poll: any other failure is a poll without news.
     /// </summary>
     private async Task MigrateWhileAwaitingAsync(Domain.Entities.Release release, CancellationToken cancellationToken)
@@ -168,7 +168,7 @@ public sealed partial class MergePollJobHandler(
                     .ExecuteUpdateAsync(
                         s => s.SetProperty(r => r.Status, MigrationRunStatus.Failed)
                             .SetProperty(r => r.ErrorCode, ErrorCodes.MigrationFailed)
-                            .SetProperty(r => r.ErrorMessage, "The migration run was interrupted; AIDE runs it again.")
+                            .SetProperty(r => r.ErrorMessage, "The migration run was interrupted; Tevrin runs it again.")
                             .SetProperty(r => r.FinishedAt, now),
                         cancellationToken);
             }

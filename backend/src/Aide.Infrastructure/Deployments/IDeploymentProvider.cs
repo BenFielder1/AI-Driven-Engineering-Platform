@@ -82,7 +82,7 @@ public sealed record DeploymentEnvWritten(string Key, DeploymentEnvironment Targ
 /// FR-90, FR-91: create a deployment of <see cref="GitSha"/> on <see cref="GitRef"/> for the Vercel project. The repository
 /// is named by its GitHub id when known (<see cref="RepoId"/>), else by <see cref="RepoOwner"/>/<see cref="RepoName"/>.
 /// <see cref="AideProjectId"/> lets the Fake provider read the commit in the project's working copy.
-/// <see cref="AideDeploymentId"/> (the AIDE row) is sent in the deployment's <c>meta</c> as an idempotency key, so a retry
+/// <see cref="AideDeploymentId"/> (the Tevrin row) is sent in the deployment's <c>meta</c> as an idempotency key, so a retry
 /// finds a deployment an earlier attempt created (<see cref="IVercelClient.FindByAideIdAsync"/>).
 /// </summary>
 public sealed record CreateDeployment(
@@ -194,13 +194,13 @@ public interface IVercelClient
     public const int MaxBuildLogLength = 1_000_000;
 
     /// <summary>
-    /// §4.15 idempotency: the deployment an earlier attempt created for the AIDE row <paramref name="aideDeploymentId"/>
+    /// §4.15 idempotency: the deployment an earlier attempt created for the Tevrin row <paramref name="aideDeploymentId"/>
     /// (its <c>meta.aideDeploymentId</c>), not canceled, or <c>null</c>.
     /// </summary>
     Task<ProviderDeployment?> FindByAideIdAsync(
         DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid aideDeploymentId, CancellationToken cancellationToken);
 
-    /// <summary>§4.15: cancels a deployment no AIDE row records (<c>PATCH /v12/deployments/{id}/cancel</c>); gone or finished is fine.</summary>
+    /// <summary>§4.15: cancels a deployment no Tevrin row records (<c>PATCH /v12/deployments/{id}/cancel</c>); gone or finished is fine.</summary>
     Task CancelDeploymentAsync(DeploymentAuth auth, string deploymentId, CancellationToken cancellationToken);
 
     /// <summary>FR-91: the production deployment Vercel made for <paramref name="sha"/>, or <c>null</c>.</summary>

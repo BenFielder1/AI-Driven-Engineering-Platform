@@ -154,9 +154,9 @@ public sealed partial class BitbucketRepoService(
             {
                 // git failed, timed out or is missing, or the temp folder couldn't be written: the empty repository stays.
                 LogPushFailed(logger, repository.Uuid, ex.GetType().Name);
-                return Result.Failure<BitbucketRepository>(new DomainError(ErrorCodes.UpstreamError, $"Bitbucket created {fullName}, but AIDE couldn't push its first commit. Try again: AIDE then pushes the README to the empty repository.")
+                return Result.Failure<BitbucketRepository>(new DomainError(ErrorCodes.UpstreamError, $"Bitbucket created {fullName}, but Tevrin couldn't push its first commit. Try again: Tevrin then pushes the README to the empty repository.")
                 {
-                    Details = [ex is BitbucketInitialPushException or GitCommandException ? ex.Message : "The README commit couldn't be prepared on the AIDE server."],
+                    Details = [ex is BitbucketInitialPushException or GitCommandException ? ex.Message : "The README commit couldn't be prepared on the Tevrin server."],
                 });
             }
 

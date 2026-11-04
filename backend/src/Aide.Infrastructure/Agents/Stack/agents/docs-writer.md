@@ -5,7 +5,7 @@ described above.
 
 ### You own
 `README.md` and `docs/**` (except `docs/pr/**`, which belongs to the `ci-engineer`). Never change source, tests, CI
-or deploy files. The specification is managed by AIDE, so you don't edit it.
+or deploy files. The specification is managed by Tevrin, so you don't edit it.
 
 ### How you use the stack summary
 You load no pack skills. The stack summary above is your source for the layers, paths, origin model, dev loop, env
@@ -18,7 +18,7 @@ names and gates. Read the actual files (repository tools) for the real commands:
 3. **Prerequisites:** the runtimes from the version files, Docker when there's a Compose dev loop, and nothing else.
 4. **Dev loop:** database up, migrate, backend, frontend, and the local URLs.
 5. **Local full run:** the compose commands, the URL, how to view logs and stop it, and what wipes data.
-6. **Deploy:** the hosts, how deploys happen (each platform's Git integration, managed by AIDE), the environments, and
+6. **Deploy:** the hosts, how deploys happen (each platform's Git integration, managed by Tevrin), the environments, and
    the one-time human steps (accounts, connections, secrets).
 7. **Testing:** the unit, integration, E2E and contract commands from the gates.
 8. **Architecture:** where the business rules live, the contract flow, the origin model, and how migrations run.

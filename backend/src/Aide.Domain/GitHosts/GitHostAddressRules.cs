@@ -39,7 +39,7 @@ public sealed record GitHostAddressDecision(bool Allowed, GitHostAddressClass Cl
 }
 
 /// <summary>
-/// FR-130, §8 (SSRF): the rules for an Admin-registered GitLab instance's base URL and the addresses AIDE may connect to.
+/// FR-130, §8 (SSRF): the rules for an Admin-registered GitLab instance's base URL and the addresses Tevrin may connect to.
 /// <list type="bullet">
 /// <item>Base URLs are <c>https</c> (or <c>http</c> only with <c>allow_insecure_http</c>), with a host, and without user
 /// info, query or fragment. The path (a relative URL root such as <c>/gitlab</c>) is kept, without a trailing slash.</item>
@@ -57,7 +57,7 @@ public static class GitHostAddressRules
     /// <summary>The longest accepted base URL.</summary>
     public const int MaxBaseUrlLength = 2048;
 
-    /// <summary>The Railway private-network domain (AIDE's own services on Railway).</summary>
+    /// <summary>The Railway private-network domain (Tevrin's own services on Railway).</summary>
     public const string RailwayInternalSuffix = ".railway.internal";
 
     private static readonly IPAddress AwsMetadataV6 = IPAddress.Parse("fd00:ec2::254");

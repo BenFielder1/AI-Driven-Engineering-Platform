@@ -115,8 +115,8 @@ public interface IDeploymentProvider
 
     /// <summary>
     /// The deployment of <paramref name="sha"/>: with <paramref name="aideDeploymentId"/>, the one an earlier attempt created
-    /// for that AIDE row; without, the one the platform made by itself (production adoption, FR-149). <c>null</c>: none.
-    /// <paramref name="createdAfter"/> (the AIDE row's creation time, given with <paramref name="aideDeploymentId"/>): a
+    /// for that Tevrin row; without, the one the platform made by itself (production adoption, FR-149). <c>null</c>: none.
+    /// <paramref name="createdAfter"/> (the Tevrin row's creation time, given with <paramref name="aideDeploymentId"/>): a
     /// platform that can't tag its builds with the row (Cloudflare) adopts only builds created at or after it, so a
     /// redeploy or manual deploy never adopts an earlier build of the same commit.
     /// </summary>
@@ -129,7 +129,7 @@ public interface IDeploymentProvider
     Task RollbackAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// FR-145, FR-146: for a platform whose build of <paramref name="sha"/> starts by itself on the merge, before AIDE can sync
+    /// FR-145, FR-146: for a platform whose build of <paramref name="sha"/> starts by itself on the merge, before Tevrin can sync
     /// (GitHub Pages): replaces a build that started before <paramref name="variablesSyncedAt"/>. Other platforms sync first.
     /// </summary>
     Task<BuildRefresh> RefreshBuildAsync(DeploymentAuth auth, DeploymentTargetRef target, string sha, DateTimeOffset variablesSyncedAt, CancellationToken cancellationToken) =>
@@ -166,7 +166,7 @@ public interface IDeploymentProviderResolver
 }
 
 /// <summary>
-/// §4.20 seam for a platform AIDE can't call for real (none since M30, when Render and Railway joined): every
+/// §4.20 seam for a platform Tevrin can't call for real (none since M30, when Render and Railway joined): every
 /// operation is <c>PLATFORM_ERROR</c> "not supported yet". Their Fake mode works.
 /// </summary>
 public sealed class UnsupportedDeploymentProvider(DeploymentProvider platform) : IDeploymentProvider

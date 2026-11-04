@@ -1,15 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The `aide` .NET global tool (SPEC FR-52). Talks to the AIDE API with a personal API token. -->
+  <!-- The `tevrin` .NET global tool (SPEC FR-52, FR-200), package Tevrin.Cli. Talks to the Tevrin API with a personal API
+       token. The deprecated `aide` command is src/Aide.Cli.Alias (package Aide.Cli), built from these same sources. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <AssemblyName>aide</AssemblyName>
+    <AssemblyName>tevrin</AssemblyName>
     <RootNamespace>Aide.Cli</RootNamespace>
     <PackAsTool>true</PackAsTool>
-    <ToolCommandName>aide</ToolCommandName>
-    <PackageId>Aide.Cli</PackageId>
-    <Version>0.1.0</Version>
-    <Description>Command-line client for the AIDE Platform.</Description>
+    <ToolCommandName>tevrin</ToolCommandName>
+    <PackageId>Tevrin.Cli</PackageId>
+    <Version>0.2.0</Version>
+    <Description>Command-line client for Tevrin.</Description>
     <!-- InvariantGlobalization is on, so localized System.CommandLine resources are never used. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

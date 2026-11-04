@@ -32,7 +32,7 @@ public sealed class ManagedDatabase
     /// <summary>Ciphertext of the connection JSON (URIs, keys, pooler config); never returned or logged.</summary>
     public string ConnectionEncrypted { get; set; } = string.Empty;
 
-    /// <summary>Ciphertext of the database password AIDE generated or reset; <c>null</c> when AIDE doesn't hold one.</summary>
+    /// <summary>Ciphertext of the database password Tevrin generated or reset; <c>null</c> when Tevrin doesn't hold one.</summary>
     public string? DbPasswordEncrypted { get; set; }
 
     /// <summary>When the database expires (Render free Postgres, 30 days); <c>null</c> when it doesn't.</summary>
@@ -73,7 +73,7 @@ public enum ManagedDatabaseStatus
 }
 
 /// <summary>
-/// §4.21, §5: one run of AIDE's Supabase BaaS migration runner (table <c>database_migration_runs</c>) against a managed
+/// §4.21, §5: one run of Tevrin's Supabase BaaS migration runner (table <c>database_migration_runs</c>) against a managed
 /// database for a commit: the migrations it applied (<see cref="Applied"/>, jsonb <c>[{version, name, ms}]</c>), and the
 /// error when it failed.
 /// </summary>

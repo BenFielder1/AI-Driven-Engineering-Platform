@@ -39,7 +39,7 @@
     {
       "title": "Auth Flows",
       "when": "mode == baas",
-      "guidance": "The sign-in methods (email and password, magic link, OAuth providers, anonymous) and how a guest upgrades. Sign-up and confirmation behaviour, the profile row created per auth user (trigger), session refresh, sign-out, and which routes require sign-in (redirect with ?next=<path>). List the redirect URLs for local, preview and production (AIDE sets site_url and the allow list on the Supabase project), and any server-only admin action that needs the secret key (or 'None')."
+      "guidance": "The sign-in methods (email and password, magic link, OAuth providers, anonymous) and how a guest upgrades. Sign-up and confirmation behaviour, the profile row created per auth user (trigger), session refresh, sign-out, and which routes require sign-in (redirect with ?next=<path>). List the redirect URLs for local, preview and production (Tevrin sets site_url and the allow list on the Supabase project), and any server-only admin action that needs the secret key (or 'None')."
     }
   ],
   "ownership": {
@@ -119,7 +119,7 @@
     {
       "glob": "supabase/migrations/**",
       "existingOnBase": true,
-      "reason": "Migrations on the base commit are immutable (FR-125); AIDE's runner fails with MIGRATION_HISTORY_DIVERGED when a recorded file changes."
+      "reason": "Migrations on the base commit are immutable (FR-125); Tevrin's runner fails with MIGRATION_HISTORY_DIVERGED when a recorded file changes."
     }
   ],
   "generatedFiles": [

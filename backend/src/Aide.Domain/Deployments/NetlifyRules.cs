@@ -15,7 +15,7 @@ public sealed record RepoDeployKey(string? PublicKey, bool ReadOnly);
 
 /// <summary>
 /// §4.20 Netlify: deploy states, the deploy-creation limit (3 a minute and 100 a day per account, enforced before calling),
-/// env contexts per AIDE environment, the provider deployment id (the deploy id, plus the commit and branch a preview must
+/// env contexts per Tevrin environment, the provider deployment id (the deploy id, plus the commit and branch a preview must
 /// build), plan-limit errors and the <c>netlify.toml</c> <c>[build] ignore</c> rule. Pure.
 /// </summary>
 public static class NetlifyRules
@@ -24,16 +24,16 @@ public static class NetlifyRules
 
     public const int DeploysPerDay = 100;
 
-    /// <summary>The build title AIDE sets (<c>aide:&lt;deployment id&gt;</c>), so a retry finds what an earlier attempt made.</summary>
+    /// <summary>The build title Tevrin sets (<c>aide:&lt;deployment id&gt;</c>), so a retry finds what an earlier attempt made.</summary>
     public const string TitlePrefix = "aide:";
 
     /// <summary>The Netlify GitHub App install page (FR-144 <c>PLATFORM_GIT_NOT_CONNECTED</c> link).</summary>
     public const string GitHubInstallUrl = "https://github.com/apps/netlify/installations/new";
 
-    /// <summary>§4.20, D-V4-16: the title of the deploy key and the description of the webhook AIDE adds to the repository.</summary>
-    public const string RepoLinkTitle = "Netlify (added by AIDE)";
+    /// <summary>§4.20, D-V4-16: the title of the deploy key and the description of the webhook Tevrin adds to the repository.</summary>
+    public const string RepoLinkTitle = "Netlify (added by Tevrin)";
 
-    /// <summary>§8: the only URL AIDE points a repository webhook at, for <c>gitlab</c> or <c>bitbucket</c>.</summary>
+    /// <summary>§8: the only URL Tevrin points a repository webhook at, for <c>gitlab</c> or <c>bitbucket</c>.</summary>
     public static string WebhookUrl(string? host) => host is "gitlab" or "bitbucket"
         ? $"https://api.netlify.com/hooks/{host}"
         : throw new ArgumentOutOfRangeException(nameof(host), host, "Netlify is linked by webhook only for GitLab and Bitbucket.");
@@ -81,7 +81,7 @@ public static class NetlifyRules
     /// <summary>The attempt number of a preview built through the build hook (no further re-trigger after it).</summary>
     public const int HookAttempt = 3;
 
-    /// <summary>The title of AIDE's preview build hook of a branch.</summary>
+    /// <summary>The title of Tevrin's preview build hook of a branch.</summary>
     public const string HookTitlePrefix = "aide previews ";
 
     /// <summary>
@@ -108,7 +108,7 @@ public static class NetlifyRules
             || message.Contains("skipped build", StringComparison.Ordinal);
     }
 
-    /// <summary>The deploy title AIDE gives a build-hook build of <paramref name="sha"/> (to find it again).</summary>
+    /// <summary>The deploy title Tevrin gives a build-hook build of <paramref name="sha"/> (to find it again).</summary>
     public static string HookDeployTitle(string sha) => $"{TitlePrefix}hook:{sha}";
 
     /// <summary>
@@ -148,13 +148,13 @@ public static class NetlifyRules
     }
 
     /// <summary>
-    /// FR-145, §4.20: the Netlify contexts of an AIDE environment: production → <c>production</c>; preview →
+    /// FR-145, §4.20: the Netlify contexts of a Tevrin environment: production → <c>production</c>; preview →
     /// <c>deploy-preview</c> and <c>branch-deploy</c> (API branch builds run as branch deploys).
     /// </summary>
     public static IReadOnlyList<string> ContextsOf(DeploymentEnvironment environment) =>
         environment == DeploymentEnvironment.Production ? ["production"] : ["deploy-preview", "branch-deploy"];
 
-    /// <summary>AIDE's id of a synced (key, environment) on Netlify: <c>netlify:&lt;environment&gt;:&lt;key&gt;</c>.</summary>
+    /// <summary>Tevrin's id of a synced (key, environment) on Netlify: <c>netlify:&lt;environment&gt;:&lt;key&gt;</c>.</summary>
     public static string EnvId(string key, DeploymentEnvironment environment) =>
         string.Create(CultureInfo.InvariantCulture, $"netlify:{environment.ToWire()}:{key}");
 
@@ -168,7 +168,7 @@ public static class NetlifyRules
     }
 
     /// <summary>
-    /// The provider deployment id of a deploy AIDE asked for: the deploy id alone (production, adopted), or
+    /// The provider deployment id of a deploy Tevrin asked for: the deploy id alone (production, adopted), or
     /// <c>&lt;deploy&gt;|&lt;sha&gt;|&lt;attempt&gt;|&lt;branch&gt;</c> for a preview, whose branch build must be of the PR
     /// head (Netlify builds the branch HEAD).
     /// </summary>
@@ -216,7 +216,7 @@ public static class NetlifyRules
     }
 
     /// <summary>
-    /// §4.20 branch control: whether <c>netlify.toml</c> has a <c>[build]</c> <c>ignore</c> command that names AIDE's
+    /// §4.20 branch control: whether <c>netlify.toml</c> has a <c>[build]</c> <c>ignore</c> command that names Tevrin's
     /// branches (<c>aide/</c>), so Netlify skips builds of <c>aide/*</c> it starts by itself.
     /// </summary>
     public static bool IgnoresAideBranches(string? toml)

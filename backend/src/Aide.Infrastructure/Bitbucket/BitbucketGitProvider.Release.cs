@@ -23,9 +23,9 @@ internal sealed partial class BitbucketGitProvider
 
     /// <summary>
     /// FR-138, §4.19: the single mergeability call (<c>GET …/pullrequests/{id}/mergeability/checks</c>), mapped by
-    /// <see cref="MergeabilityChecks.Map"/>: ready means no check has <c>blocking: true</c>. The draft AIDE opened it as
-    /// doesn't count until AIDE marked it ready (<see cref="MergeabilityChecks.IgnoringAideDraft"/>). A 404 is
-    /// <c>pr_not_open</c>. An answer AIDE can't use is <c>UPSTREAM_ERROR</c>.
+    /// <see cref="MergeabilityChecks.Map"/>: ready means no check has <c>blocking: true</c>. The draft Tevrin opened it as
+    /// doesn't count until Tevrin marked it ready (<see cref="MergeabilityChecks.IgnoringAideDraft"/>). A 404 is
+    /// <c>pr_not_open</c>. An answer Tevrin can't use is <c>UPSTREAM_ERROR</c>.
     /// </summary>
     public async Task<Result<HostMergeReadiness>> GetMergeReadinessAsync(
         GitConnectionSettings settings, int number, MergeStrategy strategy, CancellationToken cancellationToken, bool markedReady = false)
@@ -142,7 +142,7 @@ internal sealed partial class BitbucketGitProvider
     /// <list type="number">
     /// <item>The release tag already on the merged commit is the release already made; on any other commit it is
     /// <c>TAG_EXISTS</c> before anything is merged.</item>
-    /// <item>A merged pull request (by someone else, or AIDE's own merge before a retry: <see cref="ReleaseRequest.RecordedMergeCommitSha"/>)
+    /// <item>A merged pull request (by someone else, or Tevrin's own merge before a retry: <see cref="ReleaseRequest.RecordedMergeCommitSha"/>)
     /// releases its <c>merge_commit.hash</c>; a declined one is <c>PR_CLOSED</c>.</item>
     /// <item>Otherwise the draft is marked ready (<c>draft: false</c>); under <c>manual</c> (or the merge poll) the release
     /// then awaits the merge.</item>
@@ -255,15 +255,15 @@ internal sealed partial class BitbucketGitProvider
             {
                 var manual = ReleaseOutcome.Awaiting(
                     stillDraft
-                        ? $"The merge strategy is manual: AIDE never merges. AIDE couldn't mark pull request #{id} ready; mark it ready and merge it on Bitbucket."
-                        : $"The merge strategy is manual: AIDE never merges. Pull request #{id} is ready; merge it on Bitbucket.",
+                        ? $"The merge strategy is manual: Tevrin never merges. Tevrin couldn't mark pull request #{id} ready; mark it ready and merge it on Bitbucket."
+                        : $"The merge strategy is manual: Tevrin never merges. Pull request #{id} is ready; merge it on Bitbucket.",
                     refused: false);
                 return manual with { StillDraft = stillDraft };
             }
 
             if (stillDraft)
             {
-                var draft = ReleaseOutcome.Awaiting($"AIDE couldn't mark pull request #{id} ready, so Bitbucket won't merge it.", refused: true);
+                var draft = ReleaseOutcome.Awaiting($"Tevrin couldn't mark pull request #{id} ready, so Bitbucket won't merge it.", refused: true);
                 return draft with { StillDraft = true, RefusedReason = MergeReadinessReasonCode.Draft };
             }
 
@@ -278,7 +278,7 @@ internal sealed partial class BitbucketGitProvider
             {
                 return ReleaseOutcome.Failed(
                     ErrorCodes.GitError,
-                    $"Bitbucket didn't report the head of pull request #{id}, so AIDE can't confirm it is the commit the production migrations ran on; the release retries.",
+                    $"Bitbucket didn't report the head of pull request #{id}, so Tevrin can't confirm it is the commit the production migrations ran on; the release retries.",
                     transient: true);
             }
 
@@ -350,7 +350,7 @@ internal sealed partial class BitbucketGitProvider
     }
 
     /// <summary>
-    /// FR-140: AIDE's merge of pull request <paramref name="id"/>: the merged commit, or the outcome that ends the attempt
+    /// FR-140: Tevrin's merge of pull request <paramref name="id"/>: the merged commit, or the outcome that ends the attempt
     /// (awaiting the merge, the conflicts, a failure).
     /// </summary>
     private async Task<(string? Sha, string? Source, ReleaseOutcome? Outcome)> MergeAsync(
@@ -593,7 +593,7 @@ internal sealed partial class BitbucketGitProvider
         return repo.Failure;
     }
 
-    /// <summary>The tag's message is AIDE's release notes (the full notes stay on the AIDE release too), then FR-174's trailer.</summary>
+    /// <summary>The tag's message is Tevrin's release notes (the full notes stay on the Tevrin release too), then FR-174's trailer.</summary>
     private static HostReleaseRequest HostRelease(ReleaseRequest request, string commit)
     {
         var tagMessage = request.TagMessage;

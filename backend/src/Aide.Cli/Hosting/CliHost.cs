@@ -16,7 +16,7 @@ internal sealed class CliHost
     /// <summary>Creates the handler behind the API HttpClient (a fake in tests).</summary>
     public required Func<HttpMessageHandler> CreateHttpHandler { get; init; }
 
-    /// <summary>The per-user config root; the CLI uses `&lt;root&gt;/aide/config.json` unless AIDE_CONFIG is set.</summary>
+    /// <summary>The per-user config root; the CLI uses `&lt;root&gt;/aide/config.json` unless TEVRIN_CONFIG (or AIDE_CONFIG) is set.</summary>
     public required string UserConfigRoot { get; init; }
 
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;

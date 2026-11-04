@@ -46,7 +46,7 @@ public static class ReleaseEndpoints
 
         group.MapGet("/releases/{releaseId:guid}/notes", GetReleaseNotes)
             .WithName("GetReleaseNotes")
-            .WithSummary("FR-140, D-V4-7: AIDE's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded.")
+            .WithSummary("FR-140, D-V4-7: Tevrin's full release notes of one release attempt (members): a succeeded Bitbucket release's (Bitbucket has no Releases; the annotated tag's message holds them); notes is null for other Git hosts or an attempt that hasn't succeeded.")
             .Produces<ReleaseNotesDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or no such release attempt in it."));

@@ -2,14 +2,15 @@ import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon
 import type { CSSProperties } from 'react'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
-import { useThemePreference } from '../../lib/theme'
+import { useResolvedTheme } from '../../lib/theme'
 
-/** sonner toasts for async results (SPEC §7.1), themed from the tokens and following the theme preference. */
+/** sonner toasts for async results, themed from the tokens and following the theme in effect. Bottom-right (FR-205). */
 export function Toaster(props: ToasterProps) {
-  const theme = useThemePreference()
+  const theme = useResolvedTheme()
   return (
     <Sonner
       theme={theme}
+      position="bottom-right"
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

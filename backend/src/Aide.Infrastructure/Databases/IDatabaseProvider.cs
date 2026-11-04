@@ -36,7 +36,7 @@ public sealed record DatabaseHostContext(string? RenderServiceId, string? Railwa
 /// <summary>
 /// FR-152: create or link a database for one environment. <see cref="Name"/> is the resource name to create (Render
 /// preview: <c>&lt;name&gt;-preview</c>); <see cref="Password"/> the AIDE-generated database password (Supabase create, and
-/// the reset when linking a project whose password AIDE doesn't hold; Railway).
+/// the reset when linking a project whose password Tevrin doesn't hold; Railway).
 /// </summary>
 public sealed record DatabaseSetupRequest(
     Guid ProjectId,
@@ -61,7 +61,7 @@ public sealed record DatabaseSetupResult(string? ResourceId, string Name, string
     public override string ToString() => $"DatabaseSetupResult {{ ResourceId = {ResourceId}, Name = {Name} }}";
 }
 
-/// <summary>A database as a provider sees it on a poll: its resource, environment, name, the password AIDE holds and what is stored.</summary>
+/// <summary>A database as a provider sees it on a poll: its resource, environment, name, the password Tevrin holds and what is stored.</summary>
 public sealed record DatabaseRef(string? ResourceId, DeploymentEnvironment Environment, string? Name, string? Password, ManagedDatabaseConnection? Connection, DatabaseHostContext Host)
 {
     public override string ToString() => $"DatabaseRef {{ ResourceId = {ResourceId}, Environment = {Environment} }}";

@@ -19,9 +19,9 @@ public sealed class Release
     public string? MergeCommitSha { get; set; }
 
     /// <summary>
-    /// FR-140: when AIDE sent the merge call of this attempt (Bitbucket merges can finish asynchronously, 202, or time out,
+    /// FR-140: when Tevrin sent the merge call of this attempt (Bitbucket merges can finish asynchronously, 202, or time out,
     /// 555); <c>null</c> before. A rollback treats it like a recorded merge, and a retry that finds the pull request merged
-    /// knows the merge was AIDE's own.
+    /// knows the merge was Tevrin's own.
     /// </summary>
     public DateTimeOffset? MergeSubmittedAt { get; set; }
 

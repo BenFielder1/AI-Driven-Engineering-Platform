@@ -290,7 +290,7 @@ internal sealed record StackDetectionConflictDto(string Choice, IReadOnlyList<St
 
 internal sealed record StackDetectionDto(string Ref, string Commit, IReadOnlyList<StackDetectedChoiceDto> Suggestions, IReadOnlyList<StackDetectionConflictDto> Conflicts, bool Truncated);
 
-// FR-156: `aide databases` (the databases of GET /settings/deployment) and `aide migrations`.
+// FR-156: `tevrin databases` (the databases of GET /settings/deployment) and `tevrin migrations`.
 
 internal sealed record DeploymentDatabaseDto(
     string Environment,
@@ -319,7 +319,7 @@ internal sealed record MigrationRunDto(
     string? ErrorCode,
     DateTimeOffset StartedAt);
 
-// FR-194: `aide analysis` (GET /analysis, POST /analysis/run, the generic approve and reject of the stack_profile).
+// FR-194: `tevrin analysis` (GET /analysis, POST /analysis/run, the generic approve and reject of the stack_profile).
 
 internal sealed record CodebaseSummaryStatusDto(string Status, Guid? RunId, Guid? ArtifactId, int? ArtifactVersion);
 
@@ -390,7 +390,7 @@ internal sealed record StackAnalysisQueuedDto(Guid JobId, string Trigger, DateTi
 /// <summary>The body of approving a <c>stack_profile</c>: a comment, and <c>generalist</c> for "Continue with No stack (general)" (FR-181).</summary>
 internal sealed record ApproveStackProfileRequest(string? Comment, bool? Generalist);
 
-// FR-194: `aide sources` (GET/POST /sources, POST /sources/:importId/reimport, DELETE /sources/:importId, POST /sources/check).
+// FR-194: `tevrin sources` (GET/POST /sources, POST /sources/:importId/reimport, DELETE /sources/:importId, POST /sources/check).
 
 internal sealed record TrackerSelectionRequest(IReadOnlyList<string>? Keys, string? Query, string? ContainerId);
 
@@ -435,7 +435,7 @@ internal sealed record SourceDriftItemDto(Guid ImportId, string Provider, string
 
 internal sealed record SourcesCheckDto(IReadOnlyList<SourceDriftItemDto>? Items, string? SnapshotContentHash, DateTimeOffset CheckedAt);
 
-// FR-194: `aide deployments groups` (the groups of GET /settings/deployment).
+// FR-194: `tevrin deployments groups` (the groups of GET /settings/deployment).
 
 internal sealed record DeploymentGroupPartDto(string Part, string? Environment, string Status, string? StatusReason, string? ResourceId);
 

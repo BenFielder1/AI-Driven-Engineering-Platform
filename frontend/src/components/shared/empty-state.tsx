@@ -23,8 +23,10 @@ const iconTone: Record<EmptyStateVariant, string> = {
 }
 
 /**
- * Typed empty state (SPEC §7.1): no data, not started, not connected, forbidden, error. `action` is a ready-made
- * control so the caller picks a role-appropriate call to action. `headingLevel` keeps the outline right.
+ * Typed empty state (FR-205): a title, one sentence on what the area is for (`description`), and the primary action
+ * where one exists ("Create project", "Add connection"). Variants: no data, not started, not connected, forbidden,
+ * error. `action` is a ready-made control so the caller picks a role-appropriate call to action. `headingLevel` keeps
+ * the outline right.
  */
 export function EmptyState({
   variant,
@@ -53,11 +55,11 @@ export function EmptyState({
       role={variant === 'error' ? 'alert' : undefined}
       className={cn(!bare && panelClass, 'flex flex-col items-center justify-center gap-3 px-6 py-10 text-center', className)}
     >
-      <span className={cn('flex size-12 items-center justify-center rounded-full', iconTone[variant])}>
-        <Icon className="size-6" aria-hidden />
+      <span className={cn('flex size-10 items-center justify-center rounded-lg', iconTone[variant])}>
+        <Icon className="size-5" aria-hidden />
       </span>
       <div className="max-w-md space-y-1">
-        <Heading className="text-lg">{title}</Heading>
+        <Heading className="text-base">{title}</Heading>
         {description && <div className="text-sm text-muted-foreground">{description}</div>}
       </div>
       {action && <div className="mt-1 flex flex-wrap justify-center gap-2">{action}</div>}

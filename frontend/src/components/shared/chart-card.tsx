@@ -81,7 +81,7 @@ export function ChartCard({
             aria-label={`${title} table`}
             tabIndex={0}
             data-testid="chart-table-region"
-            className="max-h-96 overflow-auto rounded-lg border border-border/60 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="max-h-96 overflow-auto rounded-lg border border-border"
           >
             <table className="w-full text-sm">
               <caption className="sr-only">{table.caption ?? title}</caption>

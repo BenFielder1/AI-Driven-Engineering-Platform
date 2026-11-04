@@ -11,14 +11,13 @@ import { gitlabStartHref } from '../gitlab/gitlab-api'
 import { githubSignInHref, useAuthProviders } from './auth-api'
 
 /**
- * Centred frosted card used by /login and /register (SPEC 7.2): the AIDE lockup, the page title (h1) and the form.
+ * Centred card used by /login and /register (SPEC 7.2; no glow behind it since FR-202): the lockup, the page title (h1) and the form.
  */
 export function AuthCard({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
   useDocumentTitle(title)
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] items-center justify-center px-4 py-10">
       <div className="relative w-full max-w-md">
-        <div aria-hidden className="pointer-events-none absolute -inset-8 -z-10 rounded-full bg-primary/10 blur-3xl" />
         <div className={cn(panelClass, 'p-6 shadow-lg sm:p-8')}>
           <div className="mb-6 flex flex-col items-center gap-4 text-center">
             <BrandLockup className="scale-125" />

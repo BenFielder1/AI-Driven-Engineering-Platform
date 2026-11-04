@@ -6,7 +6,7 @@ namespace Aide.Domain.Deployments;
 public sealed record RailwayResource(string ProjectId, string ServiceId, string? ProductionEnvironmentId);
 
 /// <summary>
-/// FR-144, §4.20: the Railway service instance settings AIDE sets (<c>serviceInstanceUpdate</c>): root directory, the
+/// FR-144, §4.20: the Railway service instance settings Tevrin sets (<c>serviceInstanceUpdate</c>): root directory, the
 /// Dockerfile or build and start commands, health check, watch patterns and the pre-deploy command.
 /// </summary>
 public sealed record RailwayInstanceSettings(
@@ -28,7 +28,7 @@ public static class RailwayRules
     public const string PreviewEnvironmentName = "aide-preview";
     public const string ProductionEnvironmentName = "production";
 
-    /// <summary>The port AIDE sets (<c>PORT</c>) on a backend service it creates, so the private-network origin resolves.</summary>
+    /// <summary>The port Tevrin sets (<c>PORT</c>) on a backend service it creates, so the private-network origin resolves.</summary>
     public const string BackendPort = "8080";
 
     /// <summary>§4.20: Railway is polled at most every 20 seconds.</summary>
@@ -90,7 +90,7 @@ public static class RailwayRules
             config.PreDeployCommand is { Length: > 0 } preDeploy ? [preDeploy] : null);
     }
 
-    /// <summary>The env id AIDE records for a Railway variable: the environment and key (Railway has no ids).</summary>
+    /// <summary>The env id Tevrin records for a Railway variable: the environment and key (Railway has no ids).</summary>
     public static string EnvId(string key, DeploymentEnvironment environment) => RenderRules.EnvId(key, environment);
 
     public static (string Key, DeploymentEnvironment Environment)? ParseEnvId(string? id) => RenderRules.ParseEnvId(id);

@@ -20,7 +20,7 @@ interface AlertProps {
 
 export function Alert({ tone = 'info', title, children, role, className = '' }: AlertProps) {
   return (
-    <div role={role} className={`rounded-lg border border-l-4 p-3 text-sm backdrop-blur-sm ${tones[tone]} ${className}`}>
+    <div role={role} className={`rounded-lg border border-l-4 p-3 text-sm ${tones[tone]} ${className}`}>
       {title && <p className="font-semibold">{title}</p>}
       {children}
     </div>

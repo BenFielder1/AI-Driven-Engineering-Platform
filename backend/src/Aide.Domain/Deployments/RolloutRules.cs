@@ -6,7 +6,7 @@ namespace Aide.Domain.Deployments;
 /// <summary>A step of a preview or production rollout (FR-147, FR-149), in dependency order. Wire values: <c>migrations</c>, <c>backend</c>, <c>frontend</c>.</summary>
 public enum RolloutStepKind
 {
-    /// <summary>Supabase BaaS migrations applied by AIDE's runner (§4.21).</summary>
+    /// <summary>Supabase BaaS migrations applied by Tevrin's runner (§4.21).</summary>
     Migrations = 0,
 
     Backend = 1,

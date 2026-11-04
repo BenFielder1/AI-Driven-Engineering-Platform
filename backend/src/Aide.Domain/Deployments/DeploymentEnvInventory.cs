@@ -50,7 +50,7 @@ public sealed record DerivedEnvInput(
     DerivedEnvDatabaseFacts? DatabaseFacts = null);
 
 /// <summary>
-/// A variable AIDE derives (§4.22): key, the components it applies to, its value per environment (only the environments
+/// A variable Tevrin derives (§4.22): key, the components it applies to, its value per environment (only the environments
 /// whose source is known; empty while the backend has no URL yet), whether it is public or sensitive, and where it comes from.
 /// </summary>
 public sealed record DerivedEnvVar(
@@ -265,14 +265,14 @@ public static class DerivedEnvRules
 
     /// <summary>
     /// FR-146: the backend's origin on Railway's private network as a Railway reference variable,
-    /// <c>http://${{&lt;service&gt;.RAILWAY_PRIVATE_DOMAIN}}:${{&lt;service&gt;.PORT}}</c> (AIDE sets <c>PORT</c> on a backend
+    /// <c>http://${{&lt;service&gt;.RAILWAY_PRIVATE_DOMAIN}}:${{&lt;service&gt;.PORT}}</c> (Tevrin sets <c>PORT</c> on a backend
     /// service it creates); <c>null</c> without a service name (the public URLs are used then).
     /// </summary>
     public static string? RailwayPrivateOrigin(string? backendServiceName) =>
         string.IsNullOrWhiteSpace(backendServiceName) ? null
         : $"http://${{{{{backendServiceName}.RAILWAY_PRIVATE_DOMAIN}}}}:${{{{{backendServiceName}.PORT}}}}";
 
-    /// <summary>The keys AIDE derives for <paramref name="input"/> (an Owner can't set them, §4.22).</summary>
+    /// <summary>The keys Tevrin derives for <paramref name="input"/> (an Owner can't set them, §4.22).</summary>
     public static IReadOnlySet<string> DerivedKeys(DerivedEnvInput input) =>
         Derive(input).Select(v => v.Key).ToHashSet(StringComparer.Ordinal);
 
@@ -355,7 +355,7 @@ public sealed record EnvSyncState(DateTimeOffset UpdatedAt, DateTimeOffset? Sync
 
 /// <summary>
 /// One row of the FR-145 environment inventory: <see cref="Source"/> <c>user</c> (an Owner's, value encrypted),
-/// <c>derived</c> (AIDE's, read-only, with <see cref="DerivedFrom"/>) or <c>required</c> (a pack's required variable that has
+/// <c>derived</c> (Tevrin's, read-only, with <see cref="DerivedFrom"/>) or <c>required</c> (a pack's required variable that has
 /// no value). <see cref="HasValue"/> is false for required rows and for derived rows whose source has no URL yet.
 /// </summary>
 public sealed record EnvInventoryRow(
@@ -526,7 +526,7 @@ public static partial class EnvInventoryRules
 
         if (key is not null && derivedKeys.Contains(key))
         {
-            problems.Add($"key: AIDE derives {key} from the deployment targets; it can't be set by hand.");
+            problems.Add($"key: Tevrin derives {key} from the deployment targets; it can't be set by hand.");
         }
 
         if (isPublic && key is not null && LooksSecret(key, value))

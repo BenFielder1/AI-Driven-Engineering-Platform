@@ -285,7 +285,7 @@ public static class DeploymentGroupRules
         if (put.PartsSetUpAlone is { Count: > 0 } alone && (put.Create || put.Link))
         {
             return Result.Failure(Invalid(
-                provider, $"the {string.Join(" and ", alone.Select(DeploymentGrouping.WireName))} {(alone.Count == 1 ? "is" : "are")} already set up on their own; remove them first, because AIDE doesn't move platform resources"));
+                provider, $"the {string.Join(" and ", alone.Select(DeploymentGrouping.WireName))} {(alone.Count == 1 ? "is" : "are")} already set up on their own; remove them first, because Tevrin doesn't move platform resources"));
         }
 
         if (put.Link)

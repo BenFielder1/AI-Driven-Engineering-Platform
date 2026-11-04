@@ -4,7 +4,7 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>FR-194: `aide sources list|import|reimport|remove|check` — the tracker imports of the version in development (FR-170–FR-173).</summary>
+/// <summary>FR-194: `tevrin sources list|import|reimport|remove|check` — the tracker imports of the version in development (FR-170–FR-173).</summary>
 internal static class SourcesCommands
 {
     internal static readonly string[] Trackers = ["jira", "linear", "github", "gitlab"];
@@ -53,7 +53,7 @@ internal static class SourcesCommands
         var comments = new Option<bool>("--comments") { Description = "Include the items' comments (off by default)." };
         var command = new Command(
             "import",
-            "Import tracker items into the version in development (writer). Use --keys or --query. The import runs as a job: see 'aide sources list'. " +
+            "Import tracker items into the version in development (writer). Use --keys or --query. The import runs as a job: see 'tevrin sources list'. " +
             "Exit 4 for WRONG_PHASE, TRACKER_NOT_CONNECTED, TRACKER_PERMISSION_MISSING or SOURCE_ITEMS_TOO_LARGE.")
         {
             id, connection, tracker, keys, query, container, comments,
@@ -152,7 +152,7 @@ internal static class SourcesCommands
         return command;
     }
 
-    private static Argument<Guid> ImportIdArgument() => new("import-id") { Description = "The import's id (shown by 'aide sources list')." };
+    private static Argument<Guid> ImportIdArgument() => new("import-id") { Description = "The import's id (shown by 'tevrin sources list')." };
 
     private static string Path(Guid projectId) => $"api/projects/{projectId}/sources";
 
@@ -179,7 +179,7 @@ internal static class SourcesCommands
         }
 
         var import = queued.Value;
-        await context.Out.WriteLineAsync($"{verb} import {import.Id} from {import.Provider} ({import.Status}). Next: aide sources list {projectId}").ConfigureAwait(false);
+        await context.Out.WriteLineAsync($"{verb} import {import.Id} from {import.Provider} ({import.Status}). Next: tevrin sources list {projectId}").ConfigureAwait(false);
         return ExitCodes.Success;
     }
 

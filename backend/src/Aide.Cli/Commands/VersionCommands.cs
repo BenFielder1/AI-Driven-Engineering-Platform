@@ -5,10 +5,10 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>FR-93, FR-156: `aide version start`, `aide versions`, `aide deployments`.</summary>
+/// <summary>FR-93, FR-156: `tevrin version start`, `tevrin versions`, `tevrin deployments`.</summary>
 internal static class VersionCommands
 {
-    /// <summary>FR-156, FR-129: what <c>aide version start --preset</c> prints before exiting 2 (usage).</summary>
+    /// <summary>FR-156, FR-129: what <c>tevrin version start --preset</c> prints before exiting 2 (usage).</summary>
     internal const string PresetRemoved = "presets were removed in v4; use --frontend, --backend, --data, --vcs and the host options to choose a stack (omit them to keep the current one).";
 
     public static Command BuildVersion(CommandFactory factory)
@@ -97,7 +97,7 @@ internal static class VersionCommands
             var state = started.Value.State;
             await context.Out.WriteLineAsync(
                 $"Started version {v.Version}{(v.BaseTag is { } baseTag ? $" (from {baseTag})" : string.Empty)}: phase {state.Phase}, checkpoint {Output.Num(state.Checkpoint)}.").ConfigureAwait(false);
-            await context.Out.WriteLineAsync(state.Phase == "analysis" ? $"Next: aide analysis show {projectId}" : $"Next: aide status {projectId}").ConfigureAwait(false);
+            await context.Out.WriteLineAsync(state.Phase == "analysis" ? $"Next: tevrin analysis show {projectId}" : $"Next: tevrin status {projectId}").ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
@@ -143,7 +143,7 @@ internal static class VersionCommands
         environment.AcceptOnlyFromAmong("preview", "production");
         var component = new Option<string?>("--component") { Description = "Only the frontend's or the backend's deployments." };
         component.AcceptOnlyFromAmong("frontend", "backend");
-        var command = new Command("deployments", "List a project's deployments, newest first: target, component, version, SHA, state, URL, time and who triggered it. 'aide deployments groups <id>' lists its deployment groups.") { id, target, environment, component };
+        var command = new Command("deployments", "List a project's deployments, newest first: target, component, version, SHA, state, URL, time and who triggered it. 'tevrin deployments groups <id>' lists its deployment groups.") { id, target, environment, component };
         command.Subcommands.Add(BuildGroups(factory));
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
@@ -166,7 +166,7 @@ internal static class VersionCommands
         return command;
     }
 
-    /// <summary>FR-194: `aide deployments groups &lt;id&gt;` — the deployment groups of Settings → Deployment (FR-191).</summary>
+    /// <summary>FR-194: `tevrin deployments groups &lt;id&gt;` — the deployment groups of Settings → Deployment (FR-191).</summary>
     private static Command BuildGroups(CommandFactory factory)
     {
         var id = ProjectCommands.ProjectIdArgument();

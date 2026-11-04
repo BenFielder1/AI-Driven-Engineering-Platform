@@ -396,12 +396,12 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
             : string.Empty;
         return extension switch
         {
-            ".md" => $"# {title}\n\n{verb} by AIDE in step {step} of the {project} plan.\n",
+            ".md" => $"# {title}\n\n{verb} by Tevrin in step {step} of the {project} plan.\n",
             ".json" => JsonSerializer.Serialize(new { step, title }) + "\n",
             ".js" or ".ts" or ".mjs" or ".cjs" or ".jsx" or ".tsx" or ".cs" or ".java" or ".go" or ".rs" or ".c" or ".cpp" =>
-                $"// {title}\n// {verb} by AIDE in step {step} of the {project} plan.\n{routes}\nexport const step{step} = '{fileName}';\n",
-            ".py" or ".rb" or ".sh" or ".yml" or ".yaml" or ".toml" => $"# {title}\n# {verb} by AIDE in step {step} of the {project} plan.\n",
-            _ => $"{title}\n{verb} by AIDE in step {step} of the {project} plan.\n",
+                $"// {title}\n// {verb} by Tevrin in step {step} of the {project} plan.\n{routes}\nexport const step{step} = '{fileName}';\n",
+            ".py" or ".rb" or ".sh" or ".yml" or ".yaml" or ".toml" => $"# {title}\n# {verb} by Tevrin in step {step} of the {project} plan.\n",
+            _ => $"{title}\n{verb} by Tevrin in step {step} of the {project} plan.\n",
         };
     }
 

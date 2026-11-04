@@ -51,10 +51,10 @@ public sealed class VercelApiClient(IHttpClientFactory clients, VercelEnvWriteLi
 {
     public const string HttpClientName = "vercel";
 
-    /// <summary>The deployment <c>meta</c> key carrying the AIDE row id (idempotency key).</summary>
+    /// <summary>The deployment <c>meta</c> key carrying the Tevrin row id (idempotency key).</summary>
     public const string AideDeploymentIdMeta = "aideDeploymentId";
 
-    /// <summary>§8: the only Vercel host AIDE talks to.</summary>
+    /// <summary>§8: the only Vercel host Tevrin talks to.</summary>
     public const string ApiBaseUrl = "https://api.vercel.com/";
 
     private const int MaxMessageLength = 300;

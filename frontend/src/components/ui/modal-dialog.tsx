@@ -156,7 +156,7 @@ export function DetailSheet({
           }
         }}
         onCloseAutoFocus={focus.onCloseAutoFocus}
-        className="w-full gap-0 border-border/60 bg-background/95 backdrop-blur-xl sm:max-w-2xl"
+        className="w-full gap-0 border-border bg-background sm:max-w-2xl"
       >
         <SheetHeader className="border-b border-border/60 pr-14">
           <SheetTitle className="text-lg break-words">{title}</SheetTitle>

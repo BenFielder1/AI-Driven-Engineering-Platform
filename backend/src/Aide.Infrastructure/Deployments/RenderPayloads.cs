@@ -79,7 +79,7 @@ public sealed class RenderLogRateLimiter(TimeProvider time)
                 throw new DeploymentProviderException(
                     DeploymentFailure.RateLimited,
                     429,
-                    $"Render allows {RenderRules.LogRequestsPerMinute} log requests a minute per user; AIDE waits.",
+                    $"Render allows {RenderRules.LogRequestsPerMinute} log requests a minute per user; Tevrin waits.",
                     retryAt: decision.RetryAt,
                     platform: DeploymentProvider.Render);
             }

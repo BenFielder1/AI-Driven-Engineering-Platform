@@ -110,7 +110,7 @@ public sealed class GitHubPagesDeploymentProvider(GitHubApi api) : IDeploymentPr
             }
             catch (DeploymentProviderException ex) when (OnlyThisVariable(ex))
             {
-                var reason = refusal is null ? ex.Message : $"{refusal} The old value is still in the repository's variables; AIDE tries to remove it again at the next sync. ({ex.Message})";
+                var reason = refusal is null ? ex.Message : $"{refusal} The old value is still in the repository's variables; Tevrin tries to remove it again at the next sync. ({ex.Message})";
                 written.AddRange(key.Select(w => new DeploymentEnvWritten(w.Key, w.Target, w.ExistingId ?? string.Empty, reason)));
             }
         }
@@ -182,7 +182,7 @@ public sealed class GitHubPagesDeploymentProvider(GitHubApi api) : IDeploymentPr
             throw new DeploymentProviderException(
                 DeploymentFailure.PermissionMissing,
                 ex.Status,
-                "The Pages build started before its variables were synced, and re-running it needs the AIDE GitHub App's (or PAT's) Actions (read & write) permission: accept it on the installation, then redeploy.",
+                "The Pages build started before its variables were synced, and re-running it needs the Tevrin GitHub App's (or PAT's) Actions (read & write) permission: accept it on the installation, then redeploy.",
                 platform: Pages);
         }
     }
@@ -233,12 +233,12 @@ public sealed class GitHubPagesDeploymentProvider(GitHubApi api) : IDeploymentPr
             throw new DeploymentProviderException(
                 DeploymentFailure.PermissionMissing,
                 ex.Status,
-                "The AIDE GitHub App (or PAT) needs the Variables (read & write) permission: update the App's permissions in GitHub, then accept them on the installation.",
+                "The Tevrin GitHub App (or PAT) needs the Variables (read & write) permission: update the App's permissions in GitHub, then accept them on the installation.",
                 platform: Pages);
         }
     }
 
-    /// <summary>Production only: the push of the merge commit runs the Pages workflow, so AIDE follows that commit's run.</summary>
+    /// <summary>Production only: the push of the merge commit runs the Pages workflow, so Tevrin follows that commit's run.</summary>
     public Task<ProviderDeployment> DeployAsync(DeploymentAuth auth, DeployRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

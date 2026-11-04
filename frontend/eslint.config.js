@@ -44,7 +44,7 @@ export default defineConfig([
   },
   {
     // Node code: the custom web server, its helpers and tool configs.
-    files: ['server.ts', 'src/server/**/*.ts', 'e2e/**/*.ts', '*.config.{ts,js,mjs}'],
+    files: ['server.ts', 'src/server/**/*.ts', 'e2e/**/*.ts', 'scripts/**/*.ts', '*.config.{ts,js,mjs}'],
     languageOptions: { globals: globals.node },
   },
 ])

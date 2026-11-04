@@ -82,7 +82,7 @@ public sealed class SeedOptions
 public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSeeder> logger) : IHostedService
 {
     public const string AdminEmail = "admin@aide.local";
-    public const string AdminName = "AIDE Admin";
+    public const string AdminName = "Tevrin Admin";
     public const string DemoProjectName = "Demo: Todo API";
     public const int PasswordLength = 20;
 
@@ -849,7 +849,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
             var message = new StepCommitMessage(
                 "Add the Weather Board skeleton (Vite + React)",
-                $"Seeded by the AIDE dev seed for the stack inference demo.\n\n{CodeGeneration.StepTrailerLine(DemoSkeletonCommitId)}");
+                $"Seeded by the Tevrin dev seed for the stack inference demo.\n\n{CodeGeneration.StepTrailerLine(DemoSkeletonCommitId)}");
             var committed = await services.GetRequiredService<IWorkingCopies>()
                 .CommitStepAsync(projectId, prepared.Value.Branch, DemoSkeletonCommitId, DemoSkeletonFiles, message, cancellationToken);
             return committed.Sha;

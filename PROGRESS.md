@@ -57,6 +57,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [ ] M43 Integrate and harden: E2E, axe both themes, JS budget, audit over v1–v6
 
 ## Decisions
+- 2026-11-04 (M38): palette values shifted to pass AA (roles unchanged, §4.31 allows it): light danger rose-700 (rose-600 is 4.49:1 on card), dark primary indigo-300 (indigo-400 fails on its 15% tint), light sidebar-accent slate-100. `text-lg` is 20 px (the FR-203 scale has no 18 px step). `aide.theme` now stores `system` explicitly (v5 deleted the key); stored `light`/`dark` still honoured. Brand assets come from one generator (`npm run brand:assets`, `src/components/brand-geometry.ts`); a test fails on drift. `metadataBase` comes from the validated request Host (switch to a configured public origin if a CDN is added).
+- 2026-11-04 (M38 review): `ThemeSelector` placement in the user menu moves to M40 (FR-206 owns the user menu); the marketing footer placement is M41. Feature pages' frosted panels and sub-12 px `text-[10px|11px]` sizes are restyled in M40 (FR-208).
+- 2026-11-04 (M39 backend): CLI is package `Tevrin.Cli` (command `tevrin`, `src/Aide.Cli`); the deprecated `aide` command is package `Aide.Cli` from `src/Aide.Cli.Alias` (same sources). `TEVRIN_GIT_TOKEN` → `AIDE_GIT_TOKEN` added for consistency with the other three variables. Stack catalog agent text named AIDE and feeds the codegen prompt, so it was renamed and the catalog bumped 1.2.0 → 1.2.1. Commit subjects read `[Tevrin][Phase:…]` (nothing parses them; step detection uses the `AIDE-Step-Id` trailer, kept). Prompt versions: idea 6, spec 7, plan 6, codegen 5, review 8, repo analyst 3, stack analyst 3.
+- 2026-11-04 (M42): docs link check skips the frozen `docs/v1`–`v5` pages as link *sources* (their repo-root links break on the site; fixing them is allowed later), but checks links into them from `history/`.
 
 ## Known issues
 

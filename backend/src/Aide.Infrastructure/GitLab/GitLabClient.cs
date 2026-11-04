@@ -419,7 +419,7 @@ public sealed partial class GitLabClient
             using var json = await TryJsonAsync(response, cancellationToken);
             var status = (int)response.StatusCode;
             var message = status is >= 300 and < 400
-                ? "GitLab answered with a redirect, which AIDE doesn't follow. Check the instance's base URL."
+                ? "GitLab answered with a redirect, which Tevrin doesn't follow. Check the instance's base URL."
                 : json is null ? null : ErrorText(json.RootElement);
             throw new GitLabApiException(status, message) { RetryAfter = RetryAfterOf(response) };
         }

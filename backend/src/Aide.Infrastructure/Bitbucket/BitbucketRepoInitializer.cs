@@ -38,10 +38,10 @@ public interface IBitbucketRepoInitializer
 }
 
 /// <summary>
-/// FR-135, FR-136: Bitbucket has no auto-init, so AIDE makes the first commit itself in a throw-away repository (a temp
+/// FR-135, FR-136: Bitbucket has no auto-init, so Tevrin makes the first commit itself in a throw-away repository (a temp
 /// folder, removed afterwards) and pushes it to <c>main</c> over HTTPS (<see cref="GitHostRemotes"/>): the token goes only in
 /// the push's <c>http.extraHeader</c> (Basic <c>x-token-auth</c> for OAuth, <c>x-bitbucket-api-token-auth</c> for API
-/// tokens), never on disk, in the remote URL, in a log or to an LLM. git runs with AIDE's hardened <see cref="IGitCli"/>.
+/// tokens), never on disk, in the remote URL, in a log or to an LLM. git runs with Tevrin's hardened <see cref="IGitCli"/>.
 /// </summary>
 public sealed partial class BitbucketRepoInitializer(IGitCli git, IOptionsMonitor<BitbucketOptions> options, ILogger<BitbucketRepoInitializer> logger) : IBitbucketRepoInitializer
 {

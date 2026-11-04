@@ -5,7 +5,7 @@ using Aide.Infrastructure.Git;
 namespace Aide.Infrastructure.GitLab;
 
 /// <summary>
-/// FR-136: how AIDE reaches a GitLab repository with git. The URL is <c>{instance base}/{group/sub/project}.git</c> (the
+/// FR-136: how Tevrin reaches a GitLab repository with git. The URL is <c>{instance base}/{group/sub/project}.git</c> (the
 /// host is the Admin-registered instance, never a project field) and holds no credentials. The binding connection's token
 /// travels only as a per-command <c>http.&lt;base&gt;.extraHeader</c> Basic <c>oauth2:&lt;token&gt;</c> in the git child
 /// process's environment, so it is never written to <c>.git/config</c>, the remote URL, the command line, logs or events.

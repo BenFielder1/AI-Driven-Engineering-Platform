@@ -1,6 +1,6 @@
 namespace Aide.Domain.Trackers;
 
-/// <summary>An issue tracker AIDE imports from (FR-165–FR-168). Wire values: <c>jira</c>, <c>linear</c>, <c>github</c>, <c>gitlab</c>.</summary>
+/// <summary>An issue tracker Tevrin imports from (FR-165–FR-168). Wire values: <c>jira</c>, <c>linear</c>, <c>github</c>, <c>gitlab</c>.</summary>
 public enum TrackerProvider
 {
     Jira = 0,

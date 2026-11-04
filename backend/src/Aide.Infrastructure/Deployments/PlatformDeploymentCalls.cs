@@ -128,7 +128,7 @@ public sealed class NetlifyDeployRateLimiter(TimeProvider time)
     private static DeploymentProviderException Limited(DateTimeOffset? retryAt) => new(
         DeploymentFailure.RateLimited,
         429,
-        $"Netlify allows {NetlifyRules.DeploysPerMinute} deploys a minute and {NetlifyRules.DeploysPerDay} a day per account; AIDE waits.",
+        $"Netlify allows {NetlifyRules.DeploysPerMinute} deploys a minute and {NetlifyRules.DeploysPerDay} a day per account; Tevrin waits.",
         retryAt: retryAt,
         platform: DeploymentProvider.Netlify);
 }

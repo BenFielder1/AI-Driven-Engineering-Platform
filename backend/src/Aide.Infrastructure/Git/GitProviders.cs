@@ -91,7 +91,7 @@ internal sealed partial class GitHubGitProvider(
         if (!writable)
         {
             failure = string.IsNullOrEmpty(token)
-                ? "No access token is saved, so AIDE can't push to the repository. Save a token with Contents: read and write."
+                ? "No access token is saved, so Tevrin can't push to the repository. Save a token with Contents: read and write."
                 : "The token can't push to this repository. It needs Contents: read and write (or the repo scope).";
         }
         else if (!branchExists)
@@ -137,7 +137,7 @@ internal sealed partial class GitHubGitProvider(
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             LogGitFailed(logger, settings.ProjectId, "prepare", ex.GetType().Name);
-            return GitOutcome.Failed("The working copy could not be written on the AIDE server. Ask an admin to check the server log and the Workspaces:Root volume.");
+            return GitOutcome.Failed("The working copy could not be written on the Tevrin server. Ask an admin to check the server log and the Workspaces:Root volume.");
         }
     }
 
@@ -189,7 +189,7 @@ internal sealed partial class GitHubGitProvider(
 
         if (string.IsNullOrEmpty(token))
         {
-            return PullRequestOutcome.Failed("No access token is saved, so AIDE can't open the pull request. Save a token with Contents and Pull requests: read and write.", transient: false);
+            return PullRequestOutcome.Failed("No access token is saved, so Tevrin can't open the pull request. Save a token with Contents and Pull requests: read and write.", transient: false);
         }
 
         var client = clients.CreateClient(HttpClientName);
@@ -356,7 +356,7 @@ internal sealed partial class GitHubGitProvider(
                 if (!request.Merge)
                 {
                     return ReleaseOutcome.Awaiting(
-                        $"The merge strategy is manual: AIDE never merges. Pull request #{number} is ready for review; merge it on GitHub.", refused: false);
+                        $"The merge strategy is manual: Tevrin never merges. Pull request #{number} is ready for review; merge it on GitHub.", refused: false);
                 }
 
                 if (pr.Mergeable == false)
@@ -442,7 +442,7 @@ internal sealed partial class GitHubGitProvider(
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             LogGitFailed(logger, id, "release", ex.GetType().Name);
-            return ReleaseOutcome.Failed(ErrorCodes.GitError, "The working copy could not be written on the AIDE server. Ask an admin to check the server log.", transient: true);
+            return ReleaseOutcome.Failed(ErrorCodes.GitError, "The working copy could not be written on the Tevrin server. Ask an admin to check the server log.", transient: true);
         }
     }
 
@@ -748,7 +748,7 @@ internal sealed partial class GitHubGitProvider(
             ? GitOutcome.Failed("The repository URL isn't a GitHub repository URL (https://github.com/owner/repo).", transient: false)
             : GitOutcome.Failed(
                 string.IsNullOrEmpty(token)
-                    ? "No access token is saved, so AIDE can't clone or push. Save a token with Contents and Pull requests: read and write."
+                    ? "No access token is saved, so Tevrin can't clone or push. Save a token with Contents and Pull requests: read and write."
                     : "The repository can't be reached.",
                 transient: false);
 
@@ -914,13 +914,13 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
         {
             LogNotWritable(logger, ex, settings.ProjectId, root);
             // The server path stays in the log; the reason shown to the project Owner is generic.
-            return GitTestResult.Failed("The workspace folder on the AIDE server isn't writable. Ask an admin to check the Workspaces:Root setting and its volume.");
+            return GitTestResult.Failed("The workspace folder on the Tevrin server isn't writable. Ask an admin to check the Workspaces:Root setting and its volume.");
         }
 
         if (await git.GetVersionAsync(cancellationToken) is null)
         {
             return GitTestResult.Failed(
-                "The git command-line tool isn't installed on the AIDE server, so local repositories can't be created.",
+                "The git command-line tool isn't installed on the Tevrin server, so local repositories can't be created.",
                 reachable: true,
                 writable: true,
                 defaultBranchExists: true);
@@ -946,7 +946,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
         {
             LogPrepareFailed(logger, ex, settings.ProjectId);
             // The server path stays in the log; the reason shown to users is generic.
-            return GitOutcome.Failed("The local repository could not be prepared on the AIDE server. Ask an admin to check the server log and the Workspaces:Root volume.");
+            return GitOutcome.Failed("The local repository could not be prepared on the Tevrin server. Ask an admin to check the server log and the Workspaces:Root volume.");
         }
     }
 
@@ -1008,7 +1008,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
                 if (mergedBySomeone is null)
                 {
                     return ReleaseOutcome.Awaiting(
-                        $"The merge strategy is manual: AIDE never merges. Merge {request.Branch} into {settings.DefaultBranch} in the local repository.", refused: false);
+                        $"The merge strategy is manual: Tevrin never merges. Merge {request.Branch} into {settings.DefaultBranch} in the local repository.", refused: false);
                 }
 
                 if (request.OnMerged is { } recordMerge)
@@ -1050,7 +1050,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
             // may pass on a retry; an unusable working copy won't.
             return ReleaseOutcome.Failed(
                 ErrorCodes.GitError,
-                "The local repository could not be merged or tagged on the AIDE server. Ask an admin to check the server log.",
+                "The local repository could not be merged or tagged on the Tevrin server. Ask an admin to check the server log.",
                 transient: ex is GitCommandException or IOException);
         }
     }
@@ -1066,7 +1066,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException or UnauthorizedAccessException)
         {
             LogReleaseFailed(logger, ex, settings.ProjectId);
-            return TagLookup.Failed("The local repository could not be read on the AIDE server. Ask an admin to check the server log.", transient: true);
+            return TagLookup.Failed("The local repository could not be read on the Tevrin server. Ask an admin to check the server log.", transient: true);
         }
     }
 

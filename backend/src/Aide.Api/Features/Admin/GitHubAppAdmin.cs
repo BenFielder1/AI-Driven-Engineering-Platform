@@ -114,7 +114,7 @@ public sealed partial class GitHubAppAdmin(
         ArgumentNullException.ThrowIfNull(request);
         if (await apps.GetAsync(cancellationToken) is not null)
         {
-            return Result.Failure<GitHubAppManifestResponseDto>(new DomainError(ErrorCodes.Conflict, "An AIDE GitHub App is already configured."));
+            return Result.Failure<GitHubAppManifestResponseDto>(new DomainError(ErrorCodes.Conflict, "A Tevrin GitHub App is already configured."));
         }
 
         if (request.OwnerType == GitHubOwnerType.Organization && string.IsNullOrWhiteSpace(request.Org))

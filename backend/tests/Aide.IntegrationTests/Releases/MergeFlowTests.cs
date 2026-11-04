@@ -148,7 +148,7 @@ public sealed class MergeFlowTests(AideApiFactory factory)
             Assert.Matches(@"1\. Step 1 \(\[`[0-9a-f]{7}`\]\(https://github\.com/acme/widgets/commit/[0-9a-f]{40}\)\)", notes);
             Assert.Contains("2. Step 2", notes, StringComparison.Ordinal);
             Assert.Contains("Compliance score **0.930** (review cycle 1).", notes, StringComparison.Ordinal);
-            Assert.Contains($"[AIDE](http://localhost:8080/projects/{id}/release)", notes, StringComparison.Ordinal);
+            Assert.Contains($"[Tevrin](http://localhost:8080/projects/{id}/release)", notes, StringComparison.Ordinal);
         }
 
         // The poll ended; no token anywhere it could leak.

@@ -24,7 +24,7 @@ public enum ReadinessConnection
     Unchecked = 4,
 }
 
-/// <summary>Whether AIDE's branches are kept from deploying on their own (§4.18 <c>deploy_branch_control</c>).</summary>
+/// <summary>Whether Tevrin's branches are kept from deploying on their own (§4.18 <c>deploy_branch_control</c>).</summary>
 public enum BranchControlState
 {
     Ok = 0,
@@ -35,7 +35,7 @@ public enum BranchControlState
 }
 
 /// <summary>
-/// The facts of a readiness check. <see cref="Checked"/> is false when only AIDE's own data was read (Settings → Deployment
+/// The facts of a readiness check. <see cref="Checked"/> is false when only Tevrin's own data was read (Settings → Deployment
 /// GET); then the platform-dependent items say "verify to check". <see cref="GitAccess"/>: <c>null</c> when unknown.
 /// </summary>
 public sealed record ReadinessInput(
@@ -89,7 +89,7 @@ public static class ReadinessRules
                 {
                     true => new(GitAccess, ReadinessState.Ok, $"{platform} can access the repository."),
                     false => new(GitAccess, ReadinessState.Error, input.GitMessage ?? $"{platform} can't see this repository. Connect it in {platform}, then verify again.", input.GitFixUrl),
-                    _ => new(GitAccess, ReadinessState.Warning, input.GitMessage ?? $"AIDE couldn't check {platform}'s access to the repository.", input.GitFixUrl),
+                    _ => new(GitAccess, ReadinessState.Warning, input.GitMessage ?? $"Tevrin couldn't check {platform}'s access to the repository.", input.GitFixUrl),
                 },
             input.MissingEnv.Count == 0
                 ? new(RequiredEnv, ReadinessState.Ok, "Every required environment variable has a value.")
@@ -99,9 +99,9 @@ public static class ReadinessRules
                 BranchControlState.Ok => new(BranchControl, ReadinessState.Ok, $"Automatic deploys of aide/** are disabled ({input.BranchControlPath})."),
                 BranchControlState.Missing => new(BranchControl, ReadinessState.Error,
                     $"{input.BranchControlPath} doesn't stop automatic deploys of aide/**; the deploy step adds it, or add it yourself."),
-                BranchControlState.PlatformManaged => new(BranchControl, ReadinessState.Ok, $"{platform} builds only the production branch; AIDE deploys aide/** explicitly."),
+                BranchControlState.PlatformManaged => new(BranchControl, ReadinessState.Ok, $"{platform} builds only the production branch; Tevrin deploys aide/** explicitly."),
                 BranchControlState.NotApplicable => new(BranchControl, ReadinessState.Na, $"{platform} only deploys the default branch."),
-                _ => new(BranchControl, ReadinessState.Warning, input.Checked ? $"AIDE couldn't read {input.BranchControlPath} yet (the repository isn't checked out)." : VerifyToCheck),
+                _ => new(BranchControl, ReadinessState.Warning, input.Checked ? $"Tevrin couldn't read {input.BranchControlPath} yet (the repository isn't checked out)." : VerifyToCheck),
             },
             !caps.Previews
                 ? new(PreviewEnvironment, ReadinessState.Na, $"{platform} has no preview deployments; review doesn't wait for one.")

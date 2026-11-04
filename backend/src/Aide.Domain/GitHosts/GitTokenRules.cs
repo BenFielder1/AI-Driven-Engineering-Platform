@@ -32,7 +32,7 @@ public enum GitTokenFailureAction
 /// </summary>
 public static class GitTokenRules
 {
-    /// <summary>FR-131: AIDE warns this long before a GitLab access token's <c>expires_at</c>.</summary>
+    /// <summary>FR-131: Tevrin warns this long before a GitLab access token's <c>expires_at</c>.</summary>
     public static readonly TimeSpan ExpiryWarningWindow = TimeSpan.FromDays(14);
 
     /// <summary>FR-131, FR-134: GitLab and Bitbucket OAuth access tokens last 2 hours.</summary>
@@ -44,7 +44,7 @@ public static class GitTokenRules
     /// <summary>FR-131: the scopes a GitLab access token needs.</summary>
     public static IReadOnlyList<string> GitLabTokenScopes { get; } = ["api", "write_repository"];
 
-    /// <summary>FR-131: the GitLab OAuth scopes AIDE requests.</summary>
+    /// <summary>FR-131: the GitLab OAuth scopes Tevrin requests.</summary>
     public static IReadOnlyList<string> GitLabOauthScopes { get; } = ["api", "write_repository", "openid", "profile", "email"];
 
     /// <summary>FR-134: the scopes an Atlassian API token needs (all <c>:bitbucket</c>).</summary>

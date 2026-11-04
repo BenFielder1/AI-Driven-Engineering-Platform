@@ -5,7 +5,7 @@
 
 export const cssVar = (token: string) => `var(--${token})`
 
-/** Series palette in order: cyan, violet, emerald, amber, rose. */
+/** Series palette in order (FR-202): indigo, cyan, emerald, amber, violet. */
 export const CHART_COLORS = [cssVar('chart-1'), cssVar('chart-2'), cssVar('chart-3'), cssVar('chart-4'), cssVar('chart-5')] as const
 
 export function seriesColor(index: number): string {
@@ -31,5 +31,6 @@ export const chartTheme = {
   lineCursor: { stroke: cssVar('muted-foreground'), strokeDasharray: '3 3' },
   referenceLine: { stroke: cssVar('muted-foreground'), strokeDasharray: '4 4' },
   legend: { fontSize: 12, color: cssVar('muted-foreground') },
-  animationDuration: 400,
+  /** FR-205: motion is 150-250 ms. */
+  animationDuration: 250,
 } as const

@@ -2,18 +2,18 @@
 
 # GitLab + GitLab CI
 
-AIDE performs every Git and GitLab operation itself (branches, commits, pushes, merge requests, merges, CI/CD variables, deploy keys). You only write repository files. The project may be on gitlab.com or a self-managed instance (GitLab 17.11+).
+Tevrin performs every Git and GitLab operation itself (branches, commits, pushes, merge requests, merges, CI/CD variables, deploy keys). You only write repository files. The project may be on gitlab.com or a self-managed instance (GitLab 17.11+).
 
 ## Detect
 - Evidence in the file list: `.gitlab-ci.yml` and its `include:` entries (organisation templates: **extend them, never duplicate their jobs**), `.gitlab/merge_request_templates/`, `.gitlab/issue_templates/`, `renovate.json`, `CODEOWNERS` (root, `.gitlab/` or `docs/`).
 - On an empty repo the scaffolder writes `.gitignore` (dependencies, build output, `.env`, `.env.*` except `.env.example`, IDE folders, test reports, CI cache folders `.npm/`, `.nuget/`, `.m2/`, `.uv-cache/`) and `.gitattributes` (`* text=auto eol=lf`). CI, Renovate and templates are left to the ci-engineer.
 
 ## Branches and commits
-- AIDE names branches (`aide/**` version branches) and writes commit messages. Don't add conventions to files.
-- Pipelines must run for merge request events and the default branch only, so AIDE reads one pipeline per MR head commit (no duplicate branch + MR pipelines).
+- Tevrin names branches (`aide/**` version branches) and writes commit messages. Don't add conventions to files.
+- Pipelines must run for merge request events and the default branch only, so Tevrin reads one pipeline per MR head commit (no duplicate branch + MR pipelines).
 
 ## PRs/MRs (on request)
-AIDE opens MRs as drafts, marks them ready and merges them (Maintainer role, protected default branch). Nothing to do here, except the template under Templates.
+Tevrin opens MRs as drafts, marks them ready and merges them (Maintainer role, protected default branch). Nothing to do here, except the template under Templates.
 
 ## CI (`.gitlab-ci.yml`)
 ```yaml

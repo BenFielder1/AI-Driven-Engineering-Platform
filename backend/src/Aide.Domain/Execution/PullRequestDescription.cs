@@ -49,19 +49,19 @@ public static class PullRequestDescription
     private const char ParagraphSeparator = (char)0x2029;
     private const char ZeroWidthJoiner = (char)0x200D;
 
-    /// <summary><c>[AIDE] &lt;project&gt; — Implementation (n steps)</c> (old stack's project PR title).</summary>
+    /// <summary><c>[Tevrin] &lt;project&gt; — Implementation (n steps)</c> (old stack's project PR title).</summary>
     public static string Title(string projectName, int stepCount)
     {
         ArgumentNullException.ThrowIfNull(projectName);
         var suffix = $" — Implementation ({stepCount.ToString(CultureInfo.InvariantCulture)} {(stepCount == 1 ? "step" : "steps")})";
         var name = OneLine(projectName);
-        var room = MaxTitleLength - "[AIDE] ".Length - suffix.Length;
+        var room = MaxTitleLength - "[Tevrin] ".Length - suffix.Length;
         if (name.Length > room)
         {
             name = name[..Math.Max(0, room - 1)] + "…";
         }
 
-        return $"[AIDE] {name}{suffix}";
+        return $"[Tevrin] {name}{suffix}";
     }
 
     /// <summary>The Markdown body: header, spec summary, plan and step table, changed files, metadata, footer.</summary>
@@ -72,8 +72,8 @@ public static class PullRequestDescription
         var count = steps.Count.ToString(CultureInfo.InvariantCulture);
         var b = new StringBuilder();
 
-        b.Append("## AIDE — ").Append(Inline(input.ProjectName)).AppendLine(" (implementation complete)").AppendLine();
-        b.Append("> This pull request was opened by the **AIDE Platform** after all ").Append(count)
+        b.Append("## Tevrin — ").Append(Inline(input.ProjectName)).AppendLine(" (implementation complete)").AppendLine();
+        b.Append("> This pull request was opened by the **Tevrin Platform** after all ").Append(count)
             .AppendLine(" steps of the plan completed. Each step is one commit on this branch.").AppendLine();
 
         b.AppendLine("### Specification").AppendLine();
@@ -139,7 +139,7 @@ public static class PullRequestDescription
         }
 
         b.AppendLine();
-        b.AppendLine("### AIDE metadata").AppendLine();
+        b.AppendLine("### Tevrin metadata").AppendLine();
         b.AppendLine("| Key | Value |");
         b.AppendLine("|-----|-------|");
         b.AppendLine("| Phase | `execution` |");
@@ -149,7 +149,7 @@ public static class PullRequestDescription
         b.Append("| Steps | ").Append(count).AppendLine(" |");
         b.AppendLine();
         b.AppendLine("---");
-        b.AppendLine("_One branch per project; each step is a separate commit. AIDE merges this PR when the release is approved._");
+        b.AppendLine("_One branch per project; each step is a separate commit. Tevrin merges this PR when the release is approved._");
 
         var body = b.ToString().ReplaceLineEndings("\n");
         return body.Length <= MaxBodyLength ? body : body[..(MaxBodyLength - 20)] + "\n\n_(truncated)_\n";

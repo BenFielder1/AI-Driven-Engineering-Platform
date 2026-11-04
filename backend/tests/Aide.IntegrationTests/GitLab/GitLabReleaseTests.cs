@@ -290,7 +290,7 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         var merge = GitLabHarness.Body(Assert.Single(gitlab.Api.Requests, r => r.Method == "PUT" && r.Path == MergeRequest + "/merge"));
-        Assert.Equal($"[AIDE] Release {Tag}: {fixture.Project.Name}\n\n{line}", merge.GetProperty("merge_commit_message").GetString());
+        Assert.Equal($"[Tevrin] Release {Tag}: {fixture.Project.Name}\n\n{line}", merge.GetProperty("merge_commit_message").GetString());
         var release = GitLabHarness.Body(Assert.Single(gitlab.Api.Requests, r => r.Method == "POST" && r.Path == Project + "/releases"));
         Assert.EndsWith($"\n\n{line}", release.GetProperty("tag_message").GetString(), StringComparison.Ordinal);
         Assert.DoesNotContain("Co-authored-by", release.GetProperty("description").GetString(), StringComparison.Ordinal);

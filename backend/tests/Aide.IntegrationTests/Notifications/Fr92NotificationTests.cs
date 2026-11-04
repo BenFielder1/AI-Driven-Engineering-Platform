@@ -105,10 +105,11 @@ public sealed class Fr92NotificationTests(AideApiFactory factory)
         var only = Assert.Single(await NotificationJobs.InAppAsync(app, id));
         Assert.Equal((fixture.Owner.User!.Id, "deployment_failed", $"/projects/{id}/release"), (only.UserId, only.Type, only.Link));
         var email = Assert.Single(Test.Email.Sent, m => m.To == ops);
+        Assert.StartsWith("[Tevrin] ", email.Subject, StringComparison.Ordinal); // FR-198
         Assert.Contains("1.2.0", email.Subject, StringComparison.Ordinal);
         Assert.Contains("(BUILD_FAILED)", email.TextBody, StringComparison.Ordinal);
         Assert.Contains("redeploy from the Release page", email.TextBody, StringComparison.Ordinal);
-        Assert.Contains($"Open in AIDE: http://localhost:8080/projects/{id}/release", email.TextBody, StringComparison.Ordinal);
+        Assert.Contains($"Open in Tevrin: http://localhost:8080/projects/{id}/release", email.TextBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -176,7 +177,7 @@ public sealed class Fr92NotificationTests(AideApiFactory factory)
         var delivery = Assert.Single(await NotificationJobs.DeliveriesAsync(app, id));
         Assert.Equal(($"account_email:{owner.Id:D}", NotificationDeliveryStatus.Sent), (delivery.Channel, delivery.Status));
         var email = Assert.Single(Test.Email.Sent, m => m.To == owner.Email);
-        Assert.Contains("Open in AIDE: http://localhost:8080/connections", email.TextBody, StringComparison.Ordinal);
+        Assert.Contains("Open in Tevrin: http://localhost:8080/connections", email.TextBody, StringComparison.Ordinal);
         Assert.Empty(Test.Http.To(slack));
         Assert.DoesNotContain(Test.Email.Sent, m => m.To == ops);
     }

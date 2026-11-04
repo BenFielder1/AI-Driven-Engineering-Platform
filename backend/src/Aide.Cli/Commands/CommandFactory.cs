@@ -75,7 +75,7 @@ internal sealed class CommandContext(CliHost host, GlobalOptions globals, ParseR
     }
 
     /// <summary>
-    /// An API client using AIDE_TOKEN or the saved token, or <paramref name="tokenOverride"/> (login). The saved token is used
+    /// An API client using TEVRIN_TOKEN (or AIDE_TOKEN) or the saved token, or <paramref name="tokenOverride"/> (login). The saved token is used
     /// only for the API URL it was saved for (otherwise exit 3), and no token is ever sent over plain http to a
     /// non-loopback host (exit 2).
     /// </summary>
@@ -100,12 +100,12 @@ internal sealed class CommandContext(CliHost host, GlobalOptions globals, ParseR
             {
                 throw new CliException(
                     $"The saved token belongs to {Settings.SavedTokenApiUrl}, not {baseUri}, so it was not sent. " +
-                    $"Run 'aide login --api-url {baseUri}' to save a token for this server, or set AIDE_TOKEN.",
+                    $"Run 'tevrin login --api-url {baseUri}' to save a token for this server, or set TEVRIN_TOKEN.",
                     ExitCodes.Auth);
             }
 
             throw new CliException(
-                "Not logged in. Run 'aide login --token <token>' (create a token on the Account page) or set AIDE_TOKEN.",
+                "Not logged in. Run 'tevrin login --token <token>' (create a token on the Account page) or set TEVRIN_TOKEN.",
                 ExitCodes.Auth);
         }
 

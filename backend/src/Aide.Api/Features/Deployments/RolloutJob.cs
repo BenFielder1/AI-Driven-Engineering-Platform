@@ -15,7 +15,7 @@ namespace Aide.Api.Features.Deployments;
 /// steps (<see cref="RolloutRules.Plan"/>: Supabase BaaS migrations → backend → frontend) and does the next thing, deferring
 /// itself while a step runs (a wait, never a blocking sleep or a counted attempt):
 /// <list type="bullet">
-/// <item>Migrations: preview runs AIDE's runner on the PR head (environment <c>preview</c>, only on a preview database
+/// <item>Migrations: preview runs Tevrin's runner on the PR head (environment <c>preview</c>, only on a preview database
 /// separate from production; a preview without its own database has no migration step). Production always runs the
 /// runner again on the merge commit after the merge (idempotent: recorded versions are skipped, and only merged files
 /// exist there), so commits pushed after the release job's pre-merge run (<c>releases.migration_run_id</c>, kept) are
@@ -161,7 +161,7 @@ public sealed partial class RolloutJobHandler(
                 // An attempt crashed mid-run: the runner resumes after the last committed file, so run again.
                 run.Status = MigrationRunStatus.Failed;
                 run.ErrorCode = ErrorCodes.MigrationFailed;
-                run.ErrorMessage = "The migration run was interrupted; AIDE runs it again.";
+                run.ErrorMessage = "The migration run was interrupted; Tevrin runs it again.";
                 run.FinishedAt = now;
                 await db.SaveChangesAsync(cancellationToken);
             }

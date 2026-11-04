@@ -182,7 +182,7 @@ public sealed class ExitCodeAndOutputTests : IDisposable
         var run = await _cli.RunAsync("status", Samples.ProjectId);
 
         Assert.Equal(ExitCodes.Auth, run.ExitCode);
-        Assert.Contains("aide login", run.Error, StringComparison.Ordinal);
+        Assert.Contains("tevrin login", run.Error, StringComparison.Ordinal); // FR-200
         Assert.Empty(_cli.Requests);
     }
 
@@ -194,7 +194,7 @@ public sealed class ExitCodeAndOutputTests : IDisposable
         var run = await _cli.RunAsync("status", Samples.ProjectId);
 
         Assert.Equal(ExitCodes.Error, run.ExitCode);
-        Assert.Contains("Could not reach the AIDE API at http://localhost:8080/", run.Error, StringComparison.Ordinal);
+        Assert.Contains("Could not reach the Tevrin API at http://localhost:8080/", run.Error, StringComparison.Ordinal);
     }
 
     [Fact]

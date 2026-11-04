@@ -18,7 +18,7 @@ public sealed record GitHubAuthState(bool Enabled);
 
 /// <summary>
 /// FR-2, D-V2-7: GitHub sign-in with the built-in OAuth handler (no extra package), through
-/// <see cref="GitHubOAuthHandler"/>: the AIDE GitHub App's user authorization once an App exists, else the v1 OAuth App.
+/// <see cref="GitHubOAuthHandler"/>: the Tevrin GitHub App's user authorization once an App exists, else the v1 OAuth App.
 /// The scheme is always registered; with neither configured the routes answer 404.
 /// </summary>
 public static partial class GitHubAuth
@@ -223,7 +223,7 @@ public static partial class GitHubAuth
 /// <item>signed in: link to the current user;</item>
 /// <item>unknown email: create an account (User role, or Admin if first) and sign in;</item>
 /// <item>email of an existing, unlinked account: refuse (<c>link_required</c>) — the owner must sign in and link,
-/// so a GitHub account can't take over an AIDE account by claiming its email.</item>
+/// so a GitHub account can't take over a Tevrin account by claiming its email.</item>
 /// </list>
 /// </summary>
 public sealed partial class GitHubSignIn(
@@ -368,7 +368,7 @@ public sealed partial class GitHubSignIn(
         return null;
     }
 
-    /// <summary>Unique index on <c>users.github_id</c> (one AIDE account per GitHub account).</summary>
+    /// <summary>Unique index on <c>users.github_id</c> (one Tevrin account per GitHub account).</summary>
     public const string GithubIdIndex = "ix_users_github_id";
 
     private static bool IsUniqueViolation(DbUpdateException exception, out string? constraint)

@@ -1,0 +1,27 @@
+# Tevrin docs site (FR-225, FR-226): Jekyll + just-the-docs, built by .github/workflows/docs.yml.
+# Local preview (optional, needs Ruby 3.4):  cd docs && bundle install && bundle exec jekyll serve
+# Gemfile.lock is not committed: ruby/setup-ruby resolves it in CI within the pins below.
+source "https://rubygems.org"
+
+gem "jekyll", "~> 4.4.1"
+gem "just-the-docs", "0.12.0"
+
+group :jekyll_plugins do
+  # Frozen docs/v1-v5 files have no front matter and must not be edited; this builds them as pages anyway.
+  gem "jekyll-optional-front-matter", "~> 0.3.2"
+  # Rewrites links to .md files into the generated page URLs.
+  gem "jekyll-relative-links", "~> 0.7"
+  # Page <title> from the first heading for pages without a front-matter title (the frozen docs).
+  gem "jekyll-titles-from-headings", "~> 0.5"
+  # just-the-docs runtime dependencies, listed so they're loaded explicitly.
+  gem "jekyll-seo-tag", "~> 2.8"
+  gem "jekyll-include-cache", "~> 0.2"
+end
+
+group :test do
+  # Offline internal link check (scripts/ci/check-docs-links.rb).
+  gem "html-proofer", "~> 5.2"
+end
+
+# Only for `jekyll serve` on Ruby >= 3.0.
+gem "webrick", "~> 1.8"

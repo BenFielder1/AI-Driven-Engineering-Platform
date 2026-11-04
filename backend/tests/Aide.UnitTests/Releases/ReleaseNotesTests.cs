@@ -40,7 +40,7 @@ public class ReleaseNotesTests
             Compliance score **0.930** (review cycle 2).
 
             ---
-            Released as `v1.2.0` with [AIDE](http://localhost:8080/projects/p1/release).
+            Released as `v1.2.0` with [Tevrin](http://localhost:8080/projects/p1/release).
 
             """.ReplaceLineEndings("\n"),
             notes);

@@ -14,7 +14,7 @@ namespace Aide.Infrastructure.Databases;
 /// <item>Create: <c>POST /projects {name, organization_slug, db_pass, region_selection}</c>
 /// (<see cref="ManagedDatabaseRules.SupabaseCreateBody"/>); a project of that name in the organisation is adopted (and its
 /// password reset), so a retried job doesn't create a second one. The free-plan project limit is <c>PLATFORM_PLAN_LIMIT</c>.</item>
-/// <item>Link: <c>GET /projects/{ref}</c>, then <c>PATCH /projects/{ref}/database/password</c> when AIDE doesn't hold its password.</item>
+/// <item>Link: <c>GET /projects/{ref}</c>, then <c>PATCH /projects/{ref}/database/password</c> when Tevrin doesn't hold its password.</item>
 /// <item>Poll: <c>GET /projects/{ref}</c> until <c>ACTIVE_HEALTHY</c>, then <c>GET …/health?services=db,pooler,auth,rest</c>,
 /// the keys (<c>GET …/api-keys?reveal=true</c>, <c>POST …/api-keys {type, name}</c> for a missing publishable or secret key)
 /// and the pooler (<c>GET …/config/database/pooler</c>: host, user and database).</item>
@@ -25,7 +25,7 @@ public sealed class SupabaseDatabaseProvider(PlatformHttp http) : IDatabaseProvi
 {
     private const ManagedDatabaseProvider Supabase = ManagedDatabaseProvider.Supabase;
 
-    /// <summary>The name of the keys AIDE creates when a project has no publishable or secret key.</summary>
+    /// <summary>The name of the keys Tevrin creates when a project has no publishable or secret key.</summary>
     public const string KeyName = "aide";
 
     public ManagedDatabaseProvider Kind => Supabase;

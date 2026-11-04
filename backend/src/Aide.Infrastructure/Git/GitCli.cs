@@ -56,7 +56,7 @@ public interface IGitCli
 /// </summary>
 internal sealed class GitCli : IGitCli
 {
-    public const string AuthorName = "AIDE";
+    public const string AuthorName = "Tevrin";
     public const string AuthorEmail = "aide@aide.local";
 
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(10);
@@ -193,7 +193,7 @@ internal sealed class GitCli : IGitCli
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
-            throw new GitCommandException("The git command-line tool isn't installed on the AIDE server.", ex);
+            throw new GitCommandException("The git command-line tool isn't installed on the Tevrin server.", ex);
         }
 
         if (process is null)

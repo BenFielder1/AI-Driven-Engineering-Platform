@@ -208,7 +208,7 @@ public static class StackGuidance
         }
 
         var expectation = StackAnalysis.Expectation(detection, resolution.Composition);
-        sb.Append(" AIDE's stack detector also read the repository's manifests (its evidence is in `<stack_detection>`).");
+        sb.Append(" Tevrin's stack detector also read the repository's manifests (its evidence is in `<stack_detection>`).");
         if (expectation.DetectedPacks.Count > 0)
         {
             sb.Append(" \"Stack & Dependencies\" must name each detected pack by its id: ")

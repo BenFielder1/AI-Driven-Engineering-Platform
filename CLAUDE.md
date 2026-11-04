@@ -1,6 +1,6 @@
-# AIDE Platform
+# Tevrin
 
-AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
+Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
 **`SPEC.md` is the source of truth.** Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
@@ -31,7 +31,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` and `production`, deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
-- **VCS/CI**: Git, GitHub, GitHub Actions
+- **VCS/CI**: Git, GitHub, GitHub Actions. `.github/workflows/docs.yml` builds the docs site (Jekyll, just-the-docs) from `docs/` and publishes it to GitHub Pages
 
 Router, auth and background-work choices come from SPEC.md; if SPEC.md changes them, update this file.
 
@@ -44,7 +44,8 @@ backend/
   src/Aide.Domain/          pure business rules: lifecycle state machine, phase map, gate rules, versioning (no EF, no ASP.NET)
   src/Aide.Infrastructure/  Persistence/AideDbContext + entity configs, Migrations/, LLM providers, Git providers, notification channels
                             Agents/Prompts/*.md — versioned prompt templates (SPEC FR-24)
-  src/Aide.Cli/             `aide` .NET global tool (SPEC FR-52)
+  src/Aide.Cli/             `tevrin` .NET global tool, package Tevrin.Cli (SPEC FR-52, D-V6-2)
+  src/Aide.Cli.Alias/       deprecated `aide` command (package Aide.Cli), same sources as Aide.Cli
   tests/Aide.UnitTests/     domain + application tests
   tests/Aide.IntegrationTests/ WebApplicationFactory + Testcontainers
   openapi/api.json          GENERATED contract — commit, never hand-edit
@@ -69,8 +70,14 @@ deploy/
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on dispatch)
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v5)
-docs/                       Store SPEC.md + PROGRESS.md + research for each version
+.github/workflows/docs.yml         docs site build + link check, deployed to GitHub Pages (FR-226)
+SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v6)
+docs/                       Jekyll + just-the-docs site (index.md, _config.yml, Gemfile) and the version archive:
+  index.md                  site home
+  getting-started/ guides/ operations/ reference/ history/   site sections (front matter: title, nav_order, parent)
+  brand.md                  logo files, colours, usage rules
+  v1 … v5/                  frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
+  v6/                       brand assets (and v6 SPEC/PROGRESS once done)
 ```
 
 ## Commands

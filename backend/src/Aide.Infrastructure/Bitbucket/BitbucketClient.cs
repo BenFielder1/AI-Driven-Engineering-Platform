@@ -43,10 +43,10 @@ public class BitbucketApiException : Exception
     /// <summary>The OAuth <c>error</c> code of a token endpoint failure (<c>invalid_grant</c>…), if any.</summary>
     public string? OauthError { get; init; }
 
-    /// <summary>For 429: how long to wait (Bitbucket's <c>Retry-After</c>, or AIDE's budget refill).</summary>
+    /// <summary>For 429: how long to wait (Bitbucket's <c>Retry-After</c>, or Tevrin's budget refill).</summary>
     public TimeSpan? RetryAfter { get; init; }
 
-    /// <summary>The 429 came from AIDE's own per-connection budget (§4.19), not from Bitbucket.</summary>
+    /// <summary>The 429 came from Tevrin's own per-connection budget (§4.19), not from Bitbucket.</summary>
     public bool LocalBudget { get; init; }
 
     /// <summary>A 403 for missing scopes (Bitbucket's "credentials lack … privilege scopes").</summary>
@@ -116,7 +116,7 @@ public sealed record BitbucketCreateRepository(string Workspace, string Slug, st
 /// <summary>The answer to a harmless scope probe (FR-134): its status and whether a 403 was about scopes.</summary>
 public sealed record BitbucketProbe(int Status, bool ScopeError, IReadOnlyList<string>? GrantedScopes);
 
-/// <summary>A <see cref="BitbucketClient"/>, counted against a budget (§4.19): a connection's, or an AIDE user's.</summary>
+/// <summary>A <see cref="BitbucketClient"/>, counted against a budget (§4.19): a connection's, or a Tevrin user's.</summary>
 public interface IBitbucketClients
 {
     /// <param name="connectionId">The connection whose token the client sends (its requests take from the connection's
@@ -185,7 +185,7 @@ public sealed partial class BitbucketClient
     public Task<BitbucketOAuthTokens> ExchangeCodeAsync(string clientId, string clientSecret, string code, CancellationToken cancellationToken) =>
         TokenAsync(clientId, clientSecret, [new("grant_type", "authorization_code"), new("code", code)], cancellationToken);
 
-    /// <summary>FR-134: refreshes an access token; AIDE stores whatever refresh token comes back.</summary>
+    /// <summary>FR-134: refreshes an access token; Tevrin stores whatever refresh token comes back.</summary>
     public Task<BitbucketOAuthTokens> RefreshAsync(string clientId, string clientSecret, string refreshToken, CancellationToken cancellationToken) =>
         TokenAsync(clientId, clientSecret, [new("grant_type", "refresh_token"), new("refresh_token", refreshToken)], cancellationToken);
 
@@ -295,7 +295,7 @@ public sealed partial class BitbucketClient
 
     /// <summary>
     /// FR-135: <c>POST /2.0/repositories/{ws}/{slug} {scm: "git", is_private, project: {key}, name, description}</c>. The
-    /// repository is empty (Bitbucket has no auto-init); AIDE pushes the README itself.
+    /// repository is empty (Bitbucket has no auto-init); Tevrin pushes the README itself.
     /// </summary>
     public async Task<BitbucketRepository> CreateRepositoryAsync(BitbucketAuth auth, BitbucketCreateRepository repository, CancellationToken cancellationToken)
     {
@@ -420,7 +420,7 @@ public sealed partial class BitbucketClient
         if (_limiterKey is { } key && _limiter.TryAcquire(key) is { } wait)
         {
             // §4.19: the budget is spent; nothing is sent.
-            throw new BitbucketApiException(429, "AIDE's Bitbucket request budget is used up for now.")
+            throw new BitbucketApiException(429, "Tevrin's Bitbucket request budget is used up for now.")
             {
                 RetryAfter = wait,
                 LocalBudget = true,
@@ -455,7 +455,7 @@ public sealed partial class BitbucketClient
         using var json = await TryJsonAsync(response, cancellationToken);
         var status = (int)response.StatusCode;
         var message = status is >= 300 and < 400
-            ? "Bitbucket answered with a redirect, which AIDE doesn't follow."
+            ? "Bitbucket answered with a redirect, which Tevrin doesn't follow."
             : json is null ? null : ErrorText(json.RootElement);
         var (scopeError, granted) = status == 403 ? ScopeErrorOf(json?.RootElement) : (false, null);
         return new BitbucketApiException(status, message)
@@ -575,7 +575,7 @@ public sealed partial class BitbucketClient
             ? [.. values.EnumerateArray()]
             : [];
 
-    /// <summary>Bitbucket pages carry a <c>next</c> link while more follow (AIDE asks for the next page number itself).</summary>
+    /// <summary>Bitbucket pages carry a <c>next</c> link while more follow (Tevrin asks for the next page number itself).</summary>
     private static bool HasNext(JsonElement root) => root.ValueKind == JsonValueKind.Object && Str(root, "next") is not null;
 
     private static BitbucketRepository? ToRepository(JsonElement r)

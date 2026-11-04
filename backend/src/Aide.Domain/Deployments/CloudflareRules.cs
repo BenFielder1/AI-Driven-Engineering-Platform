@@ -5,7 +5,7 @@ using Aide.Domain.Entities;
 namespace Aide.Domain.Deployments;
 
 /// <summary>
-/// A Workers Builds trigger AIDE creates (§4.20): its name, branch filters, build and deploy commands and root directory.
+/// A Workers Builds trigger Tevrin creates (§4.20): its name, branch filters, build and deploy commands and root directory.
 /// </summary>
 public sealed record CloudflareTriggerSpec(
     string TriggerName,
@@ -25,7 +25,7 @@ public static class CloudflareRules
 
     public const string PreviewDeployCommand = "npx wrangler versions upload";
 
-    /// <summary>AIDE's branches, excluded from the preview trigger (AIDE starts their builds itself, SHA-pinned).</summary>
+    /// <summary>Tevrin's branches, excluded from the preview trigger (Tevrin starts their builds itself, SHA-pinned).</summary>
     public const string AideBranchPattern = "aide/*";
 
     /// <summary>The Workers and Pages dashboard (FR-144 <c>PLATFORM_GIT_NOT_CONNECTED</c> link to install the Git app).</summary>
@@ -36,7 +36,7 @@ public static class CloudflareRules
     /// Worker, and the first build's <c>wrangler deploy</c> replaces it.
     /// </summary>
     public const string PlaceholderModule =
-        "export default { async fetch() { return new Response(\"This app is being deployed by AIDE.\", { status: 503 }); } };\n";
+        "export default { async fetch() { return new Response(\"This app is being deployed by Tevrin.\", { status: 503 }); } };\n";
 
     /// <summary>
     /// §4.20 Workers Builds mapping: <c>queued</c>, <c>initializing</c> → queued; <c>running</c> → building;
@@ -84,14 +84,14 @@ public static class CloudflareRules
 
     /// <summary>§4.20: the production trigger: the production branch only, <c>npx wrangler deploy</c>.</summary>
     public static CloudflareTriggerSpec ProductionTrigger(string productionBranch, string rootDirectory, string? buildCommand) => new(
-        "AIDE production", [productionBranch], [], buildCommand, ProductionDeployCommand, Root(rootDirectory));
+        "Tevrin production", [productionBranch], [], buildCommand, ProductionDeployCommand, Root(rootDirectory));
 
     /// <summary>
-    /// §4.20: the preview trigger: every branch but <c>aide/*</c> (AIDE starts version-branch builds itself with the commit
+    /// §4.20: the preview trigger: every branch but <c>aide/*</c> (Tevrin starts version-branch builds itself with the commit
     /// hash), <c>npx wrangler versions upload</c> (a version with a preview URL; production is untouched).
     /// </summary>
     public static CloudflareTriggerSpec PreviewTrigger(string rootDirectory, string? buildCommand) => new(
-        "AIDE preview", ["*"], [AideBranchPattern], buildCommand, PreviewDeployCommand, Root(rootDirectory));
+        "Tevrin preview", ["*"], [AideBranchPattern], buildCommand, PreviewDeployCommand, Root(rootDirectory));
 
     /// <summary>
     /// The target's <c>preview_resource_id</c> for Workers: the preview trigger, then the production trigger
@@ -111,7 +111,7 @@ public static class CloudflareRules
         return (parts[0].Length > 0 ? parts[0] : null, parts.Length == 2 && parts[1].Length > 0 ? parts[1] : null);
     }
 
-    /// <summary>AIDE's id of a synced (key, environment) on Cloudflare: <c>cloudflare:&lt;environment&gt;:&lt;key&gt;</c>.</summary>
+    /// <summary>Tevrin's id of a synced (key, environment) on Cloudflare: <c>cloudflare:&lt;environment&gt;:&lt;key&gt;</c>.</summary>
     public static string EnvId(string key, DeploymentEnvironment environment) =>
         string.Create(CultureInfo.InvariantCulture, $"cloudflare:{environment.ToWire()}:{key}");
 
@@ -173,7 +173,7 @@ public static class CloudflareRules
     }
 
     /// <summary>
-    /// §4.20 idempotency: whether a build created at <paramref name="createdOn"/> may be adopted for an AIDE row created at
+    /// §4.20 idempotency: whether a build created at <paramref name="createdOn"/> may be adopted for a Tevrin row created at
     /// <paramref name="createdAfter"/> (<c>null</c>: by commit alone, the production auto-deploy path). Cloudflare can't tag
     /// a build with the row, so a manual or redeploy row adopts only builds made after it (never an earlier build of the
     /// commit, nor one of unknown age).

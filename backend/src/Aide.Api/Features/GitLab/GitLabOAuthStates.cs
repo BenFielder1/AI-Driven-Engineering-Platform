@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace Aide.Api.Features.GitLab;
 
-/// <summary>A started GitLab OAuth flow (FR-131), held server-side until its callback. The PKCE verifier never leaves AIDE.</summary>
+/// <summary>A started GitLab OAuth flow (FR-131), held server-side until its callback. The PKCE verifier never leaves Tevrin.</summary>
 public sealed record GitLabOAuthFlow(Guid InstanceId, GitOAuthMode Mode, string ReturnUrl, Guid? StartedByUserId, string CodeVerifier, DateTimeOffset ExpiresAt) : IGitOAuthFlow
 {
     public override string ToString() => $"GitLabOAuthFlow {{ InstanceId = {InstanceId}, Mode = {Mode} }}";
@@ -41,7 +41,7 @@ public sealed class GitLabOAuthStates(IDataProtectionProvider dataProtection, Ti
 }
 
 /// <summary>
-/// FR-131: a sign-in whose verified GitLab email matches an existing, unlinked AIDE account (<see cref="GitLabPendingLinks"/>).
+/// FR-131: a sign-in whose verified GitLab email matches an existing, unlinked Tevrin account (<see cref="GitLabPendingLinks"/>).
 /// </summary>
 public sealed record GitLabPendingLink(
     Guid Id,

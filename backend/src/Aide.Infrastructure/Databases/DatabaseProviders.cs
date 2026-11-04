@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 namespace Aide.Infrastructure.Databases;
 
 /// <summary>
-/// FR-152, §4.21 External: AIDE only stores the connection string (encrypted, by the PUT) and syncs it; there is no
+/// FR-152, §4.21 External: Tevrin only stores the connection string (encrypted, by the PUT) and syncs it; there is no
 /// platform. Setup and polls make no call; the database is available at once.
 /// </summary>
 public sealed class ExternalDatabaseProvider : IDatabaseProvider
