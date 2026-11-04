@@ -98,7 +98,7 @@ export function GitLabTokenDialog({
     <ModalDialog
       open
       title="Connect GitLab with an access token"
-      description="AIDE checks the token with GitLab before saving it. It's stored encrypted and never shown again."
+      description="Tevrin checks the token with GitLab before saving it. It's stored encrypted and never shown again."
       busy={create.isPending}
       onClose={close}
       className="sm:max-w-lg"
@@ -132,10 +132,10 @@ export function GitLabTokenDialog({
                   <code className="font-mono">{s}</code>
                 </span>
               ))}
-              . GitLab has no narrower scope that lets AIDE push and open merge requests.
+              . GitLab has no narrower scope that lets Tevrin push and open merge requests.
             </li>
             <li>
-              <strong>Expiry:</strong> pick a date that suits you (GitLab allows up to a year). AIDE warns you 14 days before
+              <strong>Expiry:</strong> pick a date that suits you (GitLab allows up to a year). Tevrin warns you 14 days before
               it expires, so you can replace it.
             </li>
           </ul>

@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -63,7 +64,7 @@ describe('/connections → GitHub (FR-81)', () => {
       'https://github.com/organizations/acme/settings/installations/9002',
     )
     expect(within(list).getByRole('listitem', { name: 'ada' })).toHaveTextContent('Selected repositories')
-    expect(within(section).getByRole('link', { name: /Install AIDE on more repositories/ })).toHaveAttribute('href', INSTALL_URL)
+    expect(within(section).getByRole('link', { name: /Install Tevrin on more repositories/ })).toHaveAttribute('href', INSTALL_URL)
   })
 
   it('FR81_disconnect: Disconnect asks for confirmation, then shows Not connected', async () => {
@@ -98,7 +99,7 @@ describe('/connections → GitHub (FR-81)', () => {
     signInAs({ systemRole: 'user' })
     configureGitHubApp()
     const { section } = await openConnections('/connections?error=GITHUB_AUTH_FAILED&reason=already_linked')
-    expect(await within(section).findByText('This GitHub account is already linked to another AIDE user.')).toBeInTheDocument()
+    expect(await within(section).findByText('This GitHub account is already linked to another Tevrin user.')).toBeInTheDocument()
   })
 
   it('FR81_app_installed: the setup URL /account/connections?github=installed keeps the param, toasts and shows the installations', async () => {
@@ -107,7 +108,7 @@ describe('/connections → GitHub (FR-81)', () => {
     const renderResult = await renderRoute('/account/connections?github=installed')
     await screen.findByRole('heading', { level: 1, name: 'Connections' })
 
-    expect(await screen.findByText('AIDE installed on GitHub')).toBeInTheDocument()
+    expect(await screen.findByText('Tevrin installed on GitHub')).toBeInTheDocument()
     expect(currentHref(renderResult.router)).toBe('/connections?github=installed')
     const section = screen.getByRole('region', { name: 'GitHub' })
     expect(await within(section).findByRole('listitem', { name: 'ada' })).toBeInTheDocument()

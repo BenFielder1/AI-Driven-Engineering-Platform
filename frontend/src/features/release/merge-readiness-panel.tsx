@@ -12,7 +12,7 @@ import { StageSection } from '../stages/stage-section'
 import { mergeReadinessApplies } from './merge-readiness-rules'
 import { useMergeReadiness, useRefreshMergeReadiness, type MergeReadiness, type MergeReadinessReason } from './merge-readiness-api'
 
-/** FR-84, FR-65, FR-138: the reasons AIDE can't merge (also recorded on an `awaiting_merge` release attempt). */
+/** FR-84, FR-65, FR-138: the reasons Tevrin can't merge (also recorded on an `awaiting_merge` release attempt). */
 export function MergeReasons({ reasons, label }: { reasons: readonly MergeReadinessReason[]; label: string }) {
   if (reasons.length === 0) {
     return null
@@ -27,7 +27,7 @@ export function MergeReasons({ reasons, label }: { reasons: readonly MergeReadin
 }
 
 /**
- * FR-84, FR-138: "AIDE will merge automatically", or "A merge on GitHub will be needed" (naming the project's Git host)
+ * FR-84, FR-138: "Tevrin will merge automatically", or "A merge on GitHub will be needed" (naming the project's Git host)
  * with the reasons. The host's raw merge state (`mergeStateStatus`, e.g. GitLab's `detailed_merge_status`) isn't shown.
  */
 export function MergeVerdict({ readiness, host }: { readiness: MergeReadiness; host: GitHostTerms }) {
@@ -36,7 +36,7 @@ export function MergeVerdict({ readiness, host }: { readiness: MergeReadiness; h
     <div className="flex flex-col gap-2">
       <p className="flex flex-wrap items-center gap-2">
         <StatusBadge tone={auto ? 'success' : 'warning'}>
-          {auto ? 'AIDE will merge automatically' : `A merge on ${host.host} will be needed`}
+          {auto ? 'Tevrin will merge automatically' : `A merge on ${host.host} will be needed`}
         </StatusBadge>
       </p>
       <MergeReasons reasons={readiness.reasons} label={`Why a merge on ${host.host} is needed`} />
@@ -65,7 +65,7 @@ export function MergeReadinessSummary({ projectId, state }: { projectId: string;
 }
 
 /**
- * Release page → Merge readiness (FR-84, FR-138): whether AIDE will merge the version's PR (GitLab: MR) itself, why
+ * Release page → Merge readiness (FR-84, FR-138): whether Tevrin will merge the version's PR (GitLab: MR) itself, why
  * not, the head's check runs and when it was checked. "Check again" asks the Git host again. The merge itself stays
  * authoritative (FR-65).
  */

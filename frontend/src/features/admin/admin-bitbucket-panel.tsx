@@ -238,7 +238,7 @@ export function AdminBitbucketPanel() {
             {configured ? (
               <span data-testid="bitbucket-config-managed">
                 Set in configuration (<code>Bitbucket__OAuth__ClientId</code> and <code>Bitbucket__OAuth__ClientSecret</code>),
-                which takes precedence. Change it there and restart AIDE; it can&apos;t be changed or removed here.
+                which takes precedence. Change it there and restart Tevrin; it can&apos;t be changed or removed here.
               </span>
             ) : saved ? (
               'Saved here. The secret is stored encrypted.'

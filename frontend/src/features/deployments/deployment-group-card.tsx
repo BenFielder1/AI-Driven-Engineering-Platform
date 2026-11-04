@@ -229,7 +229,7 @@ function GroupRebindForm({ projectId, group, onDone }: { projectId: string; grou
       <SelectField
         id={`group-${group.provider}-rebind`}
         label={`${platform} connection`}
-        hint="One of your own tokens. It replaces the connection for every part, once AIDE has checked it can reach the project."
+        hint="One of your own tokens. It replaces the connection for every part, once Tevrin has checked it can reach the project."
         error={missing ? `Pick one of your ${platform} connections.` : undefined}
         value={connectionId}
         onChange={(e) => {
@@ -463,7 +463,7 @@ export function DeploymentGroupCard({
           setConfirmRemove(false)
         }}
       >
-        <p>AIDE clears this group and its targets and databases. Nothing is deleted on {platform}: its project, services and databases stay.</p>
+        <p>Tevrin clears this group and its targets and databases. Nothing is deleted on {platform}: its project, services and databases stay.</p>
       </ConfirmDialog>
     </section>
   )

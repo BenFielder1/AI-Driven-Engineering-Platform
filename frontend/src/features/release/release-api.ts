@@ -28,7 +28,7 @@ export function useReleases(id: string, enabled = true, releaseVersionId?: strin
 }
 
 /**
- * FR-140, D-V4-7: AIDE's full release notes of one release attempt (`null` when it has none: only a succeeded Bitbucket
+ * FR-140, D-V4-7: Tevrin's full release notes of one release attempt (`null` when it has none: only a succeeded Bitbucket
  * release keeps them today). Pass `null` to skip the request.
  */
 export function useReleaseNotes(id: string, releaseId: string | null) {

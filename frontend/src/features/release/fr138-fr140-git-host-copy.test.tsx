@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
@@ -85,7 +86,7 @@ describe.each(['github', 'gitlab'] as const)('Git host copy on the Release page 
     const reasons = within(panel).getByRole('list', { name: `Why a merge on ${h.name} is needed` })
     expect(reasons).toHaveTextContent('An approving review is required')
     expect(reasons).toHaveTextContent('The merge request is still a draft')
-    expect(within(panel).getByText(new RegExp(`Merge strategy: AIDE merges the ${h.pr}`))).toBeInTheDocument()
+    expect(within(panel).getByText(new RegExp(`Merge strategy: Tevrin merges the ${h.pr}`))).toBeInTheDocument()
     expect(within(panel).getByRole('list', { name: `${h.prTitle} checks` })).toBeInTheDocument()
     // The host's raw merge state is never shown.
     expect(screen.queryByText(new RegExp(h.rawState))).not.toBeInTheDocument()
@@ -129,10 +130,10 @@ describe.each(['github', 'gitlab'] as const)('Git host copy on the Release page 
 
     const panel = await releasePanel()
     expect(await within(panel).findByText(`Waiting for merge on ${h.name}`)).toBeInTheDocument()
-    expect(within(panel).getByText(new RegExp(`AIDE couldn't merge the ${h.pr} itself. Merge it on ${h.name}`))).toBeInTheDocument()
+    expect(within(panel).getByText(new RegExp(`Tevrin couldn't merge the ${h.pr} itself. Merge it on ${h.name}`))).toBeInTheDocument()
     expect(within(panel).getByText(new RegExp(`creates the ${h.release}\\.`))).toBeInTheDocument()
     expect(within(panel).getByRole('link', { name: `Open the ${h.pr} on ${h.name}` })).toHaveAttribute('href', h.prUrl)
-    expect(within(panel).getByText(new RegExp(`AIDE checks the ${h.pr} every 2 minutes`))).toBeInTheDocument()
+    expect(within(panel).getByText(new RegExp(`Tevrin checks the ${h.pr} every 2 minutes`))).toBeInTheDocument()
   })
 
   it(`FR140_pr_closed_names_the_host_${host}`, async () => {
@@ -154,14 +155,14 @@ describe('Git host copy helpers (FR-140)', () => {
   it('FR140_recorded_merge_codes_default_to_github_and_name_gitlab_when_given', () => {
     expect(copyForCode('PR_CLOSED', 'releaseAttempt')).toBe('The pull request was closed without merging. Reopen it on GitHub, then retry.')
     expect(copyForCode('MERGE_TIMEOUT', 'releaseAttempt', gitHostTerms('gitlab'))).toBe(
-      "The merge request wasn't merged within 14 days, so AIDE stopped waiting. Merge it on GitLab or fix what blocks it, then retry the release.",
+      "The merge request wasn't merged within 14 days, so Tevrin stopped waiting. Merge it on GitLab or fix what blocks it, then retry the release.",
     )
   })
 
   it('FR140_merge_strategy_copy_names_the_host', () => {
-    expect(mergeStrategyLabel('aide_merges', gitHostTerms('github_pat'))).toBe('AIDE merges the pull request')
-    expect(mergeStrategyLabel('manual', gitHostTerms('gitlab'))).toBe('Merge manually on GitLab — AIDE waits and tags the merge')
-    expect(mergeStrategyDescription('manual', gitHostTerms('gitlab'))).toMatch(/merges it on GitLab, AIDE tags the merge commit and creates the GitLab Release\.$/)
+    expect(mergeStrategyLabel('aide_merges', gitHostTerms('github_pat'))).toBe('Tevrin merges the pull request')
+    expect(mergeStrategyLabel('manual', gitHostTerms('gitlab'))).toBe('Merge manually on GitLab — Tevrin waits and tags the merge')
+    expect(mergeStrategyDescription('manual', gitHostTerms('gitlab'))).toMatch(/merges it on GitLab, Tevrin tags the merge commit and creates the GitLab Release\.$/)
   })
 })
 

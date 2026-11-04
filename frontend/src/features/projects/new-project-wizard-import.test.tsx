@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -107,7 +108,7 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     expect(within(group).queryByRole('radio', { name: 'nightly' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Default branch')).toHaveValue('trunk')
     // An import doesn't get the scratch warning about existing code.
-    expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
+    expect(screen.queryByText('This repository has code. Tevrin will build on it')).not.toBeInTheDocument()
 
     await next(user)
     await stepHeading(/Step 4 of 8: Version/)
@@ -264,12 +265,12 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     await stepHeading(/Step 3 of 8: Repository/)
     await user.click(within(await screen.findByRole('list', { name: 'Repositories' })).getByRole('radio', { name: 'ada/shop' }))
 
-    expect(await screen.findByText('This repository has code. AIDE will build on it')).toBeInTheDocument()
+    expect(await screen.findByText('This repository has code. Tevrin will build on it')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Import instead' }))
 
     const group = await screen.findByRole('group', { name: 'Currently released version' })
     expect(within(group).getByRole('radio', { name: 'Never released' })).toBeChecked()
-    expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
+    expect(screen.queryByText('This repository has code. Tevrin will build on it')).not.toBeInTheDocument()
     expect(within(screen.getByRole('list', { name: 'Wizard steps' })).getByText(/2\. Request/)).toBeInTheDocument()
   })
 })

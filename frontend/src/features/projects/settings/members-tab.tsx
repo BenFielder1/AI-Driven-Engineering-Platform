@@ -30,7 +30,7 @@ const addMemberSchema = z.object({
   email: z
     .string()
     .trim()
-    .min(1, { error: 'Enter the email address of an existing AIDE user.' })
+    .min(1, { error: 'Enter the email address of an existing Tevrin user.' })
     .max(limits.emailMax, { error: `Email addresses are at most ${String(limits.emailMax)} characters.` })
     .pipe(z.email({ error: 'Enter a valid email address.' })),
   role: z.enum(projectRoles),

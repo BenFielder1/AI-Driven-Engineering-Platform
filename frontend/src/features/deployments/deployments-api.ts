@@ -232,7 +232,7 @@ export function useRetryDeploymentGroup(projectId: string, provider: DeploymentP
   })
 }
 
-/** FR-191 (Owner): clears the group and its parts in AIDE; every platform resource stays. */
+/** FR-191 (Owner): clears the group and its parts in Tevrin; every platform resource stays. */
 export function useDeleteDeploymentGroup(projectId: string, provider: DeploymentProvider) {
   const invalidate = useInvalidateTargets(projectId)
   return useMutation({

@@ -203,7 +203,7 @@ export function DatabaseSetupForm({
     ...(db.resourceId
       ? [{ value: 'keep', label: `Keep ${db.name ?? db.resourceId}`, description: 'Only rebind it to the connection above.' }]
       : []),
-    { value: 'create', label: `Create a new ${platformName} ${noun}`, description: 'AIDE provisions it and stores its connection details encrypted.' },
+    { value: 'create', label: `Create a new ${platformName} ${noun}`, description: 'Tevrin provisions it and stores its connection details encrypted.' },
     { value: 'link', label: `Link an existing ${platformName} ${noun}`, description: 'One your connection can reach.' },
   ]
 
@@ -220,7 +220,7 @@ export function DatabaseSetupForm({
         <TextField
           id={ids.connectionString}
           label={`${env} connection string`}
-          hint="A postgres:// or postgresql:// URI, or an ADO.NET string for SQL Server. AIDE stores it encrypted and never shows it again."
+          hint="A postgres:// or postgresql:// URI, or an ADO.NET string for SQL Server. Tevrin stores it encrypted and never shows it again."
           type="password"
           autoComplete="off"
           spellCheck={false}
@@ -234,7 +234,7 @@ export function DatabaseSetupForm({
           platformName={platformName}
           noun={noun}
           connectionsEnabled={db.needsConnection}
-          connectionHint="Bind one of your own tokens. AIDE uses it to provision, check and restore this database."
+          connectionHint="Bind one of your own tokens. Tevrin uses it to provision, check and restore this database."
           register={(field) => register(field)}
           errors={{
             connectionId: errors.connectionId?.message,

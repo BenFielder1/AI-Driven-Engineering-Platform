@@ -120,7 +120,7 @@ function DatabaseFacts({ database: db }: { database: DatabaseCard }) {
         ) : (
           <span data-testid="database-binding">
             {db.provider === 'external'
-              ? 'No platform connection: AIDE uses the connection string you entered.'
+              ? 'No platform connection: Tevrin uses the connection string you entered.'
               : db.needsConnection
                 ? 'No connection bound yet.'
                 : 'No connection needed.'}
@@ -370,7 +370,7 @@ export function DatabaseCardView({
         }}
       >
         <p>
-          {`AIDE stops using this database and removes its derived variables. Nothing is deleted on ${databasePlatformNames[db.provider] ?? providerName}, and its data is kept.`}
+          {`Tevrin stops using this database and removes its derived variables. Nothing is deleted on ${databasePlatformNames[db.provider] ?? providerName}, and its data is kept.`}
         </p>
       </ConfirmDialog>
     </section>

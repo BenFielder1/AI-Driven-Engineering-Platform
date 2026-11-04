@@ -5,7 +5,7 @@ import { buttonClasses } from '../../components/ui/button-classes'
 import { errorMessage, isApiError, type ErrorContext } from '../../lib/errors'
 import { Link } from '../../lib/navigation'
 
-/** A link that leaves AIDE for a Git host or its account pages (new tab, announced as such: "opens {site} in a new tab"). */
+/** A link that leaves Tevrin for a Git host or its account pages (new tab, announced as such: "opens {site} in a new tab"). */
 export function GitHostLink({
   site,
   href,

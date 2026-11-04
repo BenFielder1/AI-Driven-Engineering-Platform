@@ -2,9 +2,9 @@ import type { FieldValues, Path, UseFormSetError } from "react-hook-form";
 
 import { withGitHost, type GitHostTerms } from "./git-host";
 
-/** SPEC §6 GITLAB_RATE_LIMITED / BITBUCKET_RATE_LIMITED: "{host} is rate limiting requests. AIDE will retry." */
+/** SPEC §6 GITLAB_RATE_LIMITED / BITBUCKET_RATE_LIMITED: "{host} is rate limiting requests. Tevrin will retry." */
 function hostJobRateLimited(host: string): string {
-  return `${host} is rate limiting requests. AIDE will retry.`;
+  return `${host} is rate limiting requests. Tevrin will retry.`;
 }
 
 /**
@@ -83,7 +83,7 @@ export const errorMessages = {
   GITHUB_NOT_CONNECTED:
     "Connect your GitHub account first, under Connections → GitHub.",
   GITHUB_APP_NOT_INSTALLED:
-    "The AIDE GitHub App isn't installed there. Install it on the account or repository, then try again.",
+    "The Tevrin GitHub App isn't installed there. Install it on the account or repository, then try again.",
   REPO_NAME_TAKEN: "A repository with this name already exists for that owner. Choose another name.",
   GITHUB_RATE_LIMITED: "GitHub's rate limit was reached. Wait a moment and try again.",
   GIT_ERROR: "Git or GitHub refused the operation.",
@@ -96,12 +96,12 @@ export const errorMessages = {
   DEPLOYMENT_GROUP_INVALID: "These parts can't share a {platform} project: {reason}.",
   PLATFORM_RESOURCE_EXISTS: "{platform} already has a project with that name. Link it instead, or choose another name.",
   // A job code (FR-150, §6): the platform answered 429, so the deployment job backs off and retries.
-  PLATFORM_RATE_LIMITED: "{platform} is rate limiting deployments. AIDE will retry.",
+  PLATFORM_RATE_LIMITED: "{platform} is rate limiting deployments. Tevrin will retry.",
   DEPLOYMENT_ACTION_UNSUPPORTED: "{platform} doesn't support this action.",
   DEPLOYMENT_NOT_CONFIGURED:
     "Deployment isn't set up for this project. An Owner can set up the deployment targets in Settings → Deployment.",
   INVALID_DEPLOYMENT: "Only a ready production deployment can be rolled back to.",
-  DEPLOYMENT_TIMEOUT: "The deployment didn't finish within 30 minutes, so AIDE stopped waiting for it.",
+  DEPLOYMENT_TIMEOUT: "The deployment didn't finish within 30 minutes, so Tevrin stopped waiting for it.",
   // Import an existing repository (FR-73)
   TAG_NOT_FOUND: "That tag isn't in the repository. Pick another released version, or choose Never released.",
   RELEASE_CANCELLED: "A rollback cancelled this release before it ran.",
@@ -109,7 +109,7 @@ export const errorMessages = {
   // host (FR-140): pass its terms to copyForCode(); without them the copy reads as GitHub.
   PR_CLOSED: "The {pr} was closed without merging. Reopen it on {host}, then retry.",
   MERGE_TIMEOUT:
-    "The {pr} wasn't merged within 14 days, so AIDE stopped waiting. Merge it on {host} or fix what blocks it, then retry the release.",
+    "The {pr} wasn't merged within 14 days, so Tevrin stopped waiting. Merge it on {host} or fix what blocks it, then retry the release.",
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
   LINK_USED: "This approval link has already been used.",
@@ -131,7 +131,7 @@ export const errorMessages = {
   PLAN_ORDER:
     "Some plan steps break the stack's recommended order. This is a warning: the plan can still be approved.",
   MISSING_VERCEL_CONFIG:
-    "This plan doesn't create vercel.json, so Vercel would deploy AIDE branches automatically, on top of the deployments AIDE makes. Add vercel.json to a step with git.deploymentEnabled set to { \"aide/**\": false }. This is a warning: the plan can still be approved.",
+    "This plan doesn't create vercel.json, so Vercel would deploy Tevrin branches automatically, on top of the deployments Tevrin makes. Add vercel.json to a step with git.deploymentEnabled set to { \"aide/**\": false }. This is a warning: the plan can still be approved.",
   TOOL_LIMIT:
     "The agent reached its repository tool limit (25 calls or 400 KB read per run) and answered with what it had read.",
   PROVIDER_NOT_CONFIGURED:
@@ -158,14 +158,14 @@ export const errorMessages = {
   // gitHostFailureMessage(), connectionScopeMessage() and the per-context overrides below.
   GIT_HOST_NOT_ALLOWED: "That address isn't allowed for a GitLab instance.",
   GIT_AUTH_FAILED: "Signing in with your Git host didn't complete. Try again.",
-  CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions AIDE needs, or it is the wrong type of token.",
+  CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions Tevrin needs, or it is the wrong type of token.",
   UPSTREAM_RATE_LIMITED: "The service is rate limiting requests. Try again in a few minutes.",
   // FR-136 job codes (§6): the Git host rate limited a background job; it is re-queued for the reset.
   GITLAB_RATE_LIMITED: hostJobRateLimited("GitLab"),
   BITBUCKET_RATE_LIMITED: hostJobRateLimited("Bitbucket"),
   // FR-143, §6: GitHub Pages as a frontend host needs the App's Pages permission.
   PLATFORM_PERMISSION_MISSING:
-    "The AIDE GitHub App needs the Pages permission. Update it in GitHub settings, then accept it on each installation.",
+    "The Tevrin GitHub App needs the Pages permission. Update it in GitHub settings, then accept it on each installation.",
   // Managed databases and migrations (FR-147, FR-152, FR-153, §4.21, §6). Job codes are recorded on a database card's
   // provisioning job or a migration run; `{detail}` is added by withJobDetail() when the job recorded a message.
   PREVIEW_DATABASE_DIVERGED:
@@ -180,9 +180,9 @@ export const errorMessages = {
   // Issue trackers (FR-165–FR-173, §6). `{tracker}`, `{detail}`, `{size}` and `{limit}` are completed by trackerCopy().
   TRACKER_SITE_NOT_ALLOWED: "Enter your Jira Cloud site, like acme.atlassian.net.",
   TRACKER_NOT_CONNECTED: "Connect {tracker} to do this.",
-  TRACKER_PERMISSION_MISSING: "The AIDE GitHub App needs the Issues permission. Update it in GitHub settings.",
+  TRACKER_PERMISSION_MISSING: "The Tevrin GitHub App needs the Issues permission. Update it in GitHub settings.",
   TRACKER_QUERY_INVALID: "{tracker} couldn't run that query: {detail}",
-  TRACKER_RATE_LIMITED: "{tracker} is rate limiting requests. AIDE will retry.",
+  TRACKER_RATE_LIMITED: "{tracker} is rate limiting requests. Tevrin will retry.",
   TRACKER_IMPORT_FAILED: "The import from {tracker} failed: {detail}",
   SOURCE_ITEMS_TOO_LARGE:
     "These items are too large for the AI model ({size} of {limit}). Remove some items or choose a larger model.",
@@ -441,7 +441,7 @@ export const contextualErrorMessages = {
     CREDENTIAL_NOT_OWNER:
       "You can only bind one of your own connections. Pick one of yours, or add a token under Connections.",
     VALIDATION: "Check the target's settings: some fields need attention.",
-    UPSTREAM_ERROR: "A service AIDE needs for this failed or couldn't be reached, so nothing changed. Try again in a moment.",
+    UPSTREAM_ERROR: "A service Tevrin needs for this failed or couldn't be reached, so nothing changed. Try again in a moment.",
     CONFLICT: "Someone else changed the deployment settings at the same time. The page now shows the latest; try again.",
   },
   /** PUT, DELETE and retry of /api/projects/:id/settings/deployment/groups/:provider (FR-190, FR-191). */
@@ -491,11 +491,11 @@ export const contextualErrorMessages = {
   deploymentUnbind: {
     FORBIDDEN: "Only project Owners can unbind a deployment target.",
   },
-  /** PUT /api/projects/:id/settings/deployment/env/:key (FR-145): 502 means saved in AIDE but not pushed to a platform. */
+  /** PUT /api/projects/:id/settings/deployment/env/:key (FR-145): 502 means saved in Tevrin but not pushed to a platform. */
   deploymentEnvSave: {
     FORBIDDEN: "Only project Owners can edit environment variables.",
     UPSTREAM_ERROR:
-      "Saved in AIDE, but pushing it to a deployment platform failed. AIDE pushes it again on the next save or deployment.",
+      "Saved in Tevrin, but pushing it to a deployment platform failed. Tevrin pushes it again on the next save or deployment.",
   },
   /** DELETE /api/projects/:id/settings/deployment/env/:key (FR-145): nothing is deleted when a platform can't delete it. */
   deploymentEnvDelete: {
@@ -522,7 +522,7 @@ export const contextualErrorMessages = {
   },
   /** POST /api/admin/integrations/github/manifest (FR-80). */
   githubAppRegistration: {
-    CONFLICT: "An AIDE GitHub App is already registered. The page now shows it.",
+    CONFLICT: "A Tevrin GitHub App is already registered. The page now shows it.",
     GITHUB_AUTH_FAILED:
       "GitHub didn't finish registering the App (the registration may have expired or been cancelled). Nothing was saved; start again.",
     FORBIDDEN: "Only administrators can register the GitHub App, and only from a browser session.",
@@ -538,9 +538,9 @@ export const contextualErrorMessages = {
   /** POST /api/me/github/repos (FR-81). */
   createGitHubRepo: {
     FORBIDDEN:
-      "The AIDE GitHub App can't create repositories: it needs the Administration permission, or you may not create repositories for that owner.",
+      "The Tevrin GitHub App can't create repositories: it needs the Administration permission, or you may not create repositories for that owner.",
     GITHUB_APP_NOT_INSTALLED:
-      "The AIDE GitHub App isn't installed on that owner, so it can't create the repository there. Install it first.",
+      "The Tevrin GitHub App isn't installed on that owner, so it can't create the repository there. Install it first.",
     UPSTREAM_ERROR: "GitHub couldn't create the repository right now. Nothing was created; try again in a moment.",
   },
   /** POST /api/projects/:id/settings/git/switch-to-app (FR-83). */
@@ -548,9 +548,9 @@ export const contextualErrorMessages = {
     FORBIDDEN:
       "Only project Owners with write access to the repository on GitHub can switch it to the GitHub App.",
     GITHUB_NOT_CONNECTED:
-      "Connect your GitHub account first (under Connections), so AIDE can check your access to the repository.",
+      "Connect your GitHub account first (under Connections), so Tevrin can check your access to the repository.",
     GITHUB_APP_NOT_INSTALLED:
-      "The AIDE GitHub App can't access this repository. Install it on the repository, then try again.",
+      "The Tevrin GitHub App can't access this repository. Install it on the repository, then try again.",
   },
   /** POST /api/projects (FR-86): a github_app repo needs push access for the caller; FR-73 import versions. */
   createProject: {
@@ -573,7 +573,7 @@ export const contextualErrorMessages = {
     GIT_NOT_CONNECTED:
       "This GitLab connection no longer works: GitLab rejected it, or an administrator disabled its instance. Reconnect it under Connections, or pick another.",
     FORBIDDEN:
-      "Your GitLab account needs Developer access or higher on this project for AIDE to work on it. Pick another project, or ask its maintainers for access.",
+      "Your GitLab account needs Developer access or higher on this project for Tevrin to work on it. Pick another project, or ask its maintainers for access.",
     NOT_FOUND:
       "That GitLab project or connection no longer exists, or your GitLab account can't see it. Pick another project.",
     UPSTREAM_ERROR: "We couldn't reach GitLab to check the project. Nothing was created; try again in a moment.",
@@ -598,7 +598,7 @@ export const contextualErrorMessages = {
     GIT_NOT_CONNECTED:
       "This Bitbucket connection no longer works: Bitbucket rejected it, or it is missing scopes. Reconnect it under Connections, or pick another.",
     FORBIDDEN:
-      "Your Bitbucket account needs write access to this repository for AIDE to work on it. Pick another repository, or ask its admins for access.",
+      "Your Bitbucket account needs write access to this repository for Tevrin to work on it. Pick another repository, or ask its admins for access.",
     NOT_FOUND:
       "That Bitbucket repository or connection no longer exists, or your Bitbucket account can't see it. Pick another repository.",
     UPSTREAM_ERROR: "We couldn't reach Bitbucket to check the repository. Nothing was created; try again in a moment.",
@@ -659,7 +659,7 @@ export const contextualErrorMessages = {
     CONFLICT:
       "A GitLab instance with this base URL already exists, or this instance can't change that way: gitlab.com keeps its address, an instance in use keeps its base URL, and an instance configured in the server's environment only changes Enabled here.",
     UPSTREAM_ERROR:
-      "AIDE couldn't reach a GitLab at that address (GET /api/v4/version didn't answer like GitLab). Check the base URL and try again.",
+      "Tevrin couldn't reach a GitLab at that address (GET /api/v4/version didn't answer like GitLab). Check the base URL and try again.",
     NOT_FOUND: "That GitLab instance no longer exists. The list now shows the latest.",
     FORBIDDEN: "Only administrators can change GitLab instances, and only from a browser session.",
   },
@@ -682,9 +682,9 @@ export const contextualErrorMessages = {
   /** GET/POST /api/auth/gitlab/link: confirm linking a GitLab sign-in to the account with its email (FR-131). */
   gitlabLink: {
     FORBIDDEN:
-      "You're signed in to a different AIDE account. Sign out, then sign in to the account with this GitLab email to link it.",
+      "You're signed in to a different Tevrin account. Sign out, then sign in to the account with this GitLab email to link it.",
     NOT_FOUND: "This GitLab sign-in is no longer waiting to be linked (links last 10 minutes). Continue with GitLab again.",
-    CONFLICT: "This GitLab account is already linked to another AIDE account.",
+    CONFLICT: "This GitLab account is already linked to another Tevrin account.",
   },
   /** GET /api/me/git/gitlab/repos · /owners (FR-132). */
   gitlabRepos: {
@@ -708,7 +708,7 @@ export const contextualErrorMessages = {
   /** PUT/DELETE /api/admin/integrations/bitbucket (FR-133). */
   bitbucketConsumer: {
     CONFLICT:
-      "The Bitbucket consumer is set in the server's configuration (Bitbucket__OAuth__*), so it can't be changed or removed here. Change it there and restart AIDE.",
+      "The Bitbucket consumer is set in the server's configuration (Bitbucket__OAuth__*), so it can't be changed or removed here. Change it there and restart Tevrin.",
     FORBIDDEN: "Only administrators can change the Bitbucket consumer, and only from a browser session.",
   },
   /** POST/DELETE /api/me/connections/bitbucket · /:id/test (FR-134). */
@@ -724,10 +724,10 @@ export const contextualErrorMessages = {
   /** GET/POST /api/auth/bitbucket/link: confirm linking a Bitbucket sign-in to the account with its email (FR-134). */
   bitbucketLink: {
     FORBIDDEN:
-      "You're signed in to a different AIDE account. Sign out, then sign in to the account with this Bitbucket email to link it.",
+      "You're signed in to a different Tevrin account. Sign out, then sign in to the account with this Bitbucket email to link it.",
     NOT_FOUND:
       "This Bitbucket sign-in is no longer waiting to be linked (links last 10 minutes). Continue with Bitbucket again.",
-    CONFLICT: "This Bitbucket account is already linked to another AIDE account.",
+    CONFLICT: "This Bitbucket account is already linked to another Tevrin account.",
   },
   /** GET /api/me/git/bitbucket/repos · /owners (FR-135). */
   bitbucketRepos: {
@@ -742,14 +742,14 @@ export const contextualErrorMessages = {
     FORBIDDEN: "Bitbucket doesn't let you create repositories there. Pick another workspace or project.",
     UPSTREAM_RATE_LIMITED: hostRateLimited("Bitbucket", "Nothing was created"),
     UPSTREAM_ERROR:
-      "Bitbucket couldn't create the repository, or AIDE couldn't push its first commit (the README on main). Check the workspace on Bitbucket: if the repository exists but is empty, delete it there, then try again.",
+      "Bitbucket couldn't create the repository, or Tevrin couldn't push its first commit (the README on main). Check the workspace on Bitbucket: if the repository exists but is empty, delete it there, then try again.",
     GIT_NOT_CONNECTED: "This Bitbucket connection no longer works: Bitbucket rejected it. Reconnect it under Connections.",
     NOT_FOUND: "That Bitbucket connection, workspace or project no longer exists. Pick another.",
   },
   /** PATCH /api/admin/users/:id/role (FR-3). */
   changeSystemRole: {
     CONFLICT:
-      "AIDE needs at least one Admin, so the last Admin can't become a User. Make someone else an Admin first.",
+      "Tevrin needs at least one Admin, so the last Admin can't become a User. Make someone else an Admin first.",
     NOT_FOUND: "That user no longer exists. The list now shows the latest.",
     FORBIDDEN: "Only administrators can change system roles, and only from a browser session.",
   },
@@ -788,7 +788,7 @@ export const githubFailureMessages: Readonly<Record<string, string>> = {
   email_required:
     "GitHub didn't share a verified email address. Add one to your GitHub account and try again.",
   already_linked:
-    "This GitHub account is already linked to another AIDE user.",
+    "This GitHub account is already linked to another Tevrin user.",
   link_session:
     "Your session ended while linking GitHub. Sign in and try linking again.",
   link_failed: "We couldn't link your GitHub account. Try again.",
@@ -839,7 +839,7 @@ export const gitHostFailureMessages: Readonly<Record<string, string>> = {
   host_not_allowed: "That {host} address isn't allowed. Ask an administrator to check the instance.",
   email_required:
     "{host} didn't share a verified email address. Verify an email on your {host} account, or register with email first.",
-  already_linked: "This {host} account is already linked to another AIDE user.",
+  already_linked: "This {host} account is already linked to another Tevrin user.",
   link_session: "Your session ended while connecting {host}. Sign in and try again.",
   account_create_failed: "We couldn't create an account from your {host} profile. Try again, or register with email.",
   connection_failed: "Signed in, but we couldn't save your {host} connection. Connect it again from Connections.",
@@ -866,7 +866,7 @@ export function gitHostFailureMessage(provider: string | undefined, reason: stri
 
 /**
  * SPEC §6 CONNECTION_SCOPE_INSUFFICIENT: "This token is missing permissions: {missing}." (`details` lists them). FR-134:
- * Bitbucket may also name scopes AIDE couldn't confirm (`unverifiableScopes`; a token is saved only when all are
+ * Bitbucket may also name scopes Tevrin couldn't confirm (`unverifiableScopes`; a token is saved only when all are
  * verified), with what to do instead.
  */
 export function connectionScopeMessage(
@@ -883,8 +883,8 @@ export function connectionScopeMessage(
   if (unconfirmed.length > 0) {
     parts.push(
       oauthAvailable
-        ? `AIDE couldn't confirm these permissions: ${unconfirmed.join(", ")}. Connect with Bitbucket (OAuth) instead, or create a repository in your workspace first so AIDE can check them, then try again.`
-        : `AIDE couldn't confirm these permissions: ${unconfirmed.join(", ")}. Create a repository in the workspace first so AIDE can check them, then try again.`,
+        ? `Tevrin couldn't confirm these permissions: ${unconfirmed.join(", ")}. Connect with Bitbucket (OAuth) instead, or create a repository in your workspace first so Tevrin can check them, then try again.`
+        : `Tevrin couldn't confirm these permissions: ${unconfirmed.join(", ")}. Create a repository in the workspace first so Tevrin can check them, then try again.`,
     );
   }
   return parts.length === 0 ? errorMessages.CONNECTION_SCOPE_INSUFFICIENT : parts.join(" ");
@@ -1096,7 +1096,7 @@ export class ApiError extends Error {
   readonly traceId: string | undefined;
   /** ProblemDetails `reason`: the machine-readable sub-reason of some codes (RESTORE_NOT_ALLOWED, FR-58). */
   readonly reason: string | null;
-  /** ProblemDetails `installUrl` (GITHUB_APP_NOT_INSTALLED, FR-81/FR-83): the AIDE GitHub App's install link. */
+  /** ProblemDetails `installUrl` (GITHUB_APP_NOT_INSTALLED, FR-81/FR-83): the Tevrin GitHub App's install link. */
   readonly installUrl: string | null;
   /** ProblemDetails `violations` (STACK_INCOMPATIBLE, FR-116): each broken compatibility rule. */
   readonly violations: readonly StackViolation[];
@@ -1298,7 +1298,7 @@ function waitCopy(seconds: number): string {
  * 501 NOT_IMPLEMENTED: a contract stub whose backend hasn't landed yet (ApiProblems.NotImplementedCode; not a domain
  * code, so it isn't in `errorMessages` and maps by status).
  */
-export const notImplementedMessage = "This isn't available yet. It arrives in a later AIDE update.";
+export const notImplementedMessage = "This isn't available yet. It arrives in a later Tevrin update.";
 
 /** User-facing copy for any thrown error; `context` selects overrides from `contextualErrorMessages`. */
 export function errorMessage(error: unknown, context?: ErrorContext): string {

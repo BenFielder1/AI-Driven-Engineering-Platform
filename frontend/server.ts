@@ -1,5 +1,5 @@
 /**
- * AIDE web server (FR-98, FR-99, FR-100, FR-102, FR-103): a minimal custom Node server around Next.js.
+ * Tevrin web server (FR-98, FR-99, FR-100, FR-102, FR-103): a minimal custom Node server around Next.js.
  *
  * Why a custom server: Next.js 16 can proxy `/api` through `rewrites()` (fixed at build time in standalone output) or
  * `proxy.ts` rewrites, but its built-in proxy rewrites Host (changeOrigin), times out after 30 s, answers 500 (not a

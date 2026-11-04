@@ -76,7 +76,7 @@ const blank: CreateValues = { owner: '', project: '', projectKey: '', name: '', 
 
 /**
  * FR-135 "Create repository" on Bitbucket: the workspace, then one of its projects (Bitbucket requires one), name,
- * description and private. AIDE pushes a README to `main` after creating it, so the default branch exists; on success
+ * description and private. Tevrin pushes a README to `main` after creating it, so the default branch exists; on success
  * the caller selects it.
  */
 export function CreateBitbucketRepoDialog({
@@ -274,7 +274,7 @@ export function CreateBitbucketRepoDialog({
           ]}
         />
         <p className="text-sm text-muted-foreground">
-          AIDE pushes a first commit with a README to main, so the default branch exists.
+          Tevrin pushes a first commit with a README to main, so the default branch exists.
         </p>
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" onClick={close} disabled={create.isPending}>

@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -9,7 +10,7 @@ import { problem } from '../../mocks/handlers/problem'
 import { server } from '../../mocks/server'
 import { renderRoute } from '../../test/render'
 
-const LABEL = 'Credit me on commits made by AIDE'
+const LABEL = 'Credit me on commits made by Tevrin'
 
 describe('Account: commit credit (FR-177)', () => {
   it('FR177_account_default_on: on by default, with the Bitbucket warning', async () => {

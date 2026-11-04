@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# AIDE web image (FR-103): the Next.js standalone output run by the custom server (server.ts), which serves the app,
+# Tevrin web image (FR-103): the Next.js standalone output run by the custom server (server.ts), which serves the app,
 # proxies /api (incl. SignalR WebSockets) to BACKEND_URL (read at runtime), sets the security headers and writes
 # redacted JSON request logs. Non-root, PORT=8080, works with a read-only root filesystem (/tmp writable).
 # Build context: frontend/   (docker build -f frontend/Dockerfile frontend)

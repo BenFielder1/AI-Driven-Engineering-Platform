@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { expect, test, type Page } from '@playwright/test'
 
 import { password, registerViaApi, registerViaUi } from './support/api.ts'
@@ -35,7 +36,7 @@ test('FR-1: register, see yourself, sign out, sign back in', async ({ page }) =>
   // Sign out → /login; the session is gone.
   await openUserMenu(page)
   await page.getByRole('menuitem', { name: 'Sign out' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to AIDE', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Tevrin', exact: true })).toBeVisible()
   expect((await page.request.get('/api/auth/me')).status()).toBe(401)
 
   // Guarded page → /login?returnUrl=…

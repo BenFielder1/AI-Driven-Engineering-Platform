@@ -7,7 +7,7 @@ import { useReleaseNotes, useReleases, type Release } from './release-api'
 
 /**
  * Release page → the host release (FR-64, FR-140): the GitHub or GitLab Release created for the version's tag on the
- * merge commit (the API records either in `githubReleaseUrl`). A Local project has none (the tag is in the AIDE-managed
+ * merge commit (the API records either in `githubReleaseUrl`). A Local project has none (the tag is in the Tevrin-managed
  * repository); Bitbucket has no Releases, so the annotated tag holds the notes (D-V4-7): `githubReleaseUrl` is the tag's
  * page, and the release's full notes (GET …/releases/:releaseId/notes) are shown here (Markdown, rendered safely: no raw
  * HTML, no unsafe URLs).
@@ -34,7 +34,7 @@ export function GitHubReleaseSection({ projectId, state }: { projectId: string; 
     body = (
       <p className="text-sm text-muted-foreground">
         {local
-          ? `Local projects have no GitHub Release. The tag ${released.tag} is in the AIDE-managed repository.`
+          ? `Local projects have no GitHub Release. The tag ${released.tag} is in the Tevrin-managed repository.`
           : host.release
             ? `No ${host.release} is recorded for ${released.tag}.`
             : `${host.host} has no Releases. The annotated tag ${released.tag} holds the release notes.`}
@@ -44,17 +44,17 @@ export function GitHubReleaseSection({ projectId, state }: { projectId: string; 
     body = (
       <p className="text-sm text-muted-foreground">
         {local
-          ? 'Local projects have no GitHub Release; the release tags the merge commit in the AIDE-managed repository.'
+          ? 'Local projects have no GitHub Release; the release tags the merge commit in the Tevrin-managed repository.'
           : host.release
-            ? `Once the ${host.pr} is merged and tagged, AIDE creates a ${host.release} with generated notes and links it here.`
-            : `Once the ${host.pr} is merged, AIDE tags the merge commit with an annotated tag holding the release notes.`}
+            ? `Once the ${host.pr} is merged and tagged, Tevrin creates a ${host.release} with generated notes and links it here.`
+            : `Once the ${host.pr} is merged, Tevrin tags the merge commit with an annotated tag holding the release notes.`}
       </p>
     )
   }
   return (
     <StageSection id="release-github-release" title={title}>
       {body}
-      {/* Only Bitbucket keeps AIDE's notes (the tag's message); the host Release holds them elsewhere. */}
+      {/* Only Bitbucket keeps Tevrin's notes (the tag's message); the host Release holds them elsewhere. */}
       {released && provider === 'bitbucket' && <ReleaseNotes projectId={projectId} release={released} />}
     </StageSection>
   )

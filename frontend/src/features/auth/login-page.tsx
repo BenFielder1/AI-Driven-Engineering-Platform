@@ -76,7 +76,7 @@ export function LoginPage({ returnUrl, githubError, gitHostError, linkProvider }
   ]
 
   return (
-    <AuthCard title="Sign in to AIDE">
+    <AuthCard title="Sign in to Tevrin">
       {githubError && (
         <Alert tone="error" role="alert" title="GitHub sign-in failed" className="mb-4">
           <p>{githubFailureMessage(githubError.reason)}</p>
@@ -128,7 +128,7 @@ export function LoginPage({ returnUrl, githubError, gitHostError, linkProvider }
         </>
       )}
       <p className="mt-6 text-sm text-muted-foreground">
-        New to AIDE?{' '}
+        New to Tevrin?{' '}
         <Link to="/register" search={returnUrl ? { returnUrl } : {}} className="font-medium text-primary underline">
           Create an account
         </Link>

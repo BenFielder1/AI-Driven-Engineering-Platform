@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
@@ -187,9 +188,9 @@ describe('Settings → Git: mode and GitHub App (FR-83)', () => {
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Switch to GitHub App' }))
 
     expect(
-      await screen.findByText("The AIDE GitHub App can't access this repository. Install it on the repository, then try again."),
+      await screen.findByText("The Tevrin GitHub App can't access this repository. Install it on the repository, then try again."),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Install AIDE on acme/ })).toHaveAttribute('href', INSTALL_URL)
+    expect(screen.getByRole('link', { name: /Install Tevrin on acme/ })).toHaveAttribute('href', INSTALL_URL)
   })
 
   it('FR83_app_project: shows the repository and App status; the mode select offers no way onto the App', async () => {
@@ -241,9 +242,9 @@ describe('Settings → Git: release settings (FR-64, FR-65, §4.10)', () => {
   it('FR65_manual_strategy_is_saved_and_shown', async () => {
     const { user, project } = await openGit()
     const form = releaseForm()
-    expect(within(form).getByLabelText('AIDE merges the pull request')).toBeChecked()
+    expect(within(form).getByLabelText('Tevrin merges the pull request')).toBeChecked()
 
-    await user.click(within(form).getByLabelText('Merge manually on GitHub — AIDE waits and tags the merge'))
+    await user.click(within(form).getByLabelText('Merge manually on GitHub — Tevrin waits and tags the merge'))
     await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
 
     expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()

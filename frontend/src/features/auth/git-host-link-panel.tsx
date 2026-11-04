@@ -47,8 +47,8 @@ export function useGitHostPendingLink(provider: GitHostLinkProvider, enabled: bo
 }
 
 /**
- * FR-131, FR-134, D-V4-18 (`/login?link=gitlab|bitbucket`): the Git host's verified email belongs to an existing AIDE
- * account that isn't linked to this identity. AIDE never links silently: the user signs in to that account (the form
+ * FR-131, FR-134, D-V4-18 (`/login?link=gitlab|bitbucket`): the Git host's verified email belongs to an existing Tevrin
+ * account that isn't linked to this identity. Tevrin never links silently: the user signs in to that account (the form
  * below), then confirms here, or cancels. `onDone` is called after confirming or cancelling, with whether the link was
  * made. Render it with `key={provider}`.
  */
@@ -137,7 +137,7 @@ export function GitHostLinkPanel({
       <p>
         The {name} account <strong data-testid={`${provider}-link-login`}>{link.login}</strong>
         {link.instanceName ? ` on ${link.instanceName}` : ''} uses the email <strong>{link.email}</strong>, which belongs to an
-        existing AIDE account.
+        existing Tevrin account.
       </p>
       {user ? (
         <p>
@@ -146,7 +146,7 @@ export function GitHostLinkPanel({
         </p>
       ) : (
         <p>
-          To link them, sign in to that AIDE account below. AIDE never links accounts without your confirmation. This request
+          To link them, sign in to that Tevrin account below. Tevrin never links accounts without your confirmation. This request
           expires in 10 minutes.
         </p>
       )}

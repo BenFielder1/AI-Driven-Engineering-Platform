@@ -298,7 +298,7 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
                     onActionChange={setSecretAction}
                     allowClear={false}
                     required
-                    hint="HMAC key used to sign each webhook body so the receiver can verify it came from AIDE. Stored encrypted; it's never shown again."
+                    hint="HMAC key used to sign each webhook body so the receiver can verify it came from Tevrin. Stored encrypted; it's never shown again."
                     maxLength={limits.secretMax}
                     error={chErrors?.secret?.message}
                     inputProps={secretField}

@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -9,14 +10,14 @@ describe('Route guards (FR-1)', () => {
   it('FR-1: a signed-out visitor to /account is sent to /login with a returnUrl', async () => {
     const { router } = await renderRoute('/account')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to AIDE' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })).toBeInTheDocument()
     expect(currentHref(router)).toBe('/login?returnUrl=%2Faccount')
   })
 
   it('FR-1: / redirects to /projects, then to /login when signed out', async () => {
     const { router } = await renderRoute('/')
 
-    await screen.findByRole('heading', { level: 1, name: 'Sign in to AIDE' })
+    await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })
     expect(currentHref(router)).toBe('/login?returnUrl=%2Fprojects')
   })
 
@@ -42,7 +43,7 @@ describe('Route guards (FR-1)', () => {
     const { router } = await renderRoute('/login?error=GITHUB_AUTH_FAILED&reason=already_linked')
 
     expect(
-      await screen.findByText('This GitHub account is already linked to another AIDE user.'),
+      await screen.findByText('This GitHub account is already linked to another Tevrin user.'),
     ).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/account')
   })
@@ -51,7 +52,7 @@ describe('Route guards (FR-1)', () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
     const { router } = await renderRoute('/projects/abc/review?cycle=2')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to AIDE' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })).toBeInTheDocument()
     expect(currentHref(router)).toBe('/login?returnUrl=%2Fprojects%2Fabc%2Freview%3Fcycle%3D2')
 
     const user = userEvent.setup()

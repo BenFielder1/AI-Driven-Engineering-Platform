@@ -39,7 +39,7 @@ const gitlabCom = (): Instance => ({
 /** In-memory GitLab backend for tests (reset after each test by src/test/setup.ts). */
 export const gitlabDb = {
   instances: [gitlabCom()],
-  /** Connections by AIDE user id. */
+  /** Connections by Tevrin user id. */
   connections: {} as Record<string, Connection[]>,
   /** Projects per connection id (the picker lists them newest first). */
   repos: {} as Record<string, Repo[]>,

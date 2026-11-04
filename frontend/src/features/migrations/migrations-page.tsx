@@ -151,7 +151,7 @@ export function MigrationsPage() {
         variant="no_data"
         headingLevel={3}
         title={versionId ? 'No migration runs for this version' : 'No migration runs yet'}
-        description="AIDE applies supabase/migrations to the preview database during preview rollout, and to production in the release job."
+        description="Tevrin applies supabase/migrations to the preview database during preview rollout, and to production in the release job."
       />
     )
   } else {
@@ -173,7 +173,7 @@ export function MigrationsPage() {
           Migrations
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          The Supabase migration runs AIDE applied to the preview and production databases.
+          The Supabase migration runs Tevrin applied to the preview and production databases.
         </p>
       </div>
       <div className="sm:max-w-xs">

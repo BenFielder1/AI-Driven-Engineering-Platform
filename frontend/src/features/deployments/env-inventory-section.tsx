@@ -192,7 +192,7 @@ function EnvVarForm({
         onError: (error) => {
           setValue('value', '')
           put.reset()
-          // 502: saved in AIDE (value encrypted), not yet pushed to a platform; the row shows the sync error.
+          // 502: saved in Tevrin (value encrypted), not yet pushed to a platform; the row shows the sync error.
           if (isApiError(error, 'UPSTREAM_ERROR')) {
             onDone({ key, synced: false })
             return
@@ -245,7 +245,7 @@ function EnvVarForm({
         type="password"
         autoComplete="new-password"
         spellCheck={false}
-        hint="Encrypted in AIDE and pushed to the deployment platforms on save. It is never shown again."
+        hint="Encrypted in Tevrin and pushed to the deployment platforms on save. It is never shown again."
         error={errors.value?.message}
         {...register('value')}
       />
@@ -317,12 +317,12 @@ function SyncState({ v }: { v: DeploymentEnvVar }) {
     return <span>Missing: deployments are likely to fail without it.</span>
   }
   if (v.source === 'derived' && !v.hasValue) {
-    return <span className="text-muted-foreground">No value yet: AIDE fills it once its source exists.</span>
+    return <span className="text-muted-foreground">No value yet: Tevrin fills it once its source exists.</span>
   }
   if (v.syncError) {
     return (
       <span className="text-destructive" data-testid="env-sync-error">
-        Not synced: {v.syncError} AIDE retries on the next save or deployment.
+        Not synced: {v.syncError} Tevrin retries on the next save or deployment.
       </span>
     )
   }
@@ -394,7 +394,7 @@ export function EnvInventorySection({ projectId, inventory, canManage }: { proje
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        Values are encrypted in AIDE, synced to each target on save and before each deployment, and never shown again.
+        Values are encrypted in Tevrin, synced to each target on save and before each deployment, and never shown again.
         {prefix ? ` Public variables start with ${prefix}.` : ''}
       </p>
       {missing > 0 && (
@@ -513,7 +513,7 @@ export function EnvInventorySection({ projectId, inventory, canManage }: { proje
           setToDelete(null)
         }}
       >
-        <p>It is deleted in AIDE and on the deployment platforms. Deployments after that build without it.</p>
+        <p>It is deleted in Tevrin and on the deployment platforms. Deployments after that build without it.</p>
       </ConfirmDialog>
     </section>
   )

@@ -40,7 +40,7 @@ export function MobileDrawer({
               <span className="sr-only">Navigation</span>
             </div>
           </SheetTitle>
-          <SheetDescription className="sr-only">Pages in AIDE</SheetDescription>
+          <SheetDescription className="sr-only">Pages in Tevrin</SheetDescription>
           <SearchButton
             mode="expanded"
             onClick={() => {

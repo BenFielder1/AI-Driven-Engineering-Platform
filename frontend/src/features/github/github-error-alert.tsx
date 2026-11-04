@@ -6,7 +6,7 @@ import { buttonClasses } from '../../components/ui/button-classes'
 import { errorMessage, isApiError, type ErrorContext } from '../../lib/errors'
 import { connectGitHubHref } from './github-api'
 
-/** A link that leaves AIDE for GitHub (new tab, announced as such). */
+/** A link that leaves Tevrin for GitHub (new tab, announced as such). */
 export function GitHubLink({
   href,
   children,
@@ -48,7 +48,7 @@ export function GitHubErrorAlert({
   error: unknown
   title: string
   context?: ErrorContext
-  /** Who to install AIDE on ("acme"), for the link text. */
+  /** Who to install Tevrin on ("acme"), for the link text. */
   installTarget?: string
   /** Where Connect GitHub should come back to. */
   returnUrl?: string
@@ -61,7 +61,7 @@ export function GitHubErrorAlert({
       {isApiError(error, 'GITHUB_APP_NOT_INSTALLED') && error.installUrl && (
         <p className="mt-2">
           <GitHubLink href={error.installUrl} variant="link">
-            {`Install AIDE on ${installTarget ?? 'GitHub'}`}
+            {`Install Tevrin on ${installTarget ?? 'GitHub'}`}
           </GitHubLink>
         </p>
       )}

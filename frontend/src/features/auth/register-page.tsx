@@ -58,7 +58,7 @@ export function RegisterPage({ returnUrl }: { returnUrl?: string }) {
   ]
 
   return (
-    <AuthCard title="Create your AIDE account">
+    <AuthCard title="Create your Tevrin account">
       <ErrorSummary title="We couldn't create your account" errors={summary} />
       <form noValidate onSubmit={(e) => void onSubmit(e)} className="mt-2 flex flex-col gap-4">
         <TextField

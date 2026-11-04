@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -202,7 +203,7 @@ describe('FR-53: app shell', () => {
     expect(within(menu).getByRole('menuitem', { name: /Connections/ })).toHaveAttribute('href', '/connections')
     await user.click(within(menu).getByRole('menuitem', { name: /Sign out/ }))
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to AIDE' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/login')
     expect(authDb.currentUserId).toBeNull()
     expect(queryClient.getQueryData(['me', 'tokens', 'list'])).toBeUndefined()

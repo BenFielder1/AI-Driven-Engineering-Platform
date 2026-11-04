@@ -401,7 +401,7 @@ export function PlatformConnectionSection({
             </ul>
           </div>
         ) : (
-          <p>The token is removed from AIDE. No project uses it. This can&apos;t be undone.</p>
+          <p>The token is removed from Tevrin. No project uses it. This can&apos;t be undone.</p>
         )}
       </ConfirmDialog>
     </section>

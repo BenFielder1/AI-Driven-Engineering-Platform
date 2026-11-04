@@ -49,7 +49,7 @@ export function seedAdminEvent(overrides: Partial<AdminEvent> = {}): AdminEvent 
     type: 'ARTIFACT_APPROVED',
     category: 'artifact',
     outcome: 'ok',
-    actor: { id: null, name: 'aide-system', isSystem: true },
+    actor: { id: null, name: 'Tevrin', isSystem: true },
     summary: 'Technical specification v2 approved',
     payload: { type: 'technical_specification', version: 2 },
     createdAt: tick(),

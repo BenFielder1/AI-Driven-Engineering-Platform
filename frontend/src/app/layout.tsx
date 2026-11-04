@@ -26,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const proto = requestHeaders.get('x-forwarded-proto') === 'https' ? 'https' : 'http'
   const metadataBase = /^[a-z0-9.-]+(:\d{1,5})?$/i.test(host) ? new URL(`${proto}://${host}`) : undefined
   return {
-    title: 'AIDE Platform',
+    title: 'Tevrin',
     metadataBase,
     icons: {
       icon: [

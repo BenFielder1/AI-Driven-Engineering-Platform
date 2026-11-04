@@ -46,7 +46,7 @@ export function gitlabStartHref(mode: 'signin' | 'connect', instanceId: string, 
  */
 export function gitlabTokenPageUrl(baseUrl: string): string {
   const base = baseUrl.replace(/\/+$/, '')
-  return `${base}/-/user_settings/personal_access_tokens?name=AIDE&scopes=${GITLAB_TOKEN_SCOPES.join(',')}`
+  return `${base}/-/user_settings/personal_access_tokens?name=Tevrin&scopes=${GITLAB_TOKEN_SCOPES.join(',')}`
 }
 
 /** "gitlab.com" or "gitlab.example.com" (the host of a base URL), for compact labels. */

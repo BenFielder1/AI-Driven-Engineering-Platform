@@ -118,7 +118,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
         </main>
         <footer className="border-t border-border/60">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-muted-foreground sm:px-6 lg:px-8">
-            <span>AIDE Platform</span>
+            <span>Tevrin</span>
             <HealthIndicator />
           </div>
         </footer>

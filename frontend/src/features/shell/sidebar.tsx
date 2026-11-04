@@ -120,7 +120,7 @@ export function Sidebar({
         <Link
           to="/projects"
           activeOptions={{ exact: true }}
-          aria-label="AIDE home"
+          aria-label="Tevrin home"
           className={cn('flex min-h-11 items-center rounded-lg px-2', whenCollapsed.center[mode])}
         >
           <BrandLockup wordmarkClassName={whenCollapsed.srOnly[mode]} />

@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { describe, expect, it } from 'vitest'
 
 import { describeActivity } from './activity-summary'
@@ -122,7 +123,7 @@ describe('FR-155: activity summaries of the v4 events', () => {
     )
   })
 
-  it('FR155_DATABASE_RESET names the provider and only claims a schema reset AIDE ran', () => {
+  it('FR155_DATABASE_RESET names the provider and only claims a schema reset Tevrin ran', () => {
     expect(d('DATABASE_RESET', { provider: 'supabase', method: 'reset_schema', environment: 'preview' })).toBe(
       'Preview database on Supabase reset: its schema was emptied',
     )

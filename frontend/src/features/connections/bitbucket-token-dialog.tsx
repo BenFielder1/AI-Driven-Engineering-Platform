@@ -103,7 +103,7 @@ export function BitbucketTokenDialog({
     <ModalDialog
       open
       title="Connect Bitbucket with an API token"
-      description="AIDE checks the token and its scopes with Bitbucket before saving it. It's stored encrypted and never shown again."
+      description="Tevrin checks the token and its scopes with Bitbucket before saving it. It's stored encrypted and never shown again."
       busy={create.isPending}
       onClose={close}
       className="sm:max-w-lg"
@@ -137,7 +137,7 @@ export function BitbucketTokenDialog({
             </li>
             <li>
               <strong>Expiry:</strong> Atlassian allows up to a year. Pick a date that suits you and put a reminder in your
-              calendar: when it expires, AIDE marks the connection invalid until you connect a new token.
+              calendar: when it expires, Tevrin marks the connection invalid until you connect a new token.
             </li>
           </ul>
           <p className="mt-2">

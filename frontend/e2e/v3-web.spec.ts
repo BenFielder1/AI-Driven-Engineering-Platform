@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { expect, test, type Page, type WebSocket } from '@playwright/test'
 
 import { createProjectViaApi, password, registerViaApi } from './support/api.ts'
@@ -140,7 +141,7 @@ test('FR-101: a smoke flow (sign in → projects → a project) requests nothing
   })
 
   await page.goto('/login')
-  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to AIDE', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Tevrin', exact: true })).toBeVisible()
   const appOrigin = new URL(page.url()).origin
   await page.getByLabel('Email').fill(user.email)
   await page.getByLabel('Password').fill(password)

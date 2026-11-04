@@ -106,12 +106,12 @@ function AwaitingMerge({ release, pullRequestUrl, host }: { release: Release; pu
       <p>
         {manual
           ? `This project merges manually: merge the ${host.pr} on ${host.host}.`
-          : `AIDE couldn't merge the ${host.pr} itself. Merge it on ${host.host} once it's allowed.`}{' '}
+          : `Tevrin couldn't merge the ${host.pr} itself. Merge it on ${host.host} once it's allowed.`}{' '}
         {host.release
-          ? `AIDE then tags the merge commit and creates the ${host.release}.`
-          : 'AIDE then tags the merge commit with the release notes.'}
+          ? `Tevrin then tags the merge commit and creates the ${host.release}.`
+          : 'Tevrin then tags the merge commit with the release notes.'}
       </p>
-      <MergeReasons reasons={release.mergeReasons ?? []} label="Why AIDE is waiting" />
+      <MergeReasons reasons={release.mergeReasons ?? []} label="Why Tevrin is waiting" />
       {pullRequestUrl && (
         <p>
           <a href={pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
@@ -120,7 +120,7 @@ function AwaitingMerge({ release, pullRequestUrl, host }: { release: Release; pu
         </p>
       )}
       <p className="text-muted-foreground">
-        AIDE checks the {host.pr} every 2 minutes for the first hour, then every 10 minutes, for up to 14 days. If
+        Tevrin checks the {host.pr} every 2 minutes for the first hour, then every 10 minutes, for up to 14 days. If
         it's closed without merging or still unmerged after 14 days, the release fails and an Owner can retry.
       </p>
     </section>

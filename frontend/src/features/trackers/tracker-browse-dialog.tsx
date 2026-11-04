@@ -700,7 +700,7 @@ export function TrackerBrowseDialog({
     <ModalDialog
       open
       title="Import from tracker"
-      description="AIDE imports a snapshot of the items you pick and never refreshes it silently."
+      description="Tevrin imports a snapshot of the items you pick and never refreshes it silently."
       busy={pending}
       onClose={onClose}
       className="sm:max-w-3xl"

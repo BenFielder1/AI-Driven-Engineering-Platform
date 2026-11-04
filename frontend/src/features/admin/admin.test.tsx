@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -104,7 +105,7 @@ describe('Admin events (FR-51)', () => {
       category: 'run',
       outcome: 'failure',
       summary: 'Spec generator run failed',
-      actor: { id: null, name: 'aide-system', isSystem: true },
+      actor: { id: null, name: 'Tevrin', isSystem: true },
     })
     seedAdminEvent({ type: 'PROJECT_DELETED', category: 'project', summary: 'Project Old app deleted', actor: { id: 'x', name: 'Ada Lovelace', isSystem: false } })
     await open('/admin/events', 'Events')
@@ -137,7 +138,8 @@ describe('Admin events (FR-51)', () => {
     expect(within(deleted).getByRole('rowheader')).toHaveTextContent(/^Project Old app deletedPROJECT_DELETED/)
     expect(within(deleted).getByText('—')).toBeInTheDocument()
     expect(within(failed).getByText('Failure')).toBeInTheDocument()
-    expect(within(failed).getByText('aide-system (system)')).toBeInTheDocument()
+    // FR-197, FR-198: the system actor's display name is Tevrin.
+    expect(within(failed).getByText('Tevrin (system)')).toBeInTheDocument()
     expect(within(failed).getByRole('link', { name: 'Inventory tracker' })).toHaveAttribute('href', `/projects/${a.id}`)
     expect(within(approved).getByText('Artifacts')).toBeInTheDocument()
   })

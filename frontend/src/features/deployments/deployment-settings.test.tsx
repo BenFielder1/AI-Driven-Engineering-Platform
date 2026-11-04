@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
@@ -164,7 +165,7 @@ describe('Settings → Deployment targets (FR-144)', () => {
         'Connection',
         'Repository access',
         'Required variables',
-        'AIDE branches not auto-deployed',
+        'Tevrin branches not auto-deployed',
         'Preview environment',
         'Plan limits',
       ])
@@ -369,7 +370,7 @@ describe('Environment inventory (FR-145)', () => {
     await user.type(within(form).getByLabelText('Name'), 'API_ORIGIN')
     await user.type(within(form).getByLabelText('Value'), 'https://x.example')
     await user.click(within(form).getByRole('button', { name: 'Save variable' }))
-    expect((await within(form).findAllByText(/AIDE derives API_ORIGIN from the deployment targets/)).length).toBeGreaterThan(0)
+    expect((await within(form).findAllByText(/Tevrin derives API_ORIGIN from the deployment targets/)).length).toBeGreaterThan(0)
   })
 
   it('FR145_env_sync_failure: a 502 keeps the value and the row shows the sync error', async () => {
@@ -382,8 +383,8 @@ describe('Environment inventory (FR-145)', () => {
     await user.type(within(form).getByLabelText('Name'), 'API_KEY')
     await user.type(within(form).getByLabelText('Value'), 'abc')
     await user.click(within(form).getByRole('button', { name: 'Save variable' }))
-    expect(await screen.findByText(/Saved in AIDE, but pushing it to a deployment platform failed/)).toBeInTheDocument()
-    expect(within(await envRow('API_KEY')).getByTestId('env-sync-error')).toHaveTextContent('AIDE retries on the next save or deployment.')
+    expect(await screen.findByText(/Saved in Tevrin, but pushing it to a deployment platform failed/)).toBeInTheDocument()
+    expect(within(await envRow('API_KEY')).getByTestId('env-sync-error')).toHaveTextContent('Tevrin retries on the next save or deployment.')
   })
 
   it('FR145_env_delete: deleting a user variable asks first and removes it', async () => {

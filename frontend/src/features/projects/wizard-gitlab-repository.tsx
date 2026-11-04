@@ -112,7 +112,7 @@ export function WizardGitLabRepository({
           <SelectField
             id={connectionFieldId}
             label="GitLab connection"
-            hint="The account and instance AIDE uses for this project."
+            hint="The account and instance Tevrin uses for this project."
             value={connectionId}
             error={connectionError}
             onChange={(e) => {
@@ -148,7 +148,7 @@ export function WizardGitLabRepository({
             )}
           </p>
           {selected && empty === false && !importing && (
-            <Alert tone="warning" title="This project has code. AIDE will build on it">
+            <Alert tone="warning" title="This project has code. Tevrin will build on it">
               <p>
                 The project is treated as an import of a repository that was never released: the Repository Analyst reads
                 the code first, and the first specification covers what is already there. Import it instead to say which

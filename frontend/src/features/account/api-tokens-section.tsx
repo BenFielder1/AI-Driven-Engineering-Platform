@@ -214,7 +214,7 @@ export function ApiTokensSection() {
         API tokens
       </h2>
       <p className="mb-4 mt-1 text-sm text-muted-foreground">
-        Personal tokens let the <code>aide</code> CLI act as you. Treat them like passwords.
+        Personal tokens let the <code>tevrin</code> CLI act as you. Treat them like passwords.
       </p>
 
       {created && (

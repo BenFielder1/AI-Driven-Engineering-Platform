@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -265,7 +266,7 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
 
   it('FR89_a_missing_vercel_json_is_a_deterministic_finding_with_its_file', async () => {
     const message =
-      `vercel.json is missing: add it with git.deploymentEnabled { "aide/**": false } so Vercel doesn't deploy AIDE branches on its own (FR-89).`
+      `vercel.json is missing: add it with git.deploymentEnabled { "aide/**": false } so Vercel doesn't deploy Tevrin branches on its own (FR-89).`
     const project = seedReview('owner', (p) => {
       seedComplianceReport(p, {
         categoryScores: categoryScores(0.85),

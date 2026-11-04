@@ -49,7 +49,7 @@ export function WizardDeploymentStep({
       {vercel && values.gitMode === 'local' && (
         <Alert tone="info" title="Vercel deploys from GitHub">
           <p>
-            With a Local repository, deployment works only where AIDE runs its test deployment provider; otherwise creating the
+            With a Local repository, deployment works only where Tevrin runs its test deployment provider; otherwise creating the
             project reports it. Choose a GitHub repository in the Repository step to deploy to Vercel.
           </p>
         </Alert>

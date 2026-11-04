@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import { http } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -35,9 +36,9 @@ describe('FR-155 (M31): host-neutral copy and release settings', () => {
     const form = await screen.findByRole('form', { name: 'Release' })
 
     expect(within(form).getByTestId('merge-strategy-unavailable')).toHaveTextContent(
-      "This project is set to “AIDE merges (squash)”, which GitHub doesn't offer.",
+      "This project is set to “Tevrin merges (squash)”, which GitHub doesn't offer.",
     )
-    expect(within(form).getByLabelText('AIDE merges the pull request')).toBeChecked()
+    expect(within(form).getByLabelText('Tevrin merges the pull request')).toBeChecked()
 
     await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
     expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()
@@ -51,7 +52,7 @@ describe('FR-155 (M31): host-neutral copy and release settings', () => {
     await openOwnerSettings('git', { git: gitSettings({ provider: 'bitbucket', mergeStrategy: 'squash' }) })
     const form = await screen.findByRole('form', { name: 'Release' })
 
-    expect(within(form).getByLabelText('AIDE merges (squash)')).toBeChecked()
+    expect(within(form).getByLabelText('Tevrin merges (squash)')).toBeChecked()
     expect(within(form).queryByTestId('merge-strategy-unavailable')).not.toBeInTheDocument()
   })
 

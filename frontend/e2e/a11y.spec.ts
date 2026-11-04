@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { readFileSync } from 'node:fs'
 
 import { AxeBuilder } from '@axe-core/playwright'
@@ -37,7 +38,7 @@ const targets: Target[] = [
     name: 'login',
     path: () => '/login',
     signedIn: false,
-    ready: (p) => p.getByRole('heading', { level: 1, name: 'Sign in to AIDE' }),
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Sign in to Tevrin' }),
   },
   {
     name: 'projects list',
@@ -116,7 +117,7 @@ const targets: Target[] = [
     name: 'register',
     path: () => '/register',
     signedIn: false,
-    ready: (p) => p.getByRole('heading', { level: 1, name: 'Create your AIDE account' }),
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Create your Tevrin account' }),
   },
   {
     name: 'account',

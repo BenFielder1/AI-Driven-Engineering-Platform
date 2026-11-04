@@ -70,12 +70,12 @@ export const stageGates: Record<Phase, readonly GateType[]> = {
 }
 
 /**
- * Why the UI hides restore: an API reason (RESTORE_NOT_ALLOWED), or `not_restorable` for a type AIDE generates and locks
+ * Why the UI hides restore: an API reason (RESTORE_NOT_ALLOWED), or `not_restorable` for a type Tevrin generates and locks
  * itself: the Repository Analyst's codebase summary and an import's source items (the API never restores them).
  */
 export type RestoreBlock = RestoreReason | 'not_restorable'
 
-/** FR-70, FR-170: versions AIDE writes auto-locked. They can't be restored or edited into a new draft (rule 9). */
+/** FR-70, FR-170: versions Tevrin writes auto-locked. They can't be restored or edited into a new draft (rule 9). */
 export const isAgentLockedType = (type: ArtifactType): boolean => type === 'codebase_summary' || type === 'source_items'
 
 /**

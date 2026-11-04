@@ -88,7 +88,7 @@ function GitModeSummary({ git }: { git: GitSettings }) {
           <BoundHostRows git={git} />
         ) : (
           <Row term="Repository">
-            {git.mode === 'local' ? 'AIDE-managed local repository' : (repo ?? 'Not set')}
+            {git.mode === 'local' ? 'Tevrin-managed local repository' : (repo ?? 'Not set')}
           </Row>
         )}
         {git.mode === 'github_app' && (
@@ -140,7 +140,7 @@ function SwitchToApp({ projectId, git }: { projectId: string; git: GitSettings }
         Use the GitHub App
       </h3>
       <p className="mb-3 mt-1 text-sm text-muted-foreground">
-        The AIDE GitHub App is installed on this repository. Switching uses its installation tokens for all Git work and
+        The Tevrin GitHub App is installed on this repository. Switching uses its installation tokens for all Git work and
         removes the stored access token.
       </p>
       {failure !== null && (
@@ -180,7 +180,7 @@ function SwitchToApp({ projectId, git }: { projectId: string; git: GitSettings }
           setConfirming(false)
         }}
       >
-        <p>AIDE removes the stored access token and uses the App for clones, pushes, pull requests and releases.</p>
+        <p>Tevrin removes the stored access token and uses the App for clones, pushes, pull requests and releases.</p>
       </ConfirmDialog>
     </section>
   )
@@ -280,7 +280,7 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
         {provider === 'github_app' && (
           <Alert tone="info">
             <p>
-              The repository is <strong>{git.repoFullName}</strong>, picked when the project was created. AIDE accesses it
+              The repository is <strong>{git.repoFullName}</strong>, picked when the project was created. Tevrin accesses it
               through the GitHub App.
             </p>
           </Alert>
@@ -323,7 +323,7 @@ function GitForm({ projectId, git }: { projectId: string; git: GitSettings }) {
         )}
         {provider === 'local' && (
           <Alert tone="info">
-            <p>AIDE keeps a Git repository for this project on its own data volume. No token is needed.</p>
+            <p>Tevrin keeps a Git repository for this project on its own data volume. No token is needed.</p>
           </Alert>
         )}
         <TextField

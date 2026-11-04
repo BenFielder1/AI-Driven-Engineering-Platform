@@ -369,7 +369,7 @@ export function GitLabConnectionSection({
         }}
       >
         <p>
-          AIDE forgets this connection&apos;s tokens. Projects bound to it lose the binding until an Owner re-binds one, and
+          Tevrin forgets this connection&apos;s tokens. Projects bound to it lose the binding until an Owner re-binds one, and
           their Git work fails until then. Signing in with GitLab still works and reconnects it.
         </p>
       </ConfirmDialog>

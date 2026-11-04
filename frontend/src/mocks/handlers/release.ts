@@ -189,7 +189,7 @@ export const releaseHandlers = [
     )
   }),
 
-  // FR-140, D-V4-7: AIDE's release notes of one attempt (404 when the attempt isn't in the project).
+  // FR-140, D-V4-7: Tevrin's release notes of one attempt (404 when the attempt isn't in the project).
   http.get('*/api/projects/:id/releases/:releaseId/notes', ({ params }) => {
     const a = access(params.id)
     if (a instanceof Response) {

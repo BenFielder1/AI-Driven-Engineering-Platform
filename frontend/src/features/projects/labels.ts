@@ -598,25 +598,25 @@ export const stepAttemptOutcomeLabels: Record<Schemas['StepAttemptOutcome'], str
 /** FR-65, FR-140: the project's merge strategy, as Settings → Git and the Release page name it (`{…}`: see withGitHost). */
 const mergeStrategyCopy: Record<Schemas['MergeStrategy'], { label: string; description: string }> = {
   aide_merges: {
-    label: 'AIDE merges the {pr}',
+    label: 'Tevrin merges the {pr}',
     description:
-      'When the release is approved, AIDE merges the {pr}. If {host} refuses (required reviews or checks, branch protection), the release waits for a merge on {host}.',
+      'When the release is approved, Tevrin merges the {pr}. If {host} refuses (required reviews or checks, branch protection), the release waits for a merge on {host}.',
   },
   manual: {
-    label: 'Merge manually on {host} — AIDE waits and tags the merge',
+    label: 'Merge manually on {host} — Tevrin waits and tags the merge',
     description:
-      'AIDE never merges. It marks the {pr} ready for review and waits; once someone merges it on {host}, AIDE tags the merge commit and creates the {release}.',
+      'Tevrin never merges. It marks the {pr} ready for review and waits; once someone merges it on {host}, Tevrin tags the merge commit and creates the {release}.',
   },
   // FR-140: Bitbucket only (its `merge_strategy`); `aide_merges` sends `merge_commit`.
   fast_forward: {
-    label: 'AIDE merges (fast-forward)',
+    label: 'Tevrin merges (fast-forward)',
     description:
-      'When the release is approved, AIDE fast-forwards the default branch to the {pr} without a merge commit. If {host} refuses (the branch has moved on, required approvals or builds), the release waits for a merge on {host}.',
+      'When the release is approved, Tevrin fast-forwards the default branch to the {pr} without a merge commit. If {host} refuses (the branch has moved on, required approvals or builds), the release waits for a merge on {host}.',
   },
   squash: {
-    label: 'AIDE merges (squash)',
+    label: 'Tevrin merges (squash)',
     description:
-      "When the release is approved, AIDE squashes the {pr}'s commits into one commit on the default branch. If {host} refuses (required approvals or builds, branch restrictions), the release waits for a merge on {host}.",
+      "When the release is approved, Tevrin squashes the {pr}'s commits into one commit on the default branch. If {host} refuses (required approvals or builds, branch restrictions), the release waits for a merge on {host}.",
   },
 }
 
@@ -633,7 +633,7 @@ export const mergeStrategyLabel = (strategy: Schemas['MergeStrategy'], host?: Gi
 export const mergeStrategyDescription = (strategy: Schemas['MergeStrategy'], host?: GitHostTerms) =>
   withGitHost(mergeStrategyCopy[strategy].description, host)
 
-/** FR-84: why AIDE can't merge the version's PR itself (fallback when a reason has no message). */
+/** FR-84: why Tevrin can't merge the version's PR itself (fallback when a reason has no message). */
 export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], string> = {
   review_required: 'An approving review is required',
   changes_requested: 'A reviewer requested changes',
@@ -641,8 +641,8 @@ export const mergeReasonLabels: Record<Schemas['MergeReadinessReasonCode'], stri
   checks_pending: 'Required checks are still running',
   branch_protected: 'Branch protection blocks the merge',
   merge_conflict: 'The pull request has merge conflicts',
-  no_permission: "AIDE's access can't merge into the default branch",
-  merge_method_not_allowed: "The repository doesn't allow AIDE's merge method",
+  no_permission: "Tevrin's access can't merge into the default branch",
+  merge_method_not_allowed: "The repository doesn't allow Tevrin's merge method",
   pr_not_open: "The pull request isn't open",
   manual_strategy: 'The project merges manually',
   draft: 'The merge request is still a draft',

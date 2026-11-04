@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -99,7 +100,7 @@ describe('Sign in with GitLab (FR-131)', () => {
     const panel = await screen.findByRole('region', { name: 'Link your GitLab account' })
     await user.click(within(panel).getByRole('button', { name: 'Link GitLab account' }))
 
-    expect(await within(panel).findByText(/You're signed in to a different AIDE account/)).toBeInTheDocument()
+    expect(await within(panel).findByText(/You're signed in to a different Tevrin account/)).toBeInTheDocument()
     expect(gitlabDb.linkConfirmed).toBe(false)
   })
 

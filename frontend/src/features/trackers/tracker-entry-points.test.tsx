@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -119,10 +120,10 @@ describe('Picks (FR-171)', () => {
 describe('Tracker copy (§6, FR-193)', () => {
   it('FR165_spec_copy_is_in_the_one_map', () => {
     expect(errorMessages.TRACKER_SITE_NOT_ALLOWED).toBe('Enter your Jira Cloud site, like acme.atlassian.net.')
-    expect(errorMessages.TRACKER_PERMISSION_MISSING).toBe('The AIDE GitHub App needs the Issues permission. Update it in GitHub settings.')
+    expect(errorMessages.TRACKER_PERMISSION_MISSING).toBe('The Tevrin GitHub App needs the Issues permission. Update it in GitHub settings.')
     expect(trackerCopy('TRACKER_NOT_CONNECTED', 'Jira')).toBe('Connect Jira to do this.')
     expect(trackerCopy('TRACKER_QUERY_INVALID', 'Jira', 'bad')).toBe("Jira couldn't run that query: bad")
-    expect(trackerCopy('TRACKER_RATE_LIMITED', 'Linear')).toBe('Linear is rate limiting requests. AIDE will retry.')
+    expect(trackerCopy('TRACKER_RATE_LIMITED', 'Linear')).toBe('Linear is rate limiting requests. Tevrin will retry.')
     expect(trackerCopy('TRACKER_IMPORT_FAILED', 'Jira', 'no access')).toBe('The import from Jira failed: no access')
   })
 

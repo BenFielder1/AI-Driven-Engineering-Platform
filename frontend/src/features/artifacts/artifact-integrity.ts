@@ -26,7 +26,7 @@ export interface IntegrityCopy {
 export function corruptedCopy(artifact: Pick<ArtifactSummary, 'author'>, current: boolean): IntegrityCopy {
   const title = 'This version failed its integrity check'
   const what =
-    "Its content no longer matches the stored SHA-256 hash, so it may have been changed outside AIDE. Don't rely on it. An integrity alert was raised"
+    "Its content no longer matches the stored SHA-256 hash, so it may have been changed outside Tevrin. Don't rely on it. An integrity alert was raised"
   if (current && isAgentAuthored(artifact.author)) {
     return { title, body: `${what} and regeneration was requested; the new version appears here when it's ready.` }
   }

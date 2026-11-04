@@ -238,7 +238,7 @@ function SingleHostCard({
           <TextField
             id={hostFieldIds[field]}
             label={`${host.environment === 'production' ? 'Production' : 'Preview'} connection string`}
-            hint="A postgres:// or postgresql:// URI, or an ADO.NET string for SQL Server. AIDE stores it encrypted and never shows it again."
+            hint="A postgres:// or postgresql:// URI, or an ADO.NET string for SQL Server. Tevrin stores it encrypted and never shows it again."
             type="password"
             autoComplete="off"
             spellCheck={false}
@@ -259,7 +259,7 @@ function SingleHostCard({
           options={[skipOption, { value: 'create', label: `Turn on ${platformName}` }]}
         />
         <p className="text-sm text-muted-foreground">
-          {platformName} needs no extra connection: AIDE uses the project&apos;s GitHub App installation (or its access token).
+          {platformName} needs no extra connection: Tevrin uses the project&apos;s GitHub App installation (or its access token).
         </p>
       </>
     )
@@ -279,7 +279,7 @@ function SingleHostCard({
         platformName={platformName}
         noun={noun}
         connectionsEnabled
-        connectionHint={database ? 'One of your own tokens. AIDE uses it to provision, check and restore this database.' : 'One of your own tokens. Every deployment of this target uses it, whoever triggers it.'}
+        connectionHint={database ? 'One of your own tokens. Tevrin uses it to provision, check and restore this database.' : 'One of your own tokens. Every deployment of this target uses it, whoever triggers it.'}
         register={(field) => register(name(field))}
         errors={{
           connectionId: errors[name('connectionId')]?.message,
@@ -297,7 +297,7 @@ function SingleHostCard({
           {
             value: 'create',
             label: `Create a new ${platformName} ${noun}`,
-            description: database ? 'AIDE provisions it and stores its connection details encrypted.' : "Linked to the project's repository, built as the stack says.",
+            description: database ? 'Tevrin provisions it and stores its connection details encrypted.' : "Linked to the project's repository, built as the stack says.",
           },
           { value: 'link', label: `Link an existing ${platformName} ${noun}`, description: 'One your connection can reach.' },
         ]}
@@ -401,7 +401,7 @@ export function WizardHostsStep({
       {gitMode === 'local' && hosts.some((h) => h.kind === 'target') && (
         <Alert tone="info" title="Hosted deployment needs a hosted repository">
           <p>
-            With a Local repository, targets work only where AIDE runs its test deployment provider. Elsewhere the project is still created, and AIDE reports
+            With a Local repository, targets work only where Tevrin runs its test deployment provider. Elsewhere the project is still created, and Tevrin reports
             which setup it refused. Choose a hosted repository in the Repository step to deploy.
           </p>
         </Alert>
@@ -433,7 +433,7 @@ export function WizardHostsStep({
         <h3 id="wizard-readiness-title" className="text-lg">
           Readiness preview
         </h3>
-        <p className="text-muted-foreground">Once a target is set up, AIDE checks these and shows the results, with fix links, in Settings → Deployment:</p>
+        <p className="text-muted-foreground">Once a target is set up, Tevrin checks these and shows the results, with fix links, in Settings → Deployment:</p>
         <ul aria-label="Readiness checks" className="list-disc pl-5">
           {Object.values(readinessItemLabels).map((label) => (
             <li key={label}>{label}</li>

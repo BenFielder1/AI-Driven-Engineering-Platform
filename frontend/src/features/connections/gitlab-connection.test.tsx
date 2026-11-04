@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
@@ -59,7 +60,7 @@ describe('Connections → GitLab (FR-131)', () => {
     expect(dialog).toHaveTextContent('warns you 14 days before')
     expect(within(dialog).getByRole('link', { name: /Create a token on gitlab\.com/ })).toHaveAttribute(
       'href',
-      'https://gitlab.com/-/user_settings/personal_access_tokens?name=AIDE&scopes=api,write_repository',
+      'https://gitlab.com/-/user_settings/personal_access_tokens?name=Tevrin&scopes=api,write_repository',
     )
 
     await user.type(within(dialog).getByLabelText('Access token'), 'glpat-good')
