@@ -12,6 +12,8 @@ import { artifactTypeLabels } from '../projects/labels'
 import { draftSchema } from './artifact-schemas'
 import { useCreateArtifactDraft, type Artifact, type ArtifactType } from './artifacts-api'
 import { isPlanType, PLAN_BLOCK_LANGUAGE } from './plan-block'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 type Values = z.infer<typeof draftSchema>
 
@@ -74,7 +76,7 @@ export function ArtifactEditor({
       noValidate
       aria-label={`Edit ${label}`}
       onSubmit={(e) => void onSubmit(e)}
-      className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
+      className={cn(panelClass, 'flex flex-col gap-4 p-4')}
     >
       <ErrorSummary
         title="We couldn't save the draft"

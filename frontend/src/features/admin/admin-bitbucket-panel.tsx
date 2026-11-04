@@ -46,7 +46,7 @@ function RegistrationHelp({ integration }: { integration: AdminBitbucketIntegrat
     )
   }
   return (
-    <section aria-labelledby="bitbucket-registration-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby="bitbucket-registration-title" className="rounded-lg border border-border/60 bg-background p-4">
       <h4 id="bitbucket-registration-title" className="font-semibold">
         Register an OAuth consumer
       </h4>

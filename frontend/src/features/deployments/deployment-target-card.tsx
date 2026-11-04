@@ -194,7 +194,7 @@ function BuildConfig({ target: t }: { target: TargetCard }) {
     ['Pre-deploy command', b.preDeployCommand],
   ]
   return (
-    <details className="rounded-lg border border-border/60 bg-background/40">
+    <details className="rounded-lg border border-border/60 bg-background">
       <summary className="min-h-10 cursor-pointer px-3 py-2 text-sm font-medium">Build configuration (derived from the stack)</summary>
       <dl className="grid gap-x-6 gap-y-1 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[max-content_1fr]">
         {rows
@@ -454,7 +454,7 @@ function TargetSetupForm({
       noValidate
       aria-label={`Set up the ${t.component} on ${name}`}
       onSubmit={(e) => void onSubmit(e)}
-      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/40 p-4"
+      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background p-4"
     >
       <ErrorSummary title="Check the target's settings" errors={isSubmitted ? fieldErrorSummary(errors, ids) : []} />
       {failure !== null && <SetupError error={failure} target={t} />}

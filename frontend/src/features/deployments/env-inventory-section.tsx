@@ -221,7 +221,7 @@ function EnvVarForm({
       noValidate
       aria-label={draft.title}
       onSubmit={(e) => void onSubmit(e)}
-      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/40 p-4"
+      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background p-4"
     >
       <h4 className="font-semibold">{draft.title}</h4>
       <ErrorSummary

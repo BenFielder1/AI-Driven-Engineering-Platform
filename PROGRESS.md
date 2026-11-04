@@ -15,7 +15,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | FR-196 | Brand assets (mark, lockup, favicon, OG, `BrandMark`) | 3.1 | frontend + docs | M38 | done | CI 41855800502 |
-| FR-197 | App copy says Tevrin | 3.1 | frontend | M39 | todo | |
+| FR-197 | App copy says Tevrin | 3.1 | frontend | M39 | done | CI 41859664771 |
 | FR-198 | Server-generated text, OpenAPI title | 3.1 | backend | M39 | done | CI 41855800502 |
 | FR-199 | Agent prompts name Tevrin, versions bumped | 3.1 | backend | M39 | done | CI 41855800502 |
 | FR-200 | CLI `tevrin`, `aide` alias, `TEVRIN_*` env fallback | 3.1, 4.29 | backend (cli) | M39 | done | CI 41855800502 |
@@ -50,7 +50,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Phases
 - [x] M0 Baseline (base: b349c5b): CI green on `main` ([run 41828267279](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41828267279)); v5 docs moved to `docs/v5/`; no re-scaffold
 - [x] M38 Brand and design system: FR-196, FR-202–FR-205 ([CI 41855800502](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41855800502), head 134f907); ThemeSelector placement in M40/M41
-- [ ] M39 Rename: FR-197–FR-201 (backend FR-198–FR-201 green in CI 41855800502; frontend FR-197 in progress)
+- [x] M39 Rename: FR-197–FR-201 ([CI 41859664771](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41859664771), head 965dc73)
 - [ ] M40 App shell and Home: FR-206–FR-209
 - [ ] M41 Marketing site and auth: FR-210–FR-223
 - [x] M42 Documentation: FR-224–FR-227 (content in 134f907; `docs.yml` runs first on the PR)
@@ -60,6 +60,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-04 (M38): palette values shifted to pass AA (roles unchanged, §4.31 allows it): light danger rose-700 (rose-600 is 4.49:1 on card), dark primary indigo-300 (indigo-400 fails on its 15% tint), light sidebar-accent slate-100. `text-lg` is 20 px (the FR-203 scale has no 18 px step). `aide.theme` now stores `system` explicitly (v5 deleted the key); stored `light`/`dark` still honoured. Brand assets come from one generator (`npm run brand:assets`, `src/components/brand-geometry.ts`); a test fails on drift. `metadataBase` comes from the validated request Host (switch to a configured public origin if a CDN is added).
 - 2026-11-04 (M38 review): `ThemeSelector` placement in the user menu moves to M40 (FR-206 owns the user menu); the marketing footer placement is M41. Feature pages' frosted panels and sub-12 px `text-[10px|11px]` sizes are restyled in M40 (FR-208).
 - 2026-11-04 (M39 backend): CLI is package `Tevrin.Cli` (command `tevrin`, `src/Aide.Cli`); the deprecated `aide` command is package `Aide.Cli` from `src/Aide.Cli.Alias` (same sources). `TEVRIN_GIT_TOKEN` → `AIDE_GIT_TOKEN` added for consistency with the other three variables. Stack catalog agent text named AIDE and feeds the codegen prompt, so it was renamed and the catalog bumped 1.2.0 → 1.2.1. Commit subjects read `[Tevrin][Phase:…]` (nothing parses them; step detection uses the `AIDE-Step-Id` trailer, kept). Prompt versions: idea 6, spec 7, plan 6, codegen 5, review 8, repo analyst 3, stack analyst 3.
+- 2026-11-04 (M40): the user menu's theme control is menu radio items built from `ThemeSelector`'s `THEME_OPTIONS` and `useTheme()` (native radios can't take Tab focus inside a menu). FR-208's Projects "client-side name filter" is met by the existing server-side `search` (debounced, in the URL) and the default `sortBy=updated desc`; no second filter. Collapsed-rail tooltips are native `title` attributes (sr-only labels name each item). Checklist rules: Git done = OAuth GitHub link, GitHub App link or usable installation, or any GitLab/Bitbucket connection; AI provider needs a saved LLM credential (keyless providers don't count); Jira/Linear aren't deployment platforms; "member of a project" = `myRole` set on any of the 6 most recently updated projects (no member filter exists on `/api/projects`; an Admin whose memberships are all older sees the item as not done — accepted, no API change in v6). Signed-in `/` redirects to `/home` until M41's marketing Home replaces it. `?source=import` on `/projects/new` preselects Import.
 - 2026-11-04 (M42): docs link check skips the frozen `docs/v1`–`v5` pages as link *sources* (their repo-root links break on the site; fixing them is allowed later), but checks links into them from `history/`.
 
 ## Known issues

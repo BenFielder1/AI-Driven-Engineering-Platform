@@ -10,7 +10,8 @@ import { unhealthyReady } from '../../mocks/handlers/health'
 import { seedGate } from '../../mocks/handlers/lifecycle'
 import { seedProject } from '../../mocks/handlers/projects'
 import { server } from '../../mocks/server'
-import { renderRoute } from '../../test/render'
+import { currentHref, renderRoute } from '../../test/render'
+import { DOCS_URL } from '../../lib/site'
 import { authKeys } from '../auth/auth-api'
 import { SIDEBAR_STORAGE_KEY } from './use-sidebar-preference'
 
@@ -33,6 +34,12 @@ describe('FR-53: app shell', () => {
     const nav = within(aside).getByRole('navigation', { name: 'Main' })
     expect(within(nav).getByRole('list', { name: 'Workspace' })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'Projects' })).toHaveAttribute('aria-current', 'page')
+    // FR-206: Home leads the Workspace items, and the logo goes Home (FR-207).
+    expect(within(nav).getAllByRole('link').map((l) => l.textContent)).toEqual(['Home', 'Projects', 'Notifications', 'Connections'])
+    expect(within(nav).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/home')
+    expect(within(aside).getByRole('link', { name: 'Tevrin home' })).toHaveAttribute('href', '/home')
+    // FR-206: the page's primary action sits in the header's slot.
+    expect(within(screen.getByTestId('app-header')).getByRole('link', { name: 'New project' })).toHaveAttribute('href', '/projects/new')
     expect(within(nav).getByRole('link', { name: 'Notifications' })).not.toHaveAttribute('aria-current')
     expect(within(nav).getByRole('link', { name: 'Connections' })).toHaveAttribute('href', '/connections')
     expect(within(nav).queryByRole('list', { name: 'Admin' })).not.toBeInTheDocument()
@@ -103,6 +110,54 @@ describe('FR-53: app shell', () => {
       expect(router.state.location.pathname).toBe('/admin/dead-letters')
     })
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
+  })
+
+  it('FR209_palette: actions go Home, open the import wizard and switch the theme; the same shortcut closes it and focus returns', async () => {
+    signInAs()
+    const { router } = await renderRoute('/projects')
+    const user = userEvent.setup()
+    await screen.findByRole('heading', { level: 1, name: 'Projects' })
+    const trigger = within(sidebar()).getByRole('button', { name: 'Search pages' })
+
+    await user.click(trigger)
+    let dialog = await screen.findByRole('dialog', { name: 'Command palette' })
+    for (const name of ['Go to Home', 'New project', 'Import repository', 'Switch theme: Light', 'Switch theme: Dark', 'Switch theme: System']) {
+      expect(within(dialog).getByRole('option', { name })).toBeInTheDocument()
+    }
+    expect(within(dialog).getByRole('option', { name: /^Open docs/ })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('option', { name: 'Switch theme: Dark' }))
+    expect(localStorage.getItem('aide.theme')).toBe('dark')
+    expect(document.documentElement).toHaveClass('dark')
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(trigger).toHaveFocus()
+    })
+
+    // Ctrl+K opens and the same shortcut closes, returning focus to where it was.
+    await user.keyboard('{Control>}k{/Control}')
+    await screen.findByRole('dialog', { name: 'Command palette' })
+    await user.keyboard('{Control>}k{/Control}')
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
+    })
+    expect(trigger).toHaveFocus()
+
+    await user.keyboard('{Control>}k{/Control}')
+    dialog = await screen.findByRole('dialog', { name: 'Command palette' })
+    await user.click(within(dialog).getByRole('option', { name: 'Import repository' }))
+    await waitFor(() => {
+      expect(currentHref(router)).toBe('/projects/new?source=import')
+    })
+    expect(await screen.findByRole('radio', { name: 'Import an existing repository' })).toBeChecked()
+
+    await user.keyboard('{Control>}k{/Control}')
+    dialog = await screen.findByRole('dialog', { name: 'Command palette' })
+    await user.click(within(dialog).getByRole('option', { name: 'Go to Home' }))
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/home')
+    })
   })
 
   it('FR53_sidebar_collapse: the collapse toggle pins the sidebar and the choice survives a reload', async () => {
@@ -201,6 +256,11 @@ describe('FR-53: app shell', () => {
     const menu = await openUserMenu(user)
     expect(within(menu).getByRole('menuitem', { name: /Account/ })).toHaveAttribute('href', '/account')
     expect(within(menu).getByRole('menuitem', { name: /Connections/ })).toHaveAttribute('href', '/connections')
+    // FR-206: Docs opens the docs site in a new tab.
+    const docs = within(menu).getByRole('menuitem', { name: /^Docs/ })
+    expect(docs).toHaveAttribute('href', DOCS_URL)
+    expect(docs).toHaveAttribute('target', '_blank')
+    expect(docs).toHaveAttribute('rel', 'noopener noreferrer')
     await user.click(within(menu).getByRole('menuitem', { name: /Sign out/ }))
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })).toBeInTheDocument()
@@ -294,25 +354,29 @@ describe('FR-53: app shell', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('FR53_theme / FR204: the theme menu applies and persists System / Light / Dark', async () => {
+  it('FR53_theme / FR-204 / FR-206: the user menu holds the theme (System / Light / Dark), applied and persisted; no separate theme menu', async () => {
     signInAs()
     await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
+    // FR-206: the v3 theme menu button is gone from the sidebar.
+    expect(within(sidebar()).queryByRole('button', { name: /^Theme/ })).not.toBeInTheDocument()
 
-    await user.click(within(sidebar()).getByRole('button', { name: /^Theme/ }))
-    await user.click(await screen.findByRole('menuitemradio', { name: 'Light' }))
+    let menu = await openUserMenu(user)
+    expect(within(menu).getByRole('group', { name: 'Theme' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'true')
+    await user.click(within(menu).getByRole('menuitemradio', { name: 'Light' }))
     expect(document.documentElement).toHaveClass('light')
     expect(document.documentElement).not.toHaveClass('dark')
     expect(localStorage.getItem('aide.theme')).toBe('light')
 
-    await user.click(within(sidebar()).getByRole('button', { name: 'Theme: Light' }))
-    await user.click(await screen.findByRole('menuitemradio', { name: 'Dark' }))
+    menu = await openUserMenu(user)
+    await user.click(within(menu).getByRole('menuitemradio', { name: 'Dark' }))
     expect(document.documentElement).toHaveClass('dark')
     expect(localStorage.getItem('aide.theme')).toBe('dark')
 
-    await user.click(within(sidebar()).getByRole('button', { name: 'Theme: Dark' }))
-    await user.click(await screen.findByRole('menuitemradio', { name: 'System' }))
+    menu = await openUserMenu(user)
+    await user.click(within(menu).getByRole('menuitemradio', { name: 'System' }))
     // FR-204 (amends FR-53): System is stored as `system`, and follows the OS (here not dark), so the page is light.
     expect(localStorage.getItem('aide.theme')).toBe('system')
     expect(document.documentElement).toHaveClass('light')

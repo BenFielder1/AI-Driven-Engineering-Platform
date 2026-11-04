@@ -210,7 +210,7 @@ export function RebindConnection({ projectId, git }: { projectId: string; git: G
   }
 
   return (
-    <section aria-labelledby="git-rebind-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby="git-rebind-title" className="rounded-lg border border-border/60 bg-background p-4">
       <h3 id="git-rebind-title" className="font-semibold">
         {git.binding ? 'Rebind' : `Re-bind the ${host} connection`}
       </h3>

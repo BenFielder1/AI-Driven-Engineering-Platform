@@ -115,7 +115,7 @@ export function GitLabTokenDialog({
             </option>
           ))}
         </SelectField>
-        <section aria-labelledby="gitlab-token-what-title" className="rounded-lg border border-border/60 bg-background/40 p-3 text-sm">
+        <section aria-labelledby="gitlab-token-what-title" className="rounded-lg border border-border/60 bg-background p-3 text-sm">
           <h3 id="gitlab-token-what-title" className="font-semibold">
             What to create on GitLab
           </h3>

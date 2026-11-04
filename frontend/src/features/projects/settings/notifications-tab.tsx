@@ -242,7 +242,7 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
           const isSet = channel ? secretIsSet(channel) : false
           return (
             <li key={field.id}>
-              <fieldset className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/40 p-4">
+              <fieldset className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background p-4">
                 <legend className="px-1 font-semibold">Channel {n}</legend>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <SelectField

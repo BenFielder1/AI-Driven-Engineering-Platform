@@ -6,6 +6,8 @@ export const appPaths = [
   '/',
   '/login',
   '/register',
+  // v6 FR-207: Home, the signed-in landing page.
+  '/home',
   '/projects',
   '/projects/new',
   '/projects/$projectId',

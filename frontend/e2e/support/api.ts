@@ -146,7 +146,8 @@ export async function registerViaUi(page: Page, prefix: string, name = `E2E ${pr
     }
     throw new Error(`register stayed rate limited after ${String(REGISTER_ATTEMPTS)} attempts`)
   })
-  await expect(page.getByRole('heading', { level: 1, name: 'Projects', exact: true })).toBeVisible()
+  // FR-207: with no returnUrl, sign-up lands on Home, whose h1 greets the user by first name.
+  await expect(page.getByRole('heading', { level: 1, name: /^Welcome, / })).toBeVisible()
   return { id: user.id, email, name }
 }
 

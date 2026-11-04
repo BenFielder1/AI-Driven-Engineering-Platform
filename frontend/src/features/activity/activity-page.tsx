@@ -1,6 +1,8 @@
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { useProjectAccess } from '../projects/project-context'
 import { ActivityFeed } from './activity-feed'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 /** /projects/:id/activity (SPEC §7.2): the full activity feed with its category filter (v1 FR-50). */
 export function ActivityPage() {
@@ -11,7 +13,7 @@ export function ActivityPage() {
       <h2 id="activity-title" className="text-xl">
         Activity
       </h2>
-      <div className="rounded-xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-md">
+      <div className={cn(panelClass, 'p-4')}>
         <ActivityFeed projectId={project.id} releaseVersionId={releaseVersionId} />
       </div>
     </section>

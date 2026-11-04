@@ -13,6 +13,8 @@ import { RelativeTime } from '../projects/relative-time'
 import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { MergeReasons } from './merge-readiness-panel'
 import { useReleases, useRetryRelease, type Release, type ReleaseStatus } from './release-api'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const statusTones: Record<ReleaseStatus, BadgeTone> = {
   in_progress: 'info',
@@ -290,7 +292,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
     <section
       id="release"
       aria-labelledby="release-panel-title"
-      className="flex scroll-mt-4 flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
+      className={cn(panelClass, 'flex scroll-mt-4 flex-col gap-3 p-4')}
     >
       <h2 id="release-panel-title" className="text-lg">
         Release

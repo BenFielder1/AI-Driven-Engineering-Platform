@@ -12,12 +12,16 @@ import {
   DatabaseZap,
   FileStack,
   FileText,
+  FolderGit2,
   FolderKanban,
   Gauge,
+  House,
   Inbox,
   LayoutDashboard,
   ListChecks,
   ListTree,
+  Monitor,
+  Moon,
   Plug,
   Plus,
   Rocket,
@@ -25,6 +29,8 @@ import {
   ScrollText,
   Settings,
   ShieldAlert,
+  SquareArrowOutUpRight,
+  Sun,
   User,
   Users,
   Workflow,
@@ -33,6 +39,8 @@ import {
 
 import type { Schemas } from '../../api/client'
 import type { AppPath } from '../../lib/app-paths'
+import { DOCS_URL } from '../../lib/site'
+import type { ThemePreference } from '../../lib/theme'
 import { artifactTypeLabels, phaseLabels, phases, type StagePhase } from '../projects/labels'
 import { parseSettingsTab, settingsTabLabels } from '../projects/settings/settings-tabs'
 
@@ -74,7 +82,9 @@ const WORKSPACE: NavSection = {
   key: 'workspace',
   label: 'Workspace',
   items: [
-    { key: 'projects', label: 'Projects', to: '/projects', icon: FolderKanban, keywords: ['home', 'list'] },
+    // FR-206, FR-207: Home is the signed-in landing page (the onboarding checklist, recent projects, unread notifications).
+    { key: 'home', label: 'Home', to: '/home', icon: House, exact: true, keywords: ['dashboard', 'start', 'setup', 'checklist'] },
+    { key: 'projects', label: 'Projects', to: '/projects', icon: FolderKanban, keywords: ['list'] },
     { key: 'notifications', label: 'Notifications', to: '/notifications', icon: Bell, badge: 'unread', keywords: ['inbox', 'unread'] },
     {
       key: 'connections',
@@ -351,7 +361,13 @@ export interface PaletteEntry {
   keywords: readonly string[]
 }
 
-/** Every page the viewer can go to from ⌘K: the current project's pages first (in project mode), then the workspace. */
+/** Pages the palette reaches through an action instead (FR-209: Go to Home, New project). */
+const PAGES_WITH_ACTIONS = new Set(['home', 'new-project'])
+
+/**
+ * Every page the viewer can go to from ⌘K: the current project's pages first (in project mode), then the workspace.
+ * Home and New project are actions (`paletteActions`, FR-209), so they aren't listed twice.
+ */
 export function paletteEntries(
   viewer: NavViewer,
   project?: { id: string; name: string; deploymentsEnabled?: boolean; migrationsEnabled?: boolean; analysisEnabled?: boolean },
@@ -379,12 +395,60 @@ export function paletteEntries(
     }
   }
   for (const section of workspaceSections(viewer)) {
-    for (const item of section.items) {
+    for (const item of section.items.filter((i) => !PAGES_WITH_ACTIONS.has(i.key))) {
       add(item, section.label)
     }
   }
-  for (const item of EXTRA_ITEMS) {
+  for (const item of EXTRA_ITEMS.filter((i) => !PAGES_WITH_ACTIONS.has(i.key))) {
     add(item, 'More')
   }
   return entries
+}
+
+/** What a palette action does: go to an app path, switch the theme (FR-204), or open an external page in a new tab. */
+export type PaletteActionKind =
+  | { type: 'navigate'; href: string }
+  | { type: 'theme'; theme: ThemePreference }
+  | { type: 'external'; href: string }
+
+export interface PaletteAction {
+  key: string
+  label: string
+  icon: LucideIcon
+  keywords: readonly string[]
+  run: PaletteActionKind
+}
+
+/** FR-207, FR-209: the new-project wizard with "Import an existing repository" chosen. */
+export const IMPORT_REPOSITORY_HREF = '/projects/new?source=import'
+
+/** FR-209: the palette's actions, in order. */
+export function paletteActions(): PaletteAction[] {
+  return [
+    { key: 'go-home', label: 'Go to Home', icon: House, keywords: ['dashboard', 'start', 'setup'], run: { type: 'navigate', href: '/home' } },
+    { key: 'new-project', label: 'New project', icon: Plus, keywords: ['create', 'start'], run: { type: 'navigate', href: '/projects/new' } },
+    {
+      key: 'import-repository',
+      label: 'Import repository',
+      icon: FolderGit2,
+      keywords: ['import', 'existing', 'github', 'gitlab', 'bitbucket', 'project'],
+      run: { type: 'navigate', href: IMPORT_REPOSITORY_HREF },
+    },
+    { key: 'theme-light', label: 'Switch theme: Light', icon: Sun, keywords: ['theme', 'appearance'], run: { type: 'theme', theme: 'light' } },
+    { key: 'theme-dark', label: 'Switch theme: Dark', icon: Moon, keywords: ['theme', 'appearance'], run: { type: 'theme', theme: 'dark' } },
+    {
+      key: 'theme-system',
+      label: 'Switch theme: System',
+      icon: Monitor,
+      keywords: ['theme', 'appearance', 'os'],
+      run: { type: 'theme', theme: 'system' },
+    },
+    {
+      key: 'open-docs',
+      label: 'Open docs',
+      icon: SquareArrowOutUpRight,
+      keywords: ['documentation', 'help', 'guide'],
+      run: { type: 'external', href: DOCS_URL },
+    },
+  ]
 }

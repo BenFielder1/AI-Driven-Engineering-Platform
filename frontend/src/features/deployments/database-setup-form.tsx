@@ -212,7 +212,7 @@ export function DatabaseSetupForm({
       noValidate
       aria-label={`Set up the ${db.environment} database on ${providerName}`}
       onSubmit={(e) => void onSubmit(e)}
-      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/40 p-4"
+      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background p-4"
     >
       <ErrorSummary title="Check the database settings" errors={isSubmitted ? fieldErrorSummary(errors, ids) : []} />
       {failure !== null && <SetupError error={failure} />}

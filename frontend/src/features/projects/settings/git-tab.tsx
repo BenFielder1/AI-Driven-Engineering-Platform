@@ -76,7 +76,7 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
 function GitModeSummary({ git }: { git: GitSettings }) {
   const repo = git.mode === 'github_app' ? git.repoFullName : git.mode === 'github_pat' ? git.repoUrl : null
   return (
-    <section aria-labelledby="git-mode-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby="git-mode-title" className="rounded-lg border border-border/60 bg-background p-4">
       <h3 id="git-mode-title" className="font-semibold">
         Connection
       </h3>
@@ -372,7 +372,7 @@ function TestConnection({ projectId }: { projectId: string }) {
   const [error, setError] = useState<unknown>(null)
 
   return (
-    <section aria-labelledby="git-test-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby="git-test-title" className="rounded-lg border border-border/60 bg-background p-4">
       <h3 id="git-test-title" className="font-semibold">
         Test connection
       </h3>

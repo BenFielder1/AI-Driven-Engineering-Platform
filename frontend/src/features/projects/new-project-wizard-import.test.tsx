@@ -274,3 +274,20 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     expect(within(screen.getByRole('list', { name: 'Wizard steps' })).getByText(/2\. Request/)).toBeInTheDocument()
   })
 })
+
+describe('FR-207 / FR-209: ?source=import', () => {
+  it('FR207_import_link: ?source=import chooses Import on arrival and when the open wizard navigates to it', async () => {
+    signInAs({ systemRole: 'user' })
+    const { router, unmount } = await renderRoute('/projects/new?source=import')
+    expect(await screen.findByRole('radio', { name: 'Import an existing repository' })).toBeChecked()
+    unmount()
+
+    await renderRoute('/projects/new')
+    await stepHeading(/Step 1 of 8: Source/)
+    expect(screen.getByRole('radio', { name: 'Start from scratch' })).toBeChecked()
+    await router.navigate({ href: '/projects/new?source=import' })
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: 'Import an existing repository' })).toBeChecked()
+    })
+  })
+})

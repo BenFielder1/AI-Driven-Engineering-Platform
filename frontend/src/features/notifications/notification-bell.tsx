@@ -74,7 +74,7 @@ export function NotificationBell() {
         {count > 0 && (
           <span
             aria-hidden="true"
-            className="absolute top-1 right-1 min-w-5 rounded-full border border-background bg-primary px-1 text-center font-mono text-[11px] font-semibold leading-4 text-primary-foreground"
+            className="absolute top-1 right-1 min-w-5 rounded-full border border-background bg-primary px-1 text-center font-mono text-xs font-semibold leading-4 text-primary-foreground"
           >
             {badgeText(count)}
           </span>
@@ -86,7 +86,7 @@ export function NotificationBell() {
           id={panelId}
           role="region"
           aria-labelledby={headingId}
-          className="absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-1rem)] rounded-xl border border-border/60 bg-popover/95 shadow-lg backdrop-blur-md"
+          className="absolute right-0 z-40 mt-2 w-96 max-w-[calc(100vw-1rem)] rounded-xl border border-border/60 bg-popover shadow-lg"
         >
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <h2 id={headingId} className="font-semibold">

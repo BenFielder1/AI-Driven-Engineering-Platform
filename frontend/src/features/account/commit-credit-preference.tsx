@@ -5,6 +5,8 @@ import { Alert } from '../../components/ui/alert'
 import { errorMessage } from '../../lib/errors'
 import { bitbucketCommitEmailWarning } from '../../lib/git-host'
 import { useUpdateMe, type User } from '../auth/auth-api'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 /** FR-177: "Credit me on commits made by Tevrin" (default on). Turning it off skips this person in commit credit. */
 export function CommitCreditPreference({ user }: { user: User }) {
@@ -14,7 +16,7 @@ export function CommitCreditPreference({ user }: { user: User }) {
   const hintId = `${id}-hint`
 
   return (
-    <section aria-labelledby={`${id}-title`} className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+    <section aria-labelledby={`${id}-title`} className={cn(panelClass, 'p-5')}>
       <h2 id={`${id}-title`} className="mb-2 text-lg">
         Commit credit
       </h2>

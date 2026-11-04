@@ -4,6 +4,8 @@ import { useExecutionSteps, type StepStatus } from '../execution/execution-api'
 import { stepStatusLabels } from '../projects/labels'
 import type { Artifact } from './artifacts-api'
 import { PLAN_BLOCK_LANGUAGE, readPlanBlock, type PlanPreviewStep } from './plan-block'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const stepTones: Record<StepStatus, BadgeTone> = {
   pending: 'neutral',
@@ -23,7 +25,7 @@ interface Row extends Omit<PlanPreviewStep, 'files' | 'agent' | 'covers'> {
 function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[]; withStatus: boolean }) {
   const th = 'px-3 py-2'
   return (
-    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
+    <div className={cn(panelClass, 'overflow-x-auto')}>
       <table className="w-full border-collapse text-sm">
         <caption className="mb-2 text-left text-sm text-muted-foreground">{caption}</caption>
         <thead>

@@ -1,4 +1,4 @@
-import { LogOut, Plug, User as UserIcon } from 'lucide-react'
+import { BookOpen, ExternalLink, LogOut, Plug, User as UserIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -6,11 +6,16 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu'
+import { THEME_OPTIONS } from '../../components/ui/theme-selector'
 import { errorMessage } from '../../lib/errors'
 import { Link, useAppRouter } from '../../lib/navigation'
+import { DOCS_URL } from '../../lib/site'
+import { isThemePreference, useTheme } from '../../lib/theme'
 import { cn } from '../../lib/utils'
 import { useLogout, type User } from '../auth/auth-api'
 import { whenCollapsed } from './collapse-classes'
@@ -20,12 +25,17 @@ import type { SidebarMode } from './use-sidebar-preference'
 const roleLabel = { admin: 'Admin', user: 'User' } as const
 
 /**
- * The user menu in the sidebar footer (SPEC §7.1): avatar initials, name and email; Account, Connections, Sign out
- * (FR-1). Shows the system role (FR-3).
+ * The user menu in the sidebar footer (SPEC §7.1, FR-206): avatar initials, name and email; Account, Connections, Theme
+ * (FR-204), Docs (new tab), Sign out (FR-1). Shows the system role (FR-3).
+ *
+ * The theme choice uses the same options and store as `ThemeSelector` (`THEME_OPTIONS`, `useTheme`), as menu radio items:
+ * a menu keeps focus on its items (Tab doesn't move inside it), so the selector's native radios couldn't be reached by
+ * keyboard here.
  */
 export function UserMenu({ user, mode = 'expanded' }: { user: User; mode?: SidebarMode }) {
   const router = useAppRouter()
   const logout = useLogout()
+  const theme = useTheme()
 
   function signOut() {
     logout.mutate(undefined, {
@@ -78,6 +88,31 @@ export function UserMenu({ user, mode = 'expanded' }: { user: User; mode?: Sideb
           <Link to="/connections">
             <Plug aria-hidden /> Connections
           </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          aria-label="Theme"
+          value={theme.preference}
+          onValueChange={(value) => {
+            if (isThemePreference(value)) {
+              theme.setPreference(value)
+            }
+          }}
+        >
+          {THEME_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              <option.icon aria-hidden /> {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+            <BookOpen aria-hidden /> Docs
+            <ExternalLink aria-hidden className="ml-auto" />
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

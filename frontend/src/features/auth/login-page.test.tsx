@@ -26,24 +26,24 @@ describe('LoginPage', () => {
     expect(currentHref(router)).toBe('/account')
   })
 
-  it('FR-1: without a returnUrl, signing in lands on /projects', async () => {
+  it('FR-1 / FR-207: without a returnUrl, signing in lands on Home (/home; it was /projects before v6)', async () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
     const { router } = await renderRoute('/login')
 
     await fillAndSubmit('ada@example.com', 'password1')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/projects')
+    expect(await screen.findByRole('heading', { level: 1, name: /^Welcome/ })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/home')
   })
 
-  it('FR-1: ignores an off-site returnUrl', async () => {
+  it('FR-1 / FR-207: ignores an off-site returnUrl (lands on /home)', async () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
     const { router } = await renderRoute('/login?returnUrl=%2F%2Fevil.example.com')
 
     await fillAndSubmit('ada@example.com', 'password1')
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/projects')
+      expect(router.state.location.pathname).toBe('/home')
     })
   })
 
@@ -82,13 +82,13 @@ describe('LoginPage', () => {
     expect(screen.getByRole('link', { name: 'Enter your password.' })).toHaveAttribute('href', '#login-password')
   })
 
-  it('FR80_login_button_shown_for_the_github_app: githubMode app shows "Continue with GitHub"', async () => {
+  it('FR80_login_button_shown_for_the_github_app: githubMode app shows "Continue with GitHub" (returning to /home, FR-207)', async () => {
     authDb.githubMode = 'app'
     await renderRoute('/login')
 
     expect(await screen.findByRole('link', { name: 'Continue with GitHub' })).toHaveAttribute(
       'href',
-      '/api/auth/github?returnUrl=%2Fprojects',
+      '/api/auth/github?returnUrl=%2Fhome',
     )
   })
 

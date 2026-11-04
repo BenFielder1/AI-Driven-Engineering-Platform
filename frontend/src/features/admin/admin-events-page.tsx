@@ -72,7 +72,7 @@ function EventRow({ event }: { event: AdminEvent }) {
         <code className="mt-0.5 block text-xs text-muted-foreground">{event.type}</code>
         <details className="mt-1">
           <summary className="cursor-pointer text-xs text-primary underline underline-offset-4">Payload</summary>
-          <pre className="mt-1 max-h-60 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-background/60 p-2 font-mono text-xs">
+          <pre className="mt-1 max-h-60 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-background p-2 font-mono text-xs">
             {JSON.stringify(event.payload, null, 2)}
           </pre>
         </details>

@@ -23,7 +23,7 @@ import {
 export type StackFieldErrors = Partial<Record<keyof StackSelection, string>>
 
 const cardClass =
-  'flex items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3 transition-colors has-checked:border-primary/60 has-checked:bg-primary/10'
+  'flex items-start gap-3 rounded-lg border border-border/60 bg-background p-3 transition-colors has-checked:border-primary/60 has-checked:bg-primary/10'
 
 /** The element id of a choice's first radio (the error-summary link target). */
 export const stackChoiceFieldId = (idPrefix: string, choice: StackChoiceId) => `${idPrefix}-${choice}`
@@ -349,7 +349,7 @@ export function StackComposer({
             {index < subStep ? (
               <button
                 type="button"
-                className="min-h-9 rounded-full border border-border/60 bg-card/60 px-3 underline-offset-4 hover:underline"
+                className="min-h-9 rounded-full border border-border/60 bg-card px-3 underline-offset-4 hover:underline"
                 onClick={() => {
                   onSubStepChange(index)
                 }}

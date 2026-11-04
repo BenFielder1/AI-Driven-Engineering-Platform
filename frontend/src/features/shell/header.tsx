@@ -40,12 +40,23 @@ export function Breadcrumbs({ nav, className }: { nav: ShellNav; className?: str
 }
 
 /**
- * FR-53 header (SPEC §7.1): sticky, frosted, 64 px; hamburger below lg, breadcrumbs, then on project pages the live
- * indicator and the version switcher, search below lg, the bell.
+ * FR-53, FR-206 header (SPEC §7.1): sticky, opaque, 64 px with a 1 px border (`scroll-padding-top` in index.css keeps
+ * focused elements clear of it); hamburger below lg, breadcrumbs, then on project pages the live indicator and the
+ * version switcher, the page's primary action (`HeaderAction`), search below lg, the bell.
  */
-export function Header({ nav, onOpenDrawer, onOpenPalette }: { nav: ShellNav; onOpenDrawer: () => void; onOpenPalette: () => void }) {
+export function Header({
+  nav,
+  onOpenDrawer,
+  onOpenPalette,
+  actionSlotRef,
+}: {
+  nav: ShellNav
+  onOpenDrawer: () => void
+  onOpenPalette: () => void
+  actionSlotRef?: (element: HTMLElement | null) => void
+}) {
   return (
-    <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+    <header data-testid="app-header" className="sticky top-0 z-30 border-b border-border bg-background">
       <div className="flex h-16 items-center gap-1 px-2 sm:gap-2 sm:px-4 lg:px-6">
         <button
           type="button"
@@ -64,6 +75,7 @@ export function Header({ nav, onOpenDrawer, onOpenPalette }: { nav: ShellNav; on
               <VersionSwitcher projectId={nav.projectId} />
             </div>
           )}
+          <div ref={actionSlotRef} data-slot="header-actions" className="flex items-center gap-2 empty:hidden sm:mr-1" />
           <button
             type="button"
             onClick={onOpenPalette}

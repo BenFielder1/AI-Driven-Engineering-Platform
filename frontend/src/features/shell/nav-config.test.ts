@@ -2,7 +2,19 @@ import { describe, expect, it } from 'vitest'
 
 import { toAppRouterPattern } from '../../lib/app-paths'
 import { matchAppRoute } from '../../test/app-routes'
-import { crumbsFor, findNavItem, hrefFor, matchesHref, paletteEntries, projectIdFromPath, projectSections, workspaceSections } from './nav-config'
+import {
+  crumbsFor,
+  findNavItem,
+  hrefFor,
+  IMPORT_REPOSITORY_HREF,
+  matchesHref,
+  paletteActions,
+  paletteEntries,
+  projectIdFromPath,
+  projectSections,
+  workspaceSections,
+} from './nav-config'
+import { DOCS_URL } from '../../lib/site'
 
 const admin = { isAdmin: true }
 const user = { isAdmin: false }
@@ -17,10 +29,10 @@ function hasPage(to: string): boolean {
 }
 
 describe('FR-53: workspace navigation', () => {
-  it('FR53_nav_config: Projects, Notifications and Connections for everyone; Admin with its six pages for admins only', () => {
-    expect(labels(workspaceSections(user))).toEqual([{ label: 'Workspace', items: ['Projects', 'Notifications', 'Connections'] }])
+  it('FR53_nav_config / FR-206: Home, Projects, Notifications and Connections for everyone; Admin with its six pages for admins only', () => {
+    expect(labels(workspaceSections(user))).toEqual([{ label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Connections'] }])
     expect(labels(workspaceSections(admin))).toEqual([
-      { label: 'Workspace', items: ['Projects', 'Notifications', 'Connections'] },
+      { label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Connections'] },
       { label: 'Admin', items: ['Overview', 'Users', 'Events', 'Agent runs', 'Dead letters', 'Integrations'] },
     ])
   })
@@ -81,6 +93,7 @@ describe('FR-54: project navigation', () => {
 describe('FR-53: breadcrumbs come from nav-config', () => {
   it('FR53_breadcrumbs: workspace and admin pages', () => {
     expect(crumbsFor('/projects', user)).toEqual([{ label: 'Projects' }])
+    expect(crumbsFor('/home', user)).toEqual([{ label: 'Home' }])
     expect(crumbsFor('/projects/new', user)).toEqual([{ label: 'Projects', href: '/projects' }, { label: 'New project' }])
     expect(crumbsFor('/connections', user)).toEqual([{ label: 'Connections' }])
     expect(crumbsFor('/admin', admin)).toEqual([{ label: 'Admin' }])
@@ -111,9 +124,9 @@ describe('FR-53: breadcrumbs come from nav-config', () => {
 })
 
 describe('FR-53: the command palette lists the same pages', () => {
-  it('FR53_palette: workspace pages plus New project and Account; admin pages for admins only', () => {
+  it('FR53_palette / FR-209: workspace pages plus Account (Home and New project are actions); admin pages for admins only', () => {
     const forUser = paletteEntries(user).map((e) => e.label)
-    expect(forUser).toEqual(['Projects', 'Notifications', 'Connections', 'New project', 'Account'])
+    expect(forUser).toEqual(['Projects', 'Notifications', 'Connections', 'Account'])
     expect(paletteEntries(admin).map((e) => e.href)).toContain('/admin/integrations')
   })
 
@@ -121,5 +134,30 @@ describe('FR-53: the command palette lists the same pages', () => {
     const entries = paletteEntries(user, { id: 'p1', name: 'Inventory tracker' })
     expect(entries[0]).toMatchObject({ label: 'Refinement', group: 'Inventory tracker · Lifecycle', href: '/projects/p1/refinement' })
     expect(entries.find((e) => e.label === 'Settings')?.href).toBe('/projects/p1/settings')
+  })
+})
+
+describe('FR-209: command palette actions', () => {
+  it('FR209_palette_actions: Go to Home, New project, Import repository, Switch theme (Light/Dark/System), Open docs', () => {
+    const actions = paletteActions()
+    expect(actions.map((a) => a.label)).toEqual([
+      'Go to Home',
+      'New project',
+      'Import repository',
+      'Switch theme: Light',
+      'Switch theme: Dark',
+      'Switch theme: System',
+      'Open docs',
+    ])
+    expect(actions.map((a) => a.run)).toEqual([
+      { type: 'navigate', href: '/home' },
+      { type: 'navigate', href: '/projects/new' },
+      { type: 'navigate', href: IMPORT_REPOSITORY_HREF },
+      { type: 'theme', theme: 'light' },
+      { type: 'theme', theme: 'dark' },
+      { type: 'theme', theme: 'system' },
+      { type: 'external', href: DOCS_URL },
+    ])
+    expect(IMPORT_REPOSITORY_HREF).toBe('/projects/new?source=import')
   })
 })

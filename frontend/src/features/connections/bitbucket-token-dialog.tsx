@@ -115,7 +115,7 @@ export function BitbucketTokenDialog({
         />
         <section
           aria-labelledby="bitbucket-token-what-title"
-          className="rounded-lg border border-border/60 bg-background/40 p-3 text-sm"
+          className="rounded-lg border border-border/60 bg-background p-3 text-sm"
         >
           <h3 id="bitbucket-token-what-title" className="font-semibold">
             What to create on Atlassian

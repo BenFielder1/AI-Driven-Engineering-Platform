@@ -188,6 +188,11 @@
     @apply border-border;
   }
 
+  /* FR-206 (WCAG 2.4.11): keep focused and scrolled-to elements clear of the sticky 64 px header. */
+  html {
+    scroll-padding-top: 5rem;
+  }
+
   body {
     @apply bg-background font-sans text-foreground antialiased;
   }

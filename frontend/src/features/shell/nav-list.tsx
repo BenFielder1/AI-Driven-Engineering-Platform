@@ -23,7 +23,7 @@ function UnreadBadge({ mode }: { mode: SidebarMode }) {
       aria-hidden
       data-testid="nav-unread-badge"
       className={cn(
-        'flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 font-mono text-[11px] leading-none font-semibold text-primary-foreground',
+        'flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 font-mono text-xs leading-none font-semibold text-primary-foreground',
         whenCollapsed.corner[mode],
       )}
     >
@@ -41,7 +41,7 @@ function StageMarkers({ status, mode }: { status: StageStatus; mode: SidebarMode
           aria-hidden
           data-testid="stage-needs-action"
           className={cn(
-            'flex h-5 min-w-5 items-center justify-center rounded-full bg-warning px-1.5 font-mono text-[11px] leading-none font-semibold text-warning-foreground',
+            'flex h-5 min-w-5 items-center justify-center rounded-full bg-warning px-1.5 font-mono text-xs leading-none font-semibold text-warning-foreground',
             whenCollapsed.corner[mode],
           )}
         >
@@ -55,7 +55,7 @@ function StageMarkers({ status, mode }: { status: StageStatus; mode: SidebarMode
         <span
           aria-hidden
           data-testid="stage-current"
-          className={cn('size-2 animate-pulse rounded-full bg-primary shadow-[0_0_8px_var(--primary)]', whenCollapsed.hidden[mode])}
+          className={cn('size-2 rounded-full bg-brand-gradient', whenCollapsed.hidden[mode])}
         />
       )}
     </>
@@ -105,7 +105,7 @@ function ItemLink({
       {active && (
         <span
           aria-hidden
-          className="absolute top-1/2 left-1 size-1.5 -translate-y-1/2 animate-pulse rounded-full bg-primary shadow-[0_0_8px_var(--primary)]"
+          className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary"
         />
       )}
       <Icon aria-hidden className={cn('size-4 shrink-0', active && 'text-primary')} />
@@ -183,7 +183,7 @@ function SectionBlock({
     <div className="flex flex-col gap-1" data-section={section.key}>
       <p
         id={labelId}
-        className={cn('px-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase', whenCollapsed.srOnly[mode])}
+        className={cn('px-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase', whenCollapsed.srOnly[mode])}
       >
         {section.label}
       </p>

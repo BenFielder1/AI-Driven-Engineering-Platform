@@ -13,6 +13,8 @@ import {
   useUpdateNotificationPreferences,
   type NotificationPreferences,
 } from './notifications-api'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const preferencesSchema = z.object({ shown: z.array(z.enum(notificationTypes)) })
 
@@ -95,7 +97,7 @@ function PreferencesForm({ preferences }: { preferences: NotificationPreferences
 export function NotificationPreferencesSection() {
   const preferences = useNotificationPreferences()
   return (
-    <section aria-labelledby="notification-prefs-title" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+    <section aria-labelledby="notification-prefs-title" className={cn(panelClass, 'p-5')}>
       <h2 id="notification-prefs-title" className="text-lg">
         Notification preferences
       </h2>

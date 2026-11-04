@@ -57,7 +57,7 @@ export function BuildLogTail({ log, defaultOpen = false }: { log: string | null;
     return null
   }
   return (
-    <details open={defaultOpen} className="rounded-lg border border-border/60 bg-background/40">
+    <details open={defaultOpen} className="rounded-lg border border-border/60 bg-background">
       <summary className="min-h-10 cursor-pointer px-3 py-2 text-sm font-medium">Build log (last lines)</summary>
       <pre
         data-testid="build-log-tail"

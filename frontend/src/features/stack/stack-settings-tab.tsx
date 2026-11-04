@@ -176,7 +176,7 @@ export function StackSettingsTab({ project, canChange }: { project: Project; can
         />
       ) : (
         <>
-          <section aria-label="Current stack" className="rounded-lg border border-border/60 bg-background/40 p-4">
+          <section aria-label="Current stack" className="rounded-lg border border-border/60 bg-background p-4">
             {s.composition ? (
               <>
                 <dl className="divide-y divide-border/60">

@@ -91,7 +91,7 @@ const idsFor = (provider: PlatformProvider) =>
 function WhatToCreate({ info }: { info: PlatformProviderInfo }) {
   const titleId = `${info.id}-token-what-title`
   return (
-    <section aria-labelledby={titleId} className="rounded-lg border border-border/60 bg-background/40 p-3 text-sm">
+    <section aria-labelledby={titleId} className="rounded-lg border border-border/60 bg-background p-3 text-sm">
       <h3 id={titleId} className="font-semibold">
         What to create on {info.name}
       </h3>

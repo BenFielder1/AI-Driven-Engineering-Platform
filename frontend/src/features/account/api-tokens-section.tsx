@@ -17,6 +17,8 @@ import {
   type ApiToken,
   type CreatedApiToken,
 } from './tokens-api'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 function todayIso(): string {
   const now = new Date()
@@ -209,7 +211,7 @@ export function ApiTokensSection() {
   }
 
   return (
-    <section aria-labelledby="tokens-title" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+    <section aria-labelledby="tokens-title" className={cn(panelClass, 'p-5')}>
       <h2 id="tokens-title" className="text-lg">
         API tokens
       </h2>

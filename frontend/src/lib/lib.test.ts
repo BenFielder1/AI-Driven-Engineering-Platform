@@ -118,17 +118,18 @@ describe('permissions.ts (SPEC §2)', () => {
   })
 })
 
+// FR-207 (amends FR-1): the fallback landing is /home (it was /projects before v6).
 describe('safeReturnUrl', () => {
   it.each([
     ['/account', '/account'],
     ['/projects?page=2', '/projects?page=2'],
-    ['//evil.example.com', '/projects'],
-    ['/\\evil.example.com', '/projects'],
-    ['https://evil.example.com', '/projects'],
-    ['/login', '/projects'],
-    ['/api/auth/logout', '/projects'],
-    [undefined, '/projects'],
-  ])('%s → %s', (input, expected) => {
+    ['//evil.example.com', '/home'],
+    ['/\\evil.example.com', '/home'],
+    ['https://evil.example.com', '/home'],
+    ['/login', '/home'],
+    ['/api/auth/logout', '/home'],
+    [undefined, '/home'],
+  ])('FR207: %s → %s', (input, expected) => {
     expect(safeReturnUrl(input)).toBe(expected)
   })
 

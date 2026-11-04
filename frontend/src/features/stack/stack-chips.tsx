@@ -38,7 +38,7 @@ export function StackChips({ packs, label, className }: { packs: readonly string
   return (
     <ul aria-label={label} data-testid="stack-chips" className={cn('flex flex-wrap gap-1', className)}>
       {packs.map((pack) => (
-        <li key={pack} className="rounded border border-border/60 bg-background/60 px-1.5 py-0.5 text-xs">
+        <li key={pack} className="rounded border border-border/60 bg-background px-1.5 py-0.5 text-xs">
           {packName(catalog.data, pack)}
         </li>
       ))}

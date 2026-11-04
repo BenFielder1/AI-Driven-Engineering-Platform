@@ -141,7 +141,7 @@ export function StackSummary({
   }, [error, onFieldErrors])
 
   return (
-    <section aria-label="Stack summary" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-label="Stack summary" className="rounded-lg border border-border/60 bg-background p-4">
       <h3 className="font-semibold">Summary</h3>
       <dl className="mt-2 divide-y divide-border/60">
         <CompositionRows catalog={catalog} value={value} />

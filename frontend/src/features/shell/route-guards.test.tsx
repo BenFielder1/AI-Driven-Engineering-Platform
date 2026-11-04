@@ -14,27 +14,35 @@ describe('Route guards (FR-1)', () => {
     expect(currentHref(router)).toBe('/login?returnUrl=%2Faccount')
   })
 
-  it('FR-1: / redirects to /projects, then to /login when signed out', async () => {
+  it('FR-1 / FR-207: / redirects to /home, then to /login when signed out', async () => {
     const { router } = await renderRoute('/')
 
     await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })
-    expect(currentHref(router)).toBe('/login?returnUrl=%2Fprojects')
+    expect(currentHref(router)).toBe('/login?returnUrl=%2Fhome')
   })
 
-  it('FR-1: a signed-in user visiting /login goes to /projects', async () => {
-    signInAs()
+  it('FR-207: a signed-in user visiting / lands on Home (/home; it was /projects before v6)', async () => {
+    signInAs({ name: 'Ada' })
+    const { router } = await renderRoute('/')
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Welcome, Ada' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/home')
+  })
+
+  it('FR-1 / FR-207: a signed-in user visiting /login goes to Home (/home; it was /projects before v6)', async () => {
+    signInAs({ name: 'Ada' })
     const { router } = await renderRoute('/login')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/projects')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Welcome, Ada' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/home')
   })
 
-  it('FR-1: a signed-in user visiting /register goes to /projects', async () => {
+  it('FR-1 / FR-207: a signed-in user visiting /register goes to /home', async () => {
     signInAs()
     const { router } = await renderRoute('/register')
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/projects')
+      expect(router.state.location.pathname).toBe('/home')
     })
   })
 

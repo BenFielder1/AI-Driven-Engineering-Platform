@@ -497,7 +497,7 @@ function suggestedHostName(projectName: string, slot: HostSlot): string {
   return suffix ? `${suggestVercelProjectName(projectName) || 'app'}-${suffix}`.slice(0, 100) : ''
 }
 
-export function NewProjectWizard() {
+export function NewProjectWizard({ initialSource }: { initialSource?: Source } = {}) {
   const navigate = useNavigate()
   const create = useCreateProject()
   const queryClient = useQueryClient()
@@ -535,12 +535,29 @@ export function NewProjectWizard() {
     formState: { errors },
   } = useForm<WizardValues>({
     resolver: zodResolver(wizardSchema),
-    defaultValues: draft?.values ?? wizardDefaults,
+    defaultValues: draft?.values ?? (initialSource ? { ...wizardDefaults, source: initialSource } : wizardDefaults),
     mode: 'onTouched',
   })
 
   /** FR-171: the tracker items picked on the Idea step. */
   const sourceImports = useWatch({ control, name: 'sourceImports' })
+
+  /**
+   * FR-207, FR-209: `?source=import` (Home's "Import a repository", the palette's "Import repository") chooses Import,
+   * also when the wizard is already open (no remount); a saved draft (FR-159) wins.
+   */
+  const [seenSource, setSeenSource] = useState(initialSource)
+  if (initialSource !== seenSource) {
+    setSeenSource(initialSource)
+    if (initialSource === 'import' && !draft) {
+      setStep(0)
+    }
+  }
+  useEffect(() => {
+    if (initialSource === 'import' && !draft && getValues('source') !== 'import') {
+      setValue('source', 'import')
+    }
+  }, [initialSource, draft, getValues, setValue])
 
   /** FR-114: the Stack step's sub-step (Frontend → Backend → Data → VCS → Deployment). */
   const [stackSubStep, setStackSubStep] = useState(0)
@@ -1724,14 +1741,14 @@ function StepIndicator({ current, titles }: { current: number; titles: readonly 
             index === current
               ? 'border-primary/60 bg-primary/10 font-medium text-foreground'
               : index < current
-                ? 'border-border/60 bg-card/60 text-foreground'
+                ? 'border-border/60 bg-card text-foreground'
                 : 'border-dashed border-border/60 text-muted-foreground',
           )}
         >
           <span
             aria-hidden
             className={cn(
-              'flex size-5 items-center justify-center rounded-full font-mono text-[11px]',
+              'flex size-5 items-center justify-center rounded-full font-mono text-xs',
               index === current
                 ? 'bg-primary text-primary-foreground'
                 : index < current
@@ -1769,7 +1786,7 @@ function SummarySection({ title, step, onEdit, children }: {
   children: ReactNode
 }) {
   return (
-    <section aria-label={title} className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-label={title} className="rounded-lg border border-border/60 bg-background p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">{title}</h3>
         <Button

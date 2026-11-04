@@ -34,7 +34,7 @@ export function AuthCard({ title, description, children }: { title: string; desc
 }
 
 const socialButtonClass =
-  'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-field-border bg-background/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent'
+  'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-field-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent'
 
 /**
  * "Continue with GitHub" (FR-2, FR-80) and "Continue with GitLab" per enabled instance with an OAuth application

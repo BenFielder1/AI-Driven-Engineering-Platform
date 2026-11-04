@@ -2,7 +2,6 @@ import { BrandLockup } from '../../components/brand'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../../components/ui/sheet'
 import type { User } from '../auth/auth-api'
 import { SearchButton, ShellNavigation } from './sidebar'
-import { ThemeMenu } from './theme-toggle'
 import type { ShellNav } from './use-shell-nav'
 import { UserMenu } from './user-menu'
 
@@ -31,9 +30,9 @@ export function MobileDrawer({
       <SheetContent
         side="left"
         data-testid="mobile-drawer"
-        className="flex w-[85vw] max-w-xs flex-col gap-0 overflow-x-hidden border-sidebar-border/70 bg-sidebar/95 p-0 text-sidebar-foreground backdrop-blur-xl"
+        className="flex w-[85vw] max-w-xs flex-col gap-0 overflow-x-hidden border-sidebar-border bg-sidebar p-0 text-sidebar-foreground"
       >
-        <SheetHeader className="gap-3 border-b border-sidebar-border/70 p-4 pr-14">
+        <SheetHeader className="gap-3 border-b border-sidebar-border p-4 pr-14">
           <SheetTitle asChild>
             <div>
               <BrandLockup />
@@ -52,9 +51,8 @@ export function MobileDrawer({
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <ShellNavigation nav={nav} mode="expanded" onNavigate={close} />
         </div>
-        <div className="flex items-center gap-1 border-t border-sidebar-border/70 p-3">
+        <div className="flex items-center gap-1 border-t border-sidebar-border p-3">
           <UserMenu user={user} />
-          <ThemeMenu />
         </div>
       </SheetContent>
     </Sheet>

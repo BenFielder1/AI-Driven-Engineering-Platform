@@ -18,6 +18,7 @@ import { SelectField } from '../../components/ui/select-field'
 import { TextField } from '../../components/ui/text-field'
 import { cn } from '../../lib/utils'
 import { allPhases, formatDateTime, formatNumber, phaseLabels, roleLabels, statusLabels, statuses } from './labels'
+import { HeaderAction } from '../shell/header-actions'
 import { useStackCatalog } from '../stack/stack-api'
 import { catalogPacks, StackChips } from '../stack/stack-chips'
 import { PhaseBadge, StatusBadge } from './project-badges'
@@ -131,13 +132,14 @@ export function ProjectsListPage({ search, onSearchChange }: ProjectsListPagePro
         title="Projects"
         description="Every project you're a member of, from idea to release."
         className="mb-6"
-        actions={
-          <Link to="/projects/new" className={buttonClasses('primary')}>
-            <Plus className="size-4" aria-hidden />
-            New project
-          </Link>
-        }
       />
+      {/* FR-206: the page's primary action sits in the header's action slot. */}
+      <HeaderAction>
+        <Link to="/projects/new" className={buttonClasses('primary')}>
+          <Plus className="size-4" aria-hidden />
+          <span className="max-sm:sr-only">New project</span>
+        </Link>
+      </HeaderAction>
 
       <ProjectKpiRow filters={filters} filtered={filtered} />
 

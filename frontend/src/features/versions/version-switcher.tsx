@@ -33,7 +33,7 @@ export function VersionSwitcher({ projectId }: { projectId: string }) {
       <DropdownMenuTrigger
         aria-label={`Release version: ${shown.version} (${releaseVersionStatusLabels[shown.status].toLowerCase()}). Switch version`}
         data-testid="version-switcher"
-        className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border/60 bg-background/40 px-2.5 text-sm hover:bg-accent"
+        className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2.5 text-sm hover:bg-accent"
       >
         <GitBranch aria-hidden className="size-4 text-muted-foreground" />
         <span className="font-mono tabular-nums">{shown.version}</span>

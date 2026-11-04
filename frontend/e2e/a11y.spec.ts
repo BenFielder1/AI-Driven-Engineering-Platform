@@ -41,6 +41,14 @@ const targets: Target[] = [
     ready: (p) => p.getByRole('heading', { level: 1, name: 'Sign in to Tevrin' }),
   },
   {
+    // FR-207: Home, the signed-in landing page (the checklist, Recent projects with the fixture's projects, unread
+    // notifications). SPEC §8: axe on /home in light and dark.
+    name: 'home',
+    path: () => '/home',
+    signedIn: true,
+    ready: (p) => p.getByRole('list', { name: 'Recent projects' }),
+  },
+  {
     name: 'projects list',
     path: () => '/projects',
     signedIn: true,
@@ -138,8 +146,9 @@ const targets: Target[] = [
 
 /**
  * NFR-A11Y2 (FR-53, FR-54): the v2 shell in its interactive states: the sidebar in project mode with the header's
- * live indicator and stage stepper (1440 px), the drawer opened at 375 px, the command palette, and the user and theme
- * menus. Each state is checked in both themes.
+ * live indicator and stage stepper (1440 px), the drawer opened at 375 px, the command palette (with its FR-209 Actions
+ * group), and the user menu (which holds the theme choice and the Docs link since FR-206). Each state is checked in both
+ * themes.
  */
 interface ShellState {
   name: string

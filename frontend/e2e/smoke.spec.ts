@@ -10,7 +10,8 @@ test('the API is ready behind the same-origin /api proxy', async ({ request }) =
 test('a signed-out visitor to / lands on the sign-in page', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fprojects$/)
+  // FR-207: `/` sends people to Home, so a signed-out visitor returns there after sign-in.
+  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fhome$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Tevrin', exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeAttached()
 })

@@ -18,9 +18,10 @@ async function openUserMenu(page: Page) {
 test('FR-1: register, see yourself, sign out, sign back in', async ({ page }) => {
   const name = 'E2E User'
 
-  // Register → signed in, on /projects.
+  // Register → signed in, on /home (FR-207; it was /projects before v6).
   const { email } = await registerViaUi(page, 'auth', name)
-  await expect(page).toHaveURL(/\/projects$/)
+  await expect(page).toHaveURL(/\/home$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Welcome, E2E', exact: true })).toBeVisible()
 
   // GET /api/auth/me returns the new user (cookie session).
   const me = await page.request.get('/api/auth/me')

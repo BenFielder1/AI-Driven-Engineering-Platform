@@ -105,7 +105,7 @@ function RunSection({
         </dl>
         {isAnalysisRunPending(run) && (
           <p role="status" aria-busy="true" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
-            <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
+            <span aria-hidden="true" className="mr-2 inline-block size-3 motion-safe:animate-pulse rounded-full bg-primary align-middle" />
             The Stack Analyst is {run.status === 'queued' ? 'about to start' : 'reading the repository'}. Its findings appear
             here when it&apos;s done.
           </p>

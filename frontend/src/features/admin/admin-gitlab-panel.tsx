@@ -49,7 +49,7 @@ function RegistrationHelp({ integration }: { integration: AdminGitLabIntegration
     )
   }
   return (
-    <section aria-labelledby="gitlab-registration-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby="gitlab-registration-title" className="rounded-lg border border-border/60 bg-background p-4">
       <h4 id="gitlab-registration-title" className="font-semibold">
         Register an OAuth application
       </h4>

@@ -48,7 +48,7 @@ export function ProjectSwitcher({
         <DropdownMenuTrigger
           aria-label={`Switch project. Current: ${name}`}
           className={cn(
-            'flex min-h-11 w-full min-w-0 items-center gap-2.5 rounded-lg border border-border/60 bg-background/40 px-2 text-left hover:bg-sidebar-accent/60',
+            'flex min-h-11 w-full min-w-0 items-center gap-2.5 rounded-lg border border-border/60 bg-background px-2 text-left hover:bg-sidebar-accent/60',
             whenCollapsed.center[mode],
           )}
         >
