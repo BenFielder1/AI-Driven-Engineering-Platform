@@ -54,7 +54,7 @@ export const faqs: readonly FaqItem[] = [
     question: 'Which AI models can I use, and where do my keys live?',
     answer: [
       'Anthropic, OpenAI and local models through Ollama. You choose the provider and model when you create a project, and can override the model per agent.',
-      'Keys are your own connections (Account, Connections) or a system key an admin allows. Tevrin checks a key when you add it, stores it encrypted and never shows it again. Ollama needs no key.',
+      'Keys are your own connections (Account, Connections) or a system key an admin allows. Tevrin checks a key when you add it, stores it encrypted and never shows it again. Ollama needs no key, but the Railway deployment turns it off.',
     ],
     link: { label: 'LLM providers guide', href: docsUrl('guides/llm-providers/'), external: true },
   },
@@ -96,7 +96,7 @@ export const faqs: readonly FaqItem[] = [
     id: 'self-host',
     question: 'How do I self-host it?',
     answer: [
-      'Run it on Railway, on Docker Desktop Kubernetes, or as a local dev loop. You need Docker, PostgreSQL 18, and an LLM provider key or Ollama.',
+      'Run it on Railway, on Docker Desktop Kubernetes, or as a local dev loop. You need Docker, PostgreSQL 18, and an LLM provider key or Ollama. The Railway deployment turns Ollama off, so it needs a provider key.',
     ],
     link: { label: 'Self-host', href: '/self-host' },
   },

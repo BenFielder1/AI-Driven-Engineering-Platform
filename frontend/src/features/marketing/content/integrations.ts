@@ -3,7 +3,7 @@ import { docsUrl } from './site-nav'
 
 /**
  * FR-212, FR-215, FR-222: what Tevrin works with. Every name here is implemented in the backend (the provider enums
- * listed in integrations.test.ts); nothing planned or unimplemented is listed. Sources: docs/guides/*.md and the
+ * listed in pages/integrations-page.test.tsx); nothing planned or unimplemented is listed. Sources: docs/guides/*.md and the
  * v1–v5 specs.
  */
 
@@ -76,7 +76,7 @@ export const integrationGroups: readonly IntegrationGroup[] = [
     items: [
       { name: 'Anthropic', icon: { brand: 'anthropic' }, does: 'Claude models for every agent, with streaming and continued long answers.' },
       { name: 'OpenAI', icon: { generic: 'openai' }, does: 'GPT models for every agent, with your own key or an allowed system key.' },
-      { name: 'Ollama', icon: { brand: 'ollama' }, does: 'Local models with no API key, for self-hosted deployments.' },
+      { name: 'Ollama', icon: { brand: 'ollama' }, does: 'Local models with no API key, on Kubernetes and the dev loop (turned off on Railway).' },
     ],
   },
   {

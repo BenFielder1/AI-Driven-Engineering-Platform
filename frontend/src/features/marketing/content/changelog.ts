@@ -114,3 +114,6 @@ export function formatChangelogDate(date: string | null): string {
     new Date(`${date}T00:00:00Z`),
   )
 }
+
+/** FR-219: the suffix on v1–v5 titles. */
+export const AS_AIDE = '(as AIDE)'

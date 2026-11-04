@@ -147,6 +147,10 @@ jobs:
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-
       - run: npm run build
+      # SPEC §8 Performance (M43): first-load JS for `/` <= 200 KB gzipped, read from the build manifests (+ the
+      # prerendered HTML when present). Exit 1 over budget, exit 2 if the route's scripts can't be found.
+      - name: First-load JS budget for / (200 KB gzipped)
+        run: node ../scripts/ci/check-js-budget.mjs .
 
   manifests:
     name: Manifests (kustomize render + kubeconform)

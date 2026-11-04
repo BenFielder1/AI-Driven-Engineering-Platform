@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -49,20 +49,16 @@ describe('FR-223 sign in', () => {
     await renderRoute('/login')
 
     await screen.findByRole('button', { name: 'Sign in' })
-    await waitFor(() => {
-      expect(screen.queryByTestId('social-sign-in-pending')).not.toBeInTheDocument()
-    })
     expect(screen.queryByText('or')).not.toBeInTheDocument()
   })
 
-  it('FR223_providers_pending: while the providers load, one button height and the divider are reserved (no layout jump)', async () => {
+  it('FR223_providers_pending: while the providers load, no placeholder or divider renders (no jump when none are configured)', async () => {
     server.use(http.get('*/api/auth/providers', () => delay('infinite')))
     await renderRoute('/login')
 
     await screen.findByRole('button', { name: 'Sign in' })
-    const pending = screen.getByTestId('social-sign-in-pending')
-    expect(precedes(pending, screen.getByLabelText('Email'))).toBe(true)
-    expect(within(pending).getByText('or')).toBeInTheDocument()
+    expect(screen.queryByText('or')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Continue with/ })).not.toBeInTheDocument()
   })
 
   it.each(THEMES.map((t) => [t]))('FR223_login_axe: /login has no axe violations (%s)', async (theme) => {

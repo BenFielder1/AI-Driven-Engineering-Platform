@@ -28,7 +28,7 @@ export const whyCards: readonly WhyCard[] = [
   },
   {
     title: 'Reversible',
-    body: 'Roll back to any earlier checkpoint. History is never rewritten, and every change is in the audit trail.',
+    body: 'Roll back to any earlier checkpoint of the version in development. History is never rewritten, and every change is in the audit trail.',
     icon: 'undo',
   },
 ]

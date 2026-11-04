@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 
 import { BrandLockup } from '../../components/brand'
 import { panelClass } from '../../components/shared/panel-class'
-import { Skeleton } from '../../components/ui/skeleton'
 import { Link } from '../../lib/navigation'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { cn } from '../../lib/utils'
@@ -129,14 +128,10 @@ export function SocialSignIn({ returnUrl }: { returnUrl: string }) {
   const githubMode = providers.data?.githubMode ?? 'none'
   const gitlab = providers.data?.gitlab ?? []
   const bitbucket = providers.data?.bitbucket === true
+  // FR-223: nothing renders while the providers load. With none configured (the default) the form never moves; when
+  // some are configured the buttons and divider appear above it once, as soon as the (cached) providers resolve.
   if (providers.isPending) {
-    // Reserve one button and the divider while the providers load, so the form doesn't jump down (FR-223).
-    return (
-      <div data-testid="social-sign-in-pending">
-        <Skeleton className="h-11 w-full rounded-lg" />
-        <OrDivider />
-      </div>
-    )
+    return null
   }
   if (githubMode === 'none' && gitlab.length === 0 && !bitbucket) {
     return null

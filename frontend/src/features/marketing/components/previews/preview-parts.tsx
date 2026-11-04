@@ -4,7 +4,7 @@ import { LifecycleStatusBadge, StatusBadge } from '../../../../components/shared
 import { cn } from '../../../../lib/utils'
 import { DiffView } from '../../../artifacts/diff-view'
 import { phaseLabels } from '../../../projects/labels'
-import { previewArtifactHash, previewDiff, previewGate, previewRail } from '../../content/previews'
+import { previewArtifactHash, previewDiff, previewGate, previewLabels, previewRail } from '../../content/previews'
 import { FakeButton } from './preview-frame'
 
 /**
@@ -41,15 +41,15 @@ export function GatePreview() {
     <div className="rounded-lg border border-warning/50 bg-warning/5 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold">{previewGate.title}</p>
-        <StatusBadge tone="warning">Awaiting approval</StatusBadge>
+        <StatusBadge tone="warning">{previewLabels.awaitingApproval}</StatusBadge>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {previewGate.artifact} · from {previewGate.requestedBy}
+        {previewGate.artifact} · {previewLabels.from} {previewGate.requestedBy}
       </p>
       <p className="mt-2 text-xs">{previewGate.reason}</p>
       <div className="mt-3 flex gap-2">
-        <FakeButton primary>Approve</FakeButton>
-        <FakeButton>Reject</FakeButton>
+        <FakeButton primary>{previewLabels.approve}</FakeButton>
+        <FakeButton>{previewLabels.reject}</FakeButton>
       </div>
     </div>
   )
@@ -59,9 +59,9 @@ export function DiffPreview() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-medium">Technical specification</span>
-        <LifecycleStatusBadge status="in_review">Draft v3</LifecycleStatusBadge>
-        <LifecycleStatusBadge status="locked">Locked v2</LifecycleStatusBadge>
+        <span className="font-medium">{previewLabels.artifactType}</span>
+        <LifecycleStatusBadge status="in_review">{previewLabels.draft}</LifecycleStatusBadge>
+        <LifecycleStatusBadge status="locked">{previewLabels.locked}</LifecycleStatusBadge>
         <span className="font-mono text-muted-foreground">{previewArtifactHash}</span>
       </div>
       <div className="text-xs [&_caption]:text-xs [&_table]:min-w-0 [&_table]:text-xs">

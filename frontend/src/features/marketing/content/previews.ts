@@ -56,3 +56,25 @@ export const previewDeployments: readonly { part: string; platform: string; env:
   { part: 'Backend', platform: 'Render', env: 'preview', status: 'running' },
   { part: 'Database', platform: 'Supabase', env: 'preview', status: 'approved' },
 ]
+
+/** Visible captions: each preview's text alternative (FR-220). */
+export const previewCaptions = {
+  project: 'Preview: a project in Specification, with the spec approval gate waiting and the diff between spec versions 2 and 3.',
+  gates: 'Preview: the lifecycle rail and a gate awaiting approval.',
+  artifacts: 'Preview: a draft specification compared with the locked version before it.',
+  runs: 'Preview: agent runs with their models and status.',
+  deployments: 'Preview: a preview environment rolling out per part of the stack.',
+} as const
+
+/** Labels inside the previews (look-alikes of the app's own). */
+export const previewLabels = {
+  awaitingApproval: 'Awaiting approval',
+  approve: 'Approve',
+  reject: 'Reject',
+  from: 'from',
+  artifactType: 'Technical specification',
+  draft: 'Draft v3',
+  locked: 'Locked v2',
+  deploying: 'Deploying',
+  ready: 'Ready',
+} as const

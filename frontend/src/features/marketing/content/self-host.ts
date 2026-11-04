@@ -9,7 +9,7 @@ import { docsUrl, type NavLink } from './site-nav'
 export const PREVIEW_NOTE = 'Free while in preview. No billing.'
 
 /** Requirements (FR-216), also the short list on Home (FR-212). */
-export const selfHostRequirements: readonly string[] = ['Docker', 'PostgreSQL 18', 'An LLM provider key, or Ollama']
+export const selfHostRequirements: readonly string[] = ['Docker', 'PostgreSQL 18', 'An LLM provider key, or Ollama (not on Railway)']
 
 export const pathSummaries: Record<'railway' | 'kubernetes' | 'dev-loop', string> = {
   railway:

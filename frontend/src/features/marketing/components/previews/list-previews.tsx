@@ -1,12 +1,12 @@
 import { LifecycleStatusBadge } from '../../../../components/shared/status-badge'
-import { previewDeployments, previewRuns } from '../../content/previews'
+import { previewCaptions, previewDeployments, previewLabels, previewRuns } from '../../content/previews'
 import { PreviewFrame } from './preview-frame'
 import { DiffPreview, GatePreview, RailPreview } from './preview-parts'
 
 /** FR-213, FR-220: the small previews beside Product sections. Fixture data, real badges. */
 export function GatesPreview() {
   return (
-    <PreviewFrame caption="Preview: the lifecycle rail and a gate awaiting approval.">
+    <PreviewFrame caption={previewCaptions.gates}>
       <div className="flex flex-col gap-3">
         <RailPreview />
         <GatePreview />
@@ -17,7 +17,7 @@ export function GatesPreview() {
 
 export function ArtifactsPreview() {
   return (
-    <PreviewFrame caption="Preview: a draft specification compared with the locked version before it.">
+    <PreviewFrame caption={previewCaptions.artifacts}>
       <DiffPreview />
     </PreviewFrame>
   )
@@ -25,7 +25,7 @@ export function ArtifactsPreview() {
 
 export function RunsPreview() {
   return (
-    <PreviewFrame caption="Preview: agent runs with their models and status.">
+    <PreviewFrame caption={previewCaptions.runs}>
       <ul className="divide-y divide-border text-sm">
         {previewRuns.map((run) => (
           <li key={run.agent} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
@@ -43,7 +43,7 @@ export function RunsPreview() {
 
 export function DeploymentsPreview() {
   return (
-    <PreviewFrame caption="Preview: a preview environment rolling out per part of the stack.">
+    <PreviewFrame caption={previewCaptions.deployments}>
       <ul className="divide-y divide-border text-sm">
         {previewDeployments.map((d) => (
           <li key={d.part} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
@@ -53,7 +53,7 @@ export function DeploymentsPreview() {
                 {d.platform} · {d.env}
               </span>
             </span>
-            <LifecycleStatusBadge status={d.status}>{d.status === 'running' ? 'Deploying' : 'Ready'}</LifecycleStatusBadge>
+            <LifecycleStatusBadge status={d.status}>{d.status === 'running' ? previewLabels.deploying : previewLabels.ready}</LifecycleStatusBadge>
           </li>
         ))}
       </ul>

@@ -2,6 +2,7 @@ import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { cn } from '../../../lib/utils'
+import { copyFeedback } from '../content/headings'
 
 type CopyState = 'idle' | 'copied' | 'failed'
 
@@ -36,7 +37,7 @@ export function CopyButton({ text, label, className }: { text: string; label: st
   return (
     <span className={cn('inline-flex items-center gap-2', className)}>
       <span role="status" aria-live="polite" className="text-xs text-muted-foreground">
-        {state === 'copied' ? 'Copied' : state === 'failed' ? 'Couldn’t copy, select the text instead' : ''}
+        {state === 'copied' ? copyFeedback.copied : state === 'failed' ? copyFeedback.failed : ''}
       </span>
       <button
         type="button"

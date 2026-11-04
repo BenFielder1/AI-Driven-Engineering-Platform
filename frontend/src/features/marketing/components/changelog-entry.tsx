@@ -1,7 +1,7 @@
 import { panelClass } from '../../../components/shared/panel-class'
 import { StatusBadge } from '../../../components/shared/status-badge'
 import { cn } from '../../../lib/utils'
-import { formatChangelogDate, type ChangelogEntry } from '../content/changelog'
+import { AS_AIDE, formatChangelogDate, type ChangelogEntry } from '../content/changelog'
 import { SiteLink } from './site-link'
 
 /**
@@ -33,7 +33,7 @@ export function ChangelogEntryCard({
       </div>
       <Heading id={`changelog-${entry.version}`} className="mt-2 text-xl font-semibold tracking-tight">
         {entry.title}
-        {entry.asAide && <span className="font-normal text-muted-foreground"> (as AIDE)</span>}
+        {entry.asAide && <span className="font-normal text-muted-foreground"> {AS_AIDE}</span>}
       </Heading>
       <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground marker:text-border">
         {highlights.map((h) => (

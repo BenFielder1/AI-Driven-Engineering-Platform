@@ -34,7 +34,7 @@ describe('FR-216 Self-host', () => {
     expect(within(screen.getByTestId('requirements')).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       'Docker',
       'PostgreSQL 18',
-      'An LLM provider key, or Ollama',
+      'An LLM provider key, or Ollama (not on Railway)',
     ])
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   })

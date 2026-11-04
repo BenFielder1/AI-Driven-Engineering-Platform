@@ -70,3 +70,18 @@ export const faqHeadings = {
 } as const satisfies Record<string, SectionHeading>
 
 export const changelogNote = 'Versions 1 to 5 shipped under the name AIDE.'
+
+/** The marketing 404 (SPEC §7). */
+export const notFoundCopy = {
+  eyebrow: '404',
+  title: 'Page not found',
+  lead: 'The page you’re looking for doesn’t exist.',
+  home: 'Go to the home page',
+  docs: 'Read the docs',
+} as const
+
+/** Copy-button feedback (FR-216), announced in a polite live region. */
+export const copyFeedback = {
+  copied: 'Copied',
+  failed: 'Couldn’t copy, select the text instead',
+} as const

@@ -150,12 +150,6 @@ const targets: Target[] = [
     ready: (p) => p.getByRole('list', { name: 'Notifications' }),
   },
   {
-    name: 'register',
-    path: () => '/register',
-    signedIn: false,
-    ready: (p) => p.getByRole('heading', { level: 1, name: 'Create your Tevrin account' }),
-  },
-  {
     name: 'account',
     path: () => '/account',
     signedIn: true,

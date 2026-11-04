@@ -10,6 +10,11 @@ import { bentoTiles } from '../content/home'
 import { productSections } from '../content/product'
 import { selfHostPaths } from '../content/self-host-commands'
 
+/** Home's self-host block shows the Docker Desktop Kubernetes install (a path that installs something). */
+function kubernetesCommands() {
+  return selfHostPaths.find((p) => p.id === 'kubernetes')?.commands ?? []
+}
+
 afterEach(() => {
   setTheme('light')
 })
@@ -125,7 +130,7 @@ describe('FR-212 Home', () => {
 
     expect(section.getByText('PostgreSQL 18')).toBeInTheDocument()
     const block = section.getByTestId('command-block')
-    for (const c of selfHostPaths[0]?.commands ?? []) {
+    for (const c of kubernetesCommands()) {
       expect(block).toHaveTextContent(c.command)
     }
     expect(section.getByRole('button', { name: /^Copy the/ })).toBeInTheDocument()
@@ -165,7 +170,7 @@ describe('FR-212 Home', () => {
     await user.click(section.getByRole('button', { name: /^Copy the/ }))
 
     expect(await section.findByRole('status')).toHaveTextContent('Copied')
-    expect(await navigator.clipboard.readText()).toBe((selfHostPaths[0]?.commands ?? []).map((c) => c.command).join('\n'))
+    expect(await navigator.clipboard.readText()).toBe(kubernetesCommands().map((c) => c.command).join('\n'))
   })
 
   it.each(THEMES.map((t) => [t]))('FR212_axe: / has no axe violations (%s)', async (theme) => {

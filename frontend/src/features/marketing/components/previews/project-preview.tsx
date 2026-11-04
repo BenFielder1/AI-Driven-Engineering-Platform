@@ -1,6 +1,6 @@
 import { PhaseBadge } from '../../../../components/shared/phase-badge'
 import { ProjectVersionBadges } from '../../../../components/shared/version-badge'
-import { previewProject } from '../../content/previews'
+import { previewCaptions, previewProject } from '../../content/previews'
 import { PreviewFrame } from './preview-frame'
 import { DiffPreview, GatePreview, RailPreview } from './preview-parts'
 
@@ -13,7 +13,7 @@ export function ProjectPreview({ className }: { className?: string }) {
     <PreviewFrame
       chrome
       className={className}
-      caption="Preview: a project in Specification, with the spec approval gate waiting and the diff between spec versions 2 and 3."
+      caption={previewCaptions.project}
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

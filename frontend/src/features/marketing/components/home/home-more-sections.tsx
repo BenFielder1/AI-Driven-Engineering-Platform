@@ -56,9 +56,9 @@ export function FeatureBento() {
   )
 }
 
-/** FR-212 §6: requirements and a copyable command block (the first path's commands), linking to Self-host. */
+/** FR-212 §6: requirements and a copyable command block (the Docker Desktop Kubernetes install), linking to Self-host. */
 export function SelfHostTeaser() {
-  const railway = selfHostPaths[0]
+  const kubernetes = selfHostPaths.find((p) => p.id === 'kubernetes')
   return (
     <Section {...homeHeadings.selfHost} testId="home-self-host">
       <div className="grid items-start gap-8 lg:grid-cols-2">
@@ -76,7 +76,7 @@ export function SelfHostTeaser() {
             {homeHeadings.selfHostLink} <ArrowRight aria-hidden="true" className="size-4" />
           </Link>
         </div>
-        {railway && <CommandBlock title={railway.title} commands={railway.commands} />}
+        {kubernetes && <CommandBlock title={kubernetes.title} commands={kubernetes.commands} />}
       </div>
     </Section>
   )

@@ -41,7 +41,7 @@ describe('FR-222 content truthfulness', () => {
   })
 
   it('FR197_FR218_FR219_old_name_only_in_history: "AIDE" appears only in the FAQ answer about the name and the Changelog note', () => {
-    const allowed = new Set(['faq.faqs[11].question', 'faq.faqs[11].answer[0]', 'headings.changelogNote'])
+    const allowed = new Set(['faq.faqs[11].question', 'faq.faqs[11].answer[0]', 'headings.changelogNote', 'changelog.AS_AIDE'])
     const withOldName = copy.filter((c) => c.text.includes('AIDE')).map((c) => c.path)
 
     expect(withOldName.filter((p) => !allowed.has(p))).toEqual([])
