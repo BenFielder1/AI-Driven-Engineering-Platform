@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { toast } from 'sonner'
 
 import { Alert } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { LoadingState } from '../../components/ui/states'
 import { errorMessage, messageFor } from '../../lib/errors'
+import { toastAcrossNavigation } from '../../lib/toast-handoff'
 import { useCancelBitbucketLink, useConfirmBitbucketLink, useBitbucketPendingLink } from '../bitbucket/bitbucket-api'
 import { BitbucketLogo } from '../bitbucket/bitbucket-logo'
 import { useCancelGitLabLink, useConfirmGitLabLink, useGitLabPendingLink } from '../gitlab/gitlab-api'
@@ -106,7 +106,7 @@ export function GitHostLinkPanel({
     setFailure(null)
     cancel.mutate(undefined, {
       onSuccess: () => {
-        toast.info(`The ${name} account wasn’t linked.`)
+        toastAcrossNavigation('info', `The ${name} account wasn’t linked.`)
         onDone(false)
       },
       onError: setFailure,
@@ -117,7 +117,10 @@ export function GitHostLinkPanel({
     setFailure(null)
     confirm.mutate(undefined, {
       onSuccess: () => {
-        toast.success(`${name} account ${link.login} linked. You can now sign in with ${link.instanceName ?? name}.`)
+        toastAcrossNavigation(
+          'success',
+          `${name} account ${link.login} linked. You can now sign in with ${link.instanceName ?? name}.`,
+        )
         onDone(true)
       },
       onError: setFailure,

@@ -56,6 +56,8 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 | v1 FR-52 CLI | Command is `tevrin`; `aide` stays as a deprecated alias | FR-200 |
 | v1 FR-24 prompts | Prompts name Tevrin; each changed template's version increases | FR-199 |
 | Login and register pages (v1, v4) | New layout and copy | FR-223 |
+| v1 FR-34 commit subject | Reads `[Tevrin][Phase:…][Step:N]`. Nothing parses it: step detection uses the kept `AIDE-Step-Id` trailer | D-V6-15 |
+| Stack catalog 1.2.0 | 1.2.1: agent text renamed, because it feeds the codegen prompt | D-V6-15 |
 | README | Condensed; detail moves to the docs site | FR-224–FR-226 |
 
 ### 3.1 Rename to Tevrin
@@ -78,11 +80,11 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - Stored data (events, artifacts, past PR bodies, notifications already sent) is not rewritten (v1 rule 9).
   - Given a problem response that used to say "The AIDE GitHub App isn't installed…", then it says "The Tevrin GitHub App isn't installed…" with the same `errorCode` and status.
   - Given an email notification, then its subject starts `[Tevrin]` (test `FR198_…`).
-- **FR-199** *(backend)* **Agent prompts.** The seven templates in `Agents/Prompts/` say "agent of Tevrin". Each changed template's version increases (FR-24), so runs record the new version. References to `.aide/` paths stay (§4.29).
+- **FR-199** *(backend)* **Agent prompts.** The seven templates in `Agents/Prompts/` say "agent of Tevrin". Each changed template's version increases (FR-24), so runs record the new version. Built versions: idea 6, spec 7, plan 6, codegen 5, review 8, repo analyst 3, stack analyst 3. References to `.aide/` paths stay (§4.29).
   - Given a new run of any agent, then the rendered system prompt contains "Tevrin" and not "AIDE", and the run's prompt version is the new one.
 - **FR-200** *(backend)* **CLI.** The .NET tool's command is `tevrin`; help, errors and output say Tevrin.
-  - `aide` remains as a deprecated alias for v6: it prints `aide is now tevrin; this alias will be removed in a later version.` to stderr, then behaves identically. (Implementation choice, e.g. a second tool package sharing the code, is the backend engineer's.)
-  - Environment variables: `TEVRIN_TOKEN`, `TEVRIN_API_URL` and `TEVRIN_CONFIG` are read first, then `AIDE_TOKEN`, `AIDE_API_URL` and `AIDE_CONFIG` (§4.29 worked example). The config file location is unchanged. Tokens still start `aide_pat_`.
+  - `aide` remains as a deprecated alias for v6: it prints `aide is now tevrin; this alias will be removed in a later version.` to stderr, then behaves identically. Built as two packages from the same sources: `Tevrin.Cli` (command `tevrin`, `src/Aide.Cli`) and the deprecated `Aide.Cli` (command `aide`, project `src/Aide.Cli.Alias`) (D-V6-14).
+  - Environment variables: `TEVRIN_TOKEN`, `TEVRIN_API_URL`, `TEVRIN_CONFIG` and `TEVRIN_GIT_TOKEN` are read first, then `AIDE_TOKEN`, `AIDE_API_URL`, `AIDE_CONFIG` and `AIDE_GIT_TOKEN` (§4.29 worked example). The config file location is unchanged. Tokens still start `aide_pat_`.
   - Given only `AIDE_TOKEN` is set, when `tevrin projects list` runs, then it authenticates. Given both are set, then `TEVRIN_TOKEN` wins.
 - **FR-201** *(backend + frontend)* **Compatibility.** Nothing a user already holds breaks.
   - Given a browser signed in before the v6 deploy, then it stays signed in (cookie names unchanged).
@@ -95,9 +97,9 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 - **FR-202** *(frontend)* **Tokens.** `lib/ui/tokens.ts` and `index.css` hold the new palette (§4.31). Neutral slate surfaces, an indigo primary, cyan as the secondary accent and focus colour, emerald, amber and rose for success, warning and danger. The brand gradient appears only on the mark, the marketing hero glow, the active lifecycle stage and decorative borders.
   - Given the token test, then every text pair (including tinted pairs) meets WCAG AA 4.5:1 and every UI pair 3:1, in both themes.
   - Given the app, then the v2/v3 "ambient orbs" are gone from the app and auth shells.
-- **FR-203** *(frontend)* **Typography.** Geist Sans for UI and headings, Geist Mono for IDs, hashes, versions, code and eyebrow labels. Self-hosted through `@fontsource` (CSP stays `font-src 'self'` by default). DM Sans and Outfit are removed. A type scale (12/14/16/20/24/30/36/48/60 px) is defined once as tokens.
+- **FR-203** *(frontend)* **Typography.** Geist Sans for UI and headings, Geist Mono for IDs, hashes, versions, code and eyebrow labels. Self-hosted through `@fontsource` (CSP stays `font-src 'self'` by default). DM Sans and Outfit are removed. A type scale (12/14/16/20/24/30/36/48/60 px) is defined once as tokens; `text-lg` is 20 px (there is no 18 px step).
   - Given any page, then no font loads from another origin.
-- **FR-204** *(frontend)* **Theme.** Light, Dark and System; **System is the default**. The inline nonce'd init script applies the resolved theme before first paint and follows OS changes live while System is chosen. The choice is stored in `aide.theme` (`light` | `dark` | `system`).
+- **FR-204** *(frontend)* **Theme.** Light, Dark and System; **System is the default**. The inline nonce'd init script applies the resolved theme before first paint and follows OS changes live while System is chosen. The choice is stored in `aide.theme` (`light` | `dark` | `system`); `system` is stored explicitly (v5 deleted the key), and stored `light`/`dark` are still honoured.
   - Given no stored value and an OS in light mode, then the page renders light with no flash of dark.
   - Given System and the OS switches to dark, then the page switches without reload.
   - The selector is in the user menu (app) and the footer (marketing).
@@ -112,16 +114,16 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 ### 3.3 App shell and Home
 
 - **FR-206** *(frontend)* **Shell.** The sidebar and header from v2/v3 stay (`nav-config.ts` remains the single source) and are refined:
-  - Sidebar 240 px, collapsible to a 56 px icon rail with tooltips; project switcher at the top; Workspace items **Home**, Projects, Notifications, Connections; Admin and project sections unchanged in content.
-  - User menu: name, email, Account, Connections, Theme (Light/Dark/System), Docs ↗, Sign out.
+  - Sidebar 240 px, collapsible to a 56 px icon rail with tooltips (native `title` attributes; sr-only labels name each item); project switcher at the top; Workspace items **Home**, Projects, Notifications, Connections; Admin and project sections unchanged in content.
+  - User menu: name, email, Account, Connections, Theme (Light/Dark/System, as menu radio items built from `THEME_OPTIONS` and `useTheme()`), Docs ↗, Sign out.
   - Header: breadcrumbs, a primary-action slot filled by the page (e.g. "New project"), ⌘K search, notifications bell. Sticky with a 1 px border; `scroll-padding-top` keeps focused elements clear of it (WCAG 2.4.11).
   - Given a viewport below `lg`, then the drawer replaces the sidebar with the same items.
 - **FR-207** *(frontend)* **Home (`/home`).** The default signed-in landing page (after sign-in, `/`, and the logo link in the app):
   - Greeting with the user's name; **Get set up** checklist (§4.30); **Recent projects** (up to 6 by `updatedAt`, with phase badge, status and versions; "View all"); **Unread notifications** (up to 5, "View all").
   - Built only from existing endpoints. Dismissing the checklist stores `aide.home.checklist-dismissed` in localStorage; "Show setup checklist" on Home restores it.
-  - Given a user with no projects, then Recent projects shows an empty state with "Create project" and "Import a repository".
+  - Given a user with no projects, then Recent projects shows an empty state with "Create project" and "Import a repository". `?source=import` on `/projects/new` preselects Import (used by "Import a repository" and the palette).
   - Given every checklist item done, then the checklist collapses to "You're all set" and can be dismissed.
-- **FR-208** *(frontend)* **Page consistency.** Every in-app page uses `PageHeader` (title, optional description, actions) and the shared loading, empty, error and forbidden states. The Projects list gains a client-side name filter and sorts by last updated.
+- **FR-208** *(frontend)* **Page consistency.** Every in-app page uses `PageHeader` (title, optional description, actions) and the shared loading, empty, error and forbidden states. The Projects list gains a name filter and sorts by last updated. The existing server-side `search` (debounced, kept in the URL) and the default `sortBy=updated desc` meet this; there is no second client-side filter.
   - Given each app route's page test, then it renders a single `h1` and the states named above.
 - **FR-209** *(frontend)* **Command palette.** Adds actions: Go to Home, New project, Import repository, Switch theme (Light/Dark/System), Open docs ↗. Same shortcut opens and closes; focus returns to the trigger.
 
@@ -136,7 +138,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 - **FR-212** *(frontend)* **Home page (`/`)**, sections in order:
   1. Hero: headline "Ship software with AI agents, under human control."; subhead naming the six phases, approval gates, versioned artifacts and rollback; **Get started** (primary) and **Self-host** (secondary); a product preview (FR-220) of a project page with the lifecycle rail, a gate awaiting approval and an artifact diff.
   2. Integrations strip: GitHub, GitLab, Bitbucket, Jira, Linear, Railway, Render, Vercel, Netlify, Cloudflare, Supabase, Anthropic, OpenAI, Ollama — labelled "Works with", not customers.
-  3. Lifecycle: the six phases (plus optional Analysis) as numbered steps with a gate between each.
+  3. Lifecycle: the six phases (plus optional Analysis) as numbered steps with a gate between each. The Execution→Review gap is labelled "Guardian checks on every step", since no human gate exists there.
   4. Why Tevrin: three cards — Governed (gates and approval modes), Versioned (hashed, immutable artifacts with diffs), Reversible (rollback and audit trail).
   5. Feature bento (6 tiles): approval gates, artifacts and diffs, agents and providers, Git hosts and PRs, issue-tracker imports, deployments and databases. Each links to its Product section.
   6. Self-host: short requirements list and a copyable command block, linking to Self-host.
@@ -145,16 +147,16 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   9. Closing CTA repeating the hero buttons.
 - **FR-213** *(frontend)* **Product (`/product`).** One anchored section per feature area: lifecycle and gates; artifacts and versioning; agents, prompts and LLM providers; Git hosts, PRs, review and merge; issue-tracker imports; stack composition and inference; deployments and managed databases; notifications and live updates; admin and audit; CLI and API. Each has a heading, 2–4 sentences, 3–5 bullets and a preview or icon.
 - **FR-214** *(frontend)* **How it works (`/how-it-works`).** A walk-through from idea to release: each phase's input, agent, artifact and gate; approval modes (strict, advisory, autonomous); review cycles; release versions and checkpoints; rollback and invalidation. An SVG lifecycle diagram whose animation runs only without reduced motion and has a text equivalent.
-- **FR-215** *(frontend)* **Integrations (`/integrations`).** Grouped cards: Git hosts, issue trackers, LLM providers, deployment platforms, databases, notification channels. Each card states what Tevrin does with it in one line. Names match the catalog; nothing unimplemented is listed.
+- **FR-215** *(frontend)* **Integrations (`/integrations`).** Grouped cards: Git hosts (including Local Git), issue trackers, LLM providers, deployment platforms, databases (including PostgreSQL), notification channels. Each card states what Tevrin does with it in one line. Names match the catalog; nothing unimplemented is listed.
 - **FR-216** *(frontend)* **Self-host (`/self-host`).** "Free while in preview. No billing." Requirements (Docker, PostgreSQL 18, an LLM provider key or Ollama); three paths — Railway, Docker Desktop Kubernetes, dev loop — each with its key commands and a docs link; what you configure (Git sign-in, GitHub App, providers, notifications); FAQ on upgrades and data. Commands match the docs site exactly (one shared source, FR-222).
 - **FR-217** *(frontend)* **Security (`/security`).** Factual statements only: secrets encrypted at rest and never shown again, personal connections, short-lived GitHub App tokens, read-only repo tools with secret redaction, immutable locked artifacts with content hashes, audit events, CSP and security headers, no third-party scripts on the site, agents faked in tests. Links to the relevant docs.
 - **FR-218** *(frontend)* **FAQ (`/faq`).** An accessible accordion (button + region, keyboard operable), with a "Still have questions?" link to the docs and GitHub issues. Questions at least: What is Tevrin? · Who is it for? · How do approval gates work? · Can I undo what an agent did? · Which AI models can I use, and where do my keys live? · Does my code leave my infrastructure? · Does it work with an existing repository? · Which Git hosts, trackers and platforms are supported? · Is it free? · How do I self-host it? · Is there a CLI or API? · Was it called AIDE? Answers come from the specs and must be true of v6.
-- **FR-219** *(frontend)* **Changelog (`/changelog`).** One entry per version v1–v6, newest first: version, date (the merge date of its PR), title, 3–6 highlights, link to that version's spec on the docs site. v1–v5 entries say "(as AIDE)".
+- **FR-219** *(frontend)* **Changelog (`/changelog`).** One entry per version v1–v6, newest first: version, date (the merge date of its PR; the v6 entry shows "In preview" until its PR merges), title, 3–6 highlights, link to that version's spec on the docs site. v1–v5 entries say "(as AIDE)".
 - **FR-220** *(frontend)* **Product previews.** Static React components that reuse the real UI components with fixture data (no API calls), sized for the hero and Product sections, theme-aware, `aria-hidden` with a visible caption or an equivalent text alternative. No raster screenshots.
   - Given reduced motion, then previews are static.
-- **FR-221** *(frontend)* **SEO and metadata.** Each marketing route has a server `layout.tsx` exporting `metadata` (title, description, Open Graph and Twitter card with `og.png`), keeping pages as client components (D-V3-2). `robots.txt` allows marketing and auth routes and disallows app routes; `sitemap.xml` lists the marketing routes with absolute URLs built from the request host. App routes send `X-Robots-Tag: noindex`.
+- **FR-221** *(frontend)* **SEO and metadata.** Each marketing route has a server `layout.tsx` exporting `metadata` (title, description, Open Graph and Twitter card with `og.png`), keeping pages as client components (D-V3-2). `robots.txt` allows marketing and auth routes and disallows app routes; `sitemap.xml` lists the marketing routes with absolute URLs built from the request host. Both are route handlers using the validated request Host (malformed → `http://localhost`). `X-Robots-Tag: noindex` is sent on `/home`, `/projects`, `/account`, `/connections`, `/notifications`, `/approvals` and `/admin`.
   - Given `GET /robots.txt` and `GET /sitemap.xml`, then both return 200 with the content above (tests in `src/server` or route tests).
-- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in v1–v6; no customer logos, testimonials, invented metrics or "open source" claims (Q3). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
+- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in v1–v6; no customer logos, testimonials, invented metrics or "open source" claims (Q3). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name; OpenAI, Slack and Teams have no Simple Icons mark and use neutral icons. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
 
 ### 3.5 Auth pages
 
@@ -172,7 +174,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - `index.md` (overview, where to start) · `getting-started/` (prerequisites, dev loop, first project) · `guides/` (connections and sign-in, GitHub App, GitLab, Bitbucket, LLM providers, issue trackers, stacks and inference, deployments and databases, notifications, CLI) · `operations/` (local Kubernetes and troubleshooting, Railway, PostgreSQL 17→18 upgrade, CI and the commit gate) · `reference/` (configuration and environment variables, API and contract, architecture, testing, error codes, repo layout) · `history/` (one page per version linking the frozen `docs/v1`–`docs/v6` specs and build logs) · `brand.md` (logo files, colours, usage rules).
   - `deploy/railway/README.md` and `variables.md` move under `operations/railway/` only if every reference is updated; otherwise they stay and are linked.
   - Frozen `docs/v1`–`docs/v5` files are not edited except to fix links. Adding front matter to them isn't allowed, so the site config includes them as plain pages (`jekyll-optional-front-matter`).
-  - Given any page, then its relative links resolve (link check in FR-226).
+  - Given any page, then its relative links resolve (link check in FR-226). The check skips frozen `docs/v1`–`v5` pages as link sources (their repo-root links break on the site), but checks links into them.
 - **FR-226** *(deploy)* **GitHub Pages.** `.github/workflows/docs.yml` builds the site with Jekyll and the `just-the-docs` theme (mermaid enabled, search on) from `docs/`:
   - On pull requests touching `docs/**`, `README.md` or the workflow: build plus an offline internal link check (html-proofer, external links skipped). On push to `main` touching the same: build, check, then deploy with `actions/deploy-pages`.
   - Site URL: `https://benfielder1.github.io/AI-Driven-Engineering-Platform/` until a custom domain is chosen (Q1). The frontend's docs links use a build-time constant `DOCS_URL` in `src/lib/site.ts`.
@@ -199,10 +201,10 @@ CLI env resolution: `value = TEVRIN_X ?? AIDE_X ?? config file ?? default`.
 ### 4.30 Onboarding checklist
 
 Pure function `checklist(connections, llmConnections, platformConnections, projects)` in `features/home/`, unit-tested with these cases. Items, in order:
-1. **Connect a Git host** — done when the user has a Git connection (GitHub, GitLab or Bitbucket, by sign-in link or token) or the instance's GitHub App is installed for them. Action → Connections.
-2. **Add an AI provider** — done when the user has at least one LLM connection. Action → Connections.
-3. **Create or import a project** — done when the user is a member of at least one project. Action → New project.
-4. **Connect a deployment platform** *(optional)* — done when the user has a platform connection. Action → Connections.
+1. **Connect a Git host** — done when the user has an OAuth GitHub link, a GitHub App link or usable installation, or any GitLab or Bitbucket connection. Action → Connections.
+2. **Add an AI provider** — done when the user has at least one saved LLM credential (keyless providers don't count). Action → Connections.
+3. **Create or import a project** — done when `myRole` is set on any of the 6 most recently updated projects. `/api/projects` has no member filter, so an Admin whose memberships are all older sees this item as not done (accepted, D-V6-16). Action → New project.
+4. **Connect a deployment platform** *(optional)* — done when the user has a deployment-platform connection (Jira and Linear aren't deployment platforms). Action → Connections.
 
 `complete = items 1–3 done` (optional items don't block). Progress shows `done/4`.
 
@@ -215,7 +217,7 @@ Pure function `checklist(connections, llmConnections, platformConnections, proje
 
 ### 4.31 Palette
 
-Defined in `tokens.ts` (oklch), approximated here in hex. Final values may shift to pass the AA test; the roles may not.
+Defined in `tokens.ts` (oklch), approximated here in hex. Final values may shift to pass the AA test; the roles may not. Built shifts: light danger rose-700 (rose-600 is 4.49:1 on card), dark primary indigo-300 (indigo-400 fails on its 15% tint), light sidebar-accent slate-100 (D-V6-17).
 
 | Role | Light | Dark |
 | --- | --- | --- |
@@ -224,9 +226,9 @@ Defined in `tokens.ts` (oklch), approximated here in hex. Final values may shift
 | border | `#E2E8F0` | `#1E293B` |
 | foreground | `#0F172A` | `#F8FAFC` |
 | muted-foreground | `#475569` | `#94A3B8` |
-| primary (buttons, links) | `#4F46E5` (white text) | `#818CF8` (`#020617` text) |
+| primary (buttons, links) | `#4F46E5` (white text) | `#A5B4FC` indigo-300 (`#020617` text) |
 | accent / ring | `#0891B2` | `#22D3EE` |
-| success / warning / danger | emerald-700 / amber-500 fill / rose-600 | emerald-400 / amber-400 fill / rose-400 |
+| success / warning / danger | emerald-700 / amber-500 fill / rose-700 | emerald-400 / amber-400 fill / rose-400 |
 
 Rules: no text on the gradient; warning is never text; status badges pair colour with a dot and label (Locked slate, In review amber, Approved emerald, Failed rose, Running indigo).
 
@@ -241,6 +243,7 @@ Rules: no text on the gradient; warning is never text; status badges pair colour
 | `/login?returnUrl=https://evil.example` | no | after sign-in → `/home` (open-redirect guard unchanged) |
 | `/projects` | no | redirect `/login?returnUrl=%2Fprojects` |
 | `/home` | no | redirect `/login?returnUrl=%2Fhome` |
+| any unmatched URL | either | root 404 in the marketing shell (signed in shows Open app). `notFound()` inside the app keeps the app 404 |
 
 ### 4.33 README → docs mapping
 
@@ -258,7 +261,7 @@ Rules: no text on the gradient; warning is never text; status badges pair colour
 
 ## 5. Data
 
-No schema change and no migration. Browser-only state: `aide.theme` (`light|dark|system`), `aide.home.checklist-dismissed` (`"1"` when dismissed). Marketing content and the changelog are code.
+No schema change and no migration. Browser-only state: `aide.theme` (`light|dark|system`, `system` stored explicitly), `aide.home.checklist-dismissed` (`"1"` when dismissed). Marketing content and the changelog are code.
 
 ## 6. API
 
@@ -278,14 +281,15 @@ No new error codes. The frontend's error-code copy is reworded where it names th
 | `/home` | Home (app) | FR-207 | loading · empty · error |
 | existing app routes | unchanged content | restyled, FR-205/206/208 | loading · empty · error · forbidden |
 | `/robots.txt` · `/sitemap.xml` | SEO | FR-221 | — |
-| marketing 404 | Not found | marketing shell, links Home and Docs | — |
+| root 404 | Not found | marketing shell for every unmatched URL, signed in or not; links Home and Docs | — |
 
 Devices: responsive from 360 px; marketing designed mobile-first, app desktop-first. Accessibility: WCAG 2.2 AA in both themes.
 
 ## 8. Non-functional requirements
 
 - **Accessibility:** Playwright + axe reports zero violations on every marketing page, `/login`, `/register` and `/home`, in light and dark (extends `a11y.spec.ts`). Keyboard-only walk-through of the marketing header, mobile menu, FAQ accordion and theme selector (E2E). Target size ≥ 24 px; focus not obscured.
-- **Performance:** marketing pages ship no raster image over 100 KB; the hero LCP element is text or inline SVG in the server HTML; no client data fetch blocks marketing content. Budget: first-load JS for `/` ≤ 200 KB gzipped (checked from the Next build output in CI). Lighthouse performance and accessibility ≥ 90 on `/` against preview is a manual check.
+- **Performance:** marketing pages ship no raster image over 100 KB; the hero LCP element is text or inline SVG in the server HTML; no client data fetch blocks marketing content. Budget: first-load JS for `/` ≤ 200 KB gzipped (checked from the Next build output in CI by `scripts/ci/check-js-budget.mjs`; first measured 192.6 KB, little headroom). Lighthouse performance and accessibility ≥ 90 on `/` against preview is a manual check.
+- **Client architecture:** providers live in the `(app)` and `(public)` group layouts, not the root layout; one browser QueryClient is shared across groups. Marketing pages read `me` through `marketing-session.tsx` (generated client, no TanStack Query). The root `error.tsx` is plain markup and the mobile menu sheet is lazy. Zod runs jitless, set in `src/instrumentation-client.ts` before hydration, because its `new Function` probe violates the strict CSP (D-V6-18).
 - **Security:** CSP unchanged (no new origins). No third-party scripts, fonts, images or analytics. Marketing pages set the same security headers as the app.
 - **Motion:** every animation honours `prefers-reduced-motion` (tested by emulating it in E2E).
 - **Observability:** unchanged; marketing requests are logged like other pages (static assets excluded).
@@ -312,6 +316,12 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-11 | No testimonials, customer logos or invented metrics; integration marks are "Works with" | Research | assumed |
 | D-V6-12 | Previews are React components with fixture data, not screenshots | Research + CSP | assumed |
 | D-V6-13 | Frozen docs stay at `docs/v1`–`docs/v5` and are linked from `docs/history/`, not moved | CLAUDE.md | agreed |
+| D-V6-14 | CLI ships as `Tevrin.Cli` (`tevrin`) plus deprecated `Aide.Cli` (`aide`, `src/Aide.Cli.Alias`); `TEVRIN_GIT_TOKEN` → `AIDE_GIT_TOKEN` added to the env fallback (FR-200) | Build | agreed |
+| D-V6-15 | Commit subjects read `[Tevrin][Phase:…][Step:N]` (step detection uses the kept `AIDE-Step-Id` trailer); stack catalog 1.2.0 → 1.2.1; prompt versions idea 6, spec 7, plan 6, codegen 5, review 8, repo analyst 3, stack analyst 3 | Build | agreed |
+| D-V6-16 | Checklist rules in §4.30: Git, AI provider and platform definitions; membership checked over the 6 most recently updated projects, no API change in v6 | Build | agreed |
+| D-V6-17 | Palette values shifted to pass AA (§4.31); `text-lg` is 20 px; `aide.theme` stores `system` explicitly; `metadataBase` comes from the validated request Host | Build | agreed |
+| D-V6-18 | Providers move to group layouts, Zod jitless, `marketing-session.tsx`, JS budget in CI (§8), to meet the 200 KB first-load budget and the CSP | Build | agreed |
+| D-V6-19 | Shell and page details: native `title` rail tooltips, theme radio items, server-side search meets FR-208, `?source=import`, root 404 in the marketing shell, robots and sitemap handlers, neutral icons for OpenAI, Slack and Teams, link check skips frozen pages as sources, "In preview" for v6 | Build | agreed |
 
 ## 11. Open questions
 
