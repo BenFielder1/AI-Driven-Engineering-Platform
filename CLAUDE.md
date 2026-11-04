@@ -12,11 +12,12 @@ AIDE (AI-Driven Engineering Framework) coordinates specialised AI agents through
 | v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
 | v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v3/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
 | v4 | [`docs/v4/SPEC.md`](docs/v4/SPEC.md) | [`docs/v4/PROGRESS.md`](docs/v4/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
-| v5 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: issue tracker imports, commit co-authorship, stack inference with an Analysis phase, shared deployment projects, local PostgreSQL 18 |
+| v5 | [`docs/v5/SPEC.md`](docs/v5/SPEC.md) | [`docs/v5/PROGRESS.md`](docs/v5/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
+| v6 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site on GitHub Pages |
 
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
-- **v5 is an increment on v4 (and v1–v3):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113, v5 at FR-163), and the spec-verifier checks the requirements of v1–v5.
-- **Scaffolding:** v2, v4 and v5 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
+- **v6 is an increment on v5 (and v1–v4):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113, v5 at FR-163, v6 at FR-196), and the spec-verifier checks the requirements of v1–v6.
+- **Scaffolding:** v2, v4, v5 and v6 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
 - Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
 
 ## Stack
