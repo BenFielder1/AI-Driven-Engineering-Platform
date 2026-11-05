@@ -6,7 +6,7 @@ permalink: /
 
 # Tevrin documentation
 
-Tevrin coordinates specialised AI agents through a governed software lifecycle: Refinement, Specification, Planning, Execution, Review and Release. It turns an idea into released software with versioned artifacts, approval gates, rollback and an audit trail. It is for engineers and project owners who want AI-driven delivery with deterministic state and human oversight. The code is source available on GitHub.
+Tevrin coordinates specialised AI agents through a governed software lifecycle: Refinement, Specification, Planning, Execution, Review and Release. It turns an idea into released software with versioned artifacts, approval gates, rollback and an audit trail. It is for engineers and project owners who want AI-driven delivery with deterministic state and human oversight. The code is source available on GitHub under the [PolyForm Shield License 1.0.0](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/LICENSE.md).
 
 Tevrin was called AIDE before v6. Some internal identifiers keep the `aide` name. See [Architecture](reference/architecture.md).
 

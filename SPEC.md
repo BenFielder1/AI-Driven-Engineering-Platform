@@ -156,7 +156,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - Given reduced motion, then previews are static.
 - **FR-221** *(frontend)* **SEO and metadata.** Each marketing route has a server `layout.tsx` exporting `metadata` (title, description, Open Graph and Twitter card with `og.png`), keeping pages as client components (D-V3-2). `robots.txt` allows marketing and auth routes and disallows app routes; `sitemap.xml` lists the marketing routes with absolute URLs built from the request host. Both are route handlers using the validated request Host (malformed → `http://localhost`). `X-Robots-Tag: noindex` is sent on `/home`, `/projects`, `/account`, `/connections`, `/notifications`, `/approvals` and `/admin`.
   - Given `GET /robots.txt` and `GET /sitemap.xml`, then both return 200 with the content above (tests in `src/server` or route tests).
-- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in v1–v6; no customer logos, testimonials, invented metrics or "open source" claims (Q3). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name; OpenAI, Slack and Teams have no Simple Icons mark and use neutral icons. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
+- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in v1–v6; no customer logos, testimonials, invented metrics or "open source" claims (Q3, D-V6-21). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name; OpenAI, Slack and Teams have no Simple Icons mark and use neutral icons. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
 
 ### 3.5 Auth pages
 
@@ -323,6 +323,7 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-18 | Providers move to group layouts, Zod jitless, `marketing-session.tsx`, JS budget in CI (§8), to meet the 200 KB first-load budget and the CSP | Build | agreed |
 | D-V6-19 | Shell and page details: native `title` rail tooltips, theme radio items, server-side search meets FR-208, `?source=import`, root 404 in the marketing shell, robots and sitemap handlers, neutral icons for OpenAI, Slack and Teams, link check skips frozen pages as sources, "In preview" for v6 | Build | agreed |
 | D-V6-20 | Post-v6 fixes: the README logo uses GitHub's `#gh-*-mode-only` fragments, which follow the GitHub theme setting (`<picture>` follows the OS); the docs site logo is the v6 light lockup; the How it works lifecycle diagram sits under the page intro, horizontal at `lg` and vertical below (FR-214, FR-224, FR-225) | Build | agreed |
+| D-V6-21 | Licence: PolyForm Shield License 1.0.0 (`LICENSE.md`, with `Required Notice` and `Licensor Line of Business` lines). Anyone may use, modify and self-host Tevrin, but not provide a competing product (selling it or offering it as a hosted service). Single author: outside pull requests are not accepted, and the name and logo are not licensed. The CLI packages ship `LICENSE.md` (`PackageLicenseFile`); copy stays "source available", never "open source" (FR-218, FR-222, FR-224, Q3) | Ben | agreed |
 
 ## 11. Open questions
 
@@ -330,7 +331,7 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | --- | --- | --- | --- |
 | Q1 | New domain (e.g. `tevrin.<tld>`) and repo rename? Both change URLs in the docs site, README and `DOCS_URL`. Proposed: later, as a one-line constant change | Ben | nothing |
 | Q2 | Rename the existing GitHub App and Railway-visible names to Tevrin? Manual in GitHub/Railway settings | Ben | nothing (manual check) |
-| Q3 | Add a licence? Until there is one, copy says "source available on GitHub", never "open source" | Ben | FR-218 FAQ wording |
+| Q3 | ~~Add a licence?~~ **Resolved (D-V6-21):** PolyForm Shield License 1.0.0 in `LICENSE.md`. Copy says "source available", never "open source" | Ben | nothing |
 | Q4 | Terms and Privacy text for the footer and sign-up? Omitted until supplied | Ben | nothing |
 
 ## 12. Milestones

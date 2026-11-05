@@ -41,4 +41,6 @@ The brand gradient runs from indigo `#4F46E5` to cyan `#06B6D4`. Type is Geist S
 - Keep clear space around the mark of at least the width of one segment.
 - Warning colours are never used for text.
 - Status badges pair a colour with a dot and a label, so colour is never the only signal.
-- Write the name as "Tevrin". Describe the code as "source available on GitHub".
+- Write the name as "Tevrin". Describe the code as "source available on GitHub", never "open source".
+
+The code is licensed under the [PolyForm Shield License 1.0.0](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/LICENSE.md). The Tevrin name and logo aren't covered by that licence: don't use them for your own product or fork.
