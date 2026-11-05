@@ -164,7 +164,7 @@ public sealed partial class PullRequestJobHandler(
         if (working.Provider.Kind is GitProvider.GithubApp or GitProvider.Gitlab or GitProvider.Bitbucket)
         {
             // FR-82, FR-137: the App's PR, the GitLab merge request and the Bitbucket pull request link back to the AIDE project.
-            body += $"\n\n---\nOpened by [AIDE]({appOptions.Value.Absolute($"/projects/{project.Id}")}) for {project.Name}.";
+            body += $"\n\n---\nOpened by [Tevrin]({appOptions.Value.Absolute($"/projects/{project.Id}")}) for {project.Name}.";
         }
 
         var request = new PullRequestRequest(working.Branch, PullRequestDescription.Title(project.Name, steps.Count), body);

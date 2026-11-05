@@ -1,0 +1,8 @@
+# Docs site build output and local Ruby state (FR-226). Gemfile.lock is resolved in CI, not committed.
+_site/
+.jekyll-cache/
+.jekyll-metadata
+.sass-cache/
+.bundle/
+vendor/
+Gemfile.lock

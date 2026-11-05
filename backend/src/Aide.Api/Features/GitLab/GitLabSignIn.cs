@@ -235,8 +235,8 @@ public sealed partial class GitLabSignIn(
         if (!GitSignInRules.CanConfirmEmailLink(link.OfferedToUserId, userId, link.ExpiresAt, time.GetUtcNow(), linkedUserId))
         {
             return linkedUserId is { } other && other != link.OfferedToUserId
-                ? Result.Failure(new DomainError(ErrorCodes.Conflict, "This GitLab account is already linked to another AIDE account."))
-                : Result.Failure(new DomainError(ErrorCodes.Forbidden, "Sign in to the AIDE account with this email to link GitLab to it."));
+                ? Result.Failure(new DomainError(ErrorCodes.Conflict, "This GitLab account is already linked to another Tevrin account."))
+                : Result.Failure(new DomainError(ErrorCodes.Forbidden, "Sign in to the Tevrin account with this email to link GitLab to it."));
         }
 
         pendingLinks.Take(cookie);
@@ -244,7 +244,7 @@ public sealed partial class GitLabSignIn(
         var failure = await LinkAndConnectAsync(userId, link.Instance, link.User, link.Tokens, cancellationToken);
         if (failure is not null)
         {
-            return Result.Failure(new DomainError(ErrorCodes.Conflict, "This GitLab account is already linked to another AIDE account."));
+            return Result.Failure(new DomainError(ErrorCodes.Conflict, "This GitLab account is already linked to another Tevrin account."));
         }
 
         LogLinkConfirmed(logger, userId, link.Instance.Id);

@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { expect, test, type Page, type WebSocket } from '@playwright/test'
 
 import { createProjectViaApi, password, registerViaApi } from './support/api.ts'
@@ -81,9 +82,9 @@ test('FR-98, FR-99: a project page runs live updates over a WebSocket through /a
     })
   })
 
-  // Smoke flow: signed out → sign-in page, then signed in → projects → a project.
+  // Smoke flow: signed out → marketing Home (FR-211; no CSP violations there either), then signed in → projects → a project.
   await page.goto('/')
-  await expect(page).toHaveURL(/\/login\?returnUrl=%2Fprojects$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Ship software with AI agents, under human control.', exact: true })).toBeVisible()
   await registerViaApi(context, 'v3web')
   const project = await createProjectViaApi(context, `V3 web ${String(Date.now())}`)
   await page.goto('/projects')
@@ -127,7 +128,7 @@ test('FR-95: an unknown path renders the v2 not-found page with HTTP 404', async
   await expect(page.getByRole('heading', { level: 1, name: 'Page not found', exact: true })).toBeVisible()
 })
 
-test('FR-101: a smoke flow (sign in → projects → a project) requests nothing from a third-party origin', async ({ browser, page }) => {
+test('FR-101: a smoke flow (sign in → home → a project) requests nothing from a third-party origin', async ({ browser, page }) => {
   // The user and project are set up in a separate context, so this page signs in through the form.
   const setup = await browser.newContext()
   const user = await registerViaApi(setup, 'v3origin')
@@ -140,13 +141,14 @@ test('FR-101: a smoke flow (sign in → projects → a project) requests nothing
   })
 
   await page.goto('/login')
-  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to AIDE', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Tevrin', exact: true })).toBeVisible()
   const appOrigin = new URL(page.url()).origin
   await page.getByLabel('Email').fill(user.email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Projects', exact: true })).toBeVisible()
-  await expect(page).toHaveURL(/\/projects$/)
+  // FR-207: with no returnUrl, sign-in lands on Home.
+  await expect(page.getByRole('heading', { level: 1, name: /^Welcome, / })).toBeVisible()
+  await expect(page).toHaveURL(/\/home$/)
   await page.goto(`/projects/${project.id}`)
   await expect(page.getByRole('heading', { level: 1, name: project.name })).toBeVisible()
   // Let the page's own requests (API calls, lazy chunks, hub negotiate) finish. WebSocket frames don't count as

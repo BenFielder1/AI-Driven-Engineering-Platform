@@ -107,7 +107,7 @@ public sealed partial class EmailChannelSender(IEmailTransport transport, ILogge
 
         var text = new StringBuilder()
             .Append(message.Body).Append("\n\n")
-            .Append("Open in AIDE: ").Append(message.Link).Append('\n');
+            .Append(ChannelText.OpenLinkLabel).Append(": ").Append(message.Link).Append('\n');
         if (message.ApproveUrl is { } approve && message.RejectUrl is { } reject)
         {
             text.Append("\nApprove: ").Append(approve).Append('\n')
@@ -115,7 +115,7 @@ public sealed partial class EmailChannelSender(IEmailTransport transport, ILogge
                 .Append("(Each link opens a confirmation page, works once and expires after 72 hours. Sign in as an Owner of the project.)\n");
         }
 
-        var (result, error) = await transport.SendAsync(new EmailMessage(channel.Target, $"[AIDE] {message.Title}", text.ToString()), cancellationToken);
+        var (result, error) = await transport.SendAsync(new EmailMessage(channel.Target, ChannelText.EmailSubject(message.Title), text.ToString()), cancellationToken);
         return result switch
         {
             EmailSendResult.Sent => ChannelSendResult.Sent,
@@ -210,7 +210,7 @@ public sealed class SlackChannelSender(IHttpClientFactory clients, ISecretProtec
         var text = new StringBuilder()
             .Append('*').Append(Mrkdwn(message.Title)).Append("*\n")
             .Append(Mrkdwn(message.Body)).Append('\n')
-            .Append('<').Append(message.Link).Append("|Open in AIDE>");
+            .Append('<').Append(message.Link).Append('|').Append(ChannelText.OpenLinkLabel).Append('>');
         if (message.ApproveUrl is { } approve && message.RejectUrl is { } reject)
         {
             text.Append(" · <").Append(approve).Append("|Approve> · <").Append(reject).Append("|Reject>");
@@ -238,7 +238,7 @@ public sealed class TeamsChannelSender(IHttpClientFactory clients, ISecretProtec
             return Task.FromResult(new ChannelSendResult(DeliveryAttemptResult.PermanentFailure, "The Teams channel has no usable webhook URL."));
         }
 
-        var actions = new List<object> { new { type = "Action.OpenUrl", title = "Open in AIDE", url = message.Link } };
+        var actions = new List<object> { new { type = "Action.OpenUrl", title = ChannelText.OpenLinkLabel, url = message.Link } };
         if (message.ApproveUrl is { } approve && message.RejectUrl is { } reject)
         {
             actions.Add(new { type = "Action.OpenUrl", title = "Approve", url = approve });

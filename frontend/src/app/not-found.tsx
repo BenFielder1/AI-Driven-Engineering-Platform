@@ -1,6 +1,20 @@
-import { NotFoundView } from '../features/shell/route-states'
+import type { Metadata } from 'next'
 
-/** Unknown URLs (FR-95): the v2 not-found page, HTTP 404. */
+import { MarketingShell } from '../features/marketing/marketing-shell'
+import { MarketingNotFoundPage } from '../features/marketing/pages/not-found-page'
+
+/** Next adds `noindex` to 404 responses itself. */
+export const metadata: Metadata = { title: { absolute: 'Page not found · Tevrin' } }
+
+/**
+ * Unknown URLs (FR-95, SPEC §7 "marketing 404"), HTTP 404. Next serves the root not-found for any URL no route matches,
+ * signed in or not, so it renders the marketing shell (whose header offers Open app to a signed-in user) with links to
+ * Home and the docs. A `notFound()` inside the app keeps the in-shell view ((app)/not-found.tsx).
+ */
 export default function NotFound() {
-  return <NotFoundView />
+  return (
+    <MarketingShell>
+      <MarketingNotFoundPage />
+    </MarketingShell>
+  )
 }

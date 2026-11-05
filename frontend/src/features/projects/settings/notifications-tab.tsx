@@ -242,7 +242,7 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
           const isSet = channel ? secretIsSet(channel) : false
           return (
             <li key={field.id}>
-              <fieldset className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/40 p-4">
+              <fieldset className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background p-4">
                 <legend className="px-1 font-semibold">Channel {n}</legend>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <SelectField
@@ -298,7 +298,7 @@ export function NotificationsTab({ projectId, notifications }: { projectId: stri
                     onActionChange={setSecretAction}
                     allowClear={false}
                     required
-                    hint="HMAC key used to sign each webhook body so the receiver can verify it came from AIDE. Stored encrypted; it's never shown again."
+                    hint="HMAC key used to sign each webhook body so the receiver can verify it came from Tevrin. Stored encrypted; it's never shown again."
                     maxLength={limits.secretMax}
                     error={chErrors?.secret?.message}
                     inputProps={secretField}

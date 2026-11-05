@@ -4,7 +4,7 @@ using Aide.Cli.Config;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>FR-156: `aide stack catalog|show|set|detect`.</summary>
+/// <summary>FR-156: `tevrin stack catalog|show|set|detect`.</summary>
 internal static class StackCommands
 {
     private const string None = "none";
@@ -111,7 +111,7 @@ internal static class StackCommands
         var command = new Command(
             "detect",
             "Suggest a stack from a connected repository's files. Nothing is stored. Exit 4 for GIT_NOT_CONNECTED. " +
-            "For github_pat, the access token is read from AIDE_GIT_TOKEN, never from a flag.")
+            "For github_pat, the access token is read from TEVRIN_GIT_TOKEN or AIDE_GIT_TOKEN, never from a flag.")
         {
             repo, provider, gitRef, instance, connection,
         };
@@ -119,7 +119,7 @@ internal static class StackCommands
         factory.SetHandler(command, async (context, cancellationToken) =>
         {
             var (providerId, repoId) = ResolveRepo(context.Get(repo) ?? string.Empty, context.Get(provider));
-            var token = providerId == "github_pat" ? context.Host.GetEnvironmentVariable(EnvironmentVariables.GitToken) : null;
+            var token = providerId == "github_pat" ? EnvironmentVariables.GitToken.Read(context.Host.GetEnvironmentVariable) : null;
             var request = new DetectStackRequest(new DetectStackGitRequest(
                 providerId,
                 context.Get(instance),
@@ -305,7 +305,7 @@ internal sealed record StackPicks(
 }
 
 /// <summary>
-/// FR-156: the stack options of `aide stack set` and `aide version start`, and how they apply to a composition. The API
+/// FR-156: the stack options of `tevrin stack set` and `tevrin version start`, and how they apply to a composition. The API
 /// takes a whole composition (a left-out layer is None), so the options are merged into the current one.
 /// </summary>
 internal sealed class StackFlags
@@ -333,7 +333,7 @@ internal sealed class StackFlags
             return option;
         }
 
-        _frontend = Flag("frontend", "Frontend option, e.g. fe-nextjs, or none (see 'aide stack catalog').");
+        _frontend = Flag("frontend", "Frontend option, e.g. fe-nextjs, or none (see 'tevrin stack catalog').");
         _backend = Flag("backend", "Backend option, e.g. be-aspnet, or none.");
         _data = Flag("data", "Data option, e.g. data-prisma, or none; optionally with a mode: <option>:baas or <option>:host.");
         _vcs = Flag("vcs", "VCS option, e.g. vcs-github: must be the repository's host.");

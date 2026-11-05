@@ -12,7 +12,7 @@ namespace Aide.Infrastructure.Deployments;
 /// <item>Create: <c>POST /{account_slug}/sites</c> with <c>repo {provider, id, repo_path, repo_branch, cmd, dir, base,
 /// allowed_branches, installation_id}</c>. GitHub needs the Netlify GitHub App installation id, read from another site of
 /// the account linked to the same GitHub owner; without one: <c>PLATFORM_GIT_NOT_CONNECTED</c>. GitLab and Bitbucket
-/// (D-V4-16): AIDE adds a push webhook to <c>https://api.netlify.com/hooks/&lt;provider&gt;</c> and a read-only deploy key from
+/// (D-V4-16): Tevrin adds a push webhook to <c>https://api.netlify.com/hooks/&lt;provider&gt;</c> and a read-only deploy key from
 /// <c>POST /deploy_keys</c> to the repository through the project's Git binding (<see cref="IGitHostRepoLinks"/>), then
 /// creates the site with <c>deploy_key_id</c>. A retry reuses what is there. The webhook goes first, so a connection that
 /// can't add it stops setup before anything is made on Netlify.</item>

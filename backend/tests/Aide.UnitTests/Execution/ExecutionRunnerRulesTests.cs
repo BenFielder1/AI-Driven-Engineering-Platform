@@ -218,7 +218,7 @@ public class ExecutionRunnerRulesTests
 
         var message = CodeGeneration.CommitMessage(4, "Add the\nREST API", ["./src/routes.js", "src\\server.js"], stepId);
 
-        Assert.Equal("[AIDE][Phase:execution][Step:4] Add the REST API", message.Subject);
+        Assert.Equal("[Tevrin][Phase:execution][Step:4] Add the REST API", message.Subject);
         Assert.Equal($"Files:\n- src/routes.js\n- src/server.js\n\nAIDE-Step-Id: {stepId:D}", message.Body);
     }
 

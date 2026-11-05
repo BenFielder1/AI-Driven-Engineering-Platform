@@ -1,5 +1,8 @@
-/** Only same-origin app paths are allowed as post-sign-in destinations (no `//host`, schemes or auth pages). */
-export function safeReturnUrl(value: unknown, fallback = '/projects'): string {
+/**
+ * Only same-origin app paths are allowed as post-sign-in destinations (no `//host`, schemes or auth pages). Anything else
+ * lands on Home (FR-207, amends the v1–v5 `/projects` landing).
+ */
+export function safeReturnUrl(value: unknown, fallback = '/home'): string {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) {
     return fallback
   }

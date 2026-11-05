@@ -194,7 +194,7 @@ function BuildConfig({ target: t }: { target: TargetCard }) {
     ['Pre-deploy command', b.preDeployCommand],
   ]
   return (
-    <details className="rounded-lg border border-border/60 bg-background/40">
+    <details className="rounded-lg border border-border/60 bg-background">
       <summary className="min-h-10 cursor-pointer px-3 py-2 text-sm font-medium">Build configuration (derived from the stack)</summary>
       <dl className="grid gap-x-6 gap-y-1 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[max-content_1fr]">
         {rows
@@ -444,7 +444,7 @@ function TargetSetupForm({
   })
 
   const modeOptions = [
-    ...(t.resourceId ? [{ value: 'keep', label: `Keep ${t.name ?? t.resourceId}`, description: 'Only rebind it to the connection above; AIDE checks the setup again.' }] : []),
+    ...(t.resourceId ? [{ value: 'keep', label: `Keep ${t.name ?? t.resourceId}`, description: 'Only rebind it to the connection above; Tevrin checks the setup again.' }] : []),
     { value: 'create', label: `Create a new ${name} ${noun}`, description: `Linked to the project's repository, built as shown below.` },
     { value: 'link', label: `Link an existing ${name} ${noun}`, description: `One your connection can reach.` },
   ]
@@ -454,7 +454,7 @@ function TargetSetupForm({
       noValidate
       aria-label={`Set up the ${t.component} on ${name}`}
       onSubmit={(e) => void onSubmit(e)}
-      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/40 p-4"
+      className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background p-4"
     >
       <ErrorSummary title="Check the target's settings" errors={isSubmitted ? fieldErrorSummary(errors, ids) : []} />
       {failure !== null && <SetupError error={failure} target={t} />}
@@ -487,7 +487,7 @@ function TargetSetupForm({
         />
       ) : (
         <p className="text-sm text-muted-foreground">
-          {name} needs no extra connection: AIDE uses the project&apos;s GitHub App installation (or its access token) and turns
+          {name} needs no extra connection: Tevrin uses the project&apos;s GitHub App installation (or its access token) and turns
           on Pages for the repository.
         </p>
       )}
@@ -551,7 +551,7 @@ export function DeploymentTargetCard({
       )}
       {!t.implementedForReal && !t.fakeMode && (
         <Alert tone="info" title={`${name} deployments aren't available yet`}>
-          <p>AIDE can record this target, but it doesn&apos;t deploy to {name} for real yet.</p>
+          <p>Tevrin can record this target, but it doesn&apos;t deploy to {name} for real yet.</p>
         </Alert>
       )}
       <TargetFacts target={t} />
@@ -621,7 +621,7 @@ export function DeploymentTargetCard({
         }}
       >
         <p>
-          AIDE stops deploying the {t.component} to {name}. Nothing is deleted on {name}, and the deployment history is kept.
+          Tevrin stops deploying the {t.component} to {name}. Nothing is deleted on {name}, and the deployment history is kept.
         </p>
       </ConfirmDialog>
     </section>

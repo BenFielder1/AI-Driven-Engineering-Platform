@@ -49,7 +49,7 @@ export function groupModeOptions(capability: Capability) {
         { value: 'link', label: 'Link existing projects', description: 'Pick the project of each part.' },
       ]
     : [
-        { value: 'create', label: 'Create a new project', description: 'AIDE creates it, then puts every part in it.' },
+        { value: 'create', label: 'Create a new project', description: 'Tevrin creates it, then puts every part in it.' },
         { value: 'link', label: 'Link an existing project', description: 'Then, for each part, pick an existing service or create it in this project.' },
       ]
 }

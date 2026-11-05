@@ -4,7 +4,7 @@ using Aide.Cli.Config;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide login` validates a personal API token with GET /api/auth/me before saving it; `aide logout` forgets it.</summary>
+/// <summary>`tevrin login` validates a personal API token with GET /api/auth/me before saving it; `tevrin logout` forgets it.</summary>
 internal static class AuthCommands
 {
     public static Command BuildLogin(CommandFactory factory)
@@ -47,7 +47,8 @@ internal static class AuthCommands
 
             if (context.Settings.TokenSource == SettingSource.Environment)
             {
-                await context.Error.WriteLineAsync("warning: AIDE_TOKEN is set and overrides the saved token.").ConfigureAwait(false);
+                var variable = EnvironmentVariables.Token.SetName(context.Host.GetEnvironmentVariable) ?? EnvironmentVariables.Token.Name;
+                await context.Error.WriteLineAsync($"warning: {variable} is set and overrides the saved token.").ConfigureAwait(false);
             }
 
             if (context.Json)

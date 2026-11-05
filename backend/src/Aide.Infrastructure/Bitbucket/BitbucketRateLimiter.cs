@@ -6,11 +6,11 @@ namespace Aide.Infrastructure.Bitbucket;
 /// <summary>
 /// §4.19, §8 Reliability: the one shared Bitbucket limiter, keyed by connection. Every request sent with a connection's
 /// token (background jobs and request paths alike) takes a token from that connection's bucket (900 per hour,
-/// <see cref="GitHostPollBudget.TryTake"/>), so AIDE stays under Bitbucket's 1,000 requests per hour per user with room for
-/// the user's own tools. Requests made while saving an API token, before a connection exists, take from a bucket per AIDE
+/// <see cref="GitHostPollBudget.TryTake"/>), so Tevrin stays under Bitbucket's 1,000 requests per hour per user with room for
+/// the user's own tools. Requests made while saving an API token, before a connection exists, take from a bucket per Tevrin
 /// user (<see cref="UserKey"/>, same budget), so repeated saves are throttled. A Bitbucket 429 empties the bucket until
 /// <c>Retry-After</c> (else five minutes, <see cref="GitHostPollBudget.BucketAfterBitbucketRateLimited"/>). The buckets are
-/// in memory: AIDE runs one API replica (the M27 OAuth-state precedent); a restart starts every bucket full.
+/// in memory: Tevrin runs one API replica (the M27 OAuth-state precedent); a restart starts every bucket full.
 /// </summary>
 public sealed class BitbucketRateLimiter(TimeProvider time)
 {
@@ -20,7 +20,7 @@ public sealed class BitbucketRateLimiter(TimeProvider time)
     /// <summary>The bucket of a connection.</summary>
     public static string ConnectionKey(Guid connectionId) => $"connection:{connectionId:N}";
 
-    /// <summary>The bucket of an AIDE user's token checks (no connection yet).</summary>
+    /// <summary>The bucket of a Tevrin user's token checks (no connection yet).</summary>
     public static string UserKey(Guid userId) => $"user:{userId:N}";
 
     /// <summary>Takes one request from the bucket: <c>null</c> when allowed, else how long until one is.</summary>
@@ -59,7 +59,7 @@ public sealed class BitbucketRateLimiter(TimeProvider time)
 }
 
 /// <summary>
-/// FR-136, §4.19: Bitbucket (or AIDE's per-connection budget) held back a background job until <see cref="ResetAt"/>. The job
+/// FR-136, §4.19: Bitbucket (or Tevrin's per-connection budget) held back a background job until <see cref="ResetAt"/>. The job
 /// worker re-queues the job for then without counting the attempt (<c>BITBUCKET_RATE_LIMITED</c>); request paths answer 429
 /// <c>UPSTREAM_RATE_LIMITED</c>.
 /// </summary>

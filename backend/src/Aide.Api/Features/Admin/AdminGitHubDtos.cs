@@ -6,7 +6,7 @@ using Aide.Domain.GitHub;
 namespace Aide.Api.Features.Admin;
 
 /// <summary>
-/// The AIDE GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never
+/// The Tevrin GitHub App's status for Admin → Integrations → GitHub (FR-80). Secrets (client secret, private key) are never
 /// returned. <c>source</c> is <c>configuration</c> when <c>GitHub__App__*</c> is set (it takes precedence), <c>database</c>
 /// for an App registered through the manifest flow, and <c>null</c> when <c>status</c> is <c>not_configured</c> (then every
 /// App field is <c>null</c> and <c>permissions</c> is empty). <c>installUrl</c> is
@@ -45,7 +45,7 @@ public sealed record CreateGitHubAppManifestRequest
 
 /// <summary>
 /// A GitHub App manifest (FR-80, §4.14), in GitHub's own field names so the page can post it unchanged (as the
-/// <c>manifest</c> form field, JSON-encoded): name <c>AIDE ({host})</c> (the host of <c>App:PublicBaseUrl</c>); <c>url</c> and <c>setup_url</c> under
+/// <c>manifest</c> form field, JSON-encoded): name <c>Tevrin ({host})</c> (the host of <c>App:PublicBaseUrl</c>); <c>url</c> and <c>setup_url</c> under
 /// <c>App:PublicBaseUrl</c>; <c>redirect_url</c> the manifest callback (<c>/api/admin/integrations/github/callback</c>);
 /// <c>callback_urls</c> the sign-in callback (<c>/api/auth/github/callback</c>); no <c>hook_attributes</c> (GitHub rejects a
 /// localhost webhook URL even when inactive, and needs a URL whenever the object is present), so the App has no webhook; private; and

@@ -59,7 +59,7 @@ public sealed class ManagedDatabaseSecrets(ISecretProtectors protectors)
 
     /// <summary>
     /// §4.22: a usable database (available, expiring or paused, with connection details) as the derivation sees it:
-    /// Supabase's session and transaction pooler URLs (with the password AIDE holds), project URL and keys; Railway's
+    /// Supabase's session and transaction pooler URLs (with the password Tevrin holds), project URL and keys; Railway's
     /// reference; otherwise the stored URI. <c>null</c> when the database isn't usable.
     /// </summary>
     public DerivedEnvDatabase? ForDerivation(ManagedDatabase row)

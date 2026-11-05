@@ -60,7 +60,9 @@ jobs:
           --project src/Aide.Infrastructure --startup-project src/Aide.Api
           --configuration Release --no-build
       - name: CLI packs as a .NET tool (FR-52)
-        run: dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
+        run: |
+          dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
+          dotnet pack src/Aide.Cli.Alias -c Release --no-build -o "$RUNNER_TEMP/nupkg"
       - name: Test (unit, CLI)
         # Integration tests run in the backend-integration shards below.
         timeout-minutes: 10
@@ -145,6 +147,10 @@ jobs:
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-
       - run: npm run build
+      # SPEC §8 Performance (M43): first-load JS for `/` <= 200 KB gzipped, read from the build manifests (+ the
+      # prerendered HTML when present). Exit 1 over budget, exit 2 if the route's scripts can't be found.
+      - name: First-load JS budget for / (200 KB gzipped)
+        run: node ../scripts/ci/check-js-budget.mjs .
 
   manifests:
     name: Manifests (kustomize render + kubeconform)

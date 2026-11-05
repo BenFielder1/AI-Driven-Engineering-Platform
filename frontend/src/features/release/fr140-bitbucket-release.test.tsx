@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import { http } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -60,7 +61,7 @@ describe('Release page on Bitbucket (FR-140)', () => {
     }
   })
 
-  it('FR140_notes_not_fetched_for_host_releases: a GitHub release links its Release and never asks for AIDE notes', async () => {
+  it('FR140_notes_not_fetched_for_host_releases: a GitHub release links its Release and never asks for Tevrin notes', async () => {
     let notesRequests = 0
     server.use(
       http.get('*/api/projects/:id/releases/:releaseId/notes', () => {

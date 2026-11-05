@@ -202,7 +202,7 @@ public sealed partial class CloudflareDeploymentProvider
         }
 
         throw new DeploymentProviderException(
-            DeploymentFailure.Rejected, 409, "Cloudflare doesn't say which Worker version this build uploaded, so AIDE can't roll back to it.", platform: Cloudflare);
+            DeploymentFailure.Rejected, 409, "Cloudflare doesn't say which Worker version this build uploaded, so Tevrin can't roll back to it.", platform: Cloudflare);
     }
 
     private static string TriggerOf(DeploymentTargetRef target, DeploymentEnvironment environment)

@@ -16,7 +16,7 @@ public sealed record DeploymentTargetBindingDto(
     DeploymentUserDto BoundBy,
     PlatformConnectionStatus Status);
 
-/// <summary>The build configuration AIDE derived from the composition (§4.20); each field is <c>null</c> when it doesn't apply.</summary>
+/// <summary>The build configuration Tevrin derived from the composition (§4.20); each field is <c>null</c> when it doesn't apply.</summary>
 public sealed record DeploymentBuildConfigDto(
     string? Framework,
     string? BuildCommand,
@@ -176,7 +176,7 @@ public sealed record DeploymentVerifyDto(DeploymentTargetDto Target, IReadOnlyLi
 /// Create or replace a user environment variable (FR-88, FR-145): the value (up to 64 KB; encrypted, never returned), its
 /// environments (<c>targets</c>: <c>preview</c>, <c>production</c>), whether it is sensitive, the components it applies to
 /// (<c>appliesTo</c>, default <c>["frontend"]</c>) and whether it is public (default: the key has the frontend pack's public
-/// prefix; a prefixed key is always public). A public variable that looks secret, or a key AIDE derives, is
+/// prefix; a prefixed key is always public). A public variable that looks secret, or a key Tevrin derives, is
 /// <c>VALIDATION</c>.
 /// </summary>
 public sealed record PutDeploymentEnvRequest

@@ -13,6 +13,8 @@ import { RelativeTime } from '../projects/relative-time'
 import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { MergeReasons } from './merge-readiness-panel'
 import { useReleases, useRetryRelease, type Release, type ReleaseStatus } from './release-api'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const statusTones: Record<ReleaseStatus, BadgeTone> = {
   in_progress: 'info',
@@ -106,12 +108,12 @@ function AwaitingMerge({ release, pullRequestUrl, host }: { release: Release; pu
       <p>
         {manual
           ? `This project merges manually: merge the ${host.pr} on ${host.host}.`
-          : `AIDE couldn't merge the ${host.pr} itself. Merge it on ${host.host} once it's allowed.`}{' '}
+          : `Tevrin couldn't merge the ${host.pr} itself. Merge it on ${host.host} once it's allowed.`}{' '}
         {host.release
-          ? `AIDE then tags the merge commit and creates the ${host.release}.`
-          : 'AIDE then tags the merge commit with the release notes.'}
+          ? `Tevrin then tags the merge commit and creates the ${host.release}.`
+          : 'Tevrin then tags the merge commit with the release notes.'}
       </p>
-      <MergeReasons reasons={release.mergeReasons ?? []} label="Why AIDE is waiting" />
+      <MergeReasons reasons={release.mergeReasons ?? []} label="Why Tevrin is waiting" />
       {pullRequestUrl && (
         <p>
           <a href={pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
@@ -120,7 +122,7 @@ function AwaitingMerge({ release, pullRequestUrl, host }: { release: Release; pu
         </p>
       )}
       <p className="text-muted-foreground">
-        AIDE checks the {host.pr} every 2 minutes for the first hour, then every 10 minutes, for up to 14 days. If
+        Tevrin checks the {host.pr} every 2 minutes for the first hour, then every 10 minutes, for up to 14 days. If
         it's closed without merging or still unmerged after 14 days, the release fails and an Owner can retry.
       </p>
     </section>
@@ -290,7 +292,7 @@ export function ReleasePanel({ projectId, state, canRelease }: { projectId: stri
     <section
       id="release"
       aria-labelledby="release-panel-title"
-      className="flex scroll-mt-4 flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
+      className={cn(panelClass, 'flex scroll-mt-4 flex-col gap-3 p-4')}
     >
       <h2 id="release-panel-title" className="text-lg">
         Release

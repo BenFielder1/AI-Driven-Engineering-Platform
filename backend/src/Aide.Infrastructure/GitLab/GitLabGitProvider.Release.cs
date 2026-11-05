@@ -24,7 +24,7 @@ internal sealed partial class GitLabGitProvider
     /// <summary>
     /// FR-138: the merge request's <c>detailed_merge_status</c> (re-read while it is transient), the approvals, the target
     /// branch's protection, the connection's access level and the head's CI statuses, mapped by
-    /// <see cref="GitLabMergeReadiness.Map"/>. The draft state AIDE opened it with doesn't count: AIDE marks it ready before
+    /// <see cref="GitLabMergeReadiness.Map"/>. The draft state Tevrin opened it with doesn't count: Tevrin marks it ready before
     /// merging, until it has (<see cref="GitLabMergeReadiness.IgnoringAideDraft"/>). A missing merge request is
     /// <c>pr_not_open</c>.
     /// </summary>
@@ -292,8 +292,8 @@ internal sealed partial class GitLabGitProvider
             {
                 var manual = ReleaseOutcome.Awaiting(
                     stillDraft
-                        ? $"The merge strategy is manual: AIDE never merges. AIDE couldn't mark merge request !{iid} ready; mark it ready and merge it on GitLab."
-                        : $"The merge strategy is manual: AIDE never merges. Merge request !{iid} is ready; merge it on GitLab.",
+                        ? $"The merge strategy is manual: Tevrin never merges. Tevrin couldn't mark merge request !{iid} ready; mark it ready and merge it on GitLab."
+                        : $"The merge strategy is manual: Tevrin never merges. Merge request !{iid} is ready; merge it on GitLab.",
                     refused: false);
                 return manual with { StillDraft = stillDraft };
             }
@@ -301,7 +301,7 @@ internal sealed partial class GitLabGitProvider
             if (stillDraft)
             {
                 // GitLab won't merge a draft: the merge needs someone to mark it ready on GitLab.
-                var draft = ReleaseOutcome.Awaiting($"AIDE couldn't mark merge request !{iid} ready, so GitLab won't merge it.", refused: true);
+                var draft = ReleaseOutcome.Awaiting($"Tevrin couldn't mark merge request !{iid} ready, so GitLab won't merge it.", refused: true);
                 return draft with { StillDraft = true, RefusedReason = MergeReadinessReasonCode.Draft };
             }
 

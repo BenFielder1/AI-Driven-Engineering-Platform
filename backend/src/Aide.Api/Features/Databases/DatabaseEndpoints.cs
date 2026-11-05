@@ -60,12 +60,12 @@ public static class DatabaseEndpoints
 
         databases.MapPost("/preview/reset", ResetPreviewDatabase)
             .WithName("ResetPreviewDatabase")
-            .WithSummary("Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: AIDE connects; Render: over its external URL; Railway: the Owner empties it in Railway and AIDE records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method.")
+            .WithSummary("Reset the preview database (Owner, FR-148): a preview_database_reset job empties its schema (Supabase, External: Tevrin connects; Render: over its external URL; Railway: the Owner empties it in Railway and Tevrin records the reset) and, for Supabase BaaS, re-applies the base commit's migrations. Clears PREVIEW_DATABASE_DIVERGED; the next backend preview's pre-deploy re-applies every migration. Answers 202 with the job and method.")
             .Produces<PreviewDatabaseResetDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION (the preview database isn't separate from production: AIDE never resets it)"),
+                (StatusCodes.Status400BadRequest, "VALIDATION (the preview database isn't separate from production: Tevrin never resets it)"),
                 (StatusCodes.Status404NotFound, "NOT_FOUND (project, or no preview database)"),
                 (StatusCodes.Status409Conflict, "INVALID_STATE (a preview rollout or reset is running, or the preview database isn't available yet)"));
 

@@ -85,7 +85,7 @@ public static class PathRules
     }
 
     /// <summary>
-    /// A path under <c>.aide/</c> (any case): the project's own rules for AIDE, which only humans edit. The Guardian rejects
+    /// A path under <c>.aide/</c> (any case): the project's own rules for Tevrin, which only humans edit. The Guardian rejects
     /// agent output there even when the step declares it, and plans may not declare it (§4.6, Decisions).
     /// </summary>
     public static bool IsAgentForbidden(string normalisedPath)

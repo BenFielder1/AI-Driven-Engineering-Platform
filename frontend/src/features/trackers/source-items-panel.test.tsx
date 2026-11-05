@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -107,7 +108,7 @@ describe('Refinement → Source items (FR-171, FR-173)', () => {
       seedArtifact(p, { type: 'source_items', content: '# v2', status: 'locked' })
     })
     await openArtifact(project, 'source_items', 1)
-    expect(await screen.findByText(/snapshots AIDE writes and locks with each import/)).toBeInTheDocument()
+    expect(await screen.findByText(/snapshots Tevrin writes and locks with each import/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Restore/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit as new draft' })).not.toBeInTheDocument()
   })
@@ -125,7 +126,7 @@ describe('Refinement → Source items (FR-171, FR-173)', () => {
       seedSourceImport(p.id, { provider: 'linear', status: 'queued', errorCode: 'TRACKER_RATE_LIMITED', items: [], itemCount: 0, completedAt: null })
     })
     const { panel } = await open(project)
-    expect(within(panel).getByRole('status')).toHaveTextContent('Linear is rate limiting requests. AIDE will retry.')
+    expect(within(panel).getByRole('status')).toHaveTextContent('Linear is rate limiting requests. Tevrin will retry.')
     expect(within(panel).queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
   })
 

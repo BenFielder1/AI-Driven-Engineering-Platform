@@ -11,7 +11,7 @@ namespace Aide.Infrastructure.Deployments;
 /// Render deploys (§4.20): preview = <c>PATCH</c> the <c>-preview</c> service's branch, then
 /// <c>POST /v1/services/{id}/deploys {commitId}</c> (SHA-pinned); production adopts the auto-deploy of the merge SHA, else
 /// the same <c>POST</c>. Rollback <c>POST /v1/services/{id}/rollback {deployId}</c>; logs <c>GET /v1/logs</c> (build).
-/// AIDE deployment ids are <c>service|deploy</c> (<see cref="RenderRules.DeploymentId"/>).
+/// Tevrin deployment ids are <c>service|deploy</c> (<see cref="RenderRules.DeploymentId"/>).
 /// </summary>
 public sealed partial class RenderDeploymentProvider
 {

@@ -106,7 +106,7 @@ export function WizardBitbucketRepository({
           <SelectField
             id={connectionFieldId}
             label="Bitbucket connection"
-            hint="The Bitbucket account AIDE uses for this project."
+            hint="The Bitbucket account Tevrin uses for this project."
             value={connectionId}
             error={connectionError}
             onChange={(e) => {
@@ -141,7 +141,7 @@ export function WizardBitbucketRepository({
             )}
           </p>
           {selected && empty === false && !importing && (
-            <Alert tone="warning" title="This repository has code. AIDE will build on it">
+            <Alert tone="warning" title="This repository has code. Tevrin will build on it">
               <p>
                 The repository is treated as an import that was never released: the Repository Analyst reads the code
                 first, and the first specification covers what is already there. Import it instead to say which version is

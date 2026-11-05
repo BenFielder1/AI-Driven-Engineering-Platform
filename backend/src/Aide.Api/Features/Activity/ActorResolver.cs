@@ -10,7 +10,7 @@ namespace Aide.Api.Features.Activity;
 /// </summary>
 public static class ActorResolver
 {
-    public const string SystemDisplayName = "AIDE";
+    public const string SystemDisplayName = "Tevrin";
     public const string DeletedUserName = "Deleted user";
 
     public static async Task<Func<string, ActorDto>> ForActorsAsync(AideDbContext db, IEnumerable<string> actors, CancellationToken cancellationToken)

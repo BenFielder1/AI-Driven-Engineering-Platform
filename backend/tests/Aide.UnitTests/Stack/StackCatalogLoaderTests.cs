@@ -16,9 +16,9 @@ public class StackCatalogLoaderTests
 
         Assert.Empty(result.Errors);
         Assert.NotNull(result.Catalog);
-        Assert.Equal("1.2.0", result.Catalog.Version);
+        Assert.Equal("1.2.1", result.Catalog.Version); // FR-199: 1.2.1 renames the product in the agent text
         Assert.Matches("^[0-9a-f]{64}$", result.Catalog.ContentHash);
-        Assert.Equal("stack@1.2.0", result.Catalog.Label);
+        Assert.Equal("stack@1.2.1", result.Catalog.Label);
         Assert.All(result.Packs, p => Assert.True(p.Loaded, string.Join(" | ", p.Errors)));
     }
 

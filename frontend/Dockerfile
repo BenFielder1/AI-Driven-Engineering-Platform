@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# AIDE web image (FR-103): the Next.js standalone output run by the custom server (server.ts), which serves the app,
+# Tevrin web image (FR-103): the Next.js standalone output run by the custom server (server.ts), which serves the app,
 # proxies /api (incl. SignalR WebSockets) to BACKEND_URL (read at runtime), sets the security headers and writes
 # redacted JSON request logs. Non-root, PORT=8080, works with a read-only root filesystem (/tmp writable).
 # Build context: frontend/   (docker build -f frontend/Dockerfile frontend)
@@ -29,7 +29,7 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/server.ts ./server.ts
 COPY --from=build /app/src/lib/env.ts /app/src/lib/log-redaction.ts ./src/lib/
-COPY --from=build /app/src/server/api-proxy.ts /app/src/server/request-log.ts /app/src/server/security-headers.ts ./src/server/
+COPY --from=build /app/src/server/api-proxy.ts /app/src/server/request-log.ts /app/src/server/security-headers.ts /app/src/server/seo.ts ./src/server/
 COPY --from=build /app/node_modules/zod ./node_modules/zod
 # Read-only root FS: Next's runtime cache lives in /tmp (an emptyDir in Kubernetes).
 RUN rm -rf .next/cache && ln -s /tmp .next/cache

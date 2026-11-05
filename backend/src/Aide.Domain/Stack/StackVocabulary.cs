@@ -180,7 +180,7 @@ public static class PackVocabulary
     /// <summary>§4.18: the layer-path placeholders of pack globs (<c>{app}</c> is the backend path, else the frontend path).</summary>
     public static IReadOnlyList<string> GlobPlaceholders { get; } = ["{fe}", "{be}", "{app}"];
 
-    /// <summary>§4.16: the section no agent loads (AIDE's own rules replace it).</summary>
+    /// <summary>§4.16: the section no agent loads (Tevrin's own rules replace it).</summary>
     public const string AgentAutonomySection = "Agent autonomy";
 
     /// <summary>The whole adapted skill, in <c>agentSections</c>.</summary>

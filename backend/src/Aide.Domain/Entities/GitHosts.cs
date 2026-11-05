@@ -47,7 +47,7 @@ public enum GitHostKind
     Bitbucket = 1,
 }
 
-/// <summary>A provider identity linked to an AIDE user, used for sign-in matching (FR-131, FR-134, D-V4-18); table
+/// <summary>A provider identity linked to a Tevrin user, used for sign-in matching (FR-131, FR-134, D-V4-18); table
 /// <c>user_external_logins</c>. Unique by (provider, instance, external user id), with a NULL instance (GitHub, or a removed
 /// instance) counted as one value. Existing <c>users.github_id</c> values are backfilled as
 /// <see cref="ExternalLoginProvider.Github"/> rows; <c>users.github_id</c> stays for v2 code paths.</summary>
@@ -119,7 +119,7 @@ public sealed class GitConnection
     /// <summary>Granted scopes (OAuth scopes, or a token's scopes as validated).</summary>
     public IReadOnlyList<string> Scopes { get; set; } = [];
 
-    /// <summary>FR-131: the access token's own expiry (GitLab PAT <c>expires_at</c>); AIDE warns 14 days before it.</summary>
+    /// <summary>FR-131: the access token's own expiry (GitLab PAT <c>expires_at</c>); Tevrin warns 14 days before it.</summary>
     public DateTimeOffset? ExpiresAt { get; set; }
 
     public GitConnectionStatus Status { get; set; } = GitConnectionStatus.Valid;

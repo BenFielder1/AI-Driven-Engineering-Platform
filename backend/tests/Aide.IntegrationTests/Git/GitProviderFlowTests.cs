@@ -70,7 +70,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var pr = await PullRequestAsync(fixture.Viewer.Client, id);
         Assert.True(pr.ComparisonAvailable);
         Assert.Equal((GitProvider.Local, "main", branch, (int?)null, (string?)null, false), (pr.Provider, pr.BaseBranch, pr.HeadBranch, pr.Number, pr.Url, pr.Truncated));
-        Assert.Equal(["[AIDE][Phase:execution][Step:2] Step 2", "[AIDE][Phase:execution][Step:1] Step 1"], pr.Commits.Select(c => c.Subject));
+        Assert.Equal(["[Tevrin][Phase:execution][Step:2] Step 2", "[Tevrin][Phase:execution][Step:1] Step 1"], pr.Commits.Select(c => c.Subject));
         Assert.All(pr.Commits, c => Assert.Null(c.Url));
         Assert.Equal(
             [new PullRequestFileDto("src/part1.js", PullRequestFileStatus.Added), new PullRequestFileDto("src/part2.js", PullRequestFileStatus.Added)],
@@ -191,7 +191,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var create = api.Requests.Single(r => r.Method == "POST" && r.Path == Pulls);
         Assert.Equal($"Bearer {Token}", create.Authorization);
         using var body = JsonDocument.Parse(create.Body);
-        Assert.Equal($"[AIDE] {fixture.Project.Name} — Implementation (2 steps)", body.RootElement.GetProperty("title").GetString());
+        Assert.Equal($"[Tevrin] {fixture.Project.Name} — Implementation (2 steps)", body.RootElement.GetProperty("title").GetString());
         Assert.Equal((branch, "main"), (body.RootElement.GetProperty("head").GetString(), body.RootElement.GetProperty("base").GetString()));
         var description = body.RootElement.GetProperty("body").GetString()!;
         Assert.Contains("> Express API.", description, StringComparison.Ordinal);
@@ -591,7 +591,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var patch = Assert.Single(api.Requests, r => r.Method == "PATCH");
         using (var body = JsonDocument.Parse(patch.Body))
         {
-            Assert.Equal($"[AIDE] {fixture.Project.Name} — Implementation (1 step)", body.RootElement.GetProperty("title").GetString());
+            Assert.Equal($"[Tevrin] {fixture.Project.Name} — Implementation (1 step)", body.RootElement.GetProperty("title").GetString());
             Assert.Contains("### Plan: implementation_plan v1 (1 steps)", body.RootElement.GetProperty("body").GetString(), StringComparison.Ordinal);
         }
 

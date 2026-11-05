@@ -38,8 +38,8 @@ public sealed record UpdateBitbucketConsumerRequest
 }
 
 /// <summary>
-/// FR-134 sign-in: Bitbucket's verified email belongs to an existing AIDE account that isn't linked to this Bitbucket
-/// identity. AIDE never links silently (D-V4-18): the user signs in to that account (any method) and confirms with
+/// FR-134 sign-in: Bitbucket's verified email belongs to an existing Tevrin account that isn't linked to this Bitbucket
+/// identity. Tevrin never links silently (D-V4-18): the user signs in to that account (any method) and confirms with
 /// <c>POST /api/auth/bitbucket/link</c>, or cancels with <c>DELETE /api/auth/bitbucket/link</c>. Expires after 10 minutes.
 /// </summary>
 public sealed record BitbucketPendingLinkDto(string Login, string Email, DateTimeOffset ExpiresAt);
@@ -116,7 +116,7 @@ public sealed record BitbucketOwnersDto(IReadOnlyList<BitbucketWorkspaceDto> Wor
 
 /// <summary>
 /// Create a Bitbucket repository (FR-135) with the caller's connection <c>connectionId</c> in workspace <c>owner</c> and
-/// project <c>project</c> (its key; Bitbucket requires one). The slug is Bitbucket's slug of <c>name</c>. AIDE then pushes an
+/// project <c>project</c> (its key; Bitbucket requires one). The slug is Bitbucket's slug of <c>name</c>. Tevrin then pushes an
 /// initial commit with a README to <c>main</c>, so the default branch exists. <c>private</c> defaults to true.
 /// </summary>
 public sealed record CreateBitbucketRepoRequest

@@ -61,7 +61,7 @@ public sealed partial class ProjectCreator(
     TimeProvider time,
     ILogger<ProjectCreator> logger)
 {
-    /// <summary>The <c>request</c> recorded on an imported baseline version (it was never developed in AIDE).</summary>
+    /// <summary>The <c>request</c> recorded on an imported baseline version (it was never developed in Tevrin).</summary>
     public const string ImportedRequest = "Imported baseline.";
 
     public async Task<Result<Project>> CreateAsync(CreateProjectRequest request, Guid ownerId, string actor, CancellationToken cancellationToken)

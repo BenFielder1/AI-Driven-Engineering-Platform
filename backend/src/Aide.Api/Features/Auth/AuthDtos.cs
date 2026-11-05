@@ -45,7 +45,7 @@ public sealed record UserDto(
     string? AvatarUrl,
     bool GithubLinked)
 {
-    /// <summary>FR-177: the user turned off "Credit me on commits made by AIDE".</summary>
+    /// <summary>FR-177: the user turned off "Credit me on commits made by Tevrin".</summary>
     public bool CommitCreditOptOut { get; init; }
 
     public static UserDto From(AppUser user)
@@ -67,7 +67,7 @@ public sealed record UpdateCurrentUserRequest
 
 /// <summary>
 /// Which sign-in providers are available (the frontend hides "Continue with GitHub" when <c>github</c> is false).
-/// <c>githubMode</c> (D-V2-7) says how GitHub sign-in works: <c>app</c> (the AIDE GitHub App's user authorization flow
+/// <c>githubMode</c> (D-V2-7) says how GitHub sign-in works: <c>app</c> (the Tevrin GitHub App's user authorization flow
 /// with PKCE), <c>oauth</c> (the v1 OAuth App, only while no App is registered) or <c>none</c>; <c>github</c> is
 /// <c>githubMode != none</c>. <c>gitlab</c> (FR-131) lists the enabled GitLab instances with an OAuth application: one
 /// "Continue with GitLab" button each (<c>GET /api/auth/gitlab/start</c> with <c>instanceId</c> and <c>mode=signin</c>).

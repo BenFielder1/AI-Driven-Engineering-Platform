@@ -179,7 +179,7 @@
         "severity": "critical"
       },
       {
-        "item": "No CI job, script or package script deploys with the Railway CLI; AIDE triggers every deploy",
+        "item": "No CI job, script or package script deploys with the Railway CLI; Tevrin triggers every deploy",
         "category": "architecture",
         "severity": "major"
       },

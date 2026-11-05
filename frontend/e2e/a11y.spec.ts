@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { readFileSync } from 'node:fs'
 
 import { AxeBuilder } from '@axe-core/playwright'
@@ -37,7 +38,43 @@ const targets: Target[] = [
     name: 'login',
     path: () => '/login',
     signedIn: false,
-    ready: (p) => p.getByRole('heading', { level: 1, name: 'Sign in to AIDE' }),
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Sign in to Tevrin' }),
+  },
+  {
+    // FR-223: the split-screen sign-up page (the intro panel shows from lg up; Desktop Chrome is 1280 px wide).
+    name: 'register',
+    path: () => '/register',
+    signedIn: false,
+    ready: (p) => p.getByRole('heading', { level: 1, name: 'Create your Tevrin account' }),
+  },
+  // FR-210, SPEC §8: every marketing page (shell, header, footer), signed out, in light and dark.
+  ...(
+    [
+      ['marketing home', '/', 'Ship software with AI agents, under human control.'],
+      ['marketing product', '/product', 'Everything Tevrin does, from idea to release'],
+      ['marketing how it works', '/how-it-works', 'How Tevrin takes an idea to a release'],
+      ['marketing integrations', '/integrations', 'Works with the tools you already use'],
+      ['marketing self-host', '/self-host', 'Run Tevrin on your own infrastructure'],
+      ['marketing security', '/security', 'Security at Tevrin'],
+      ['marketing faq', '/faq', 'Frequently asked questions'],
+      ['marketing changelog', '/changelog', 'Changelog'],
+      ['marketing 404', '/no-such-page', 'Page not found'],
+    ] as const
+  ).map(
+    ([name, path, h1]): Target => ({
+      name,
+      path: () => path,
+      signedIn: false,
+      ready: (p) => p.getByRole('heading', { level: 1, name: h1, exact: true }),
+    }),
+  ),
+  {
+    // FR-207: Home, the signed-in landing page (the checklist, Recent projects with the fixture's projects, unread
+    // notifications). SPEC §8: axe on /home in light and dark.
+    name: 'home',
+    path: () => '/home',
+    signedIn: true,
+    ready: (p) => p.getByRole('list', { name: 'Recent projects' }),
   },
   {
     name: 'projects list',
@@ -113,12 +150,6 @@ const targets: Target[] = [
     ready: (p) => p.getByRole('list', { name: 'Notifications' }),
   },
   {
-    name: 'register',
-    path: () => '/register',
-    signedIn: false,
-    ready: (p) => p.getByRole('heading', { level: 1, name: 'Create your AIDE account' }),
-  },
-  {
     name: 'account',
     path: () => '/account',
     signedIn: true,
@@ -137,8 +168,9 @@ const targets: Target[] = [
 
 /**
  * NFR-A11Y2 (FR-53, FR-54): the v2 shell in its interactive states: the sidebar in project mode with the header's
- * live indicator and stage stepper (1440 px), the drawer opened at 375 px, the command palette, and the user and theme
- * menus. Each state is checked in both themes.
+ * live indicator and stage stepper (1440 px), the drawer opened at 375 px, the command palette (with its FR-209 Actions
+ * group), and the user menu (which holds the theme choice and the Docs link since FR-206). Each state is checked in both
+ * themes.
  */
 interface ShellState {
   name: string

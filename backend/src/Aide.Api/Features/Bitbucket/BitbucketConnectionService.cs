@@ -54,7 +54,7 @@ public sealed partial class BitbucketConnectionService(
     /// FR-134 token fallback: validates the API token with <c>GET /2.0/user</c> (Basic <c>email:token</c>; rejected →
     /// <c>CREDENTIAL_INVALID</c>), then checks every required scope (<see cref="CheckTokenScopesAsync"/>); the token is saved
     /// only when all nine are verified, otherwise <c>CONNECTION_SCOPE_INSUFFICIENT</c> lists the missing ones (<c>details</c>)
-    /// and the ones AIDE couldn't confirm (<c>unverifiableScopes</c>). Then creates or replaces the caller's connection for
+    /// and the ones Tevrin couldn't confirm (<c>unverifiableScopes</c>). Then creates or replaces the caller's connection for
     /// that Bitbucket account. These calls take from the caller's own budget (§4.19, 900 an hour), so repeated saves are
     /// throttled (<c>UPSTREAM_RATE_LIMITED</c>). Nothing is saved on failure.
     /// </summary>
@@ -300,7 +300,7 @@ public sealed partial class BitbucketConnectionService(
         return Result.Failure<T>(new DomainError(ErrorCodes.GitNotConnected, "Bitbucket rejected the connection. Connect Bitbucket again under Account → Connections → Bitbucket."));
     }
 
-    /// <summary>The AIDE error for a Bitbucket failure other than 401.</summary>
+    /// <summary>The Tevrin error for a Bitbucket failure other than 401.</summary>
     public static DomainError UpstreamError(BitbucketApiException exception)
     {
         ArgumentNullException.ThrowIfNull(exception);

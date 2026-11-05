@@ -37,7 +37,7 @@ namespace Aide.Api.Features.Release;
 /// the version and the project become <c>awaiting_merge</c> with the merge-readiness reasons (FR-84), Owners are notified
 /// and the merge poll (§4.14) waits for the merge on GitHub.</item>
 /// <item>FR-64: once tagged, a GitHub project gets its GitHub Release (<see cref="GitHubReleasePublisher"/>). FR-140: a
-/// GitLab project's provider merges the merge request and creates the GitLab Release (with the annotated tag and AIDE's
+/// GitLab project's provider merges the merge request and creates the GitLab Release (with the annotated tag and Tevrin's
 /// notes) itself; its URL is recorded where the GitHub Release URL is.</item>
 /// </list>
 /// Transient failures retry the job; when its retries run out, <see cref="ReleaseJobEndedHook"/> fails the attempt.
@@ -359,9 +359,9 @@ public sealed partial class ReleaseJobHandler(
     }
 
     /// <summary>
-    /// FR-140: the host accepted AIDE's merge and is still performing it. Within <see cref="ReleaseRules.SubmittedMergeCeiling"/>
+    /// FR-140: the host accepted Tevrin's merge and is still performing it. Within <see cref="ReleaseRules.SubmittedMergeCeiling"/>
     /// of the submission the job looks again shortly without counting an attempt (the attempt keeps
-    /// <c>merge_submitted_at</c>, so the retry knows the merge is AIDE's own); after it, the attempt becomes
+    /// <c>merge_submitted_at</c>, so the retry knows the merge is Tevrin's own); after it, the attempt becomes
     /// <c>awaiting_merge</c> and the merge poll takes over (its 14-day ceiling, <c>PR_CLOSED</c>).
     /// </summary>
     private async Task MergePendingAsync(Project project, Guid releaseId, ReleaseOutcome outcome, CancellationToken cancellationToken)
@@ -378,18 +378,18 @@ public sealed partial class ReleaseJobHandler(
         if (reasons.All(r => r.Code == MergeReadinessReasonCode.ManualStrategy))
         {
             reasons.Add(new Git.MergeReadinessReasonDto(
-                MergeReadinessReasonCode.ChecksPending, "The Git host accepted the merge but hasn't finished it after an hour; AIDE keeps checking and tags it once merged."));
+                MergeReadinessReasonCode.ChecksPending, "The Git host accepted the merge but hasn't finished it after an hour; Tevrin keeps checking and tags it once merged."));
         }
 
         await completion.AwaitMergeAsync(releaseId, project.MergeStrategy, reasons, cancellationToken);
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the host is still performing AIDE's merge after an hour; the merge poll takes over")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: the host is still performing Tevrin's merge after an hour; the merge poll takes over")]
     private static partial void LogMergePendingTooLong(ILogger logger, Guid projectId);
 
     /// <summary>
     /// FR-140: puts "merge submitted" on the attempt right before the host's merge call (a Bitbucket merge can finish
-    /// asynchronously): a rollback then waits for the release, and a retry knows a merged pull request is AIDE's own.
+    /// asynchronously): a rollback then waits for the release, and a retry knows a merged pull request is Tevrin's own.
     /// </summary>
     private async Task RecordMergeSubmittedAsync(Guid releaseId, CancellationToken cancellationToken)
     {
@@ -436,13 +436,13 @@ public sealed partial class ReleaseJobHandler(
         // FR-138: AIDE couldn't take the merge request out of draft: say so (readiness ignores the draft until AIDE marked it ready).
         if (outcome.StillDraft && reasons.All(r => r.Code != MergeReadinessReasonCode.Draft))
         {
-            reasons.Add(new Git.MergeReadinessReasonDto(MergeReadinessReasonCode.Draft, "AIDE couldn't mark the merge request ready; it is still a draft."));
+            reasons.Add(new Git.MergeReadinessReasonDto(MergeReadinessReasonCode.Draft, "Tevrin couldn't mark the merge request ready; it is still a draft."));
         }
 
         if (project.MergeStrategy == MergeStrategy.Manual && reasons.All(r => r.Code != MergeReadinessReasonCode.ManualStrategy))
         {
             reasons.Insert(0, new Git.MergeReadinessReasonDto(
-                MergeReadinessReasonCode.ManualStrategy, "The project's merge strategy is manual: AIDE never merges; merge the pull request on the Git host."));
+                MergeReadinessReasonCode.ManualStrategy, "The project's merge strategy is manual: Tevrin never merges; merge the pull request on the Git host."));
         }
 
         return reasons;

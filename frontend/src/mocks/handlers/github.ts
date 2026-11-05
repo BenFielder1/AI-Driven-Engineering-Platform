@@ -20,7 +20,7 @@ export interface StoredGitHubConnection {
 
 export const INSTALL_URL = 'https://github.com/apps/aide-localhost/installations/new'
 
-/** The §4.14 permissions the AIDE App manifest asks for (GitHub's own names). */
+/** The §4.14 permissions the Tevrin App manifest asks for (GitHub's own names). */
 export const manifestPermissions: Record<string, string> = {
   contents: 'write',
   pull_requests: 'write',
@@ -49,7 +49,7 @@ const notConfigured = (): App => ({
 /** In-memory GitHub App backend for tests (reset after each test by src/test/setup.ts). */
 export const githubDb = {
   app: notConfigured(),
-  /** GitHub connections by AIDE user id. */
+  /** GitHub connections by Tevrin user id. */
   connections: {} as Record<string, StoredGitHubConnection>,
   installations: [] as Installation[],
   repos: [] as Repo[],
@@ -121,7 +121,7 @@ export function seedRepo(overrides: Partial<Repo> = {}): Repo {
 
 /**
  * Connects the signed-in user's GitHub account (FR-81) with one installation on their own account, and the user and
- * an `acme` organisation as owners (AIDE installed on both).
+ * an `acme` organisation as owners (Tevrin installed on both).
  */
 export function connectGitHub(userId: string, overrides: Partial<StoredGitHubConnection> = {}) {
   if (githubDb.app.status !== 'configured') {
@@ -219,7 +219,7 @@ export const githubHandlers = [
       postUrl: `${base}?state=${state}`,
       state,
       manifest: {
-        name: 'AIDE (localhost)',
+        name: 'Tevrin (localhost)',
         url: 'http://localhost:8080',
         redirect_url: 'http://localhost:8080/api/admin/integrations/github/callback',
         callback_urls: ['http://localhost:8080/api/auth/github/callback'],

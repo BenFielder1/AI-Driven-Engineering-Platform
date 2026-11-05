@@ -1,4 +1,4 @@
-# AIDE on Railway (FR-107 to FR-112)
+# Tevrin on Railway (FR-107 to FR-112)
 
 One Railway project, `aide`, with two environments: `preview` and `production`. Each environment has:
 
@@ -200,7 +200,7 @@ The smoke test runs `GET /api/projects` and opens the live-updates WebSocket as 
 
 URLs are per environment, so register a separate GitHub App (or OAuth App) for `preview` and for `production`.
 
-- **AIDE GitHub App (recommended):** sign in as Admin, then go to Admin → Integrations → GitHub → Register. The manifest
+- **Tevrin GitHub App (recommended):** sign in as Admin, then go to Admin → Integrations → GitHub → Register. The manifest
   uses `App__PublicBaseUrl`, so its callback and setup URLs point at this environment's domain. The App's keys are
   stored encrypted with this environment's Data Protection keys.
 - **OAuth App (v1 sign-in, only while no GitHub App exists):**
@@ -226,7 +226,7 @@ per environment):
   override a DB-registered instance with the same host and are validated at start-up, so a bad value stops `api`.
 - **Private-network GitLab hosts are refused on Railway.** `GitLab__AllowPrivateNetworks=false` (literal in
   `railway.ts`, SPEC §8): a host resolving to 10/8, 172.16/12, 192.168/16, fc00::/7 or `*.railway.internal` is
-  rejected, because those addresses are AIDE's own services. Loopback, link-local and metadata addresses are refused
+  rejected, because those addresses are Tevrin's own services. Loopback, link-local and metadata addresses are refused
   everywhere. A self-managed GitLab used from Railway must be reachable on a public address.
 - **Bitbucket Cloud (M28):** the same pattern with callback `https://<web-domain>/api/auth/bitbucket/callback` and
   `Bitbucket__OAuth__ClientId` / the `Bitbucket__OAuth__ClientSecret` secret.

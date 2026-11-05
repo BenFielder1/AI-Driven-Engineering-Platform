@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -58,7 +59,7 @@ describe('Merge readiness (FR-84)', () => {
     expect(within(panel).getByRole('list', { name: 'Why a merge on GitHub is needed' })).toHaveTextContent(
       'The default branch requires 1 approving review.',
     )
-    expect(within(panel).getByText(/Merge strategy: AIDE merges the pull request/)).toBeInTheDocument()
+    expect(within(panel).getByText(/Merge strategy: Tevrin merges the pull request/)).toBeInTheDocument()
     // The pre-release gate card shows the same verdict.
     const gate = within(screen.getByRole('region', { name: 'Gates' })).getByRole('listitem', { name: 'Release approval' })
     expect(await within(gate).findByText('A merge on GitHub will be needed')).toBeInTheDocument()
@@ -90,7 +91,7 @@ describe('Merge readiness (FR-84)', () => {
 
     await user.click(within(panel).getByRole('button', { name: 'Check again' }))
 
-    expect(await within(panel).findByText('AIDE will merge automatically')).toBeInTheDocument()
+    expect(await within(panel).findByText('Tevrin will merge automatically')).toBeInTheDocument()
     // The mock records only refresh=true checks.
     expect(requestsTo('GET', '/git/merge-readiness')).toHaveLength(1)
     expect(within(panel).queryByRole('list', { name: 'Why a merge on GitHub is needed' })).not.toBeInTheDocument()
@@ -133,7 +134,7 @@ describe('Awaiting merge (FR-65)', () => {
       'href',
       'https://github.com/acme/inventory/pull/42',
     )
-    expect(within(panel).getByRole('list', { name: 'Why AIDE is waiting' })).toHaveTextContent('requires 1 approving review')
+    expect(within(panel).getByRole('list', { name: 'Why Tevrin is waiting' })).toHaveTextContent('requires 1 approving review')
     expect(within(panel).getByText(/every 2 minutes for the first hour, then every 10 minutes, for up to 14 days/)).toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: 'Retry release' })).not.toBeInTheDocument()
     // The project status reads Awaiting merge (header badge and attempt badge).
@@ -167,7 +168,7 @@ describe('Awaiting merge (FR-65)', () => {
     expect(await within(panel).findByText('The release stopped waiting for the merge')).toBeInTheDocument()
     expect(
       within(panel).getByText(
-        "The pull request wasn't merged within 14 days, so AIDE stopped waiting. Merge it on GitHub or fix what blocks it, then retry the release.",
+        "The pull request wasn't merged within 14 days, so Tevrin stopped waiting. Merge it on GitHub or fix what blocks it, then retry the release.",
       ),
     ).toBeInTheDocument()
   })

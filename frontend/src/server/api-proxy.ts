@@ -134,7 +134,7 @@ export interface Problem {
 export const upstreamProblem: Problem = {
   status: 502,
   title: 'Bad Gateway',
-  detail: "The AIDE API couldn't be reached. Try again in a moment.",
+  detail: "The Tevrin API couldn't be reached. Try again in a moment.",
   errorCode: 'UPSTREAM_ERROR',
 }
 

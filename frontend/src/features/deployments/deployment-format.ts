@@ -36,7 +36,7 @@ export const deploymentTargetLabels: Record<DeploymentTarget, string> = {
 }
 
 export const deploymentTriggerLabels: Record<Schemas['DeploymentTrigger'], string> = {
-  auto: 'AIDE',
+  auto: 'Tevrin',
   manual: 'Manual',
   promote: 'Promote',
   redeploy: 'Redeploy',
@@ -56,10 +56,10 @@ export const deploymentProviderLabels: Record<Schemas['DeploymentProvider'], str
 /** The first 7 characters of a commit SHA. */
 export const shortSha = (sha: string) => sha.slice(0, 7)
 
-/** "Ana (Redeploy)", "AIDE" for automatic deployments, "Deleted user (Manual)" when the user is gone. */
+/** "Ana (Redeploy)", "Tevrin" for automatic deployments, "Deleted user (Manual)" when the user is gone. */
 export function triggeredByLabel(d: Pick<Deployment, 'trigger' | 'triggeredBy'>): string {
   if (d.trigger === 'auto') {
-    return 'AIDE'
+    return 'Tevrin'
   }
   const who = d.triggeredBy?.name ?? 'Deleted user'
   return `${who} (${deploymentTriggerLabels[d.trigger]})`
@@ -131,7 +131,7 @@ export const readinessItemLabels: Readonly<Record<string, string>> = {
   connection: 'Connection',
   git_access: 'Repository access',
   required_env: 'Required variables',
-  branch_control: 'AIDE branches not auto-deployed',
+  branch_control: 'Tevrin branches not auto-deployed',
   preview_environment: 'Preview environment',
   plan_notes: 'Plan limits',
 }
@@ -181,7 +181,7 @@ export function capabilityLines(t: Pick<TargetCard, 'capabilities' | 'provider'>
   return [
     c.previews ? 'Preview deployments' : `No previews on ${name}`,
     c.rollback ? 'Rollback to an earlier deployment' : `No rollback on ${name}`,
-    c.shaPinned ? 'Deploys the exact commit AIDE asks for' : `${name} deploys the branch head, not a pinned commit`,
+    c.shaPinned ? 'Deploys the exact commit Tevrin asks for' : `${name} deploys the branch head, not a pinned commit`,
     c.perEnvironmentVariables ? 'Separate variables for preview and production' : 'The same variables for preview and production',
     c.runtimeSecrets ? 'Runtime secrets' : 'No runtime secrets: variables are built into the app',
   ]

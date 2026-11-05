@@ -36,7 +36,7 @@ public sealed partial class GitHubConnections(
 
     /// <summary>
     /// Creates or replaces the user's connection (sign-in through the App, or connect). Returns <c>false</c> when the GitHub
-    /// account is already connected to another AIDE user (unique <c>github_user_id</c>).
+    /// account is already connected to another Tevrin user (unique <c>github_user_id</c>).
     /// </summary>
     public async Task<bool> SaveAsync(Guid userId, long githubUserId, string login, GitHubUserTokens tokens, CancellationToken cancellationToken)
     {
@@ -99,7 +99,7 @@ public sealed partial class GitHubConnections(
         var app = await apps.GetAsync(cancellationToken);
         if (app is null)
         {
-            return NotConnected("No AIDE GitHub App is registered. An Admin registers it under Admin → Integrations → GitHub.");
+            return NotConnected("No Tevrin GitHub App is registered. An Admin registers it under Admin → Integrations → GitHub.");
         }
 
         var connection = await db.GitHubConnections.AsNoTracking().FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);

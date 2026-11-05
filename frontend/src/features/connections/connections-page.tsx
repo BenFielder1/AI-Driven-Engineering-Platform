@@ -27,7 +27,7 @@ import { databasePlatformIds, deploymentPlatformIds, trackerPlatformIds } from '
 import { TrackerReadiness } from '../trackers/tracker-readiness'
 
 const keylessDescriptions: Partial<Record<LlmCredential['provider'], string>> = {
-  ollama: 'Uses the Ollama server configured for AIDE. No key needed.',
+  ollama: 'Uses the Ollama server configured for Tevrin. No key needed.',
   fake: 'Deterministic test replies. No key needed.',
 }
 
@@ -283,7 +283,7 @@ function LlmProvidersSection() {
             </ul>
           </div>
         ) : (
-          <p>The key is removed from AIDE. No project uses it. This can&apos;t be undone.</p>
+          <p>The key is removed from Tevrin. No project uses it. This can&apos;t be undone.</p>
         )}
       </ConfirmDialog>
     </section>
@@ -372,7 +372,7 @@ export function ConnectionsPage({
       <PlatformConnectionSection
         id="issue-trackers"
         title="Issue trackers"
-        description="Import items into a project's Refinement from Jira, Linear, GitHub Issues or GitLab Issues. AIDE only reads from them."
+        description="Import items into a project's Refinement from Jira, Linear, GitHub Issues or GitLab Issues. Tevrin only reads from them."
         providers={trackerPlatformIds}
         includeTrackers
       >

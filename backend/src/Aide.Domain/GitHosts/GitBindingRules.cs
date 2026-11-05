@@ -27,7 +27,7 @@ public sealed record GitConnectionRef(Guid Id, Guid UserId, Guid InstanceId, boo
 /// FR-136: the binding of a GitLab or Bitbucket project to its binding Owner's connection, which all background Git work
 /// uses. The binding is cleared when that Owner loses the role or leaves, or the connection is deleted or invalid; Git jobs
 /// then fail with <c>GIT_NOT_CONNECTED</c>, and another Owner re-binds their own valid connection to the same instance
-/// once AIDE has checked it has developer/write access to the repo. Pure.
+/// once Tevrin has checked it has developer/write access to the repo. Pure.
 /// </summary>
 public static class GitBindingRules
 {

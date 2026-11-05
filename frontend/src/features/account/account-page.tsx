@@ -6,6 +6,8 @@ import { githubLinkHref, useAuthProviders, useCurrentUser } from '../auth/auth-a
 import { NotificationPreferencesSection } from '../notifications/notification-preferences-section'
 import { ApiTokensSection } from './api-tokens-section'
 import { CommitCreditPreference } from './commit-credit-preference'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const roleLabel = { admin: 'Admin', user: 'User' } as const
 
@@ -28,7 +30,7 @@ export function AccountPage({ githubError }: { githubError?: { reason?: string }
         </Alert>
       )}
 
-      <section aria-labelledby="profile-title" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+      <section aria-labelledby="profile-title" className={cn(panelClass, 'p-5')}>
         <h2 id="profile-title" className="mb-4 text-lg">
           Profile
         </h2>
@@ -45,7 +47,7 @@ export function AccountPage({ githubError }: { githubError?: { reason?: string }
         </div>
       </section>
 
-      <section aria-labelledby="github-title" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+      <section aria-labelledby="github-title" className={cn(panelClass, 'p-5')}>
         <h2 id="github-title" className="mb-2 text-lg">
           GitHub
         </h2>

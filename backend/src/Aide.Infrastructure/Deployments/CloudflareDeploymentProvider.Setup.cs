@@ -8,7 +8,7 @@ namespace Aide.Infrastructure.Deployments;
 public sealed partial class CloudflareDeploymentProvider
 {
     /// <summary>
-    /// The Worker's triggers: reuses AIDE's (or the user's) production and preview triggers and creates the missing ones
+    /// The Worker's triggers: reuses Tevrin's (or the user's) production and preview triggers and creates the missing ones
     /// with the repository connection and build token (from the arguments, else from the production trigger).
     /// </summary>
     private async Task<DeploymentSetupResult> WorkerResultAsync(
@@ -92,7 +92,7 @@ public sealed partial class CloudflareDeploymentProvider
 
     /// <summary>
     /// Pages (adopt only): the project must build this repository; previews become <c>custom</c> excluding <c>aide/*</c>
-    /// (AIDE deploys its branches through the API).
+    /// (Tevrin deploys its branches through the API).
     /// </summary>
     private async Task<DeploymentSetupResult> LinkPagesAsync(DeploymentAuth auth, DeploymentTargetRef target, string project, CancellationToken cancellationToken)
     {

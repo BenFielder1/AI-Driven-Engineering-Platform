@@ -39,7 +39,7 @@ interface RefsQuery {
 /**
  * FR-73, FR-141 "Currently released version": for a GitHub App or GitLab repo, its Releases and semver tags, for a
  * Bitbucket repo its semver tags (the wizard preselects one), plus "Never released"; for a URL + token or Local import, the tag typed in (empty: never
- * released), since AIDE can't list those repositories' tags before the project exists.
+ * released), since Tevrin can't list those repositories' tags before the project exists.
  */
 export function ReleasedVersionField({
   id,

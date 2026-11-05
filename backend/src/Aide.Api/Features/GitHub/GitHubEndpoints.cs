@@ -50,7 +50,7 @@ public static class GitHubEndpoints
 
         connection.MapGet("/connect", ConnectGitHub)
             .WithName("ConnectGitHub")
-            .WithSummary("FR-81: redirects to the AIDE GitHub App's user authorization (PKCE) to connect GitHub to the signed-in account without signing in again, then back to returnUrl (a same-origin path). 404 when no App is registered. Browser session only.")
+            .WithSummary("FR-81: redirects to the Tevrin GitHub App's user authorization (PKCE) to connect GitHub to the signed-in account without signing in again, then back to returnUrl (a same-origin path). 404 when no App is registered. Browser session only.")
             .RequireAuthorization(AuthConstants.BrowserSessionPolicy)
             .Produces(StatusCodes.Status302Found)
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -66,7 +66,7 @@ public static class GitHubEndpoints
 
         github.MapGet("/repos", ListGitHubRepos)
             .WithName("ListGitHubRepos")
-            .WithSummary("FR-81: the repositories the AIDE GitHub App is installed on that the caller can access, searchable by name, 30 per page.")
+            .WithSummary("FR-81: the repositories the Tevrin GitHub App is installed on that the caller can access, searchable by name, 30 per page.")
             .Produces<GitHubRepoPageDto>()
             .ProducesValidationProblem()
             .WithRetryAfterOn429()
@@ -135,7 +135,7 @@ public static class GitHubEndpoints
     {
         if (await apps.GetAsync(cancellationToken) is null)
         {
-            return ApiProblems.NotFound("No AIDE GitHub App is registered.");
+            return ApiProblems.NotFound("No Tevrin GitHub App is registered.");
         }
 
         // FR-81: the App's user authorization (PKCE) links GitHub to the signed-in user and stores the connection.

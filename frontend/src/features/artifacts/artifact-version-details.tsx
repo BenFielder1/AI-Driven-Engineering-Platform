@@ -24,7 +24,7 @@ function Meta({ term, children }: { term: string; children: ReactNode }) {
 export function ArtifactVersionDetails({ projectId, artifact }: { projectId: string; artifact: Artifact }) {
   const runId = artifact.author.agentRunId
   return (
-    <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-background/40 p-3 sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-background p-3 sm:grid-cols-4">
       <Meta term="Status">
         <ArtifactStatusBadge status={artifact.status} />
       </Meta>

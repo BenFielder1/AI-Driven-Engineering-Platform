@@ -40,7 +40,7 @@ only your ORM's migrations.
 5. Keep the pack's one-off migrate command working, because the local dev loop and deploys run it.
 
 ### Rules
-- **Never modify a migration that exists on the version's base commit.** AIDE rejects the step. Changes are new
+- **Never modify a migration that exists on the version's base commit.** Tevrin rejects the step. Changes are new
   migrations.
 - No schema push or auto-sync in app code or scripts: no `EnsureCreated`, `Database.Migrate()` at startup,
   `ddl-auto=update`, `create_all`, `prisma db push` or `drizzle-kit push`.

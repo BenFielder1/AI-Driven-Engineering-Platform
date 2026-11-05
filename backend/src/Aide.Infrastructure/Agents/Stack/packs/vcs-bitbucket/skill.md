@@ -2,7 +2,7 @@
 
 # Bitbucket Cloud + Bitbucket Pipelines
 
-AIDE performs every Git and Bitbucket operation itself (branches, commits, pushes, PRs, merges, variables, deploy keys). You only write repository files.
+Tevrin performs every Git and Bitbucket operation itself (branches, commits, pushes, PRs, merges, variables, deploy keys). You only write repository files.
 
 ## Detect
 - Evidence in the file list: `bitbucket-pipelines.yml`, `renovate.json`, `docs/pr/TEMPLATE.md`, `CODEOWNERS`.
@@ -10,14 +10,14 @@ AIDE performs every Git and Bitbucket operation itself (branches, commits, pushe
 - On an empty repo the scaffolder writes `.gitignore` (dependencies, build output, `.env`, `.env.*` except `.env.example`, IDE folders, `test-results/`) and `.gitattributes` (`* text=auto eol=lf`). CI, Renovate and templates are left to the ci-engineer.
 
 ## Auth (for git and API)
-AIDE holds the Bitbucket credentials (OAuth or scoped API tokens; app passwords no longer work). Generated files never contain tokens, usernames or clone URLs with credentials, and pipelines need no repository token for the gate.
+Tevrin holds the Bitbucket credentials (OAuth or scoped API tokens; app passwords no longer work). Generated files never contain tokens, usernames or clone URLs with credentials, and pipelines need no repository token for the gate.
 
 ## Branches and commits
-- AIDE names branches (`aide/**` version branches) and writes commit messages. Don't add conventions to files.
-- Pipelines run for pull requests and the default branch, so AIDE can read the PR head commit's statuses before merging.
+- Tevrin names branches (`aide/**` version branches) and writes commit messages. Don't add conventions to files.
+- Pipelines run for pull requests and the default branch, so Tevrin can read the PR head commit's statuses before merging.
 
 ## PRs (on request)
-AIDE opens PRs as drafts and merges them. Bitbucket doesn't read a PR template from the repo, so keep `docs/pr/TEMPLATE.md` (see Templates).
+Tevrin opens PRs as drafts and merges them. Bitbucket doesn't read a PR template from the repo, so keep `docs/pr/TEMPLATE.md` (see Templates).
 
 ## CI (`bitbucket-pipelines.yml`)
 ```yaml

@@ -12,7 +12,7 @@ export function trackerReasonCopy(tracker: Pick<TrackerStatus, 'provider' | 'nam
     case 'issues_permission_missing':
       return "Issues permission missing: update the App's permissions in GitHub, then accept them on each installation"
     case 'app_not_registered':
-      return "The AIDE GitHub App isn't registered on this server yet. An Admin can register it."
+      return "The Tevrin GitHub App isn't registered on this server yet. An Admin can register it."
     default:
       switch (tracker.provider) {
         case 'github':

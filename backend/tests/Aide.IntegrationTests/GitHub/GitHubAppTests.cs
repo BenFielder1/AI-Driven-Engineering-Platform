@@ -81,7 +81,7 @@ public sealed class GitHubAppTests(AideApiFactory factory)
 
         // §4.14 manifest: name from App:PublicBaseUrl, sign-in callback, no webhook, the App permissions.
         var manifest = started.Manifest;
-        Assert.Equal("AIDE (localhost)", manifest.Name);
+        Assert.Equal("Tevrin (localhost)", manifest.Name);
         Assert.Equal(["http://localhost:8080/api/auth/github/callback"], manifest.CallbackUrls);
         Assert.Equal("http://localhost:8080/api/admin/integrations/github/callback", manifest.RedirectUrl);
         Assert.False(manifest.Public);

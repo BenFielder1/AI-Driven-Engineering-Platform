@@ -122,7 +122,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
             Assert.Null(s.CommitUrl);
         });
         var subjects = (await GitAsync(id, "log", "--reverse", "--format=%s", branch)).Split('\n');
-        Assert.Equal([InitialCommit, "[AIDE][Phase:execution][Step:1] Step 1", "[AIDE][Phase:execution][Step:2] Step 2", "[AIDE][Phase:execution][Step:3] Step 3"], subjects);
+        Assert.Equal([InitialCommit, "[Tevrin][Phase:execution][Step:1] Step 1", "[Tevrin][Phase:execution][Step:2] Step 2", "[Tevrin][Phase:execution][Step:3] Step 3"], subjects);
         var step2 = listed.Steps[1];
         Assert.Equal(step2.CommitSha, await GitAsync(id, "rev-parse", $"{branch}~1"));
         var body = await GitAsync(id, "log", "-1", "--format=%b", step2.CommitSha!);

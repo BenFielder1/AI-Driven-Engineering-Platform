@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -18,13 +19,13 @@ async function fillAndSubmit(values: { email: string; name: string; password: st
 }
 
 describe('RegisterPage', () => {
-  it('FR-1: registering signs the user in and shows them in the shell', async () => {
+  it('FR-1 / FR-207: registering signs the user in and lands on Home in the shell (it was /projects before v6)', async () => {
     const { queryClient, router } = await renderRoute('/register')
 
     await fillAndSubmit({ email: 'a@x.com', name: 'Ada', password: 'password1' })
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/projects')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Welcome, Ada' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/home')
     expect(queryClient.getQueryData(authKeys.me())).toMatchObject({ email: 'a@x.com', name: 'Ada' })
     expect(authDb.users).toHaveLength(1)
   })
@@ -47,7 +48,7 @@ describe('RegisterPage', () => {
     const copy = 'An account with this email already exists. Sign in instead.'
     expect(await screen.findAllByText(copy)).toHaveLength(2) // field + summary
     expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByRole('heading', { level: 1, name: 'Create your AIDE account' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Create your Tevrin account' })).toBeInTheDocument()
   })
 
   it('FR-1: enforces the password policy (8+ characters, a letter and a digit) client-side', async () => {

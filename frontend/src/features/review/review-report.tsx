@@ -18,6 +18,8 @@ import { previewBuildFailureTitles } from '../deployments/rollout-format'
 import { RolloutStateBadge, RolloutSteps } from '../deployments/rollout-parts'
 import { CategoryBarsChart } from './category-bars-chart'
 import type { CategoryScore, ComplianceReportDetail, FindingSeverity } from './review-api'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 /** The report fields the sections read (the v2 detail DTO; the v1 latest-report DTO has the same shapes). */
 type Report = Pick<ComplianceReportDetail, 'categoryScores' | 'driftLevel' | 'driftAreas' | 'violations' | 'missingFeatures'>
@@ -39,7 +41,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${String(n)} ${n =
 
 export function ReportSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
+    <section aria-labelledby={id} className={cn(panelClass, 'flex flex-col gap-3 p-4')}>
       <h3 id={id} className="text-lg">
         {title}
       </h3>

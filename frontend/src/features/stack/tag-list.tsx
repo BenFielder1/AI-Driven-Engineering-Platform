@@ -8,7 +8,7 @@ export function TagList({ label, items, className }: { label: string; items: rea
   return (
     <ul aria-label={label} className={cn('flex flex-wrap gap-1', className)}>
       {items.map((item) => (
-        <li key={item} className="rounded border border-border/60 bg-background/60 px-1.5 py-0.5 text-xs">
+        <li key={item} className="rounded border border-border/60 bg-background px-1.5 py-0.5 text-xs">
           {item}
         </li>
       ))}

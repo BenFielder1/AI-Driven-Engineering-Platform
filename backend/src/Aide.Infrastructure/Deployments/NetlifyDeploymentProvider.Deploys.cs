@@ -240,7 +240,7 @@ public sealed partial class NetlifyDeploymentProvider
     }
 
     /// <summary>
-    /// §4.20 fallback: builds <paramref name="branch"/> through AIDE's build hook of the branch (made through the API the
+    /// §4.20 fallback: builds <paramref name="branch"/> through Tevrin's build hook of the branch (made through the API the
     /// first time), titled for <paramref name="sha"/>. Counts as a deploy creation for the account's limit.
     /// </summary>
     private async Task TriggerHookAsync(DeploymentAuth auth, DeploymentTargetRef target, string branch, string sha, CancellationToken cancellationToken)

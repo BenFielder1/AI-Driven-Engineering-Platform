@@ -2,7 +2,7 @@
 
 # GitHub + GitHub Actions
 
-AIDE performs every Git and GitHub operation itself (branches, commits, pushes, PRs, merges, secrets, Pages settings). You only write repository files. Never describe or script remote actions.
+Tevrin performs every Git and GitHub operation itself (branches, commits, pushes, PRs, merges, secrets, Pages settings). You only write repository files. Never describe or script remote actions.
 
 ## Detect
 - Evidence in the file list: `.github/workflows/*.yml`, `.github/dependabot.yml`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/`, `CODEOWNERS` (root, `.github/` or `docs/`).
@@ -10,11 +10,11 @@ AIDE performs every Git and GitHub operation itself (branches, commits, pushes, 
 - On an empty repo the scaffolder writes `.gitignore` (dependencies, build output, `.env`, `.env.*` except `.env.example`, IDE folders, test reports) and `.gitattributes` (`* text=auto eol=lf`). CI, Dependabot and templates are left to the ci-engineer.
 
 ## Branches and commits
-- AIDE names branches (`aide/**` version branches) and writes commit messages. Don't add branch or commit conventions to files.
-- CI must run on `pull_request` (any branch into the default branch) and on `push` to the default branch, so AIDE can read the PR head's check runs before merging. Don't trigger on every branch push as well (duplicate runs).
+- Tevrin names branches (`aide/**` version branches) and writes commit messages. Don't add branch or commit conventions to files.
+- CI must run on `pull_request` (any branch into the default branch) and on `push` to the default branch, so Tevrin can read the PR head's check runs before merging. Don't trigger on every branch push as well (duplicate runs).
 
 ## PRs (on request)
-AIDE opens and updates PRs and writes their bodies. Nothing to do here, except the template under Templates.
+Tevrin opens and updates PRs and writes their bodies. Nothing to do here, except the template under Templates.
 
 ## CI (`.github/workflows/ci.yml`)
 One workflow, one job per layer in the composition. Each job runs that layer pack's **Gate** commands, unchanged, in its directory (`defaults.run.working-directory: {fe}` / `{be}`). Use `dorny/paths-filter` or `on.pull_request.paths` only if every job still reports a status that branch protection can rely on.
@@ -39,7 +39,7 @@ Also required:
 
 ## Secrets and variables
 - CI needs no repository secrets for the gate. Ephemeral test databases use fixed values in YAML mapping form (`POSTGRES_PASSWORD: postgres`), never `NAME=value` text.
-- If a job really needs a secret, reference `${{ secrets.NAME }}` and list the name in your step summary. AIDE or the user sets it.
+- If a job really needs a secret, reference `${{ secrets.NAME }}` and list the name in your step summary. Tevrin or the user sets it.
 
 ## Dependency updates
 `.github/dependabot.yml` (version 2): one entry per ecosystem and directory (`npm` for each Node folder, `nuget`, `maven`/`gradle`, `uv` or `pip`, `docker` for each Dockerfile folder, `github-actions` at `/`), `schedule.interval: weekly`, and `groups` bundling minor and patch updates.

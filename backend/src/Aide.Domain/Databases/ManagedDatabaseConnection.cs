@@ -1,7 +1,7 @@
 namespace Aide.Domain.Databases;
 
 /// <summary>
-/// FR-152, §4.21, §5: what AIDE knows about how to reach a managed database, stored as JSON in
+/// FR-152, §4.21, §5: what Tevrin knows about how to reach a managed database, stored as JSON in
 /// <c>managed_databases.connection_encrypted</c> (Data Protection ciphertext; never returned or logged). The database
 /// password is separate (<c>db_password_encrypted</c>). Which fields are set depends on the provider:
 /// <list type="bullet">
@@ -49,10 +49,10 @@ public sealed record ManagedDatabaseConnection
     /// <summary>Supabase <c>sb_secret_…</c> (or a migrated v2 project's legacy <c>service_role</c> key).</summary>
     public string? SecretKey { get; init; }
 
-    /// <summary>The Auth <c>site_url</c> AIDE last applied (re-applied when the frontend URLs change).</summary>
+    /// <summary>The Auth <c>site_url</c> Tevrin last applied (re-applied when the frontend URLs change).</summary>
     public string? AuthSiteUrl { get; init; }
 
-    /// <summary>The Auth <c>uri_allow_list</c> AIDE last applied.</summary>
+    /// <summary>The Auth <c>uri_allow_list</c> Tevrin last applied.</summary>
     public string? AuthAllowList { get; init; }
 
     /// <summary>The resource's display name on the platform.</summary>

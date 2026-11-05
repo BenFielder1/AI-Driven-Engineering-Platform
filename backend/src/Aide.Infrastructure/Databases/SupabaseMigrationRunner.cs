@@ -35,7 +35,7 @@ public sealed record MigrationRunResult(
     string? AdvisorError);
 
 /// <summary>
-/// FR-153, §4.21, D-V4-12: AIDE's own Supabase BaaS migration runner. It reads <c>supabase/migrations/&lt;version&gt;_&lt;name&gt;.sql</c>
+/// FR-153, §4.21, D-V4-12: Tevrin's own Supabase BaaS migration runner. It reads <c>supabase/migrations/&lt;version&gt;_&lt;name&gt;.sql</c>
 /// at the commit from the project's working copy, plans with <see cref="MigrationPlanning"/> against
 /// <c>supabase_migrations.schema_migrations</c>, and applies the pending files in version order, each in its own transaction
 /// with its history row <c>(version, name, statements)</c>; a crashed run resumes after the last committed file. A recorded

@@ -88,7 +88,7 @@ export function PreviewDeploymentSection() {
         )}
         {!current ? (
           <p className="text-sm text-muted-foreground">
-            No preview yet. AIDE deploys one when execution opens or updates the pull request.
+            No preview yet. Tevrin deploys one when execution opens or updates the pull request.
           </p>
         ) : (
           <>
@@ -194,7 +194,7 @@ export function ProductionDeploymentSection({ release }: { release: Release | nu
   if (!enabled && !d && !rollout) {
     body = <NotConfigured owner={owner} projectId={project.id} what="production deployment" />
   } else if (!release) {
-    body = <p className="text-sm text-muted-foreground">AIDE deploys production after the release is merged.</p>
+    body = <p className="text-sm text-muted-foreground">Tevrin deploys production after the release is merged.</p>
   } else if (rollout) {
     body = (
       <div className="flex flex-col gap-3">
@@ -216,7 +216,7 @@ export function ProductionDeploymentSection({ release }: { release: Release | nu
         <p className="text-sm text-muted-foreground">
           {release.status === 'succeeded'
             ? 'The production deployment of the merge commit will show here shortly.'
-            : 'AIDE deploys production once the release is merged.'}
+            : 'Tevrin deploys production once the release is merged.'}
         </p>
       </div>
     )

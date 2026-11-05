@@ -106,7 +106,8 @@ type Loader = () => Promise<FileModule>
 // which under parallel load could take seconds and eat into the findBy timeout. Files load on demand only outside that.
 const loaders: Record<string, Loader> = {
   ...import.meta.glob<FileModule>('../app/**/page.tsx'),
-  // The root layout renders <html>/<body> and reads request headers: tests render the providers it wraps instead.
+  // The root layout renders <html>/<body> and reads request headers: it is skipped. The group layouts' Providers is
+  // mocked to a pass-through (src/test/setup.ts): tests render TestProviders around the tree instead.
   ...import.meta.glob<FileModule>(['../app/**/layout.tsx', '!../app/layout.tsx']),
   ...import.meta.glob<FileModule>('../app/**/loading.tsx'),
   ...import.meta.glob<FileModule>('../app/**/error.tsx'),

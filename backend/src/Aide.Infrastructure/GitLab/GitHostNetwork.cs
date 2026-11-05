@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace Aide.Infrastructure.GitLab;
 
-/// <summary>§8: a Git host request refused by the SSRF guard (the host resolves to an address AIDE must not reach).</summary>
+/// <summary>§8: a Git host request refused by the SSRF guard (the host resolves to an address Tevrin must not reach).</summary>
 public sealed class GitHostBlockedException : IOException
 {
     public GitHostBlockedException()

@@ -2,7 +2,7 @@ namespace Aide.Domain.Entities;
 
 /// <summary>
 /// A release version of a project (§4.10, FR-60–FR-67): <c>in_development → (awaiting_merge →) released</c>, or
-/// <c>imported</c> for a baseline never developed in AIDE. At most one version per project is <c>in_development</c> or
+/// <c>imported</c> for a baseline never developed in Tevrin. At most one version per project is <c>in_development</c> or
 /// <c>awaiting_merge</c> (partial unique index). The project's Git branch and pull request belong to the version.
 /// </summary>
 public sealed class ReleaseVersion

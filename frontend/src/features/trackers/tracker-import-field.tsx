@@ -57,7 +57,7 @@ export function TrackerImportField({
             pick.items.map((item) => (
               <li
                 key={`${String(pickIndex)}:${item.key}`}
-                className="flex max-w-full items-center gap-1 rounded-full border border-border bg-background/40 py-0.5 pr-0.5 pl-2 text-xs"
+                className="flex max-w-full items-center gap-1 rounded-full border border-border bg-background py-0.5 pr-0.5 pl-2 text-xs"
               >
                 <span className="sr-only">{trackerNames[pick.provider]}: </span>
                 <span className="font-mono">{item.key}</span>

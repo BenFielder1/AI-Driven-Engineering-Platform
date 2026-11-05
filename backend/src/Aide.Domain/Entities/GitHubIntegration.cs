@@ -1,6 +1,6 @@
 namespace Aide.Domain.Entities;
 
-/// <summary>The AIDE GitHub App registered through the manifest flow (FR-80); table <c>github_apps</c>, at most one row
+/// <summary>The Tevrin GitHub App registered through the manifest flow (FR-80); table <c>github_apps</c>, at most one row
 /// (a unique index on a constant generated column). <c>GitHub__App__*</c> configuration overrides it. Secrets are
 /// Data Protection ciphertext and never returned.</summary>
 public sealed class GitHubApp
@@ -46,7 +46,7 @@ public sealed class GitHubConnection
 {
     public Guid UserId { get; set; }
 
-    /// <summary>GitHub's numeric user id; unique (one AIDE user per GitHub account). Sign-in matches on
+    /// <summary>GitHub's numeric user id; unique (one Tevrin user per GitHub account). Sign-in matches on
     /// <c>users.github_id</c>, which holds the same id as text.</summary>
     public long GithubUserId { get; set; }
 

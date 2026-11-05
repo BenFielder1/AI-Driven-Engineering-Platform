@@ -155,7 +155,7 @@ function bitbucketOptions(connections: readonly BitbucketConnection[] | undefine
 
 /**
  * FR-136 Rebind (Owners, `canRebind`): choose one of your own connections for the project's host (GitLab: on the
- * project's instance); AIDE checks it has Developer (GitLab) or write (Bitbucket) access to the repository, then binds
+ * project's instance); Tevrin checks it has Developer (GitLab) or write (Bitbucket) access to the repository, then binds
  * it.
  */
 export function RebindConnection({ projectId, git }: { projectId: string; git: GitSettings }) {
@@ -210,14 +210,14 @@ export function RebindConnection({ projectId, git }: { projectId: string; git: G
   }
 
   return (
-    <section aria-labelledby="git-rebind-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby="git-rebind-title" className="rounded-lg border border-border/60 bg-background p-4">
       <h3 id="git-rebind-title" className="font-semibold">
         {git.binding ? 'Rebind' : `Re-bind the ${host} connection`}
       </h3>
       <p className="mb-3 mt-1 text-sm text-muted-foreground">
         {isBitbucket
-          ? "Bind one of your own Bitbucket connections. AIDE checks it has write access to the repository, then uses it for all of this project's Git work."
-          : `Bind one of your own GitLab connections on ${instanceName}. AIDE checks it has Developer access or higher on the repository, then uses it for all of this project's Git work.`}
+          ? "Bind one of your own Bitbucket connections. Tevrin checks it has write access to the repository, then uses it for all of this project's Git work."
+          : `Bind one of your own GitLab connections on ${instanceName}. Tevrin checks it has Developer access or higher on the repository, then uses it for all of this project's Git work.`}
       </p>
       {connections.isPending ? (
         <LoadingState label={`Loading your ${host} connections…`} />

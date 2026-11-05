@@ -63,7 +63,7 @@ public sealed partial class CloudflareDeploymentProvider(PlatformHttp http) : ID
                 : request.Name;
             if (DeploymentRollbackRules.IsCloudflarePages(name))
             {
-                throw new DeploymentProviderException(DeploymentFailure.Rejected, 400, "AIDE can't create Cloudflare Pages projects; link an existing one, or create a Worker.", platform: Cloudflare);
+                throw new DeploymentProviderException(DeploymentFailure.Rejected, 400, "Tevrin can't create Cloudflare Pages projects; link an existing one, or create a Worker.", platform: Cloudflare);
             }
 
             await EnsureWorkerAsync(auth, name, cancellationToken);

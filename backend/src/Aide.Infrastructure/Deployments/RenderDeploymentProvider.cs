@@ -317,7 +317,7 @@ public sealed partial class RenderDeploymentProvider(PlatformHttp http, RenderLo
         PlatformDeploymentCalls.Call(Render, () => http.SendAsync(PlatformProvider.Render, PlatformHosts.RenderClient, method, path, auth.Token, body, cancellationToken));
 }
 
-/// <summary>A Render service as AIDE reads it: id, name, type, repository URL, branch, auto-deploy trigger, URL, plan, region.</summary>
+/// <summary>A Render service as Tevrin reads it: id, name, type, repository URL, branch, auto-deploy trigger, URL, plan, region.</summary>
 internal sealed record RenderService(
     string Id, string Name, string? Type, string? Repo, string? Branch, string? AutoDeployTrigger, string? Url, string? Plan, string? Region)
 {

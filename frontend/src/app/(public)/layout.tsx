@@ -9,12 +9,22 @@ import { publicRedirectTarget } from '../../features/auth/auth-redirects'
 import { PublicShell } from '../../features/shell/app-shell'
 import { RouteErrorView } from '../../features/shell/route-states'
 import { useLocation, useNavigate } from '../../lib/navigation'
+import { Providers } from '../providers'
 
 /**
- * Layout for /login and /register (v2 `_public`). Signed-in users are sent on (to `returnUrl`, or /projects). Like the
+ * Layout for /login and /register (v2 `_public`). Signed-in users are sent on (to a same-origin `returnUrl`, or /home). Like the
  * v2 guard, the check runs when a URL is entered, not when signing in on the page (the page then navigates itself).
  */
 export default function PublicLayout({ children }: { children: ReactNode }) {
+  // The client providers sit here, not in the root layout, so marketing routes don't load them (SPEC §8).
+  return (
+    <Providers>
+      <PublicGuard>{children}</PublicGuard>
+    </Providers>
+  )
+}
+
+function PublicGuard({ children }: { children: ReactNode }) {
   const me = useQuery(meQueryOptions)
   const location = useLocation()
   const navigate = useNavigate()

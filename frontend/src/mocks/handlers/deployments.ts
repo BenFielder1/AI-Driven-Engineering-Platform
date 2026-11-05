@@ -35,7 +35,7 @@ export type StoredVercelConnection = StoredPlatformConnection
 
 export const VERCEL_INSTALL_URL = 'https://github.com/apps/vercel/installations/new'
 export const NETLIFY_INSTALL_URL = 'https://github.com/apps/netlify/installations/new'
-/** FR-143: the AIDE GitHub App's settings page (PLATFORM_PERMISSION_MISSING `installUrl`). */
+/** FR-143: the Tevrin GitHub App's settings page (PLATFORM_PERMISSION_MISSING `installUrl`). */
 export const GITHUB_APP_SETTINGS_URL = 'https://github.com/settings/apps/aide-test'
 
 /** In-memory deployment platforms for tests (reset after each test by src/test/setup.ts). */
@@ -46,7 +46,7 @@ export const deploymentDb = {
   gitNotConnected: false,
   /** A plan restriction: the wizard answers 409 PLATFORM_PLAN_LIMIT, a target's setup job fails with it. */
   planLimit: false,
-  /** FR-143: the AIDE GitHub App lacks Pages: setting up GitHub Pages answers 409 PLATFORM_PERMISSION_MISSING. */
+  /** FR-143: the Tevrin GitHub App lacks Pages: setting up GitHub Pages answers 409 PLATFORM_PERMISSION_MISSING. */
   pagesPermissionMissing: false,
   /** Pushing env vars fails: PUT saves the value with syncError and answers 502. */
   envSyncFails: false,
@@ -458,7 +458,7 @@ const rollbackTrigger = (platform: Provider): 'promote' | 'rollback' =>
   platform === 'vercel' || platform === 'fake' ? 'promote' : 'rollback'
 
 /**
- * Appends a deployment. Defaults: a ready preview of the frontend on Vercel at the current version by AIDE, one minute
+ * Appends a deployment. Defaults: a ready preview of the frontend on Vercel at the current version by Tevrin, one minute
  * after the previous one. `current`, `canRollback` and `rollbackBlockedReason` are worked out when it is listed.
  */
 export function seedDeployment(p: StoredProject, overrides: Partial<Deployment> = {}): Deployment {
@@ -1173,7 +1173,7 @@ export const deploymentHandlers = [
       return HttpResponse.json<Group>(g, { status: 202 })
     }
     if (g.id !== null) {
-      return problem(409, 'CONFLICT', 'The group already has platform resources. Remove the group first; AIDE keeps those resources.')
+      return problem(409, 'CONFLICT', 'The group already has platform resources. Remove the group first; Tevrin keeps those resources.')
     }
     if (body.create && deploymentDb.existingProjectNames.includes(body.create.name)) {
       return problem(409, 'PLATFORM_RESOURCE_EXISTS', `${platform} already has a project with that name. Link it instead, or choose another name.`, { platform: provider })
@@ -1248,7 +1248,7 @@ export const deploymentHandlers = [
       })
     }
     if (t.provider === 'github_pages' && deploymentDb.pagesPermissionMissing) {
-      return problem(409, 'PLATFORM_PERMISSION_MISSING', 'The AIDE GitHub App lacks the Pages permission.', {
+      return problem(409, 'PLATFORM_PERMISSION_MISSING', 'The Tevrin GitHub App lacks the Pages permission.', {
         platform: 'github_pages',
         installUrl: GITHUB_APP_SETTINGS_URL,
       })
@@ -1510,7 +1510,7 @@ export const deploymentHandlers = [
       errors.appliesTo = ['Choose frontend, backend or both, each once.']
     }
     if (d.derived.some((r) => r.key === key)) {
-      errors.key = [`AIDE derives ${key} from the deployment targets; it can't be set by hand.`]
+      errors.key = [`Tevrin derives ${key} from the deployment targets; it can't be set by hand.`]
     }
     const secret = isPublic && (SECRET_KEY.test(key) || SECRET_VALUE.test(body.value))
     if (secret) {

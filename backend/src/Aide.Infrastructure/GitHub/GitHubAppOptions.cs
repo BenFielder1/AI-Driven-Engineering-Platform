@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 namespace Aide.Infrastructure.GitHub;
 
 /// <summary>
-/// FR-80, §9: the AIDE GitHub App from configuration (section <c>GitHub:App</c>; <c>GitHub__App__*</c> in
+/// FR-80, §9: the Tevrin GitHub App from configuration (section <c>GitHub:App</c>; <c>GitHub__App__*</c> in
 /// <c>secrets.env</c>). When all five values are set they take precedence over the App registered through the manifest
 /// flow. <see cref="PrivateKey"/> is the App's PEM private key; <c>\n</c> escapes (one line in an env file) are accepted.
 /// </summary>

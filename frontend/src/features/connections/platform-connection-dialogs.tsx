@@ -91,7 +91,7 @@ const idsFor = (provider: PlatformProvider) =>
 function WhatToCreate({ info }: { info: PlatformProviderInfo }) {
   const titleId = `${info.id}-token-what-title`
   return (
-    <section aria-labelledby={titleId} className="rounded-lg border border-border/60 bg-background/40 p-3 text-sm">
+    <section aria-labelledby={titleId} className="rounded-lg border border-border/60 bg-background p-3 text-sm">
       <h3 id={titleId} className="font-semibold">
         What to create on {info.name}
       </h3>
@@ -124,7 +124,7 @@ function WhatToCreate({ info }: { info: PlatformProviderInfo }) {
 }
 
 /**
- * FR-142: add a platform connection (a pasted token with a label). AIDE checks it with the platform before saving:
+ * FR-142: add a platform connection (a pasted token with a label). Tevrin checks it with the platform before saving:
  * CREDENTIAL_INVALID and CONNECTION_SCOPE_INSUFFICIENT save nothing, while a token missing permissions is saved as
  * `insufficient_scope` (the row lists them). The token is a password field, cleared after every attempt that reached
  * the server, and the mutation holding it is reset at once, so the token never stays in memory.
@@ -203,7 +203,7 @@ export function AddPlatformConnectionDialog({
     <ModalDialog
       open
       title={title}
-      description={`AIDE checks the token with ${info.name} before saving it. It's stored encrypted and never shown again; only its last 4 characters are.`}
+      description={`Tevrin checks the token with ${info.name} before saving it. It's stored encrypted and never shown again; only its last 4 characters are.`}
       busy={create.isPending}
       onClose={close}
       className="sm:max-w-lg"
@@ -264,7 +264,7 @@ export function AddPlatformConnectionDialog({
           <TextField
             id={ids.expiresAt}
             label="Expiry date (optional)"
-            hint={`${info.name} doesn't report when a token expires. Enter it, and AIDE warns you 14 days before.`}
+            hint={`${info.name} doesn't report when a token expires. Enter it, and Tevrin warns you 14 days before.`}
             type="date"
             error={errors.expiresAt?.message}
             {...register('expiresAt')}
@@ -367,7 +367,7 @@ export function EditTrackerConnectionDialog({
         <TextField
           id="tracker-connection-edit-expiry"
           label="Expiry date (optional)"
-          hint="AIDE warns you 14 days before. Leave it empty if the token doesn't expire."
+          hint="Tevrin warns you 14 days before. Leave it empty if the token doesn't expire."
           type="date"
           error={errors.expiresAt?.message}
           {...register('expiresAt')}
@@ -382,7 +382,7 @@ export function EditTrackerConnectionDialog({
           ) : (
             <SelectField
               label="Acceptance criteria field (optional)"
-              hint="The custom field AIDE imports as each item's acceptance criteria."
+              hint="The custom field Tevrin imports as each item's acceptance criteria."
               error={errors.acceptanceCriteriaField?.message}
               defaultValue={current}
               {...register('acceptanceCriteriaField')}

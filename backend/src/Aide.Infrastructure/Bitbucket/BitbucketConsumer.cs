@@ -10,7 +10,7 @@ using Npgsql;
 namespace Aide.Infrastructure.Bitbucket;
 
 /// <summary>
-/// The Bitbucket Cloud OAuth consumer as AIDE uses it (FR-133): the single <c>git_host_instances</c> row of kind
+/// The Bitbucket Cloud OAuth consumer as Tevrin uses it (FR-133): the single <c>git_host_instances</c> row of kind
 /// <c>bitbucket</c> (base URL NULL: Bitbucket is Cloud only, its hosts fixed) with configuration
 /// (<c>Bitbucket:OAuth:*</c>) applied on top. <see cref="InstanceId"/> is what Bitbucket connections and sign-in links
 /// reference. The secret is never on this record (<see cref="IBitbucketConsumer.GetClientSecretAsync"/>).

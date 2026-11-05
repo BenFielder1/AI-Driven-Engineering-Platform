@@ -56,7 +56,7 @@ public static partial class AuthEndpoints
 
         group.MapPatch("/me", UpdateCurrentUser)
             .WithName("UpdateCurrentUser")
-            .WithSummary("FR-177: change the signed-in user's own preferences: commitCreditOptOut (\"Credit me on commits made by AIDE\"). Browser session only.")
+            .WithSummary("FR-177: change the signed-in user's own preferences: commitCreditOptOut (\"Credit me on commits made by Tevrin\"). Browser session only.")
             .RequireAuthorization(AuthConstants.BrowserSessionPolicy)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status401Unauthorized)
@@ -74,7 +74,7 @@ public static partial class AuthEndpoints
 
         group.MapGet("/github", StartGitHubSignIn)
             .WithName("StartGitHubSignIn")
-            .WithSummary("Redirects to GitHub to sign in (FR-2). Once an AIDE GitHub App exists this uses its user authorization flow with PKCE, which also connects GitHub (FR-80, FR-81, D-V2-7). 404 when GitHub sign-in isn't configured.")
+            .WithSummary("Redirects to GitHub to sign in (FR-2). Once a Tevrin GitHub App exists this uses its user authorization flow with PKCE, which also connects GitHub (FR-80, FR-81, D-V2-7). 404 when GitHub sign-in isn't configured.")
             .AllowAnonymous()
             .Produces(StatusCodes.Status302Found)
             .ProducesProblem(StatusCodes.Status404NotFound);

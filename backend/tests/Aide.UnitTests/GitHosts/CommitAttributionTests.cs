@@ -202,7 +202,7 @@ public sealed class CommitAttributionTests
         var message = CodeGeneration.CommitMessage(
             3, "Add the projects endpoint", ["backend/src/Api/Projects.cs"], stepId, "Co-authored-by: Ana Lee <42+ana@users.noreply.github.com>");
 
-        Assert.Equal("[AIDE][Phase:execution][Step:3] Add the projects endpoint", message.Subject);
+        Assert.Equal("[Tevrin][Phase:execution][Step:3] Add the projects endpoint", message.Subject);
         Assert.Equal(
             $"Files:\n- backend/src/Api/Projects.cs\n\nAIDE-Step-Id: {stepId:D}\nCo-authored-by: Ana Lee <42+ana@users.noreply.github.com>",
             message.Body);

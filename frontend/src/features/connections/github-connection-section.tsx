@@ -73,10 +73,10 @@ function ConnectedView({ connection, onDisconnect }: { connection: GitHubConnect
       </div>
 
       <div>
-        <h4 className="mb-2 text-sm font-semibold">Where AIDE is installed</h4>
+        <h4 className="mb-2 text-sm font-semibold">Where Tevrin is installed</h4>
         {connection.installations.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            The AIDE GitHub App isn&apos;t installed on any account you can access yet. Install it to pick repositories.
+            The Tevrin GitHub App isn&apos;t installed on any account you can access yet. Install it to pick repositories.
           </p>
         ) : (
           <ul aria-label="GitHub App installations" className="divide-y divide-border/60 rounded-lg border border-border/60">
@@ -107,7 +107,7 @@ function ConnectedView({ connection, onDisconnect }: { connection: GitHubConnect
       </div>
       {connection.installUrl && (
         <div>
-          <GitHubLink href={connection.installUrl}>Install AIDE on more repositories</GitHubLink>
+          <GitHubLink href={connection.installUrl}>Install Tevrin on more repositories</GitHubLink>
         </div>
       )}
     </div>
@@ -131,7 +131,7 @@ export function GitHubConnectionSection({
   useEffect(() => {
     if (installed && !announced.current) {
       announced.current = true
-      toast.success('AIDE installed on GitHub')
+      toast.success('Tevrin installed on GitHub')
       void queryClient.invalidateQueries({ queryKey: githubKeys.connection() })
       void queryClient.invalidateQueries({ queryKey: githubKeys.all })
     }
@@ -172,7 +172,7 @@ export function GitHubConnectionSection({
         headingLevel={4}
         bare
         title="GitHub isn't set up yet"
-        description="AIDE connects to GitHub through its GitHub App, and an Admin must register it first under Admin → Integrations → GitHub. Projects keep using the Git settings they have."
+        description="Tevrin connects to GitHub through its GitHub App, and an Admin must register it first under Admin → Integrations → GitHub. Projects keep using the Git settings they have."
         action={
           isAdmin(user) ? (
             <Link to="/admin/integrations" className={buttonClasses('secondary')}>
@@ -251,7 +251,7 @@ export function GitHubConnectionSection({
         }}
       >
         <p>
-          AIDE forgets your GitHub tokens. Projects keep working (they use the App), but you can&apos;t pick or create
+          Tevrin forgets your GitHub tokens. Projects keep working (they use the App), but you can&apos;t pick or create
           repositories until you connect again. Signing in with GitHub reconnects it.
         </p>
       </ConfirmDialog>

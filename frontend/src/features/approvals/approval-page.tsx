@@ -20,6 +20,8 @@ import type { Gate } from '../gates/gates-api'
 import { approvalDecisionLabels, artifactTypeLabels, formatDateTime, gateTypeLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
 import { useApprovalLink, useConfirmApprovalLink, type ApprovalLinkView } from './approvals-api'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 type CommentValues = z.infer<typeof commentSchema>
 
@@ -276,7 +278,7 @@ export function ApprovalPage({ token }: { token: string }) {
     content = (
       <>
         <PageHeader title={`${approvalDecisionLabels[view.decision]} ${gateTypeLabels[view.gateType].toLowerCase()}?`} />
-        <section aria-label="Approval summary" className="rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-5">
+        <section aria-label="Approval summary" className={cn(panelClass, 'p-5')}>
           <Summary view={view} />
         </section>
         <ConfirmForm token={token} view={view} onDone={setResult} />

@@ -51,7 +51,7 @@ public static class DeploymentEndpoints
                 (StatusCodes.Status400BadRequest, "VALIDATION (body, component, or a Local Git project outside Fake mode), STACK_INCOMPATIBLE (the composition doesn't host the component on this provider; GitHub Pages without a GitHub repository) or DEPLOYMENT_GROUP_INVALID (groupId: the part can't join that group)"),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN (not an Owner) or CREDENTIAL_NOT_OWNER (another user's connection)"),
                 (StatusCodes.Status404NotFound, "NOT_FOUND (project or connection)"),
-                (StatusCodes.Status409Conflict, "PLATFORM_PERMISSION_MISSING (GitHub Pages: the AIDE GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT"),
+                (StatusCodes.Status409Conflict, "PLATFORM_PERMISSION_MISSING (GitHub Pages: the Tevrin GitHub App lacks Pages; extensions platform, installUrl = the App's page), PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT (extension platform; also reported by the setup job on the target) or CONFLICT"),
                 (StatusCodes.Status502BadGateway, "PLATFORM_ERROR (the provider isn't supported for real yet; extension platform) or UPSTREAM_ERROR (GitHub couldn't mint a token)"));
 
         settings.MapDelete("/targets/{component}", DeleteDeploymentTarget)
@@ -79,11 +79,11 @@ public static class DeploymentEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway)
             .WithResponseDescriptions(
                 (StatusCodes.Status400BadRequest, "VALIDATION (including a derived key, or secret values can't be public)"),
-                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (saved in AIDE with syncError; a platform failed or couldn't be reached)"));
+                (StatusCodes.Status502BadGateway, "UPSTREAM_ERROR (saved in Tevrin with syncError; a platform failed or couldn't be reached)"));
 
         settings.MapDelete("/env/{key}", DeleteDeploymentEnv)
             .WithName("DeleteDeploymentEnv")
-            .WithSummary("Delete a user environment variable in AIDE and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION).")
+            .WithSummary("Delete a user environment variable in Tevrin and on its targets (Owner, FR-145). If a platform can't delete it, nothing is deleted (502 UPSTREAM_ERROR). Derived variables can't be deleted (VALIDATION).")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status502BadGateway);
@@ -177,7 +177,7 @@ public static class DeploymentEndpoints
 
         deployments.MapPost("/{deploymentId:guid}/redeploy", RedeployDeployment)
             .WithName("RedeployDeployment")
-            .WithSummary("Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. AIDE polls it (§4.15).")
+            .WithSummary("Deploy the same commit again as a new row (FR-90, FR-91): a preview needs a writer, production an Owner. Tevrin polls it (§4.15).")
             .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -426,7 +426,7 @@ public static class DeploymentEndpoints
         await db.SaveChangesAsync(cancellationToken);
         return failure is null
             ? TypedResults.Ok(DeploymentInventoryService.ToDto(variable))
-            : ApiProblems.Of(ErrorCodes.UpstreamError, $"Saved in AIDE, but a deployment platform wasn't updated: {failure} It is pushed again on the next save or deployment.");
+            : ApiProblems.Of(ErrorCodes.UpstreamError, $"Saved in Tevrin, but a deployment platform wasn't updated: {failure} It is pushed again on the next save or deployment.");
     }
 
     private static async Task<Results<NoContent, ValidationProblem, ProblemHttpResult>> DeleteDeploymentEnv(
@@ -458,7 +458,7 @@ public static class DeploymentEndpoints
 
         if (variable.Source == DeploymentEnvSource.Derived)
         {
-            return ApiProblems.Validation(new Dictionary<string, string[]> { ["key"] = [$"AIDE derives {key}; it changes with the deployment targets."] });
+            return ApiProblems.Validation(new Dictionary<string, string[]> { ["key"] = [$"Tevrin derives {key}; it changes with the deployment targets."] });
         }
 
         // FR-88, FR-145: deleting in AIDE deletes on every target; if a platform can't, nothing is deleted (all or nothing).

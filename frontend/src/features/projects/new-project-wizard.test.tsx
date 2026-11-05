@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -130,7 +131,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
     await user.click(screen.getByRole('radio', { name: 'Local repository' }))
     expect(screen.queryByLabelText('Repository URL')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Access token (optional)')).not.toBeInTheDocument()
-    expect(screen.getByText(/AIDE creates and keeps a local Git repository/)).toBeInTheDocument()
+    expect(screen.getByText(/Tevrin creates and keeps a local Git repository/)).toBeInTheDocument()
     // FR-73: the server path field is for Local imports only.
     expect(screen.queryByLabelText(/Path of an existing repository on the server/)).not.toBeInTheDocument()
 

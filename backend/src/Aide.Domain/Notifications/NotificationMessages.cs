@@ -45,7 +45,7 @@ public sealed record NotificationFacts(NotificationType Type, string ProjectName
     /// <summary>FR-65: the version's PR (awaiting merge).</summary>
     public string? PullRequestUrl { get; init; }
 
-    /// <summary>FR-65, FR-84: the merge-readiness reasons (messages) why AIDE couldn't merge.</summary>
+    /// <summary>FR-65, FR-84: the merge-readiness reasons (messages) why Tevrin couldn't merge.</summary>
     public IReadOnlyList<string> MergeReasons { get; init; } = [];
 
     /// <summary>FR-90, FR-91: the deployment's target (<c>preview</c>, <c>production</c>).</summary>
@@ -122,7 +122,7 @@ public static class NotificationMessages
                 $"{project} was rolled back from checkpoint {Opt(facts.FromVersion)} to checkpoint {Opt(facts.TargetVersion)}.{reason}"),
             NotificationType.ReleaseAwaitingMerge => (
                 $"{project}: release {facts.Tag ?? string.Empty} awaits a merge on {GitHostNames.Display(facts.Provider)}".Replace("  ", " ", StringComparison.Ordinal),
-                $"AIDE can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on {GitHostNames.Display(facts.Provider)}; AIDE then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
+                $"Tevrin can't merge the pull request of {project}{(facts.PullRequestUrl is { } url ? $" ({OneLine(url, 300)})" : string.Empty)} itself. Merge it on {GitHostNames.Display(facts.Provider)}; Tevrin then tags the merge commit and completes the release.{MergeReasonsText(facts.MergeReasons)}"),
             NotificationType.DeploymentFailed when facts.Component == NotificationRules.MigrationsComponent => (
                 $"{project}: {Target(facts)} migrations{VersionText(facts)} failed",
                 $"The {Target(facts)} database migrations of {project}{VersionText(facts)} failed{CodeText(facts)}. The release stands; an Owner can fix the migration and redeploy from the Release page."),

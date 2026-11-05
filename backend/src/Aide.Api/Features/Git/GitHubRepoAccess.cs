@@ -70,7 +70,7 @@ public sealed class GitHubRepoAccess(AideDbContext db, ISecretProtector secrets,
 
         if (await apps.GetAsync(cancellationToken) is not { } app)
         {
-            return Failure("No AIDE GitHub App is registered.");
+            return Failure("No Tevrin GitHub App is registered.");
         }
 
         try
@@ -80,7 +80,7 @@ public sealed class GitHubRepoAccess(AideDbContext db, ISecretProtector secrets,
         }
         catch (GitHubApiException ex)
         {
-            return Failure($"The AIDE GitHub App can't access the repository. {ex.Message}", ErrorCodes.UpstreamError);
+            return Failure($"The Tevrin GitHub App can't access the repository. {ex.Message}", ErrorCodes.UpstreamError);
         }
     }
 

@@ -5,7 +5,7 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>FR-156: `aide databases`, `aide migrations`.</summary>
+/// <summary>FR-156: `tevrin databases`, `tevrin migrations`.</summary>
 internal static class DatabaseCommands
 {
     public static Command BuildDatabases(CommandFactory factory)

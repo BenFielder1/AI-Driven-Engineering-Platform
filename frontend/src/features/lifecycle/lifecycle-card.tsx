@@ -104,8 +104,8 @@ export function LifecycleCard({
   }
 
   return (
-    <section aria-labelledby="lifecycle-title" className={cn(panelClass, 'relative overflow-hidden border-primary/40 p-5')}>
-      <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-primary/15 blur-3xl" />
+    <section aria-labelledby="lifecycle-title" className={cn(panelClass, 'relative overflow-hidden p-5')}>
+      <div aria-hidden data-slot="lifecycle-accent" className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-brand-gradient" />
       <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-1">
           <h2 id="lifecycle-title" className="text-sm font-medium tracking-wider text-muted-foreground uppercase">

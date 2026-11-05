@@ -49,7 +49,7 @@ function RegistrationHelp({ integration }: { integration: AdminGitLabIntegration
     )
   }
   return (
-    <section aria-labelledby="gitlab-registration-title" className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby="gitlab-registration-title" className="rounded-lg border border-border/60 bg-background p-4">
       <h4 id="gitlab-registration-title" className="font-semibold">
         Register an OAuth application
       </h4>
@@ -142,7 +142,7 @@ function InstanceRow({
           {configured ? (
             <>
               Set in configuration (<code>GitLab__Instances__*</code>), which takes precedence. Change it there and restart
-              AIDE; only Enabled can change here.
+              Tevrin; only Enabled can change here.
             </>
           ) : (
             'Added here. The client secret is stored encrypted.'
@@ -331,7 +331,7 @@ function InstanceDialog({ instance, onClose }: { instance: AdminGitLabInstance |
     <ModalDialog
       open
       title={editing ? `Edit "${instance.name}"` : 'Add a GitLab instance'}
-      description="AIDE checks the address (it must be allowed and answer like GitLab) before saving."
+      description="Tevrin checks the address (it must be allowed and answer like GitLab) before saving."
       busy={pending}
       onClose={onClose}
       className="sm:max-w-lg"

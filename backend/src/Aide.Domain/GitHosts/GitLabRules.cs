@@ -94,7 +94,7 @@ public static partial class GitLabRules
 
     /// <summary>The warning shown for <see cref="GitLabVersionVerdict.Old"/>, else <c>null</c>.</summary>
     public static string? VersionWarning(string? version) => CheckVersion(version) == GitLabVersionVerdict.Old
-        ? $"GitLab {version} is older than {MinimumVersion.Major}.{MinimumVersion.Minor}, the minimum AIDE supports. Some features may not work."
+        ? $"GitLab {version} is older than {MinimumVersion.Major}.{MinimumVersion.Minor}, the minimum Tevrin supports. Some features may not work."
         : null;
 
     /// <summary>The major.minor of a GitLab version string, else <c>null</c>.</summary>
@@ -159,7 +159,7 @@ public static partial class GitLabRules
             };
 
     /// <summary>
-    /// FR-132: the AIDE error for a failed <c>POST /projects</c>: a name or path that "has already been taken" is
+    /// FR-132: the Tevrin error for a failed <c>POST /projects</c>: a name or path that "has already been taken" is
     /// <c>REPO_NAME_TAKEN</c>; a 429 or a project-creation limit is <c>UPSTREAM_RATE_LIMITED</c>; a 403 is
     /// <c>FORBIDDEN</c>; another 400/422 is <c>VALIDATION</c>; anything else is <c>UPSTREAM_ERROR</c>.
     /// <paramref name="message"/> is GitLab's error text (its <c>message</c>, flattened).

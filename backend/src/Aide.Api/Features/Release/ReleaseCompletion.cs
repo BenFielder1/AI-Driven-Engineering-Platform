@@ -301,7 +301,7 @@ public sealed partial class ReleaseCompletion(
     [LoggerMessage(Level = LogLevel.Information, Message = "Release completion did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged}, merged outside AIDE: {MergedExternally})")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged}, merged outside Tevrin: {MergedExternally})")]
     private static partial void LogReleased(ILogger logger, Guid projectId, string tag, bool alreadyTagged, bool mergedExternally);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Release {Tag} of project {ProjectId} awaits a merge on its Git host ({ReasonCount} reasons)")]

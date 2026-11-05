@@ -114,7 +114,7 @@ export interface StoredProject extends Omit<
   phaseAtVersion: Record<number, Project['currentPhase']>
   /** Release attempts, oldest first (FR-42, FR-43); see mocks/handlers/release.ts. */
   releases?: Schemas['ReleaseDto'][]
-  /** FR-140: AIDE's release notes per release attempt id (GET …/releases/:releaseId/notes; missing = `null`). */
+  /** FR-140: Tevrin's release notes per release attempt id (GET …/releases/:releaseId/notes; missing = `null`). */
   releaseNotes?: Record<string, string | null>
   /** Recorded rollbacks, oldest first (FR-44); see mocks/handlers/release.ts. */
   rollbacks?: Schemas['RollbackDto'][]
@@ -168,7 +168,7 @@ export interface StoredDeploymentSettings {
   originModel: Schemas['DeploymentOriginModelDto']
   /** Pack-declared variables: listed as `required` rows while no user value exists. */
   required: Pick<Schemas['DeploymentEnvVarDto'], 'key' | 'appliesTo' | 'environments' | 'sensitive' | 'public' | 'description'>[]
-  /** AIDE-written rows (§4.22): read-only. */
+  /** Tevrin-written rows (§4.22): read-only. */
   derived: Schemas['DeploymentEnvVarDto'][]
   fakeMode: boolean
   /** FR-187: what the composition groups, as cards; `id` null until a PUT. Unset: none. */
@@ -1009,7 +1009,7 @@ export const projectHandlers = [
       errors['git.repoUrl'] = ['A repository URL is required for GitHub.']
     }
     if (mode === 'github_app' && (!body.git.installationId || !body.git.repoFullName)) {
-      errors['git.repoFullName'] = ['Pick a repository the AIDE GitHub App is installed on.']
+      errors['git.repoFullName'] = ['Pick a repository the Tevrin GitHub App is installed on.']
     }
     if (mode === 'gitlab') {
       if (!body.git.instanceId) {
@@ -1310,7 +1310,7 @@ export const projectHandlers = [
     const provider = body.provider ?? git.provider
     // FR-82/FR-83: only "Switch to GitHub App" moves a project onto the App.
     if (provider === 'github_app' && git.provider !== 'github_app') {
-      return validation({ provider: ['Use Switch to GitHub App to move this project onto the AIDE GitHub App.'] })
+      return validation({ provider: ['Use Switch to GitHub App to move this project onto the Tevrin GitHub App.'] })
     }
     // FR-136: a project can't move onto GitLab or Bitbucket here (only the wizard creates those).
     if ((provider === 'gitlab' || provider === 'bitbucket') && git.provider !== provider) {

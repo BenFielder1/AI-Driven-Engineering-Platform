@@ -105,7 +105,7 @@ public sealed class GitHubAppGitFlowTests(AideApiFactory factory)
         Assert.Equal($"Bearer {GitHubAppHarness.InstallationToken}", pr.Authorization);
         using (var body = JsonDocument.Parse(pr.Body))
         {
-            Assert.Contains($"Opened by [AIDE](http://localhost:8080/projects/{id})", body.RootElement.GetProperty("body").GetString(), StringComparison.Ordinal);
+            Assert.Contains($"Opened by [Tevrin](http://localhost:8080/projects/{id})", body.RootElement.GetProperty("body").GetString(), StringComparison.Ordinal);
         }
 
         var version = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));

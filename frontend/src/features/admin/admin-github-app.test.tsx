@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -16,7 +17,7 @@ async function openPanel(path = '/admin/integrations') {
   return { panel, user: userEvent.setup() }
 }
 
-/** Captures native form submissions (GitHub's manifest flow is a real POST that leaves AIDE). */
+/** Captures native form submissions (GitHub's manifest flow is a real POST that leaves Tevrin). */
 function captureSubmit() {
   const submitted: HTMLFormElement[] = []
   const listener = (e: SubmitEvent) => {
@@ -53,8 +54,8 @@ describe('Admin → Integrations → GitHub App (FR-80)', () => {
 
     const preview = await within(panel).findByRole('region', { name: 'Manifest preview' })
     expect(githubDb.manifestRequests).toEqual([{ ownerType: 'organization', org: 'acme' }])
-    expect(preview).toHaveTextContent('AIDE (localhost)')
-    expect(preview).toHaveTextContent('Off (AIDE polls GitHub instead)')
+    expect(preview).toHaveTextContent('Tevrin (localhost)')
+    expect(preview).toHaveTextContent('Off (Tevrin polls GitHub instead)')
     const permissions = within(preview).getByRole('list', { name: 'Requested permissions' })
     expect(within(permissions).getByText('Administration').closest('li')).toHaveTextContent('Read and write')
     expect(preview).toHaveTextContent(/Unticking Administration disables "Create repository"/)
@@ -70,7 +71,7 @@ describe('Admin → Integrations → GitHub App (FR-80)', () => {
       throw new Error('The form has no manifest field.')
     }
     expect(JSON.parse(manifest)).toMatchObject({
-      name: 'AIDE (localhost)',
+      name: 'Tevrin (localhost)',
       default_permissions: { administration: 'write', contents: 'write' },
     })
     // GitHub refuses a localhost webhook URL, and any hook_attributes without one: the App has no webhook.

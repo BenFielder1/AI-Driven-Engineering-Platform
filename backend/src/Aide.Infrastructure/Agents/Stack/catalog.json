@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "layers": [
     { "id": "frontend", "name": "Frontend", "description": "The web UI, or None for an API-only project." },
     { "id": "backend", "name": "Backend", "description": "The API service, or None for a static site, Next.js full-stack or an SPA with Supabase." },
@@ -169,7 +169,7 @@
       { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-github-pages"], "state": "forbidden", "when": [{ "vcsHost": ["!github"] }], "text": "GitHub Pages only builds from GitHub" },
       { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-cloudflare"], "state": "forbidden", "when": [{ "vcsHost": ["bitbucket"] }], "text": "Cloudflare can't build Bitbucket repos" },
       { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-vercel", "deploy-cloudflare", "deploy-render"], "state": "forbidden", "when": [{ "vcsHost": ["gitlab-self-managed"] }], "text": "Only Netlify builds from self-managed GitLab" },
-      { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-netlify"], "state": "caveat", "when": [{ "vcsHost": ["gitlab", "gitlab-self-managed", "bitbucket"] }], "text": "Linked with a deploy key and webhook that AIDE adds to the repo" },
+      { "rule": "R9", "choices": ["frontendHost", "backendHost"], "options": ["deploy-netlify"], "state": "caveat", "when": [{ "vcsHost": ["gitlab", "gitlab-self-managed", "bitbucket"] }], "text": "Linked with a deploy key and webhook that Tevrin adds to the repo" },
 
       { "rule": "R11", "choices": ["databaseHost"], "options": ["supabase", "render-postgres", "railway-postgres", "external"], "state": "caveat", "unless": [{ "backendHost": ["!none"] }, { "frontendHost": ["!none"], "nextjsMode": ["full-stack"] }, { "frontendHost": ["!none"], "data": ["data-supabase"] }], "text": "Database only used by the local dev loop" },
 

@@ -20,7 +20,7 @@ namespace Aide.Api.Features.Admin;
 public sealed record AdminLlmPolicyDto(bool AllowSystemKeys, IReadOnlyList<LlmProvider> SystemKeyProviders);
 
 /// <summary>
-/// Admin → Integrations (§6 <c>/api/admin/integrations/…</c>): the system LLM key policy and the AIDE GitHub App (FR-80).
+/// Admin → Integrations (§6 <c>/api/admin/integrations/…</c>): the system LLM key policy and the Tevrin GitHub App (FR-80).
 /// </summary>
 public static class AdminIntegrationEndpoints
 {
@@ -38,7 +38,7 @@ public static class AdminIntegrationEndpoints
 
         group.MapGet("/github", GetGitHubApp)
             .WithName("GetAdminGitHubApp")
-            .WithSummary("FR-80: the AIDE GitHub App's status (not_configured or configured, from the database or GitHub__App__* configuration), slug, owner, install URL, granted permissions and whether repositories can be created. Admins only; secrets are never returned.")
+            .WithSummary("FR-80: the Tevrin GitHub App's status (not_configured or configured, from the database or GitHub__App__* configuration), slug, owner, install URL, granted permissions and whether repositories can be created. Admins only; secrets are never returned.")
             .Produces<AdminGitHubAppDto>();
 
         group.MapPost("/github/manifest", CreateGitHubAppManifest)

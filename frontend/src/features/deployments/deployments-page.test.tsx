@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -72,7 +73,7 @@ describe('/projects/:id/deployments (FR-91)', () => {
     expect(live).toHaveTextContent('1.2.0')
     expect(within(live).getByTestId('deployment-current')).toHaveTextContent('Current')
     expect(within(live).getByRole('link', { name: /shop\.vercel\.app/ })).toHaveAttribute('href', 'https://shop.vercel.app')
-    expect(old).toHaveTextContent('AIDE')
+    expect(old).toHaveTextContent('Tevrin')
   })
 
   it('FR91_promote_only_ready_production: Owners can promote an earlier ready production deployment, not the live one or previews', async () => {

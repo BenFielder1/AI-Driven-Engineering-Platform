@@ -131,7 +131,7 @@ public interface IGitProvider
         Task.FromResult(Result.Failure<GitHostReleaseRefs>(GitHostOperations.NotSupported(Kind, "reading releases and tags")));
 
     /// <summary>
-    /// §4.19, FR-138: the version's merge/pull request readiness. <paramref name="markedReady"/>: AIDE already marked the
+    /// §4.19, FR-138: the version's merge/pull request readiness. <paramref name="markedReady"/>: Tevrin already marked the
     /// draft ready for this version (a release attempt awaited its merge), so a draft blocks again.
     /// </summary>
     Task<Result<HostMergeReadiness>> GetMergeReadinessAsync(
@@ -252,14 +252,14 @@ public sealed record ReleaseRequest(
     public string TagMessageFor(string tag) => Domain.GitHosts.CommitTrailers.Append(Domain.Releases.ReleaseRules.TagMessage(ProjectName, tag, Version), CoAuthorLine);
 
     /// <summary>
-    /// FR-65: whether AIDE may merge (<c>aide_merges</c>). <c>false</c> (<c>manual</c>, and the merge poll): never merge —
+    /// FR-65: whether Tevrin may merge (<c>aide_merges</c>). <c>false</c> (<c>manual</c>, and the merge poll): never merge —
     /// a PR (or Local branch) already merged by someone else is tagged on its merge commit and released; one not merged yet
     /// is <see cref="ReleaseOutcomeKind.AwaitingMerge"/> (GitHub: a draft PR is marked ready for review first).
     /// </summary>
     public bool Merge { get; init; } = true;
 
     /// <summary>
-    /// FR-140: AIDE's release notes (<see cref="Domain.Releases.ReleaseNotes"/>) for a host whose release is created with the
+    /// FR-140: Tevrin's release notes (<see cref="Domain.Releases.ReleaseNotes"/>) for a host whose release is created with the
     /// tag (GitLab: the Release's <c>description</c>; Bitbucket: the annotated tag's message). <c>null</c> for GitHub (its
     /// Release is created after tagging) and Local.
     /// </summary>
@@ -272,14 +272,14 @@ public sealed record ReleaseRequest(
     public MergeStrategy Strategy { get; init; } = MergeStrategy.AideMerges;
 
     /// <summary>
-    /// FR-65, FR-140: the merge commit already recorded on the attempt (AIDE's own merge, before a retry); a merged PR/MR
+    /// FR-65, FR-140: the merge commit already recorded on the attempt (Tevrin's own merge, before a retry); a merged PR/MR
     /// on this commit isn't a merge someone else made.
     /// </summary>
     public string? RecordedMergeCommitSha { get; init; }
 
     /// <summary>
-    /// FR-140: the attempt already submitted AIDE's merge (<c>releases.merge_submitted_at</c>); a pull request found merged is
-    /// then AIDE's own merge, even before its commit was recorded.
+    /// FR-140: the attempt already submitted Tevrin's merge (<c>releases.merge_submitted_at</c>); a pull request found merged is
+    /// then Tevrin's own merge, even before its commit was recorded.
     /// </summary>
     public bool MergeSubmitted { get; init; }
 
@@ -290,7 +290,7 @@ public sealed record ReleaseRequest(
     public Func<CancellationToken, Task>? OnMergeSubmitting { get; init; }
 
     /// <summary>
-    /// FR-153, §4.21: the branch head the production migrations ran on (Supabase BaaS). AIDE merges only this commit: a
+    /// FR-153, §4.21: the branch head the production migrations ran on (Supabase BaaS). Tevrin merges only this commit: a
     /// fetched head (which the host's PR head must equal, and the merge call pins) that differs fails the attempt
     /// transiently, and the retry runs the migrations again on the new head first. <c>null</c>: no pre-merge migrations.
     /// </summary>
@@ -319,7 +319,7 @@ public enum ReleaseOutcomeKind
     Failed = 2,
 
     /// <summary>
-    /// FR-65: not merged yet, and AIDE won't (or can't) merge it: the strategy is <c>manual</c>, or GitHub refused the merge
+    /// FR-65: not merged yet, and Tevrin won't (or can't) merge it: the strategy is <c>manual</c>, or GitHub refused the merge
     /// (branch protection, required reviews or checks, missing permission). <see cref="ReleaseOutcome.Reason"/> says why.
     /// Nothing was merged or tagged.
     /// </summary>
@@ -351,11 +351,11 @@ public sealed record ReleaseOutcome(
     public static ReleaseOutcome Failed(string errorCode, string reason, bool transient) =>
         new(ReleaseOutcomeKind.Failed, null, false, [], errorCode, reason, transient);
 
-    /// <summary>FR-65: waiting for a merge by someone else; <see cref="MergeRefused"/> when GitHub refused AIDE's merge.</summary>
+    /// <summary>FR-65: waiting for a merge by someone else; <see cref="MergeRefused"/> when GitHub refused Tevrin's merge.</summary>
     public static ReleaseOutcome Awaiting(string reason, bool refused) =>
         new(ReleaseOutcomeKind.AwaitingMerge, null, false, [], null, reason, false) { MergeRefused = refused };
 
-    /// <summary>FR-65: GitHub refused AIDE's merge (as opposed to the <c>manual</c> strategy not trying).</summary>
+    /// <summary>FR-65: GitHub refused Tevrin's merge (as opposed to the <c>manual</c> strategy not trying).</summary>
     public bool MergeRefused { get; init; }
 
     /// <summary>FR-65: released on a merge someone else made (the PR was already merged on GitHub, or the Local branch by hand).</summary>
@@ -370,11 +370,11 @@ public sealed record ReleaseOutcome(
     /// </summary>
     public MergeReadinessReasonCode? RefusedReason { get; init; }
 
-    /// <summary>FR-138: AIDE couldn't take the merge request out of draft, so the awaiting reasons include <c>draft</c>.</summary>
+    /// <summary>FR-138: Tevrin couldn't take the merge request out of draft, so the awaiting reasons include <c>draft</c>.</summary>
     public bool StillDraft { get; init; }
 
     /// <summary>
-    /// FR-140: the host accepted AIDE's merge and is still performing it (a Bitbucket merge task still pending): not a
+    /// FR-140: the host accepted Tevrin's merge and is still performing it (a Bitbucket merge task still pending): not a
     /// failure; the release job looks again shortly without counting an attempt.
     /// </summary>
     public bool MergePending { get; init; }
@@ -387,7 +387,7 @@ public sealed record ReleaseOutcome(
 
     /// <summary>
     /// FR-153, §4.21: the pull request head of a merge someone else made, as the host reports it (or the Local branch);
-    /// <c>null</c> when it isn't known or AIDE merged. Compared with the head the production migrations ran on.
+    /// <c>null</c> when it isn't known or Tevrin merged. Compared with the head the production migrations ran on.
     /// </summary>
     public string? MergedHead { get; init; }
 }

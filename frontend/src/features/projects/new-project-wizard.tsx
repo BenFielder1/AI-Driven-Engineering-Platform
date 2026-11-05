@@ -396,7 +396,7 @@ const sourceLabels: Record<Source, string> = {
 
 /** The wizard's Git options (FR-86). */
 const gitModeOptionLabels: Record<WizardValues['gitMode'], string> = {
-  github_app: 'GitHub (AIDE GitHub App)',
+  github_app: 'GitHub (Tevrin GitHub App)',
   github_pat: 'Repository URL and access token',
   gitlab: 'GitLab',
   bitbucket: 'Bitbucket',
@@ -405,7 +405,7 @@ const gitModeOptionLabels: Record<WizardValues['gitMode'], string> = {
 
 /**
  * FR-86 GitHub App option: the repo picker (with Create repository) once the user has connected GitHub, else Connect
- * GitHub. In "start from scratch", a repo with code gets the "AIDE will build on it" warning (it's treated as an
+ * GitHub. In "start from scratch", a repo with code gets the "Tevrin will build on it" warning (it's treated as an
  * import, never released) and offers "Import instead".
  */
 function AppRepository({
@@ -466,7 +466,7 @@ function AppRepository({
         )}
       </p>
       {selected && hasCode && source === 'scratch' && (
-        <Alert tone="warning" title="This repository has code. AIDE will build on it">
+        <Alert tone="warning" title="This repository has code. Tevrin will build on it">
           <p>
             The project is treated as an import of a repository that was never released: the Repository Analyst reads the
             code first, and the first specification covers what is already there. Import it instead to say which version
@@ -497,7 +497,7 @@ function suggestedHostName(projectName: string, slot: HostSlot): string {
   return suffix ? `${suggestVercelProjectName(projectName) || 'app'}-${suffix}`.slice(0, 100) : ''
 }
 
-export function NewProjectWizard() {
+export function NewProjectWizard({ initialSource }: { initialSource?: Source } = {}) {
   const navigate = useNavigate()
   const create = useCreateProject()
   const queryClient = useQueryClient()
@@ -535,12 +535,29 @@ export function NewProjectWizard() {
     formState: { errors },
   } = useForm<WizardValues>({
     resolver: zodResolver(wizardSchema),
-    defaultValues: draft?.values ?? wizardDefaults,
+    defaultValues: draft?.values ?? (initialSource ? { ...wizardDefaults, source: initialSource } : wizardDefaults),
     mode: 'onTouched',
   })
 
   /** FR-171: the tracker items picked on the Idea step. */
   const sourceImports = useWatch({ control, name: 'sourceImports' })
+
+  /**
+   * FR-207, FR-209: `?source=import` (Home's "Import a repository", the palette's "Import repository") chooses Import,
+   * also when the wizard is already open (no remount); a saved draft (FR-159) wins.
+   */
+  const [seenSource, setSeenSource] = useState(initialSource)
+  if (initialSource !== seenSource) {
+    setSeenSource(initialSource)
+    if (initialSource === 'import' && !draft) {
+      setStep(0)
+    }
+  }
+  useEffect(() => {
+    if (initialSource === 'import' && !draft && getValues('source') !== 'import') {
+      setValue('source', 'import')
+    }
+  }, [initialSource, draft, getValues, setValue])
 
   /** FR-114: the Stack step's sub-step (Frontend → Backend → Data → VCS → Deployment). */
   const [stackSubStep, setStackSubStep] = useState(0)
@@ -1277,8 +1294,8 @@ export function NewProjectWizard() {
                           value: 'github_app',
                           label: gitModeOptionLabels.github_app,
                           description: importing
-                            ? 'Pick a repository the AIDE GitHub App can access. Recommended.'
-                            : 'Pick or create a repository the AIDE GitHub App can access. Recommended.',
+                            ? 'Pick a repository the Tevrin GitHub App can access. Recommended.'
+                            : 'Pick or create a repository the Tevrin GitHub App can access. Recommended.',
                         },
                       ]
                     : []),
@@ -1305,14 +1322,14 @@ export function NewProjectWizard() {
                   {
                     value: 'github_pat',
                     label: gitModeOptionLabels.github_pat,
-                    description: "For a GitHub repository the AIDE GitHub App can't be installed on.",
+                    description: "For a GitHub repository the Tevrin GitHub App can't be installed on.",
                   },
                   {
                     value: 'local',
                     label: gitModeOptionLabels.local,
                     description: importing
-                      ? 'An existing Git repository on the AIDE server (development and testing only).'
-                      : 'AIDE keeps a Git repository for this project on its own data volume.',
+                      ? 'An existing Git repository on the Tevrin server (development and testing only).'
+                      : 'Tevrin keeps a Git repository for this project on its own data volume.',
                   },
                 ]}
               />
@@ -1403,7 +1420,7 @@ export function NewProjectWizard() {
                 ) : (
                   <Alert tone="info">
                     <p>
-                      No repository to set up: AIDE creates and keeps a local Git repository for this project on its data
+                      No repository to set up: Tevrin creates and keeps a local Git repository for this project on its data
                       volume. Releases are tagged there instead of on GitHub.
                     </p>
                   </Alert>
@@ -1724,14 +1741,14 @@ function StepIndicator({ current, titles }: { current: number; titles: readonly 
             index === current
               ? 'border-primary/60 bg-primary/10 font-medium text-foreground'
               : index < current
-                ? 'border-border/60 bg-card/60 text-foreground'
+                ? 'border-border/60 bg-card text-foreground'
                 : 'border-dashed border-border/60 text-muted-foreground',
           )}
         >
           <span
             aria-hidden
             className={cn(
-              'flex size-5 items-center justify-center rounded-full font-mono text-[11px]',
+              'flex size-5 items-center justify-center rounded-full font-mono text-xs',
               index === current
                 ? 'bg-primary text-primary-foreground'
                 : index < current
@@ -1769,7 +1786,7 @@ function SummarySection({ title, step, onEdit, children }: {
   children: ReactNode
 }) {
   return (
-    <section aria-label={title} className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-label={title} className="rounded-lg border border-border/60 bg-background p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">{title}</h3>
         <Button
@@ -1837,7 +1854,7 @@ function DetectionNotice({
         The layers detected in <code className="font-mono">{d.ref}</code> are pre-filled and marked Detected. You can
         change any of them.
       </p>
-      {d.truncated && <p className="mt-1">The repository has more files than AIDE listed, so some layers may be missing.</p>}
+      {d.truncated && <p className="mt-1">The repository has more files than Tevrin listed, so some layers may be missing.</p>}
     </Alert>
   )
 }
@@ -2020,7 +2037,7 @@ function ReviewSummary({
         {values.gitMode === 'gitlab' && <GitLabConnectionSummary connectionId={values.gitlabConnectionId} />}
         {values.gitMode === 'bitbucket' && <BitbucketConnectionSummary connectionId={values.bitbucketConnectionId} />}
         {(app || values.gitMode === 'gitlab' || values.gitMode === 'bitbucket') && values.repoHasCode && !importing && (
-          <SummaryRow term="Existing code">AIDE builds on it (treated as an import that was never released)</SummaryRow>
+          <SummaryRow term="Existing code">Tevrin builds on it (treated as an import that was never released)</SummaryRow>
         )}
         {pat && <SummaryRow term="Repository URL">{values.repoUrl.trim()}</SummaryRow>}
         {importing && values.gitMode === 'local' && (

@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { NextConfig } from 'next'
 
 /**
- * AIDE web (FR-94, FR-103). The app is served by the custom server in server.ts (the /api proxy, security headers and
+ * Tevrin web (FR-94, FR-103). The app is served by the custom server in server.ts (the /api proxy, security headers and
  * request logs live there); `output: 'standalone'` gives the minimal runtime that the Docker image copies.
  */
 const root = path.resolve('.')

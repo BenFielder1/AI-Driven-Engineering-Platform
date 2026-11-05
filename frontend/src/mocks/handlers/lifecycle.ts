@@ -27,7 +27,8 @@ const statusFor: Record<Phase, ProjectStatus> = {
   release: 'releasing',
 }
 
-const systemActor: Actor = { id: null, name: 'aide-system', isSystem: true }
+// FR-198: the API returns the system actor with its display name (ActorResolver.SystemDisplayName).
+const systemActor: Actor = { id: null, name: 'Tevrin', isSystem: true }
 
 function actorFor(userId: string): Actor {
   const user = authDb.users.find((u) => u.id === userId)

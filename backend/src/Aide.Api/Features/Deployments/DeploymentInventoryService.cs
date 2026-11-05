@@ -39,7 +39,7 @@ public sealed record DeploymentFacts(StackResolution? Stack, string? PublicPrefi
     public override string ToString() => $"DeploymentFacts {{ Targets = {Targets.Count}, Databases = {Databases.Count} }}";
 }
 
-/// <summary>A variable AIDE no longer writes under its old platform ids: the ids to delete on the targets of its components.</summary>
+/// <summary>A variable Tevrin no longer writes under its old platform ids: the ids to delete on the targets of its components.</summary>
 public sealed record RemovedEnvVar(string Key, IReadOnlyList<string> AppliesTo, IReadOnlyDictionary<string, string>? PlatformIds);
 
 /// <summary>The outcome of <see cref="DeploymentInventoryService.RecomputeDerivedAsync"/>: rows to push, and platform vars to delete.</summary>
@@ -96,7 +96,7 @@ public sealed partial class DeploymentInventoryService(
 
     /// <summary>
     /// §4.22: writes the derived rows for the current composition and targets (tracked): new or changed values are saved and
-    /// marked unsynced, rows AIDE no longer derives are removed (a user row on a derived key becomes derived: user variables
+    /// marked unsynced, rows Tevrin no longer derives are removed (a user row on a derived key becomes derived: user variables
     /// can't override derived keys: the replacement is logged and recorded as an activity event, and the user row's platform
     /// vars are deleted and written again rather than updated in place). Returns the rows to push and the platform vars to
     /// delete (removed rows, replaced user rows). The caller saves.
@@ -173,7 +173,7 @@ public sealed partial class DeploymentInventoryService(
         v.SyncedAt,
         v.SyncError);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: {Key} is now derived by AIDE; the Owner's value was replaced")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId}: {Key} is now derived by Tevrin; the Owner's value was replaced")]
     private static partial void LogUserValueReplaced(ILogger logger, Guid projectId, string key);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {Derived} derived environment variable(s), {Changed} changed")]

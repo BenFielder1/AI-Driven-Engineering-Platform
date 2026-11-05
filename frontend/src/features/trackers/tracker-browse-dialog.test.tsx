@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -127,7 +128,7 @@ describe('Import from tracker dialog (FR-169)', () => {
     trackersDb.permissionMissing = 'https://github.com/apps/aide'
     signInAs({ systemRole: 'user' })
     renderWithProviders(<TrackerBrowseDialog capacity={200} onClose={vi.fn()} onAdd={vi.fn()} />)
-    expect(await screen.findByText('The AIDE GitHub App needs the Issues permission. Update it in GitHub settings.')).toBeInTheDocument()
+    expect(await screen.findByText('The Tevrin GitHub App needs the Issues permission. Update it in GitHub settings.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Open the GitHub App settings/ })).toHaveAttribute('href', 'https://github.com/apps/aide')
   })
 

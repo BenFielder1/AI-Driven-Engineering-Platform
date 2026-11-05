@@ -8,7 +8,7 @@ namespace Aide.Api.Features.GitHub;
 public sealed record GitHubAccountDto(string Login, GitHubOwnerType Type);
 
 /// <summary>
-/// An installation of the AIDE GitHub App that the caller can access (FR-81, <c>GET /user/installations</c>):
+/// An installation of the Tevrin GitHub App that the caller can access (FR-81, <c>GET /user/installations</c>):
 /// <c>repositorySelection</c> is <c>all</c> or <c>selected</c>; <c>manageUrl</c> is where the user adds repositories to it.
 /// <c>pagesPermission</c> (FR-143) is whether the installation grants the App's Pages write permission (<c>granted</c>,
 /// <c>missing</c>: the Owner has to accept the updated permissions on the installation, or <c>unknown</c>).
@@ -24,7 +24,7 @@ public sealed record GitHubInstallationDto(
 /// The caller's GitHub connection (FR-81). Tokens are never returned. When <c>connected</c> is false, <c>login</c>,
 /// <c>githubUserId</c>, <c>status</c> and <c>accessExpiresAt</c> are <c>null</c> and <c>installations</c> is empty.
 /// <c>status</c> is <c>invalid</c> after a failed token refresh (§4.14); <c>accessExpiresAt</c> is <c>null</c> when the
-/// App's tokens don't expire. <c>installUrl</c> is the App's "Install AIDE on more repositories" link (<c>null</c> when no
+/// App's tokens don't expire. <c>installUrl</c> is the App's "Install Tevrin on more repositories" link (<c>null</c> when no
 /// App is registered).
 /// </summary>
 public sealed record GitHubConnectionDto(
@@ -37,7 +37,7 @@ public sealed record GitHubConnectionDto(
     string? InstallUrl);
 
 /// <summary>
-/// A repository the AIDE GitHub App can access for the caller (FR-81, FR-86). <c>installationId</c> is the installation
+/// A repository the Tevrin GitHub App can access for the caller (FR-81, FR-86). <c>installationId</c> is the installation
 /// that grants it (send it with <c>repoFullName</c> in <c>POST /api/projects</c>). <c>empty</c> is whether the repo has
 /// no commits (<c>null</c>: not checked in the list; <c>GET …/refs</c> always says). <c>canPush</c>: the caller may push to it
 /// (push, maintain or admin); only such repositories can back a project (FR-82, FR-83).
@@ -59,7 +59,7 @@ public sealed record GitHubRepoPageDto(IReadOnlyList<GitHubRepoDto> Items, int P
 
 /// <summary>
 /// A possible owner for "Create repository" (FR-81): the caller (<c>user</c>) or an organisation they belong to.
-/// <c>appInstalled</c> / <c>installationId</c>: whether (and where) the AIDE GitHub App is installed on it;
+/// <c>appInstalled</c> / <c>installationId</c>: whether (and where) the Tevrin GitHub App is installed on it;
 /// <c>canCreate</c>: the App is installed, has Administration write, and (for an organisation) the caller may create
 /// repositories there.
 /// </summary>

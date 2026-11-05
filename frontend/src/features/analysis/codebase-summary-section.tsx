@@ -77,7 +77,7 @@ export function CodebaseSummarySection({ state, inference }: { state: CodebaseSu
     case 'running':
       body = (
         <p role="status" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
-          <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
+          <span aria-hidden="true" className="mr-2 inline-block size-3 motion-safe:animate-pulse rounded-full bg-primary align-middle" />
           <span className="font-medium">Summary being generated…</span> The Repository Analyst{' '}
           {state.status === 'queued' ? 'is about to read' : 'is reading'} the repository at this version&apos;s base
           commit. {next}

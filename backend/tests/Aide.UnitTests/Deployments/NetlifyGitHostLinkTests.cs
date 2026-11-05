@@ -280,7 +280,7 @@ public class GitHostRepoLinksTests
         var body = Assert.Single(stub.Where("POST", GitLabKeys)).Body;
         Assert.Contains("\"can_push\":false", body, StringComparison.Ordinal);
         Assert.Contains("\"key\":\"ssh-rsa AAAA\"", body, StringComparison.Ordinal);
-        Assert.Contains("\"title\":\"Netlify (added by AIDE)\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"title\":\"Netlify (added by Tevrin)\"", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -364,7 +364,7 @@ public class GitHostRepoLinksTests
         await links.EnsurePushWebhookAsync(ProjectId, Bitbucket, BitbucketHookUrl, NetlifyRules.RepoLinkTitle, Ct);
 
         var key = Assert.Single(stub.Where("POST", BitbucketKeys)).Body;
-        Assert.Contains("\"label\":\"Netlify (added by AIDE)\"", key, StringComparison.Ordinal);
+        Assert.Contains("\"label\":\"Netlify (added by Tevrin)\"", key, StringComparison.Ordinal);
         Assert.Contains("\"key\":\"ssh-rsa AAAA\"", key, StringComparison.Ordinal);
         var hook = Assert.Single(stub.Where("POST", BitbucketHooks)).Body;
         Assert.Contains("\"events\":[\"repo:push\"]", hook, StringComparison.Ordinal);

@@ -80,7 +80,7 @@ public static class GitLabMergeReadiness
         detailedMergeStatus is not null && TransientStatuses.Contains(detailedMergeStatus);
 
     /// <summary>
-    /// FR-138: whether AIDE may merge the MR now, and why not. A closed MR is <c>pr_not_open</c> alone; a transient merge
+    /// FR-138: whether Tevrin may merge the MR now, and why not. A closed MR is <c>pr_not_open</c> alone; a transient merge
     /// status re-polls. Otherwise every reason the facts and the status show, in the v2 order: permission, conflicts,
     /// rebase, draft, review, discussions, failing then pending pipeline, and <c>branch_protected</c> for any other
     /// GitLab block (e.g. <c>merge_request_blocked</c>, <c>locked_paths</c>) when nothing else explains it. The
@@ -104,7 +104,7 @@ public static class GitLabMergeReadiness
         var status = facts.DetailedMergeStatus;
         if (!MayMerge(facts.UserAccessLevel, facts.ProtectedBranchMergeAccessLevels))
         {
-            reasons.Add(MergeReadinessReasonCode.NoPermission, "AIDE's GitLab connection may not merge into the target branch (it needs the Maintainer role, or the access the protected branch allows).");
+            reasons.Add(MergeReadinessReasonCode.NoPermission, "Tevrin's GitLab connection may not merge into the target branch (it needs the Maintainer role, or the access the protected branch allows).");
         }
 
         if (facts.HasConflicts || status == "conflict")
@@ -170,11 +170,11 @@ public static class GitLabMergeReadiness
     }
 
     /// <summary>
-    /// FR-138, FR-65, FR-137: AIDE opens the merge request as a draft and marks it ready itself before merging (under both
-    /// strategies), so until it has (<paramref name="markedReady"/> false) the draft doesn't block AIDE (as v2 does for
+    /// FR-138, FR-65, FR-137: Tevrin opens the merge request as a draft and marks it ready itself before merging (under both
+    /// strategies), so until it has (<paramref name="markedReady"/> false) the draft doesn't block Tevrin (as v2 does for
     /// GitHub drafts): the facts without <see cref="GitLabMergeFacts.Draft"/>, and without GitLab's <c>draft_status</c>
     /// (which hides the other merge checks; the approvals endpoint, conflicts, discussions and the head pipeline still say
-    /// what blocks). Once AIDE marked it ready, a draft (made again by someone, or never cleared) blocks: facts unchanged.
+    /// what blocks). Once Tevrin marked it ready, a draft (made again by someone, or never cleared) blocks: facts unchanged.
     /// </summary>
     public static GitLabMergeFacts IgnoringAideDraft(GitLabMergeFacts facts, bool markedReady = false)
     {
@@ -313,9 +313,9 @@ public static class MergeabilityChecks
     }
 
     /// <summary>
-    /// FR-138, FR-137: AIDE opens the pull request as a draft and marks it ready itself before merging, so until it has
-    /// (<paramref name="markedReady"/> false) a draft check doesn't block AIDE (as for GitLab and v2's GitHub drafts). Once
-    /// AIDE marked it ready, a draft (made again by someone) blocks: the checks are unchanged.
+    /// FR-138, FR-137: Tevrin opens the pull request as a draft and marks it ready itself before merging, so until it has
+    /// (<paramref name="markedReady"/> false) a draft check doesn't block Tevrin (as for GitLab and v2's GitHub drafts). Once
+    /// Tevrin marked it ready, a draft (made again by someone) blocks: the checks are unchanged.
     /// </summary>
     public static IReadOnlyList<MergeabilityCheck> IgnoringAideDraft(IEnumerable<MergeabilityCheck> checks, bool markedReady = false)
     {
@@ -367,7 +367,7 @@ public static class MergeabilityChecks
 
         if (Has(check, "permission") || Has(check, "write_access") || Has(check, "merge_access"))
         {
-            return (MergeReadinessReasonCode.NoPermission, "AIDE's Bitbucket connection may not merge into the destination branch.");
+            return (MergeReadinessReasonCode.NoPermission, "Tevrin's Bitbucket connection may not merge into the destination branch.");
         }
 
         return (MergeReadinessReasonCode.BranchProtected, $"A Bitbucket merge check blocks the merge ({name}).");
@@ -397,7 +397,7 @@ internal sealed class ReasonList
         var canMerge = _reasons.Count == 0;
         if (strategy == MergeStrategy.Manual)
         {
-            _reasons.Add(new(MergeReadinessReasonCode.ManualStrategy, $"The project's merge strategy is manual: AIDE never merges; merge it on {host}."));
+            _reasons.Add(new(MergeReadinessReasonCode.ManualStrategy, $"The project's merge strategy is manual: Tevrin never merges; merge it on {host}."));
         }
 
         return new MergeReadinessVerdict(canMerge, MergeReadinessRules.WillAutoMerge(strategy, canMerge), [.. _reasons]);

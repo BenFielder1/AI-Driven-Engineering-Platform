@@ -67,11 +67,11 @@ export const liveOnNames = (live: readonly LiveTarget[]) =>
 /** FR-148: what happens after the reset was queued, per method. */
 export const previewResetCopy: Record<PreviewResetMethod, string> = {
   reset_schema:
-    "AIDE is emptying the preview database's schema. The next preview deployment re-applies every migration from the branch.",
+    "Tevrin is emptying the preview database's schema. The next preview deployment re-applies every migration from the branch.",
   reset_schema_external:
-    "AIDE is emptying the preview database's schema over its external connection. The next preview deployment re-applies every migration from the branch.",
+    "Tevrin is emptying the preview database's schema over its external connection. The next preview deployment re-applies every migration from the branch.",
   manual:
-    "The reset is recorded, but AIDE can't empty a Railway database itself. Empty the preview Postgres in Railway (drop its schema or re-create it), then deploy a preview: its pre-deploy re-applies every migration.",
+    "The reset is recorded, but Tevrin can't empty a Railway database itself. Empty the preview Postgres in Railway (drop its schema or re-create it), then deploy a preview: its pre-deploy re-applies every migration.",
   none: 'There was nothing to reset.',
 }
 

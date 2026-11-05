@@ -83,7 +83,7 @@ public sealed partial class CommitCredit(AideDbContext db, ISecretProtectors pro
     }
 
     /// <summary>
-    /// §4.25 initial commit of a repository AIDE creates on Bitbucket (FR-135), before any project exists: the person creating
+    /// §4.25 initial commit of a repository Tevrin creates on Bitbucket (FR-135), before any project exists: the person creating
     /// it is the project creator-to-be, and there is no project setting yet (it defaults to on).
     /// </summary>
     public Task<string?> ForBitbucketInitialCommitAsync(Guid userId, Guid connectionId, CancellationToken cancellationToken) =>

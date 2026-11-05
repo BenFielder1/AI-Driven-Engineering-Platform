@@ -72,7 +72,7 @@ const setUp = (row: { resourceId: string | null; binding: unknown }) => row.reso
 /**
  * FR-191: which cards go where. A set-up group holds the rows tied to it by `groupId`, and any of its parts that left it
  * and aren't set up (which can rejoin). A part set up on its own stays outside. A group with no row yet whose parts were
- * set up alone in v4 isn't shown at all: those rows look as they did, since AIDE never moves platform resources (D-V5-9).
+ * set up alone in v4 isn't shown at all: those rows look as they did, since Tevrin never moves platform resources (D-V5-9).
  */
 export function layoutOf(s: DeploymentSettings) {
   const inGroup = (group: DeploymentGroup) => ({
@@ -115,7 +115,7 @@ export function DeploymentSettingsTab({ project }: { project: Project; canEdit?:
       <div className="flex flex-col gap-6">
         {s.fakeMode && (
           <Alert tone="info" title="Fake mode">
-            <p>This AIDE server deploys with its Fake provider: setup and deployments are simulated, and nothing is created on the platforms.</p>
+            <p>This Tevrin server deploys with its Fake provider: setup and deployments are simulated, and nothing is created on the platforms.</p>
           </Alert>
         )}
         {!s.canManage && <p className="text-sm text-muted-foreground">Only project Owners can change the deployment settings.</p>}

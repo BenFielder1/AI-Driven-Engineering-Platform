@@ -102,7 +102,7 @@ internal static class ErrorReporter
 
         if (api.ExitCode == ExitCodes.Auth && api.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            await error.WriteLineAsync("  The token is missing, revoked or expired. Run 'aide login --token <token>'.").ConfigureAwait(false);
+            await error.WriteLineAsync("  The token is missing, revoked or expired. Run 'tevrin login --token <token>'.").ConfigureAwait(false);
         }
 
         if (!string.IsNullOrWhiteSpace(problem?.TraceId))

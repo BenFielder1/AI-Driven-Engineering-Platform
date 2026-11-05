@@ -78,7 +78,7 @@ public static partial class BitbucketProjectRules
 
         if (!string.IsNullOrEmpty(token))
         {
-            problems.Add($"{prefix}token: Not used with bitbucket: AIDE uses your Bitbucket connection.");
+            problems.Add($"{prefix}token: Not used with bitbucket: Tevrin uses your Bitbucket connection.");
         }
 
         if (installationId is not null)

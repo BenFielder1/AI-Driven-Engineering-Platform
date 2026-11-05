@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -107,7 +108,7 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     expect(within(group).queryByRole('radio', { name: 'nightly' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Default branch')).toHaveValue('trunk')
     // An import doesn't get the scratch warning about existing code.
-    expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
+    expect(screen.queryByText('This repository has code. Tevrin will build on it')).not.toBeInTheDocument()
 
     await next(user)
     await stepHeading(/Step 4 of 8: Version/)
@@ -264,12 +265,29 @@ describe('Wizard → Import an existing repository (FR-73)', () => {
     await stepHeading(/Step 3 of 8: Repository/)
     await user.click(within(await screen.findByRole('list', { name: 'Repositories' })).getByRole('radio', { name: 'ada/shop' }))
 
-    expect(await screen.findByText('This repository has code. AIDE will build on it')).toBeInTheDocument()
+    expect(await screen.findByText('This repository has code. Tevrin will build on it')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Import instead' }))
 
     const group = await screen.findByRole('group', { name: 'Currently released version' })
     expect(within(group).getByRole('radio', { name: 'Never released' })).toBeChecked()
-    expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
+    expect(screen.queryByText('This repository has code. Tevrin will build on it')).not.toBeInTheDocument()
     expect(within(screen.getByRole('list', { name: 'Wizard steps' })).getByText(/2\. Request/)).toBeInTheDocument()
+  })
+})
+
+describe('FR-207 / FR-209: ?source=import', () => {
+  it('FR207_import_link: ?source=import chooses Import on arrival and when the open wizard navigates to it', async () => {
+    signInAs({ systemRole: 'user' })
+    const { router, unmount } = await renderRoute('/projects/new?source=import')
+    expect(await screen.findByRole('radio', { name: 'Import an existing repository' })).toBeChecked()
+    unmount()
+
+    await renderRoute('/projects/new')
+    await stepHeading(/Step 1 of 8: Source/)
+    expect(screen.getByRole('radio', { name: 'Start from scratch' })).toBeChecked()
+    await router.navigate({ href: '/projects/new?source=import' })
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: 'Import an existing repository' })).toBeChecked()
+    })
   })
 })

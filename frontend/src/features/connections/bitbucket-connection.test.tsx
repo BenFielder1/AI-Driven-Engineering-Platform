@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
@@ -90,7 +91,7 @@ describe('Connections → Bitbucket (FR-134)', () => {
     expect(bitbucketDb.connections[me.id] ?? []).toEqual([])
   })
 
-  it('FR134_scope_unverifiable: lists the scopes AIDE could not confirm, with what to do instead, and saves nothing', async () => {
+  it('FR134_scope_unverifiable: lists the scopes Tevrin could not confirm, with what to do instead, and saves nothing', async () => {
     const me = signInAs()
     configureBitbucketConsumer()
     const { user, dialog } = await openTokenDialog()
@@ -100,7 +101,7 @@ describe('Connections → Bitbucket (FR-134)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Connect' }))
 
     const [message] = await within(dialog).findAllByText(
-      /AIDE couldn't confirm these permissions: write:repository:bitbucket, admin:repository:bitbucket\./,
+      /Tevrin couldn't confirm these permissions: write:repository:bitbucket, admin:repository:bitbucket\./,
     )
     expect(message).toHaveTextContent('Connect with Bitbucket (OAuth) instead, or create a repository')
     expect(within(dialog).getByLabelText('API token')).toHaveValue('')
@@ -115,7 +116,7 @@ describe('Connections → Bitbucket (FR-134)', () => {
     await user.type(within(dialog).getByLabelText('API token'), 'unverif-token')
     await user.click(within(dialog).getByRole('button', { name: 'Connect' }))
 
-    const [message] = await within(dialog).findAllByText(/AIDE couldn't confirm these permissions/)
+    const [message] = await within(dialog).findAllByText(/Tevrin couldn't confirm these permissions/)
     expect(message).toHaveTextContent('Create a repository in the workspace first')
     expect(message).not.toHaveTextContent('OAuth')
   })

@@ -410,7 +410,7 @@ function describeRelease(type: string, payload: Payload): string | null {
     }
     case "MERGE_READINESS_CHECKED": {
       if (payload.willAutoMerge === true) {
-        return "Merge readiness checked: AIDE will merge automatically";
+        return "Merge readiness checked: Tevrin will merge automatically";
       }
       if (payload.willAutoMerge === false) {
         return `Merge readiness checked: a merge on ${host.host} will be needed`;
@@ -796,7 +796,7 @@ function describeDatabase(type: string, payload: Payload): string | null {
     case "DATABASE_RESET": {
       // FR-148: the reset only ever applies to the preview database; older payloads don't name the environment.
       const where = provider ? ` on ${databaseProviderLabel(provider)}` : "";
-      // A `manual` reset (Railway) only records that someone reset it on the platform; AIDE ran nothing.
+      // A `manual` reset (Railway) only records that someone reset it on the platform; Tevrin ran nothing.
       return payload.method === "reset_schema" || payload.method === "reset_schema_external"
         ? `Preview database${where} reset: its schema was emptied`
         : `Preview database${where} recorded as reset`;

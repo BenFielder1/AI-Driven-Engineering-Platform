@@ -6,8 +6,8 @@ using Aide.Domain.Review;
 namespace Aide.Domain.Deployments;
 
 /// <summary>
-/// FR-89: the deterministic checks that a Vercel project's repository stops Vercel's automatic deploys of AIDE branches
-/// (AIDE deploys them explicitly). The repository's <c>vercel.json</c> (in the Vercel project's root directory) must set
+/// FR-89: the deterministic checks that a Vercel project's repository stops Vercel's automatic deploys of Tevrin branches
+/// (Tevrin deploys them explicitly). The repository's <c>vercel.json</c> (in the Vercel project's root directory) must set
 /// <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c>; production deploys of the default branch stay on.
 /// <list type="bullet">
 /// <item><see cref="PlanWarning"/>: a plan of a stack that deploys to Vercel (FR-129: the composition's Vercel host, formerly a
@@ -22,7 +22,7 @@ public static class VercelConfigRules
     /// <summary>The Vercel project configuration file.</summary>
     public const string FileName = "vercel.json";
 
-    /// <summary>The <c>git.deploymentEnabled</c> key that matches AIDE's working branches (<c>aide/&lt;slug&gt;-…</c>).</summary>
+    /// <summary>The <c>git.deploymentEnabled</c> key that matches Tevrin's working branches (<c>aide/&lt;slug&gt;-…</c>).</summary>
     public const string AideBranches = "aide/**";
 
     /// <summary>The repository path of <c>vercel.json</c> for a Vercel project rooted at <paramref name="rootDirectory"/> (<c>.</c>: the repository root).</summary>
@@ -65,7 +65,7 @@ public static class VercelConfigRules
 
         return new ValidationWarning(
             ErrorCodes.MissingVercelConfig,
-            $"No step declares {path}, and the repository has none: Vercel would deploy every AIDE branch on its own.",
+            $"No step declares {path}, and the repository has none: Vercel would deploy every Tevrin branch on its own.",
             [$"Add {path} to a step (the scaffold step for a new repository) with git.deploymentEnabled {{ \"{AideBranches}\": false }}."]);
     }
 
@@ -78,12 +78,12 @@ public static class VercelConfigRules
         ArgumentNullException.ThrowIfNull(path);
         if (content is null)
         {
-            return [Finding($"{path} is missing: add it with git.deploymentEnabled {{ \"{AideBranches}\": false }} so Vercel doesn't deploy AIDE branches on its own (FR-89).", path)];
+            return [Finding($"{path} is missing: add it with git.deploymentEnabled {{ \"{AideBranches}\": false }} so Vercel doesn't deploy Tevrin branches on its own (FR-89).", path)];
         }
 
         return DisablesAideBranches(content)
             ? []
-            : [Finding($"{path} doesn't set git.deploymentEnabled[\"{AideBranches}\"] to false, so Vercel deploys AIDE branches on its own; AIDE deploys them explicitly (FR-89).", path)];
+            : [Finding($"{path} doesn't set git.deploymentEnabled[\"{AideBranches}\"] to false, so Vercel deploys Tevrin branches on its own; Tevrin deploys them explicitly (FR-89).", path)];
     }
 
     /// <summary>Whether the JSON <paramref name="content"/> sets <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c> (unreadable JSON: no).</summary>

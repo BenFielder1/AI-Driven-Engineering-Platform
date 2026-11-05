@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace Aide.Infrastructure.Git;
 
 /// <summary>
-/// Who commits and tags in a working copy (author and committer). The default is AIDE (<see cref="GitCli.AuthorName"/>);
+/// Who commits and tags in a working copy (author and committer). The default is Tevrin (<see cref="GitCli.AuthorName"/>);
 /// FR-82: GitHub App projects commit as the App bot (<c>&lt;slug&gt;[bot]</c> with its noreply email).
 /// </summary>
 public sealed record GitCommitIdentity(string Name, string Email);
@@ -245,7 +245,7 @@ public interface IWorkingCopies
 
     /// <summary>
     /// FR-82: commits, merges and tags in the project's working copy are made as <paramref name="identity"/> from now on
-    /// (<c>null</c>: AIDE). Set by the provider each time it prepares the working copy (in memory; prepared again after a
+    /// (<c>null</c>: Tevrin). Set by the provider each time it prepares the working copy (in memory; prepared again after a
     /// restart before any commit).
     /// </summary>
     void UseCommitIdentity(Guid projectId, GitCommitIdentity? identity);
@@ -258,7 +258,7 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> Locks = new();
 
-    /// <summary>FR-82: the commit identity per working-copy root (absent: AIDE).</summary>
+    /// <summary>FR-82: the commit identity per working-copy root (absent: Tevrin).</summary>
     private readonly ConcurrentDictionary<string, GitCommitIdentity> _identities = new(StringComparer.Ordinal);
 
     public void UseCommitIdentity(Guid projectId, GitCommitIdentity? identity)

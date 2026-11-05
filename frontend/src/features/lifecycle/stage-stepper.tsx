@@ -77,7 +77,7 @@ export function StageStepper({
                   'group relative flex min-h-11 items-center gap-2 rounded-full border px-3 text-sm whitespace-nowrap transition-colors',
                   'outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
                   s.state === 'current' && 'border-primary/60 bg-primary/10 font-medium text-foreground',
-                  s.state === 'done' && 'border-border/60 bg-card/60 text-foreground hover:bg-accent',
+                  s.state === 'done' && 'border-border/60 bg-card text-foreground hover:bg-accent',
                   s.state === 'upcoming' && 'border-dashed border-border/60 text-muted-foreground hover:text-foreground',
                   isViewing && 'ring-2 ring-primary/50',
                 )}
@@ -85,16 +85,16 @@ export function StageStepper({
                 <span
                   aria-hidden
                   className={cn(
-                    'flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px]',
+                    'flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-xs',
                     s.state === 'done' && 'bg-success/20 text-success',
-                    s.state === 'current' && 'bg-primary text-primary-foreground',
+                    s.state === 'current' && 'bg-brand-gradient text-primary-foreground',
                     s.state === 'upcoming' && 'bg-muted text-muted-foreground',
                   )}
                 >
                   {s.state === 'done' ? (
                     <Check className="size-3" />
                   ) : s.state === 'current' ? (
-                    <span className="size-2 animate-pulse rounded-full bg-primary-foreground" />
+                    <span className="size-2 rounded-full bg-background" />
                   ) : (
                     i + 1
                   )}
@@ -109,7 +109,7 @@ export function StageStepper({
                   <span
                     aria-hidden
                     data-testid="stepper-needs-action"
-                    className="flex h-5 min-w-5 items-center justify-center rounded-full bg-warning px-1.5 font-mono text-[11px] leading-none font-semibold text-warning-foreground"
+                    className="flex h-5 min-w-5 items-center justify-center rounded-full bg-warning px-1.5 font-mono text-xs leading-none font-semibold text-warning-foreground"
                   >
                     {s.needsAction}
                   </span>

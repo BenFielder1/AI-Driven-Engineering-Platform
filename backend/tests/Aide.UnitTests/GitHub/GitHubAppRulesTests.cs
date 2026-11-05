@@ -40,9 +40,9 @@ public class GitHubAppRulesTests
     }
 
     [Theory]
-    [InlineData("localhost", "AIDE (localhost)")]
-    [InlineData("aide.internal.example.com", "AIDE (aide.internal.example.com)")]
-    [InlineData("a-very-long-host-name.example.internal", "AIDE (a-very-long-host-name.examp)")]
+    [InlineData("localhost", "Tevrin (localhost)")]
+    [InlineData("aide.internal.example.com", "Tevrin (aide.internal.example.com)")]
+    [InlineData("a-very-long-host-name.example.internal", "Tevrin (a-very-long-host-name.exa)")]
     public void FR80_The_App_is_named_after_the_public_host_within_GitHubs_34_characters(string host, string expected)
     {
         var name = GitHubRules.ManifestAppName(host);

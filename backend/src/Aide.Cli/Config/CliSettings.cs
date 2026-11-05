@@ -2,12 +2,40 @@ using System.Net;
 
 namespace Aide.Cli.Config;
 
+/// <summary>
+/// FR-200, §4.29: the CLI's environment variables. Each is read as <c>TEVRIN_X</c>, then the deprecated <c>AIDE_X</c>
+/// (so <c>value = TEVRIN_X ?? AIDE_X ?? config file ?? default</c>); an empty or blank value counts as unset.
+/// </summary>
 internal static class EnvironmentVariables
 {
-    public const string Config = "AIDE_CONFIG";
-    public const string ApiUrl = "AIDE_API_URL";
-    public const string Token = "AIDE_TOKEN";
-    public const string GitToken = "AIDE_GIT_TOKEN";
+    public static readonly CliVariable Config = new("TEVRIN_CONFIG", "AIDE_CONFIG");
+    public static readonly CliVariable ApiUrl = new("TEVRIN_API_URL", "AIDE_API_URL");
+    public static readonly CliVariable Token = new("TEVRIN_TOKEN", "AIDE_TOKEN");
+    public static readonly CliVariable GitToken = new("TEVRIN_GIT_TOKEN", "AIDE_GIT_TOKEN");
+}
+
+/// <summary>One CLI setting's environment variable: <see cref="Name"/> first, then the deprecated <see cref="LegacyName"/>.</summary>
+internal sealed record CliVariable(string Name, string LegacyName)
+{
+    /// <summary>The value of <see cref="Name"/>, else of <see cref="LegacyName"/>, else <c>null</c> (empty counts as unset).</summary>
+    public string? Read(Func<string, string?> getEnvironmentVariable) => SourceOf(getEnvironmentVariable)?.Value;
+
+    /// <summary>The variable that supplies the value (for messages), else <c>null</c>.</summary>
+    public string? SetName(Func<string, string?> getEnvironmentVariable) => SourceOf(getEnvironmentVariable)?.Name;
+
+    private (string Name, string Value)? SourceOf(Func<string, string?> getEnvironmentVariable)
+    {
+        ArgumentNullException.ThrowIfNull(getEnvironmentVariable);
+        foreach (var name in (ReadOnlySpan<string>)[Name, LegacyName])
+        {
+            if (getEnvironmentVariable(name) is { } value && !string.IsNullOrWhiteSpace(value))
+            {
+                return (name, value);
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>Where an effective setting came from (shown by `config get`).</summary>
@@ -20,10 +48,10 @@ internal enum SettingSource
 }
 
 /// <summary>
-/// Effective API URL and token. API URL precedence: --api-url flag &gt; AIDE_API_URL &gt; config file &gt; default.
-/// Token: AIDE_TOKEN (explicit, sent to whatever URL is in effect) &gt; the saved token, which is used only when the effective
+/// Effective API URL and token. API URL precedence: --api-url flag &gt; TEVRIN_API_URL &gt; AIDE_API_URL &gt; config file &gt; default.
+/// Token: TEVRIN_TOKEN, then AIDE_TOKEN (explicit, sent to whatever URL is in effect) &gt; the saved token, which is used only when the effective
 /// API URL is the one it was saved for (<see cref="CliConfig.TokenApiUrl"/>; compared after normalising scheme, host, port
-/// and path). A saved token is never sent to another server just because --api-url or AIDE_API_URL points elsewhere.
+/// and path). A saved token is never sent to another server just because --api-url or TEVRIN_API_URL (AIDE_API_URL) points elsewhere.
 /// </summary>
 internal sealed record CliSettings(string ApiUrl, SettingSource ApiUrlSource, string? Token, SettingSource TokenSource)
 {
@@ -37,10 +65,10 @@ internal sealed record CliSettings(string ApiUrl, SettingSource ApiUrlSource, st
 
     public static CliSettings Resolve(string? apiUrlFlag, Func<string, string?> getEnvironmentVariable, CliConfig config)
     {
-        var (apiUrl, apiUrlSource) = Pick(apiUrlFlag, getEnvironmentVariable(EnvironmentVariables.ApiUrl), config.ApiUrl);
+        var (apiUrl, apiUrlSource) = Pick(apiUrlFlag, EnvironmentVariables.ApiUrl.Read(getEnvironmentVariable), config.ApiUrl);
         var effectiveUrl = apiUrl ?? DefaultApiUrl;
 
-        var environmentToken = getEnvironmentVariable(EnvironmentVariables.Token);
+        var environmentToken = EnvironmentVariables.Token.Read(getEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(environmentToken))
         {
             return new CliSettings(effectiveUrl, apiUrlSource, environmentToken.Trim(), SettingSource.Environment);

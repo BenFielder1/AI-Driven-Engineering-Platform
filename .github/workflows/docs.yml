@@ -1,0 +1,80 @@
+# FR-226 / D-V6-4: builds the Tevrin docs site (Jekyll + just-the-docs, docs/) and checks its internal links offline
+# (html-proofer, external links skipped; scripts/ci/check-docs-links.rb). A broken relative link fails the build job.
+#   pull_request        build + link check
+#   push to main        build + link check, then deploy to GitHub Pages
+#   workflow_dispatch   build + link check; deploys only when dispatched on main
+# One-off repo setting (Ben): Settings -> Pages -> Build and deployment -> Source: "GitHub Actions". The `github-pages`
+# environment is created by GitHub with a main-only deployment branch rule.
+# README.md is not part of the site; it's a trigger because FR-224 moves README detail onto these pages.
+# ci.yml skips docs-only commits but still runs actionlint over this file when it changes.
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "README.md"
+      - ".github/workflows/docs.yml"
+      - "scripts/ci/check-docs-links.rb"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - ".github/workflows/docs.yml"
+      - "scripts/ci/check-docs-links.rb"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build docs site + internal link check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: docs
+    env:
+      JEKYLL_ENV: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          working-directory: docs
+          bundler-cache: true
+      - name: Build (Jekyll, just-the-docs)
+        run: bundle exec jekyll build --strict-front-matter --trace
+      - name: Internal link check (html-proofer, offline)
+        run: bundle exec ruby ../scripts/ci/check-docs-links.rb _site
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Never cancel a deploy in flight; a newer one queues behind it.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

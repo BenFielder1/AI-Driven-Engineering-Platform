@@ -52,7 +52,7 @@ public static class GitLabMergeResult
     public static HostMergeFailure ClassifyMergeError(int status) => status switch
     {
         405 or 406 => new(HostMergeFailureKind.AwaitingMerge, null, "GitLab says the merge request isn't mergeable yet."),
-        403 => new(HostMergeFailureKind.AwaitingMerge, MergeReadinessReasonCode.NoPermission, "AIDE's GitLab connection may not merge into the target branch (it needs the Maintainer role)."),
+        403 => new(HostMergeFailureKind.AwaitingMerge, MergeReadinessReasonCode.NoPermission, "Tevrin's GitLab connection may not merge into the target branch (it needs the Maintainer role)."),
         409 => new(HostMergeFailureKind.HeadMoved, null, "The merge request's head moved since it was reviewed; it needs a new review."),
         422 => new(HostMergeFailureKind.Failed, null, "GitLab couldn't merge the merge request."),
         401 => new(HostMergeFailureKind.Unauthorized, null, "GitLab rejected the connection's token."),
@@ -132,7 +132,7 @@ public static class BitbucketMergeResult
     public static HostMergeFailure ClassifyMergeError(int status) => status switch
     {
         400 => new(HostMergeFailureKind.AwaitingMerge, null, "Bitbucket says the pull request isn't mergeable yet."),
-        403 => new(HostMergeFailureKind.AwaitingMerge, MergeReadinessReasonCode.NoPermission, "AIDE's Bitbucket connection may not merge into the destination branch."),
+        403 => new(HostMergeFailureKind.AwaitingMerge, MergeReadinessReasonCode.NoPermission, "Tevrin's Bitbucket connection may not merge into the destination branch."),
         409 => new(HostMergeFailureKind.HeadMoved, null, "The pull request's branch changed since it was reviewed; it needs a new review."),
         401 => new(HostMergeFailureKind.Unauthorized, null, "Bitbucket rejected the connection's token."),
         429 => new(HostMergeFailureKind.RateLimited, null, "Bitbucket is rate limiting requests."),

@@ -32,7 +32,7 @@ public static class ProductionMigrationRules
     /// §4.21: why merge readiness hasn't passed for the production migrations; <c>null</c> when it has. <c>merge_conflict</c>
     /// comes first, then <c>pr_not_open</c>, then the first other reason. Three reasons don't hold migrations back, because
     /// they don't say the PR can't merge: <c>manual_strategy</c> is the strategy itself, and <c>no_permission</c> and
-    /// <c>merge_method_not_allowed</c> are about AIDE's own token and merge method, while a person can still merge. With
+    /// <c>merge_method_not_allowed</c> are about Tevrin's own token and merge method, while a person can still merge. With
     /// <paramref name="reviewUnknown"/> (see <see cref="ReviewUnknown"/>) <c>review_required</c> is unknown readiness, which
     /// doesn't block either.
     /// </summary>
@@ -58,7 +58,7 @@ public static class ProductionMigrationRules
         provider is GitProvider.GithubPat or GitProvider.GithubApp && mergeStateStatus is null && reviewDecision is null;
 
     /// <summary>
-    /// §4.19, §4.21: GitLab's transient <c>detailed_merge_status</c> (reported as <c>checks_pending</c> after AIDE's re-reads)
+    /// §4.19, §4.21: GitLab's transient <c>detailed_merge_status</c> (reported as <c>checks_pending</c> after Tevrin's re-reads)
     /// isn't a reason the merge request can't merge: readiness is unknown, as when it can't be read. Only for this gate: what
     /// people see of readiness stays "still checking".
     /// </summary>

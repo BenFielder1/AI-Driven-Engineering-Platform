@@ -41,7 +41,7 @@ const noConsumer = (): Integration => ({
 /** In-memory Bitbucket backend for tests (reset after each test by src/test/setup.ts). */
 export const bitbucketDb = {
   consumer: noConsumer(),
-  /** Connections by AIDE user id. */
+  /** Connections by Tevrin user id. */
   connections: {} as Record<string, Connection[]>,
   /** Repositories per connection id (the picker lists them in this order). */
   repos: {} as Record<string, Repo[]>,
@@ -336,7 +336,7 @@ export const bitbucketHandlers = [
         details: ['write:pullrequest:bitbucket'],
       })
     }
-    // Scopes AIDE couldn't confirm (no repository to probe) are listed apart, and nothing is saved either.
+    // Scopes Tevrin couldn't confirm (no repository to probe) are listed apart, and nothing is saved either.
     if (body.token.startsWith('unverif')) {
       return problem(400, 'CONNECTION_SCOPE_INSUFFICIENT', 'Some permissions could not be confirmed.', {
         details: [],
@@ -461,7 +461,7 @@ export const bitbucketHandlers = [
       projectKey: body.project,
       isPrivate: body.private !== false,
     })
-    // FR-135: main holds only the README AIDE pushed (starter files: empty for FR-86).
+    // FR-135: main holds only the README Tevrin pushed (starter files: empty for FR-86).
     seedBitbucketRefs(repo, { empty: true })
     return HttpResponse.json(repo, { status: 201 })
   }),

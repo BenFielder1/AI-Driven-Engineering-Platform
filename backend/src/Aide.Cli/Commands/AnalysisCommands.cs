@@ -3,7 +3,7 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>FR-194: `aide analysis show|approve|reject|retry` — the Analysis page (FR-182, FR-183) of a version that infers its stack.</summary>
+/// <summary>FR-194: `tevrin analysis show|approve|reject|retry` — the Analysis page (FR-182, FR-183) of a version that infers its stack.</summary>
 internal static class AnalysisCommands
 {
     public static Command Build(CommandFactory factory)
@@ -65,7 +65,7 @@ internal static class AnalysisCommands
             var projectId = context.Get(id);
             var analysis = await context.Api().GetAsync<AnalysisDto>(Path(projectId), cancellationToken).ConfigureAwait(false);
             var profile = analysis.Value.Profile
-                ?? throw new CliException("There is no stack profile to decide yet. Run 'aide analysis show' to see the Stack Analyst's state.");
+                ?? throw new CliException("There is no stack profile to decide yet. Run 'tevrin analysis show' to see the Stack Analyst's state.");
             if (profile.Status != "draft")
             {
                 throw new CliException($"Stack profile v{profile.Version} is {profile.Status}, not a draft: there is nothing to {(approve ? "approve" : "reject")}.");
@@ -84,7 +84,7 @@ internal static class AnalysisCommands
 
             await context.Out.WriteLineAsync(approve
                 ? $"Approved stack profile v{decided.Value.Version}: the stack is pinned. Next: continue to Refinement on the Analysis page."
-                : $"Rejected stack profile v{decided.Value.Version}: the Stack Analyst runs again. Next: aide analysis show {projectId}").ConfigureAwait(false);
+                : $"Rejected stack profile v{decided.Value.Version}: the Stack Analyst runs again. Next: tevrin analysis show {projectId}").ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;
@@ -104,7 +104,7 @@ internal static class AnalysisCommands
                 return ExitCodes.Success;
             }
 
-            await context.Out.WriteLineAsync($"Queued the Stack Analyst (job {queued.Value.JobId}). Next: aide analysis show {projectId}").ConfigureAwait(false);
+            await context.Out.WriteLineAsync($"Queued the Stack Analyst (job {queued.Value.JobId}). Next: tevrin analysis show {projectId}").ConfigureAwait(false);
             return ExitCodes.Success;
         });
         return command;

@@ -141,11 +141,11 @@ public static partial class ProjectSettingsRules
         }
         else if (tokenSent is not null && provider == GitProvider.GithubApp)
         {
-            problems.Add($"{prefix}token: Not used with github_app: AIDE uses the App's installation tokens.");
+            problems.Add($"{prefix}token: Not used with github_app: Tevrin uses the App's installation tokens.");
         }
         else if (tokenSent is not null && IsGitHost(provider))
         {
-            problems.Add($"{prefix}token: Not used with {provider.ToWire()}: AIDE uses the binding Owner's connection.");
+            problems.Add($"{prefix}token: Not used with {provider.ToWire()}: Tevrin uses the binding Owner's connection.");
         }
 
         return ProjectRules.ToResult(problems, "The Git settings are invalid.");
@@ -207,7 +207,7 @@ public static partial class ProjectSettingsRules
         var problems = new List<string>();
         if (installationId is not > 0)
         {
-            problems.Add($"{prefix}installationId: Pick a repository the AIDE GitHub App is installed on.");
+            problems.Add($"{prefix}installationId: Pick a repository the Tevrin GitHub App is installed on.");
         }
 
         if (!TryParseRepoFullName(repoFullName, out _))
@@ -222,7 +222,7 @@ public static partial class ProjectSettingsRules
 
         if (!string.IsNullOrEmpty(token))
         {
-            problems.Add($"{prefix}token: Not used with github_app: AIDE uses the App's installation tokens.");
+            problems.Add($"{prefix}token: Not used with github_app: Tevrin uses the App's installation tokens.");
         }
 
         return ProjectRules.ToResult(problems, "The Git settings are invalid.");
@@ -245,7 +245,7 @@ public static partial class ProjectSettingsRules
     public static Result ValidateProviderChange(GitProvider previous, GitProvider next) =>
         next == previous ? Result.Success()
         : next == GitProvider.GithubApp
-            ? Result.Failure(Invalid("provider: Use Switch to GitHub App to move this project onto the AIDE GitHub App."))
+            ? Result.Failure(Invalid("provider: Use Switch to GitHub App to move this project onto the Tevrin GitHub App."))
         : IsGitHost(next)
             ? Result.Failure(Invalid($"provider: A project moves onto {next.ToWire()} only when it is created with a repository picked through a connection."))
         : Result.Success();

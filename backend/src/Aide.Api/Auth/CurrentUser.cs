@@ -7,7 +7,7 @@ namespace Aide.Api.Auth;
 
 public static class ClaimsPrincipalExtensions
 {
-    /// <summary>The AIDE user id of an authenticated principal (cookie or API token), else <c>null</c>.</summary>
+    /// <summary>The Tevrin user id of an authenticated principal (cookie or API token), else <c>null</c>.</summary>
     public static Guid? GetUserId(this ClaimsPrincipal principal)
     {
         ArgumentNullException.ThrowIfNull(principal);

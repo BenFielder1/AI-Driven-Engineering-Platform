@@ -6,7 +6,7 @@ using Aide.Cli.Api;
 
 namespace Aide.Cli.Commands;
 
-/// <summary>`aide artifact list|show|history|approve|reject|edit|restore`.</summary>
+/// <summary>`tevrin artifact list|show|history|approve|reject|edit|restore`.</summary>
 internal static class ArtifactCommands
 {
     private static readonly Dictionary<string, string> TypeAliases = new(StringComparer.OrdinalIgnoreCase)

@@ -89,7 +89,7 @@ public sealed record CreatePlatformConnectionRequest
     [MaxLength(Domain.Trackers.TrackerRules.MaxEmailLength)]
     public string? Email { get; init; }
 
-    /// <summary>FR-165: Jira and Linear don't report token expiry, so the dialog asks. AIDE warns 14 days before it.</summary>
+    /// <summary>FR-165: Jira and Linear don't report token expiry, so the dialog asks. Tevrin warns 14 days before it.</summary>
     public DateTimeOffset? ExpiresAt { get; init; }
 
     /// <summary>FR-165 Jira: the custom field holding acceptance criteria, from <c>GET …/resources?type=fields</c>.</summary>

@@ -460,9 +460,9 @@ public static partial class StackReviewChecks
 
     /// <summary>
     /// <c>deploy_branch_control</c> (major architecture, generalises v2 FR-89): each target's config file must stop the platform
-    /// building AIDE branches on its own: <c>vercel.json</c> sets <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c>
+    /// building Tevrin branches on its own: <c>vercel.json</c> sets <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c>
     /// (<see cref="VercelConfigRules"/>); <c>netlify.toml</c> has a <c>[build] ignore</c> that skips <c>aide/*</c>. Cloudflare's
-    /// branch control is the Workers preview trigger AIDE configures, so it has no file to check. A config file missing
+    /// branch control is the Workers preview trigger Tevrin configures, so it has no file to check. A config file missing
     /// from <paramref name="tree"/> is reported; without a tree only the files given are checked.
     /// </summary>
     public static IReadOnlyList<ReviewFinding> BranchControl(IEnumerable<SourceFile> files, IEnumerable<(string Provider, string ConfigPath)> targets, IReadOnlyCollection<string>? tree)
@@ -477,7 +477,7 @@ public static partial class StackReviewChecks
             {
                 if (tree is not null && !tree.Select(PathRules.Normalize).Contains(path, StringComparer.Ordinal))
                 {
-                    findings.Add(BranchFinding(path, $"{path} is missing, so {provider} builds every AIDE branch on its own: {BranchRule(provider)}."));
+                    findings.Add(BranchFinding(path, $"{path} is missing, so {provider} builds every Tevrin branch on its own: {BranchRule(provider)}."));
                 }
 
                 continue;
@@ -486,7 +486,7 @@ public static partial class StackReviewChecks
             var ok = provider == "netlify" ? NetlifyIgnoresAide(content) : VercelConfigRules.DisablesAideBranches(content);
             if (!ok)
             {
-                findings.Add(BranchFinding(path, $"{path} doesn't stop {provider} building AIDE branches on its own: {BranchRule(provider)}. AIDE deploys them explicitly."));
+                findings.Add(BranchFinding(path, $"{path} doesn't stop {provider} building Tevrin branches on its own: {BranchRule(provider)}. Tevrin deploys them explicitly."));
             }
         }
 

@@ -58,7 +58,7 @@ internal sealed class ApiException(HttpStatusCode statusCode, string? reasonPhra
     }
 }
 
-/// <summary>Typed HttpClient wrapper for the AIDE API, authenticated with a personal API token.</summary>
+/// <summary>Typed HttpClient wrapper for the Tevrin API, authenticated with a personal API token.</summary>
 internal sealed class AideApiClient : IDisposable
 {
     private readonly HttpClient _http;
@@ -98,7 +98,7 @@ internal sealed class AideApiClient : IDisposable
         }
         catch (JsonException ex)
         {
-            throw new CliException($"The API returned a response the CLI could not read ({ex.Message}). Is {BaseUri} an AIDE API?");
+            throw new CliException($"The API returned a response the CLI could not read ({ex.Message}). Is {BaseUri} a Tevrin API?");
         }
 
         if (value is null)
@@ -125,11 +125,11 @@ internal sealed class AideApiClient : IDisposable
         }
         catch (HttpRequestException ex)
         {
-            throw new CliException($"Could not reach the AIDE API at {BaseUri}: {ex.Message}");
+            throw new CliException($"Could not reach the Tevrin API at {BaseUri}: {ex.Message}");
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new CliException($"The AIDE API at {BaseUri} did not respond in time.");
+            throw new CliException($"The Tevrin API at {BaseUri} did not respond in time.");
         }
 
         using (response)

@@ -44,7 +44,7 @@ internal sealed partial class GitHubAppGitProvider(
         {
             if (await api.FindRepositoryAsync(minted.Token!.Token, repo.Owner, repo.Name, cancellationToken) is null)
             {
-                return GitTestResult.Failed($"The AIDE GitHub App can't access {repo.Owner}/{repo.Name}. Add the repository to the App's installation.");
+                return GitTestResult.Failed($"The Tevrin GitHub App can't access {repo.Owner}/{repo.Name}. Add the repository to the App's installation.");
             }
 
             // An installation token's own permissions say whether AIDE may push (Contents: write).
@@ -56,7 +56,7 @@ internal sealed partial class GitHubAppGitProvider(
                 emptyIsMissing: true);
             var branchExists = branch is not null;
             string? reason = !writable
-                ? "The AIDE GitHub App can't push to this repository: it needs Contents: read and write."
+                ? "The Tevrin GitHub App can't push to this repository: it needs Contents: read and write."
                 : !branchExists
                     ? $"The default branch '{settings.DefaultBranch}' doesn't exist in {repo.Owner}/{repo.Name}."
                     : null;
@@ -137,7 +137,7 @@ internal sealed partial class GitHubAppGitProvider(
         var app = await apps.GetAsync(cancellationToken);
         if (app is null)
         {
-            return Minted.Failed("No AIDE GitHub App is registered, so AIDE can't reach the repository. An Admin registers it under Admin → Integrations → GitHub.", transient: false);
+            return Minted.Failed("No Tevrin GitHub App is registered, so Tevrin can't reach the repository. An Admin registers it under Admin → Integrations → GitHub.", transient: false);
         }
 
         try
@@ -151,7 +151,7 @@ internal sealed partial class GitHubAppGitProvider(
             var transient = ex.Kind == GitHubFailureKind.Upstream;
             return Minted.Failed(
                 ex.Kind is GitHubFailureKind.NotFound or GitHubFailureKind.Unprocessable or GitHubFailureKind.Forbidden
-                    ? $"The AIDE GitHub App can't access the repository any more (it was uninstalled, or the repository was removed from its installation). {ex.Message}"
+                    ? $"The Tevrin GitHub App can't access the repository any more (it was uninstalled, or the repository was removed from its installation). {ex.Message}"
                     : ex.Message,
                 transient);
         }

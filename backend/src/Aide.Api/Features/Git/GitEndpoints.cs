@@ -16,7 +16,7 @@ namespace Aide.Api.Features.Git;
 
 /// <summary>
 /// The project PR once recorded (FR-36): provider, base (default) and head (project) branch, and for GitHub its number and
-/// web URL (both <c>null</c> for Local, whose "PR" is the recorded branch comparison). <c>openedAt</c> is when AIDE last
+/// web URL (both <c>null</c> for Local, whose "PR" is the recorded branch comparison). <c>openedAt</c> is when Tevrin last
 /// opened or reused it.
 /// </summary>
 public sealed record PullRequestSummaryDto(GitProvider Provider, string BaseBranch, string HeadBranch, int? Number, string? Url, DateTimeOffset OpenedAt);
@@ -179,7 +179,7 @@ public static class GitEndpoints
 
         group.MapGet("/pull-request", GetPullRequest)
             .WithName("GetPullRequest")
-            .WithSummary("The project pull request (members, FR-36): provider, base and head branch, GitHub number and URL (null for Local), and the branch comparison read from the working copy — commits (newest first, at most 250) and changed files (at most 1000). For a Local project the comparison is the \"PR\". 404 NOT_FOUND until AIDE has opened it (when every step of the plan is completed).")
+            .WithSummary("The project pull request (members, FR-36): provider, base and head branch, GitHub number and URL (null for Local), and the branch comparison read from the working copy — commits (newest first, at most 250) and changed files (at most 1000). For a Local project the comparison is the \"PR\". 404 NOT_FOUND until Tevrin has opened it (when every step of the plan is completed).")
             .Produces<PullRequestDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or no pull request has been opened yet."));
@@ -198,7 +198,7 @@ public static class GitEndpoints
 
         group.MapGet("/merge-readiness", GetMergeReadiness)
             .WithName("GetMergeReadiness")
-            .WithSummary("Merge readiness of the version's PR (members, FR-84): whether AIDE's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"AIDE will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65).")
+            .WithSummary("Merge readiness of the version's PR (members, FR-84): whether Tevrin's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"Tevrin will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65).")
             .Produces<MergeReadinessDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)

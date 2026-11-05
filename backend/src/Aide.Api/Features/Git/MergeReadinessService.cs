@@ -19,7 +19,7 @@ namespace Aide.Api.Features.Git;
 /// status checks), the PR's <c>mergeStateStatus</c> and <c>reviewDecision</c> (GraphQL; without GraphQL for the token it
 /// degrades: logged, and required approvals count as missing) and the check runs and commit statuses on the PR head;
 /// evaluated by <see cref="MergeReadinessRules.Evaluate"/>. GitLab (FR-138): through the project's provider
-/// (<see cref="GitHostTargets"/>). Local: AIDE can merge unless a dry-run merge conflicts. Each
+/// (<see cref="GitHostTargets"/>). Local: Tevrin can merge unless a dry-run merge conflicts. Each
 /// check is stored as <c>MERGE_READINESS_CHECKED</c>; reads return the latest one while it is fresh
 /// (<see cref="FreshFor"/>).
 /// </summary>
@@ -223,7 +223,7 @@ public sealed partial class MergeReadinessService(
         return Result.Success(Dto(verdict, project.MergeStrategy, readiness.Value.Checks, readiness.Value.HostStatus, null, now));
     }
 
-    /// <summary>Local (D12): AIDE can merge unless a dry-run merge of the version branch into the default branch conflicts.</summary>
+    /// <summary>Local (D12): Tevrin can merge unless a dry-run merge of the version branch into the default branch conflicts.</summary>
     private async Task<MergeReadinessDto> LocalAsync(Project project, ReleaseVersion? version, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var conflicts = false;

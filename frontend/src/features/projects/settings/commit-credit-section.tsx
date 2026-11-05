@@ -15,7 +15,7 @@ export function CommitCreditSection({ projectId, git }: { projectId: string; git
   const enabled = git.commitCreditEnabled ?? true
 
   return (
-    <section aria-labelledby={`${id}-title`} className="rounded-lg border border-border/60 bg-background/40 p-4">
+    <section aria-labelledby={`${id}-title`} className="rounded-lg border border-border/60 bg-background p-4">
       <h3 id={`${id}-title`} className="font-semibold">
         Commit credit
       </h3>

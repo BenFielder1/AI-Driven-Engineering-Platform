@@ -88,7 +88,7 @@ function ConfiguredApp({ app }: { app: AdminGitHubApp }) {
           {app.source === 'configuration' ? (
             <>
               Set in <code>secrets.env</code> (<code>GitHub__App__*</code> configuration), which takes precedence over an
-              App registered here. Change it there and restart AIDE.
+              App registered here. Change it there and restart Tevrin.
             </>
           ) : (
             'Registered from this page. Its private key and client secret are stored encrypted in the database.'
@@ -135,7 +135,7 @@ function ConfiguredApp({ app }: { app: AdminGitHubApp }) {
         <Alert tone="warning">
           <p>
             &quot;Create repository&quot; is unavailable: the App doesn&apos;t have the Administration permission. Add it in
-            the App&apos;s settings on GitHub if users should create repositories from AIDE.
+            the App&apos;s settings on GitHub if users should create repositories from Tevrin.
           </p>
         </Alert>
       )}
@@ -143,7 +143,7 @@ function ConfiguredApp({ app }: { app: AdminGitHubApp }) {
         <div className="flex flex-wrap items-center gap-3">
           <GitHubLink href={app.installUrl}>Install the App</GitHubLink>
           <span className="text-sm text-muted-foreground">
-            Users install it on the accounts and repositories AIDE should work with.
+            Users install it on the accounts and repositories Tevrin should work with.
           </span>
         </div>
       )}
@@ -168,7 +168,7 @@ type OwnerValues = z.infer<typeof ownerSchema>
 const ownerIds = { ownerType: 'github-app-owner-type', org: 'github-app-org' } as const
 
 /**
- * FR-80 manifest flow: choose the owner, prepare the manifest (AIDE builds it), preview it, then a real HTML form POST
+ * FR-80 manifest flow: choose the owner, prepare the manifest (Tevrin builds it), preview it, then a real HTML form POST
  * to GitHub (`postUrl`, field `manifest`). GitHub redirects back through the API's callback to this page.
  */
 function RegisterApp() {
@@ -212,7 +212,7 @@ function RegisterApp() {
             <Row term="Name">{m.name}</Row>
             <Row term="Homepage">{m.url}</Row>
             <Row term="Sign-in callback">{m.callback_urls.join(', ')}</Row>
-            <Row term="Webhook">Off (AIDE polls GitHub instead)</Row>
+            <Row term="Webhook">Off (Tevrin polls GitHub instead)</Row>
             <Row term="Visibility">{m.public ? 'Public' : 'Private (only the owner can install it)'}</Row>
           </dl>
           <PermissionList permissions={m.default_permissions} label="Requested permissions" />
@@ -242,8 +242,8 @@ function RegisterApp() {
   return (
     <form noValidate onSubmit={(e) => void onSubmit(e)} aria-label="Choose the GitHub App owner" className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        AIDE works with GitHub through its own GitHub App. Register it once: AIDE prepares the App manifest, GitHub creates
-        the App, and AIDE stores its credentials encrypted.
+        Tevrin works with GitHub through its own GitHub App. Register it once: Tevrin prepares the App manifest, GitHub creates
+        the App, and Tevrin stores its credentials encrypted.
       </p>
       <ErrorSummary
         title="We couldn't prepare the registration"
@@ -282,7 +282,7 @@ function RegisterApp() {
   )
 }
 
-/** Admin → Integrations → GitHub (FR-80): register the AIDE GitHub App, or show the registered one. */
+/** Admin → Integrations → GitHub (FR-80): register the Tevrin GitHub App, or show the registered one. */
 export function GitHubAppPanel({ callback }: { callback?: 'configured' | 'failed' }) {
   const app = useAdminGitHubApp()
   let body

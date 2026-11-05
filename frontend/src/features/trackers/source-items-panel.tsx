@@ -277,7 +277,7 @@ export function SourceItemsPanel() {
           </ul>
         )}
         {check.isError && (
-          <p className="text-sm text-muted-foreground">AIDE couldn&apos;t check the items against the tracker just now. The snapshot is unaffected.</p>
+          <p className="text-sm text-muted-foreground">Tevrin couldn&apos;t check the items against the tracker just now. The snapshot is unaffected.</p>
         )}
         {!readOnly && !canChange && (
           <p className="text-sm text-muted-foreground">
@@ -344,7 +344,7 @@ export function SourceItemsPanel() {
       >
         <p>
           {toRemove?.status === 'completed'
-            ? `AIDE writes a new snapshot without these ${itemsCopy(toRemove.itemCount)}. Earlier locked snapshots are kept.`
+            ? `Tevrin writes a new snapshot without these ${itemsCopy(toRemove.itemCount)}. Earlier locked snapshots are kept.`
             : 'This import never reached a snapshot. Earlier locked snapshots are kept.'}
         </p>
       </ConfirmDialog>

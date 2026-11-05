@@ -27,6 +27,8 @@ import {
 } from './execution-api'
 import { ExecutionRuns, RunsState, StepRunExtras } from './execution-runs'
 import { ExecutionStepItem } from './execution-steps'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const runTones: Record<ExecutionRunStatus, BadgeTone> = {
   idle: 'neutral',
@@ -126,7 +128,7 @@ function ProgressSummary({
 }) {
   const c = state.execution
   return (
-    <section aria-labelledby="execution-progress" className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
+    <section aria-labelledby="execution-progress" className={cn(panelClass, 'flex flex-col gap-3 p-4')}>
       <div className="flex flex-wrap items-center gap-2">
         <h3 id="execution-progress" className="text-lg">
           Progress
@@ -144,7 +146,7 @@ function ProgressSummary({
           </p>
         ) : status === 'running' ? (
           <p role="status" aria-busy="true">
-            <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
+            <span aria-hidden="true" className="mr-2 inline-block size-3 motion-safe:animate-pulse rounded-full bg-primary align-middle" />
             Waiting for the next step to start…
           </p>
         ) : status === 'paused' ? (

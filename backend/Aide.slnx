@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Aide.Api/Aide.Api.csproj" />
     <Project Path="src/Aide.Cli/Aide.Cli.csproj" />
+    <Project Path="src/Aide.Cli.Alias/Aide.Cli.Alias.csproj" />
     <Project Path="src/Aide.Domain/Aide.Domain.csproj" />
     <Project Path="src/Aide.Infrastructure/Aide.Infrastructure.csproj" />
   </Folder>

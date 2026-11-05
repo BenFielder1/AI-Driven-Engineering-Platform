@@ -63,8 +63,8 @@ function alignOf<T>(col: DataTableColumn<T>): 'left' | 'right' | 'center' {
   return col.align ?? (col.numeric ? 'right' : 'left')
 }
 
-const controlClass =
-  'inline-flex min-h-11 items-center gap-1 rounded-lg outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50'
+/** Sort buttons: 44 px tall, the global focus ring (FR-205). */
+const controlClass = 'inline-flex min-h-11 items-center gap-1 rounded-lg'
 
 function SortIcon({ dir }: { dir: SortDir | null }) {
   if (dir === 'asc') {

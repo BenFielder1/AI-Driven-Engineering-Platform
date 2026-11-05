@@ -50,8 +50,8 @@ function PackRow({ pack }: { pack: AdminStackPack }) {
 
 /**
  * Admin → Integrations → Stack catalog (§7.2, FR-113, FR-122): the catalog version, content hash and load status, and
- * each pack with its layer, stack-packs source (plugin@version), AIDE pack version and load status. Read-only: packs
- * ship with AIDE.
+ * each pack with its layer, stack-packs source (plugin@version), Tevrin pack version and load status. Read-only: packs
+ * ship with Tevrin.
  */
 export function AdminStackCatalogPanel() {
   const catalog = useAdminStackCatalog()
@@ -100,7 +100,7 @@ export function AdminStackCatalogPanel() {
                 <th scope="col" className="py-1 pr-3 font-medium">Layer</th>
                 <th scope="col" className="py-1 pr-3 font-medium">Pack</th>
                 <th scope="col" className="py-1 pr-3 font-medium">Source</th>
-                <th scope="col" className="py-1 pr-3 font-medium">AIDE version</th>
+                <th scope="col" className="py-1 pr-3 font-medium">Tevrin version</th>
                 <th scope="col" className="py-1 font-medium">Load status</th>
               </tr>
             </thead>

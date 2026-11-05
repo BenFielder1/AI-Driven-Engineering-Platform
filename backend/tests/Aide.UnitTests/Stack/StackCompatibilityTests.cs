@@ -225,7 +225,7 @@ public class StackCompatibilityTests
 
         var gitlab = Evaluate(Sel("fe-react-vite", "none", "none", "vcs-gitlab"));
         Assert.Equal(new StackReason("R9", "Railway only builds from GitHub"), Option(gitlab, FeHost, "deploy-railway").Reasons.Single());
-        Assert.Equal(new StackReason("R9", "Linked with a deploy key and webhook that AIDE adds to the repo"), Option(gitlab, FeHost, "deploy-netlify").Reasons.Single());
+        Assert.Equal(new StackReason("R9", "Linked with a deploy key and webhook that Tevrin adds to the repo"), Option(gitlab, FeHost, "deploy-netlify").Reasons.Single());
         Assert.Equal(StackOptionState.Caveat, Option(gitlab, FeHost, "deploy-netlify").State);
         Assert.Equal(StackOptionState.Allowed, Option(Evaluate(Sel("fe-react-vite", "none", "none", "vcs-github")), FeHost, "deploy-netlify").State);
         Assert.Contains(new StackReason("R9", "Only Netlify builds from self-managed GitLab"),
@@ -305,7 +305,7 @@ public class StackCompatibilityTests
     {
         var c = Valid(Sel("fe-react-vite", "be-aspnet", "data-efcore-postgres", "vcs-gitlab", "deploy-netlify", "deploy-render", "render-postgres"));
 
-        Assert.Equal(new StackCaveat(FeHost, "deploy-netlify", "R9", "Linked with a deploy key and webhook that AIDE adds to the repo"), Assert.Single(c.Caveats));
+        Assert.Equal(new StackCaveat(FeHost, "deploy-netlify", "R9", "Linked with a deploy key and webhook that Tevrin adds to the repo"), Assert.Single(c.Caveats));
         Assert.Equal("proxy", c.OriginModel);
         Assert.Equal(new StackDeploy("deploy-netlify", "deploy-render", "render-postgres", StackIds.Compose), c.Deploy);
         Assert.Equal(new StackComponent("fe-react-vite", "frontend"), c.Frontend);

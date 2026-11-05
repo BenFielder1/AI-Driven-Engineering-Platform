@@ -94,7 +94,7 @@ public static class ErrorCodes
     public const string GitHubNotConnected = "GITHUB_NOT_CONNECTED";
 
     /// <summary>
-    /// FR-81, FR-82, FR-83: the AIDE GitHub App isn't installed on the target owner or repository. The ProblemDetails
+    /// FR-81, FR-82, FR-83: the Tevrin GitHub App isn't installed on the target owner or repository. The ProblemDetails
     /// carries an <c>installUrl</c> extension (the App's install link) when an App is registered.
     /// </summary>
     public const string GitHubAppNotInstalled = "GITHUB_APP_NOT_INSTALLED";
@@ -141,7 +141,7 @@ public static class ErrorCodes
 
     /// <summary>FR-90, FR-91, §6 (replaces <c>VERCEL_ERROR</c>): the platform reported the build or deployment as failed, or
     /// refused a request (recorded on a deployment with the message and build-log tail); as an endpoint answer (502), a
-    /// platform API failure, or a provider AIDE can't call for real yet ("not supported yet").</summary>
+    /// platform API failure, or a provider Tevrin can't call for real yet ("not supported yet").</summary>
     public const string PlatformError = "PLATFORM_ERROR";
 
     /// <summary>FR-165 (400): the Jira site isn't <c>*.atlassian.net</c>; nothing was fetched.</summary>
@@ -150,7 +150,7 @@ public static class ErrorCodes
     /// <summary>FR-169, FR-173 (409): no usable connection for that tracker.</summary>
     public const string TrackerNotConnected = "TRACKER_NOT_CONNECTED";
 
-    /// <summary>FR-167 (409): the AIDE GitHub App lacks Issues: read. The ProblemDetails carries the App settings link (<c>installUrl</c>).</summary>
+    /// <summary>FR-167 (409): the Tevrin GitHub App lacks Issues: read. The ProblemDetails carries the App settings link (<c>installUrl</c>).</summary>
     public const string TrackerPermissionMissing = "TRACKER_PERMISSION_MISSING";
 
     /// <summary>FR-169 (400): the tracker refused the native query; the title holds its message.</summary>
@@ -332,7 +332,7 @@ public static class ErrorCodes
     /// </summary>
     public const string ConnectionScopeInsufficient = "CONNECTION_SCOPE_INSUFFICIENT";
 
-    /// <summary>§6 (429, with <c>Retry-After</c> when known): a Git host or platform is rate limiting AIDE's requests (e.g. the
+    /// <summary>§6 (429, with <c>Retry-After</c> when known): a Git host or platform is rate limiting Tevrin's requests (e.g. the
     /// GitLab.com project-creation limit, FR-132).</summary>
     public const string UpstreamRateLimited = "UPSTREAM_RATE_LIMITED";
 
@@ -343,21 +343,21 @@ public static class ErrorCodes
     public const string GitLabRateLimited = "GITLAB_RATE_LIMITED";
 
     /// <summary>
-    /// §6 job code (FR-136, §4.19): Bitbucket (429), or AIDE's per-connection budget of 900 requests an hour, held back a
+    /// §6 job code (FR-136, §4.19): Bitbucket (429), or Tevrin's per-connection budget of 900 requests an hour, held back a
     /// background job's request. The job is re-queued for the wait (<c>Retry-After</c>, else five minutes, or the bucket's
     /// refill) without counting an attempt.
     /// </summary>
     public const string BitbucketRateLimited = "BITBUCKET_RATE_LIMITED";
 
     /// <summary>
-    /// §6 job code (FR-149, §4.20): a deployment platform rate limited a background job (429), or AIDE's own limit held it
+    /// §6 job code (FR-149, §4.20): a deployment platform rate limited a background job (429), or Tevrin's own limit held it
     /// back before calling (Netlify: 3 deploys a minute and 100 a day per account). The job waits for <c>Retry-After</c> (or
     /// the limit's window) without counting an attempt.
     /// </summary>
     public const string PlatformRateLimited = "PLATFORM_RATE_LIMITED";
 
     /// <summary>
-    /// FR-143, §6 (409 when an Owner sets up a GitHub Pages target): the AIDE GitHub App (or its installation) lacks the
+    /// FR-143, §6 (409 when an Owner sets up a GitHub Pages target): the Tevrin GitHub App (or its installation) lacks the
     /// Pages permission. The ProblemDetails carries <c>platform</c> and the App settings link (<c>installUrl</c>).
     /// </summary>
     public const string PlatformPermissionMissing = "PLATFORM_PERMISSION_MISSING";

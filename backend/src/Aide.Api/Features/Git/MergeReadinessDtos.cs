@@ -5,7 +5,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 
 namespace Aide.Api.Features.Git;
 
-/// <summary>FR-84: one reason AIDE can't merge the version's PR itself, with copy for the Release page and the gate.</summary>
+/// <summary>FR-84: one reason Tevrin can't merge the version's PR itself, with copy for the Release page and the gate.</summary>
 public sealed record MergeReadinessReasonDto(MergeReadinessReasonCode Code, string Message);
 
 /// <summary>
@@ -16,10 +16,10 @@ public sealed record MergeReadinessReasonDto(MergeReadinessReasonCode Code, stri
 public sealed record CheckRunDto(string Name, CheckRunStatus Status, CheckRunConclusion? Conclusion, bool Required, string? DetailsUrl);
 
 /// <summary>
-/// FR-84 merge readiness of the version's PR, as of <c>checkedAt</c>. <c>canMerge</c> is whether AIDE's token may merge it
+/// FR-84 merge readiness of the version's PR, as of <c>checkedAt</c>. <c>canMerge</c> is whether Tevrin's token may merge it
 /// now (repository permission and allowed merge methods, branch rules, the PR's <c>mergeStateStatus</c> and
 /// <c>reviewDecision</c>, required checks). <c>willAutoMerge</c> is <c>canMerge</c> under the <c>aide_merges</c> strategy
-/// ("AIDE will merge automatically"); otherwise "A merge on GitHub will be needed" with <c>reasons</c> (empty when
+/// ("Tevrin will merge automatically"); otherwise "A merge on GitHub will be needed" with <c>reasons</c> (empty when
 /// <c>canMerge</c>, except <c>manual_strategy</c>). <c>checks</c> are the PR head's check runs and commit statuses.
 /// <c>mergeStateStatus</c> and <c>reviewDecision</c> are GitHub's GraphQL values verbatim (e.g. <c>CLEAN</c>,
 /// <c>BLOCKED</c>; <c>APPROVED</c>, <c>REVIEW_REQUIRED</c>), <c>null</c> when unknown. For a GitLab project (FR-138)

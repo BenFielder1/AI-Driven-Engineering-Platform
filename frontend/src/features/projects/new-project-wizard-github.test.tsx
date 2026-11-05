@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -11,7 +12,7 @@ import { projectsDb } from '../../mocks/handlers/projects'
 import { server } from '../../mocks/server'
 import { renderRoute } from '../../test/render'
 
-const APP_OPTION = 'GitHub (AIDE GitHub App)'
+const APP_OPTION = 'GitHub (Tevrin GitHub App)'
 
 /** Signs in, optionally registers the App and connects GitHub, and walks the wizard to the Git step. */
 async function openGitStep({ app = true, connect = true } = {}) {
@@ -94,7 +95,7 @@ describe('Wizard → Git repository with the GitHub App (FR-81, FR-86)', () => {
 
     expect(screen.getByText('Selected:').parentElement).toHaveTextContent('Selected: acme/billing')
     expect(screen.getByLabelText('Default branch')).toHaveValue('trunk')
-    expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
+    expect(screen.queryByText('This repository has code. Tevrin will build on it')).not.toBeInTheDocument()
 
     await finish(user)
     const git = screen.getByRole('region', { name: 'Repository' })
@@ -111,21 +112,21 @@ describe('Wizard → Git repository with the GitHub App (FR-81, FR-86)', () => {
     expect(createBody()?.git).not.toHaveProperty('provider')
   })
 
-  it('FR86_non_empty_repo_warning: a repo with code in "start from scratch" warns that AIDE will build on it', async () => {
+  it('FR86_non_empty_repo_warning: a repo with code in "start from scratch" warns that Tevrin will build on it', async () => {
     const repo = seedRepo({ owner: 'ada', name: 'legacy', empty: null })
     githubDb.refs[repo.fullName] = { defaultBranch: 'main', empty: false, releases: [], tags: [] }
     const { user } = await openGitStep()
 
     await user.click(within(await repoList()).getByRole('radio', { name: 'ada/legacy' }))
 
-    expect(await screen.findByText('This repository has code. AIDE will build on it')).toBeInTheDocument()
+    expect(await screen.findByText('This repository has code. Tevrin will build on it')).toBeInTheDocument()
     await finish(user)
-    expect(within(screen.getByRole('region', { name: 'Repository' })).getByText(/AIDE builds on it/)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Repository' })).getByText(/Tevrin builds on it/)).toBeInTheDocument()
   })
 
   it('FR81_create_repo_selects_it: Create repository makes a private repo and the wizard selects it', async () => {
     const { user } = await openGitStep()
-    await screen.findByText(/AIDE can’t access any of your repositories yet/)
+    await screen.findByText(/Tevrin can’t access any of your repositories yet/)
 
     await user.click(screen.getByRole('button', { name: 'Create repository' }))
     const dialog = await screen.findByRole('dialog', { name: 'Create repository' })
@@ -178,8 +179,8 @@ describe('Wizard → Git repository with the GitHub App (FR-81, FR-86)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Create repository' })
     const option = await within(dialog).findByRole('option', { name: /globex/ })
     expect(option).toBeDisabled()
-    expect(option).toHaveTextContent('AIDE isn’t installed here')
-    expect(within(dialog).getByRole('link', { name: /Install AIDE on globex/ })).toHaveAttribute('href', INSTALL_URL)
+    expect(option).toHaveTextContent('Tevrin isn’t installed here')
+    expect(within(dialog).getByRole('link', { name: /Install Tevrin on globex/ })).toHaveAttribute('href', INSTALL_URL)
   })
 
   it('FR81_app_not_installed: the picker shows the copy and the install link', async () => {
@@ -190,8 +191,8 @@ describe('Wizard → Git repository with the GitHub App (FR-81, FR-86)', () => {
     )
     await openGitStep()
 
-    expect(await screen.findByText(/The AIDE GitHub App isn't installed there/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Install AIDE on GitHub/ })).toHaveAttribute('href', INSTALL_URL)
+    expect(await screen.findByText(/The Tevrin GitHub App isn't installed there/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Install Tevrin on GitHub/ })).toHaveAttribute('href', INSTALL_URL)
   })
 
   it('FR81_rate_limited: GITHUB_RATE_LIMITED says when to retry', async () => {

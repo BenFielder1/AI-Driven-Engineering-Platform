@@ -2,7 +2,7 @@
 
 # GitHub Pages
 
-AIDE enables Pages (source: GitHub Actions) through the project's GitHub App or PAT, and reads the deployment after the workflow runs on the merge commit. You write the workflow and the base-path handling.
+Tevrin enables Pages (source: GitHub Actions) through the project's GitHub App or PAT, and reads the deployment after the workflow runs on the merge commit. You write the workflow and the base-path handling.
 
 ## Supports
 - Static output from `fe-vanilla`, `fe-react-vite`, `fe-vue` and `fe-angular`.
@@ -11,7 +11,7 @@ AIDE enables Pages (source: GitHub Actions) through the project's GitHub App or 
 - Requires `vcs-github`. Sites are public, even from private repos on most plans: never ship anything sensitive in the bundle.
 
 ## Prerequisites and auth
-None for you. Pages enablement and permissions are AIDE's. The workflow uses only the built-in `GITHUB_TOKEN` through its `permissions`.
+None for you. Pages enablement and permissions are Tevrin's. The workflow uses only the built-in `GITHUB_TOKEN` through its `permissions`.
 
 ## Config as code (`.github/workflows/pages.yml`)
 ```yaml
@@ -61,20 +61,20 @@ jobs:
 
 ## Environment variables
 - Only build-time public values, from `env:` in the workflow or repository variables (`vars.X`). No runtime secrets exist: everything in the bundle is public.
-- AIDE syncs the project's public inventory variables (production values) to repository variables under the same names, and removes deleted ones. Pass each one the frontend reads to the build step as `NAME: ${{ vars.NAME }}`. Sensitive variables are never sent, so never read a secret here.
+- Tevrin syncs the project's public inventory variables (production values) to repository variables under the same names, and removes deleted ones. Pass each one the frontend reads to the build step as `NAME: ${{ vars.NAME }}`. Sensitive variables are never sent, so never read a secret here.
 - Cross-origin: the API URL (`VITE_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, or Angular config) comes from a repository variable; the backend's `CORS_ALLOWED_ORIGINS` includes the Pages origin (`https://<user>.github.io`).
 
 ## Database
 None. Use Supabase BaaS (publishable key + RLS) or a backend hosted elsewhere.
 
 ## Deploy commands
-None beyond the workflow: a push to the default branch (the release merge) deploys. AIDE waits for that run and reads the Pages deployment for the merge SHA.
+None beyond the workflow: a push to the default branch (the release merge) deploys. Tevrin waits for that run and reads the Pages deployment for the merge SHA.
 
 ## Previews and promotion
-No previews: every successful run replaces the live site, so AIDE skips Pages in the preview rollout. Promotion is the release merge.
+No previews: every successful run replaces the live site, so Tevrin skips Pages in the preview rollout. Promotion is the release merge.
 
 ## Agent autonomy
-AIDE's own rules apply; not loaded by any agent.
+Tevrin's own rules apply; not loaded by any agent.
 
 ## Troubleshooting
 | Symptom | Check |

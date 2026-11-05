@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -96,7 +97,7 @@ describe('Wizard → create on Bitbucket (FR-135, FR-136)', () => {
       expect(screen.getByText('Selected:').parentElement).toHaveTextContent('Selected: acme/todo-app')
     })
     // A new repository holds only its README: no "has code" warning.
-    expect(screen.queryByText('This repository has code. AIDE will build on it')).not.toBeInTheDocument()
+    expect(screen.queryByText('This repository has code. Tevrin will build on it')).not.toBeInTheDocument()
 
     await next(user)
     await stepHeading(/Step 4 of 8: Version/)
@@ -124,7 +125,7 @@ describe('Wizard → create on Bitbucket (FR-135, FR-136)', () => {
     const { user } = await openRepository({ slugs: ['legacy'] })
     await pick(user, 'acme/legacy')
 
-    expect(await screen.findByText('This repository has code. AIDE will build on it')).toBeInTheDocument()
+    expect(await screen.findByText('This repository has code. Tevrin will build on it')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Import instead' }))
 
     expect(await screen.findByRole('group', { name: 'Currently released version' })).toBeInTheDocument()

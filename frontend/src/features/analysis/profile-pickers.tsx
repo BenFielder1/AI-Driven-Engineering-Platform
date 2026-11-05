@@ -163,7 +163,7 @@ export function HostPickers({
                 label={label}
                 value={value}
                 disabled={disabled}
-                hint={defaulted ? `Default: ${state?.default ? optionName(catalog, choice, state.default) : 'chosen by AIDE'}` : undefined}
+                hint={defaulted ? `Default: ${state?.default ? optionName(catalog, choice, state.default) : 'chosen by Tevrin'}` : undefined}
                 error={errors[choice] ?? unavailableReason(catalog, state, value)}
                 onChange={(e) => {
                   onChange(choice, e.target.value)

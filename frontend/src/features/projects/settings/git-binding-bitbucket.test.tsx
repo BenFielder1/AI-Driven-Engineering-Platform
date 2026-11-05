@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
@@ -109,28 +110,28 @@ describe('Merge strategy per host (FR-140)', () => {
       'squash',
       'manual',
     ])
-    await user.click(within(group).getByRole('radio', { name: 'AIDE merges (squash)' }))
-    expect(within(group).getByRole('radio', { name: 'AIDE merges (fast-forward)' })).toBeInTheDocument()
+    await user.click(within(group).getByRole('radio', { name: 'Tevrin merges (squash)' }))
+    expect(within(group).getByRole('radio', { name: 'Tevrin merges (fast-forward)' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save release settings' }))
 
     await waitFor(() => {
       expect(requestsTo('PATCH', '/settings/git').at(-1)?.body).toEqual({ mergeStrategy: 'squash' })
     })
     await waitFor(() => {
-      expect(within(connectionSummary()).getByTestId('git-merge-strategy')).toHaveTextContent('AIDE merges (squash)')
+      expect(within(connectionSummary()).getByTestId('git-merge-strategy')).toHaveTextContent('Tevrin merges (squash)')
     })
   })
 
-  it('FR140_merge_strategies_github_only_two: GitHub and GitLab projects offer only AIDE merges and manual', async () => {
+  it('FR140_merge_strategies_github_only_two: GitHub and GitLab projects offer only Tevrin merges and manual', async () => {
     signInAsOwner()
     const project = seedProject({ git: gitSettings({ provider: 'github_app' }) })
     await openSettings('git', project)
 
     const group = await screen.findByRole('group', { name: 'Merge strategy' })
     expect(within(group).getAllByRole('radio').map((r) => r.getAttribute('value'))).toEqual(['aide_merges', 'manual'])
-    expect(screen.queryByText('AIDE merges (squash)')).not.toBeInTheDocument()
+    expect(screen.queryByText('Tevrin merges (squash)')).not.toBeInTheDocument()
 
     expect(mergeStrategiesFor('gitlab')).toEqual(['aide_merges', 'manual'])
-    expect(mergeStrategyLabel('fast_forward', gitHostTerms('bitbucket'))).toBe('AIDE merges (fast-forward)')
+    expect(mergeStrategyLabel('fast_forward', gitHostTerms('bitbucket'))).toBe('Tevrin merges (fast-forward)')
   })
 })

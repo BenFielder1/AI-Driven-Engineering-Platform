@@ -9,6 +9,7 @@ import { loginRedirectHref } from '../../features/auth/auth-redirects'
 import { AppShell } from '../../features/shell/app-shell'
 import { RouteErrorView } from '../../features/shell/route-states'
 import { useLocation, useNavigate } from '../../lib/navigation'
+import { Providers } from '../providers'
 
 /**
  * Authenticated layout (v2 `_app`, FR-97): signed-out users go to /login?returnUrl=<path+search>. The check runs
@@ -16,6 +17,15 @@ import { useLocation, useNavigate } from '../../lib/navigation'
  * the admin area), as in v2; the API stays the authority.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
+  // The client providers sit here, not in the root layout, so marketing routes don't load them (SPEC §8).
+  return (
+    <Providers>
+      <AppGuard>{children}</AppGuard>
+    </Providers>
+  )
+}
+
+function AppGuard({ children }: { children: ReactNode }) {
   const me = useQuery(meQueryOptions)
   const location = useLocation()
   const navigate = useNavigate()

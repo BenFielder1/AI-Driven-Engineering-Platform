@@ -103,8 +103,8 @@ public sealed record UpdateGitLabInstanceRequest
 public sealed record GitLabInstanceSummaryDto(Guid Id, string Name, string BaseUrl, bool IsGitLabCom, bool OauthConfigured);
 
 /// <summary>
-/// FR-131 sign-in: GitLab's verified email belongs to an existing AIDE account that isn't linked to this GitLab identity.
-/// AIDE never links silently: the user signs in to that account (any method) and confirms with
+/// FR-131 sign-in: GitLab's verified email belongs to an existing Tevrin account that isn't linked to this GitLab identity.
+/// Tevrin never links silently: the user signs in to that account (any method) and confirms with
 /// <c>POST /api/auth/gitlab/link</c>, or cancels with <c>DELETE /api/auth/gitlab/link</c>. Expires after 10 minutes.
 /// </summary>
 public sealed record GitLabPendingLinkDto(Guid InstanceId, string InstanceName, string Login, string Email, DateTimeOffset ExpiresAt);

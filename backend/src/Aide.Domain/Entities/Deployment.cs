@@ -133,7 +133,7 @@ public sealed class DeploymentEnvVar
     /// <summary>Whether the variable is exposed to the browser (FR-145: a public prefix such as <c>NEXT_PUBLIC_</c>).</summary>
     public bool Public { get; set; }
 
-    /// <summary>Who wrote it (FR-145): an Owner (<c>user</c>) or AIDE (<c>derived</c>, read-only).</summary>
+    /// <summary>Who wrote it (FR-145): an Owner (<c>user</c>) or Tevrin (<c>derived</c>, read-only).</summary>
     public DeploymentEnvSource Source { get; set; } = DeploymentEnvSource.User;
 
     /// <summary>For a derived variable: what it is derived from (e.g. "Render Postgres (production)"); <c>null</c> for user ones.</summary>
@@ -205,7 +205,7 @@ public sealed class Deployment
     /// <summary>The end of the build log (at most <see cref="BuildLogTailMaxLength"/> characters).</summary>
     public string? BuildLogTail { get; set; }
 
-    /// <summary>The user who triggered it; null when AIDE triggered it (auto) or the user was deleted.</summary>
+    /// <summary>The user who triggered it; null when Tevrin triggered it (auto) or the user was deleted.</summary>
     public Guid? TriggeredBy { get; set; }
 
     public DeploymentTrigger Trigger { get; set; }
@@ -264,7 +264,7 @@ public enum DeploymentStatus
     Canceled = 4,
 }
 
-/// <summary>Why a deployment row exists (FR-90, FR-91). Wire values: <c>auto</c> (AIDE after execution or release),
+/// <summary>Why a deployment row exists (FR-90, FR-91). Wire values: <c>auto</c> (Tevrin after execution or release),
 /// <c>manual</c>, <c>promote</c>, <c>redeploy</c>.</summary>
 public enum DeploymentTrigger
 {

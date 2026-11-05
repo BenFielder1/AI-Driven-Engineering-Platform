@@ -26,6 +26,8 @@ import { isUnfinished } from './run-format'
 import { checkpointLabel, useReleaseVersionNames } from '../versions/version-label'
 import { useRun, useRuns, type AgentRun } from './runs-api'
 import type { RunsSearch } from './runs-search'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 interface RunsPageProps {
   search: RunsSearch
@@ -88,7 +90,7 @@ function RunsTable({ projectId, runs, onOpen }: { projectId: string; runs: Agent
   const head = 'px-3 py-2 font-medium'
   const versionName = useReleaseVersionNames(projectId)
   return (
-    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
+    <div className={cn(panelClass, 'overflow-x-auto')}>
       <table className="w-full min-w-[70rem] border-collapse text-sm">
         <caption className="sr-only">Agent runs, newest first. Open a run to see all its details.</caption>
         <thead>

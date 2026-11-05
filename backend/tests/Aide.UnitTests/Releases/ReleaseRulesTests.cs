@@ -81,8 +81,8 @@ public class ReleaseRulesTests
     [Fact]
     public void FR64_Tag_message_and_merge_title_name_the_semver_tag_on_one_line()
     {
-        Assert.Equal("[AIDE] Release v1.2.0: Todo API", ReleaseRules.MergeTitle("Todo\r\nAPI", "v1.2.0"));
-        Assert.Equal("AIDE release v1.2.0: Todo API (version 1.2.0)", ReleaseRules.TagMessage("Todo API", "v1.2.0", "1.2.0"));
+        Assert.Equal("[Tevrin] Release v1.2.0: Todo API", ReleaseRules.MergeTitle("Todo\r\nAPI", "v1.2.0"));
+        Assert.Equal("Tevrin release v1.2.0: Todo API (version 1.2.0)", ReleaseRules.TagMessage("Todo API", "v1.2.0", "1.2.0"));
         Assert.Throws<ArgumentException>(() => ReleaseRules.TagMessage("Todo API", "-x", "1.2.0"));
     }
 

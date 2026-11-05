@@ -157,7 +157,7 @@ public sealed partial class TrackerImportJobHandler(
             var runAfter = ex.RetryAt ?? time.GetUtcNow() + TimeSpan.FromMinutes(1);
             import.Status = TrackerImportStatus.Queued;
             import.ErrorCode = ErrorCodes.TrackerRateLimited;
-            import.ErrorMessage = $"{TrackerRules.DisplayName(import.Provider)} is rate limiting requests. AIDE will retry.";
+            import.ErrorMessage = $"{TrackerRules.DisplayName(import.Provider)} is rate limiting requests. Tevrin will retry.";
             await db.SaveChangesAsync(cancellationToken);
             throw new JobDeferredException($"{ErrorCodes.TrackerRateLimited}: waiting until {runAfter:u}.", runAfter);
         }

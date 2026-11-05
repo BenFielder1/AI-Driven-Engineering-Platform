@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -9,31 +10,41 @@ describe('Route guards (FR-1)', () => {
   it('FR-1: a signed-out visitor to /account is sent to /login with a returnUrl', async () => {
     const { router } = await renderRoute('/account')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to AIDE' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })).toBeInTheDocument()
     expect(currentHref(router)).toBe('/login?returnUrl=%2Faccount')
   })
 
-  it('FR-1: / redirects to /projects, then to /login when signed out', async () => {
+  it('FR-211: a signed-out visitor to / gets the marketing Home, not the sign-in page (it redirected before v6)', async () => {
     const { router } = await renderRoute('/')
 
-    await screen.findByRole('heading', { level: 1, name: 'Sign in to AIDE' })
-    expect(currentHref(router)).toBe('/login?returnUrl=%2Fprojects')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Ship software with AI agents, under human control.' }),
+    ).toBeInTheDocument()
+    expect(currentHref(router)).toBe('/')
   })
 
-  it('FR-1: a signed-in user visiting /login goes to /projects', async () => {
-    signInAs()
+  it('FR-207 / FR-211: a signed-in user visiting / lands on Home (/home; it was /projects before v6)', async () => {
+    signInAs({ name: 'Ada' })
+    const { router } = await renderRoute('/')
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Welcome, Ada' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/home')
+  })
+
+  it('FR-1 / FR-207: a signed-in user visiting /login goes to Home (/home; it was /projects before v6)', async () => {
+    signInAs({ name: 'Ada' })
     const { router } = await renderRoute('/login')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/projects')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Welcome, Ada' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/home')
   })
 
-  it('FR-1: a signed-in user visiting /register goes to /projects', async () => {
+  it('FR-1 / FR-207: a signed-in user visiting /register goes to /home', async () => {
     signInAs()
     const { router } = await renderRoute('/register')
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/projects')
+      expect(router.state.location.pathname).toBe('/home')
     })
   })
 
@@ -42,7 +53,7 @@ describe('Route guards (FR-1)', () => {
     const { router } = await renderRoute('/login?error=GITHUB_AUTH_FAILED&reason=already_linked')
 
     expect(
-      await screen.findByText('This GitHub account is already linked to another AIDE user.'),
+      await screen.findByText('This GitHub account is already linked to another Tevrin user.'),
     ).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/account')
   })
@@ -51,7 +62,7 @@ describe('Route guards (FR-1)', () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
     const { router } = await renderRoute('/projects/abc/review?cycle=2')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to AIDE' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Tevrin' })).toBeInTheDocument()
     expect(currentHref(router)).toBe('/login?returnUrl=%2Fprojects%2Fabc%2Freview%3Fcycle%3D2')
 
     const user = userEvent.setup()

@@ -5,7 +5,7 @@ using Aide.Domain.Lifecycle;
 namespace Aide.Domain.Releases;
 
 /// <summary>
-/// FR-84: why AIDE can't merge the version's PR itself (wire values <c>review_required</c>, <c>changes_requested</c>,
+/// FR-84: why Tevrin can't merge the version's PR itself (wire values <c>review_required</c>, <c>changes_requested</c>,
 /// <c>checks_failing</c>, <c>checks_pending</c>, <c>branch_protected</c>, <c>merge_conflict</c>, <c>no_permission</c>,
 /// <c>merge_method_not_allowed</c>, <c>pr_not_open</c>, <c>manual_strategy</c>), plus FR-138's GitLab/Bitbucket reasons
 /// <c>draft</c>, <c>discussions_unresolved</c> and <c>rebase_required</c>. Also recorded on an <c>awaiting_merge</c>
@@ -31,16 +31,16 @@ public enum MergeReadinessReasonCode
     /// <summary>The PR conflicts with the default branch.</summary>
     MergeConflict = 5,
 
-    /// <summary>AIDE's token may not merge into the repository.</summary>
+    /// <summary>Tevrin's token may not merge into the repository.</summary>
     NoPermission = 6,
 
-    /// <summary>The repository allows none of the merge methods AIDE uses.</summary>
+    /// <summary>The repository allows none of the merge methods Tevrin uses.</summary>
     MergeMethodNotAllowed = 7,
 
     /// <summary>There is no open PR for the version (not opened yet, closed or already merged).</summary>
     PrNotOpen = 8,
 
-    /// <summary>The project's merge strategy is <c>manual</c>: AIDE never merges (FR-65).</summary>
+    /// <summary>The project's merge strategy is <c>manual</c>: Tevrin never merges (FR-65).</summary>
     ManualStrategy = 9,
 
     /// <summary>FR-138: the merge request (GitLab) or pull request (Bitbucket) is still a draft.</summary>
@@ -92,13 +92,13 @@ public static class MergeReadinessRules
                 $"Merge readiness is checked in the review and release phases, not in {phase.ToWire()}."));
 
     /// <summary>
-    /// FR-65, FR-84: "AIDE will merge automatically" needs a strategy where AIDE merges (<c>aide_merges</c>, or Bitbucket's
+    /// FR-65, FR-84: "Tevrin will merge automatically" needs a strategy where Tevrin merges (<c>aide_merges</c>, or Bitbucket's
     /// <c>fast_forward</c>/<c>squash</c>, FR-140) and a mergeable PR.
     /// </summary>
     public static bool WillAutoMerge(MergeStrategy strategy, bool canMerge) =>
         AideMerges(strategy) && canMerge;
 
-    /// <summary>FR-65, FR-140: whether AIDE merges under <paramref name="strategy"/> (every strategy but <c>manual</c>).</summary>
+    /// <summary>FR-65, FR-140: whether Tevrin merges under <paramref name="strategy"/> (every strategy but <c>manual</c>).</summary>
     public static bool AideMerges(MergeStrategy strategy) => strategy != MergeStrategy.Manual;
 
     /// <summary>A completed check whose conclusion blocks a required check: failure, timed out, cancelled or action required.</summary>
@@ -148,7 +148,7 @@ public static class MergeReadinessRules
     }
 
     /// <summary>
-    /// FR-84: whether AIDE's token may merge the version's PR now, and why not. Order: no open PR (alone); missing permission;
+    /// FR-84: whether Tevrin's token may merge the version's PR now, and why not. Order: no open PR (alone); missing permission;
     /// merge method not allowed; conflicts; changes requested / review required (from <c>reviewDecision</c>, or — when
     /// GraphQL was unavailable — conservatively from the branch rules' required approvals); failing then pending required
     /// checks; and <c>branch_protected</c> when GitHub still reports the PR <c>BLOCKED</c> or <c>BEHIND</c> for another
@@ -167,14 +167,14 @@ public static class MergeReadinessRules
 
         if (facts.CanWrite == false)
         {
-            reasons.Add(new(MergeReadinessReasonCode.NoPermission, "AIDE's token may not merge into this repository (it needs Contents and Pull requests: read and write)."));
+            reasons.Add(new(MergeReadinessReasonCode.NoPermission, "Tevrin's token may not merge into this repository (it needs Contents and Pull requests: read and write)."));
         }
 
         if (facts.AllowedMergeMethods is { } allowed && !allowed.Contains(facts.MergeMethod, StringComparer.Ordinal))
         {
             reasons.Add(new(
                 MergeReadinessReasonCode.MergeMethodNotAllowed,
-                $"The repository doesn't allow {facts.MergeMethod} merges, which AIDE uses (allowed: {(allowed.Count == 0 ? "none" : string.Join(", ", allowed.Order(StringComparer.Ordinal)))})."));
+                $"The repository doesn't allow {facts.MergeMethod} merges, which Tevrin uses (allowed: {(allowed.Count == 0 ? "none" : string.Join(", ", allowed.Order(StringComparer.Ordinal)))})."));
         }
 
         if (facts.HasConflicts || string.Equals(facts.MergeStateStatus, "DIRTY", StringComparison.Ordinal))
@@ -229,7 +229,7 @@ public static class MergeReadinessRules
         var canMerge = reasons.Count == 0;
         if (strategy == MergeStrategy.Manual)
         {
-            reasons.Add(new(MergeReadinessReasonCode.ManualStrategy, "The project's merge strategy is manual: AIDE never merges; merge the pull request on GitHub."));
+            reasons.Add(new(MergeReadinessReasonCode.ManualStrategy, "The project's merge strategy is manual: Tevrin never merges; merge the pull request on GitHub."));
         }
 
         return new MergeReadinessVerdict(canMerge, WillAutoMerge(strategy, canMerge), reasons);
@@ -268,10 +268,10 @@ public static class MergeReadinessRules
 /// <summary>FR-84, FR-85: a check run or commit status on the PR head; <c>required</c> when the default branch's rules require it.</summary>
 public sealed record CheckObservation(string Name, CheckRunStatus Status, CheckRunConclusion? Conclusion, bool Required, string? DetailsUrl);
 
-/// <summary>FR-84: one reason AIDE can't merge the version's PR itself.</summary>
+/// <summary>FR-84: one reason Tevrin can't merge the version's PR itself.</summary>
 public sealed record MergeReadinessReason(MergeReadinessReasonCode Code, string Message);
 
-/// <summary>FR-84: the verdict: whether AIDE may merge, whether it will (strategy), and the reasons.</summary>
+/// <summary>FR-84: the verdict: whether Tevrin may merge, whether it will (strategy), and the reasons.</summary>
 public sealed record MergeReadinessVerdict(bool CanMerge, bool WillAutoMerge, IReadOnlyList<MergeReadinessReason> Reasons);
 
 /// <summary>
@@ -288,7 +288,7 @@ public sealed record MergeReadinessFacts
 
     public IReadOnlyCollection<string>? AllowedMergeMethods { get; init; }
 
-    /// <summary>The merge method AIDE uses (<c>GitHub:ReleaseMergeMethod</c>, default <c>merge</c>).</summary>
+    /// <summary>The merge method Tevrin uses (<c>GitHub:ReleaseMergeMethod</c>, default <c>merge</c>).</summary>
     public string MergeMethod { get; init; } = "merge";
 
     /// <summary>The branch rules' required approving review count (0 when none).</summary>

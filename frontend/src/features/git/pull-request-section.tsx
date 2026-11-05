@@ -20,6 +20,8 @@ import {
   type PullRequestFile,
   type PullRequestSummary,
 } from "./pull-request-api";
+import { panelClass } from "../../components/shared/panel-class";
+import { cn } from "../../lib/utils";
 
 const fileTones: Record<PullRequestFile["status"], BadgeTone> = {
   added: "success",
@@ -161,7 +163,7 @@ function PullRequestPending({
       <p role="status" aria-busy="true" className="text-sm">
         <span
           aria-hidden="true"
-          className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle"
+          className="mr-2 inline-block size-3 motion-safe:animate-pulse rounded-full bg-primary align-middle"
         />
         Opening pull request…
       </p>
@@ -322,7 +324,7 @@ export function PullRequestSection({
     <section
       id="pull-request"
       aria-labelledby="pull-request-title"
-      className="flex scroll-mt-4 flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4"
+      className={cn(panelClass, "flex scroll-mt-4 flex-col gap-3 p-4")}
     >
       <h3 id="pull-request-title" className="text-lg">
         {summary ? pullRequestTitle(summary) : "Pull request"}

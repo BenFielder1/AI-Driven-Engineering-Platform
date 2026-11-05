@@ -50,6 +50,8 @@ import {
   ReportSection,
   ViolationsSection,
 } from './review-report'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const statusTones: Record<ReviewRunStatus, BadgeTone> = {
   idle: 'neutral',
@@ -473,7 +475,7 @@ export function ReviewPage({
         {!readOnly && (
           <section
             aria-labelledby="review-status"
-            className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-md"
+            className={cn(panelClass, 'flex flex-col gap-2 p-4')}
           >
             <div className="flex flex-wrap items-center gap-2">
               <h3 id="review-status" className="text-lg">
@@ -489,7 +491,7 @@ export function ReviewPage({
             <div aria-live="polite" className="text-sm">
               {review.status === 'running' && (
                 <p role="status" aria-busy="true">
-                  <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
+                  <span aria-hidden="true" className="mr-2 inline-block size-3 motion-safe:animate-pulse rounded-full bg-primary align-middle" />
                   {queued === null ? 'Review running' : `Review cycle ${String(queued)} running`}: deterministic checks and the
                   Code Review agent are scoring the code against the specification…
                 </p>

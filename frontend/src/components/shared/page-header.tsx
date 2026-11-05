@@ -8,14 +8,17 @@ export function PageHeader({
   title,
   description,
   actions,
+  documentTitle,
   className,
 }: {
   title: string
   description?: ReactNode
   actions?: ReactNode
+  /** The document title when it differs from the h1 (e.g. Home's greeting). */
+  documentTitle?: string
   className?: string
 }) {
-  useDocumentTitle(title)
+  useDocumentTitle(documentTitle ?? title)
   return (
     <header className={cn('flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}>
       <div className="min-w-0">

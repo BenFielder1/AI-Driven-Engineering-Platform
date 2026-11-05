@@ -30,7 +30,7 @@ interface LoginPageProps {
   linkProvider?: GitHostLinkProvider | undefined
 }
 
-/** /login (FR-1, FR-2, FR-131, FR-134). */
+/** /login (FR-1, FR-2, FR-131, FR-134; layout FR-223: providers, then an "or" divider, then the email form). */
 export function LoginPage({ returnUrl, githubError, gitHostError, linkProvider }: LoginPageProps) {
   const router = useAppRouter()
   const login = useLogin()
@@ -76,7 +76,7 @@ export function LoginPage({ returnUrl, githubError, gitHostError, linkProvider }
   ]
 
   return (
-    <AuthCard title="Sign in to AIDE">
+    <AuthCard title="Sign in to Tevrin">
       {githubError && (
         <Alert tone="error" role="alert" title="GitHub sign-in failed" className="mb-4">
           <p>{githubFailureMessage(githubError.reason)}</p>
@@ -102,6 +102,7 @@ export function LoginPage({ returnUrl, githubError, gitHostError, linkProvider }
       )}
       {!(linking && me) && (
         <>
+          {!linking && <SocialSignIn returnUrl={destination} />}
           <ErrorSummary title="We couldn't sign you in" errors={summary} />
           <form noValidate onSubmit={(e) => void onSubmit(e)} className="mt-2 flex flex-col gap-4">
             <TextField
@@ -124,13 +125,12 @@ export function LoginPage({ returnUrl, githubError, gitHostError, linkProvider }
               Sign in
             </Button>
           </form>
-          {!linking && <SocialSignIn returnUrl={destination} />}
         </>
       )}
       <p className="mt-6 text-sm text-muted-foreground">
-        New to AIDE?{' '}
+        Don&apos;t have an account?{' '}
         <Link to="/register" search={returnUrl ? { returnUrl } : {}} className="font-medium text-primary underline">
-          Create an account
+          Create one
         </Link>
       </p>
     </AuthCard>

@@ -41,7 +41,7 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
         schema.Properties[ApiProblems.InstallUrlKey] = new OpenApiSchema
         {
             Type = JsonSchemaType.String,
-            Description = "GITHUB_APP_NOT_INSTALLED: the AIDE GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the AIDE GitHub App's settings link (FR-143, FR-144).",
+            Description = "GITHUB_APP_NOT_INSTALLED: the Tevrin GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the Tevrin GitHub App's settings link (FR-143, FR-144).",
         };
         schema.Properties[ApiProblems.PlatformKey] = new OpenApiSchema
         {

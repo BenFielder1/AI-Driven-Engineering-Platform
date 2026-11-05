@@ -12,7 +12,7 @@ using Npgsql;
 namespace Aide.Infrastructure.GitHub;
 
 /// <summary>
-/// The AIDE GitHub App in use (FR-80), with its secrets decrypted: from <c>GitHub:App:*</c> configuration (which takes
+/// The Tevrin GitHub App in use (FR-80), with its secrets decrypted: from <c>GitHub:App:*</c> configuration (which takes
 /// precedence) or the row registered through the manifest flow. Never serialised or logged; the private key never leaves
 /// the server (§8). <see cref="Permissions"/>, owner and HTML URL are <c>null</c> for a configured App until read from
 /// GitHub (<c>GET /app</c>).
@@ -35,7 +35,7 @@ public sealed record GitHubAppCredentials(
     public override string ToString() => $"GitHubApp {{ AppId = {AppId}, Slug = {Slug}, Source = {Source} }}";
 }
 
-/// <summary>Reads and registers the AIDE GitHub App (FR-80).</summary>
+/// <summary>Reads and registers the Tevrin GitHub App (FR-80).</summary>
 public interface IGitHubAppStore
 {
     /// <summary>The App in use, or <c>null</c> when none is registered or configured.</summary>

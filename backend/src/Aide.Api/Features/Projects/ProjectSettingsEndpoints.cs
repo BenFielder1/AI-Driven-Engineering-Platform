@@ -43,7 +43,7 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/git", UpdateGitSettings)
             .WithName("UpdateGitSettings")
-            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after AIDE checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.")
+            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.")
             .Produces<GitSettingsDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -59,7 +59,7 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPost("/git/switch-to-app", SwitchGitToApp)
             .WithName("SwitchGitToApp")
-            .WithSummary("FR-83: move a github_pat project onto the AIDE GitHub App (Owner): stores the installation and repository ids and drops the PAT. The caller's own GitHub connection must be able to push to the repo (403 FORBIDDEN otherwise; 409 GITHUB_NOT_CONNECTED without a connection). 409 GITHUB_APP_NOT_INSTALLED (extension installUrl) when the App can't access the repo.")
+            .WithSummary("FR-83: move a github_pat project onto the Tevrin GitHub App (Owner): stores the installation and repository ids and drops the PAT. The caller's own GitHub connection must be able to push to the repo (403 FORBIDDEN otherwise; 409 GITHUB_NOT_CONNECTED without a connection). 409 GITHUB_APP_NOT_INSTALLED (extension installUrl) when the App can't access the repo.")
             .Produces<GitSettingsDto>()
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status429TooManyRequests)
@@ -690,12 +690,12 @@ public static partial class ProjectSettingsEndpoints
         var settings = await GitAsync(db, id, cancellationToken);
         if (settings.Provider != GitProvider.GithubPat || !ProjectSettingsRules.TryParseGitHubRepo(settings.RepoUrl, out var repo))
         {
-            return ApiProblems.Of(ErrorCodes.Conflict, "Only a project on a GitHub personal access token can switch to the AIDE GitHub App.");
+            return ApiProblems.Of(ErrorCodes.Conflict, "Only a project on a GitHub personal access token can switch to the Tevrin GitHub App.");
         }
 
         if (await apps.GetAsync(cancellationToken) is null)
         {
-            return ApiProblems.GitHubAppNotInstalled(null, "No AIDE GitHub App is registered. An Admin registers it under Admin → Integrations → GitHub.");
+            return ApiProblems.GitHubAppNotInstalled(null, "No Tevrin GitHub App is registered. An Admin registers it under Admin → Integrations → GitHub.");
         }
 
         // FR-83: the caller must be able to write to the repository with their own GitHub account.

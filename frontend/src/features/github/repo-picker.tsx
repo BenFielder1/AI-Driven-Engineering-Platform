@@ -25,13 +25,13 @@ const DESCRIPTION_MAX = 350
 /** Why an owner can't take a new repository (FR-81), or null when it can. */
 function ownerBlockedReason(owner: GitHubOwner): string | null {
   if (!owner.appInstalled) {
-    return 'AIDE isn’t installed here'
+    return 'Tevrin isn’t installed here'
   }
-  return owner.canCreate ? null : 'AIDE can’t create repositories here'
+  return owner.canCreate ? null : 'Tevrin can’t create repositories here'
 }
 
 const createSchema = z.object({
-  owner: z.string().min(1, { error: 'Choose an owner where AIDE is installed.' }),
+  owner: z.string().min(1, { error: 'Choose an owner where Tevrin is installed.' }),
   name: z
     .string()
     .trim()
@@ -81,7 +81,7 @@ export function CreateRepoDialog({
   const blocked = (owners.data ?? []).filter((o) => ownerBlockedReason(o) !== null)
   const firstCreatable = creatable[0]?.login ?? ''
 
-  // Preselect the first owner AIDE can create repositories for, once the owners load.
+  // Preselect the first owner Tevrin can create repositories for, once the owners load.
   useEffect(() => {
     if (firstCreatable && !getValues('owner')) {
       setValue('owner', firstCreatable)
@@ -152,13 +152,13 @@ export function CreateRepoDialog({
         {creatable.length === 0 && (
           <Alert tone="warning">
             <p>
-              AIDE can&apos;t create a repository for any of your accounts: install the AIDE GitHub App on your account or
+              Tevrin can&apos;t create a repository for any of your accounts: install the Tevrin GitHub App on your account or
               an organisation first.
             </p>
             {installUrl && (
               <p className="mt-2">
                 <GitHubLink href={installUrl} variant="link">
-                  Install AIDE on more repositories
+                  Install Tevrin on more repositories
                 </GitHubLink>
               </p>
             )}
@@ -190,7 +190,7 @@ export function CreateRepoDialog({
                 {o.login}: {ownerBlockedReason(o)}.{' '}
                 {!o.appInstalled && installUrl && (
                   <GitHubLink href={installUrl} variant="link">
-                    {`Install AIDE on ${o.login}`}
+                    {`Install Tevrin on ${o.login}`}
                   </GitHubLink>
                 )}
                 {o.appInstalled && 'It needs the Administration permission, and you need permission to create repositories there.'}
@@ -258,7 +258,7 @@ function useDebounced(value: string, ms = 300): string {
 }
 
 /**
- * FR-81, FR-86: the repositories the AIDE GitHub App can access for the user, searchable and paged, with "Install AIDE on
+ * FR-81, FR-86: the repositories the Tevrin GitHub App can access for the user, searchable and paged, with "Install Tevrin on
  * more repositories" and "Create repository" (which selects the new repo).
  */
 export function RepoPicker({
@@ -293,7 +293,7 @@ export function RepoPicker({
       <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
         {term
           ? `No repositories match "${term}".`
-          : 'AIDE can’t access any of your repositories yet. Install AIDE on more repositories, or create one.'}
+          : 'Tevrin can’t access any of your repositories yet. Install Tevrin on more repositories, or create one.'}
       </p>
     )
   } else {
@@ -307,7 +307,7 @@ export function RepoPicker({
               <li
                 key={r.id}
                 className={cn(
-                  'flex items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3 has-checked:border-primary/60 has-checked:bg-primary/10',
+                  'flex items-start gap-3 rounded-lg border border-border/60 bg-background p-3 has-checked:border-primary/60 has-checked:bg-primary/10',
                   !r.canPush && 'opacity-70',
                 )}
               >
@@ -384,7 +384,7 @@ export function RepoPicker({
         >
           Create repository
         </Button>
-        {installUrl && <GitHubLink href={installUrl} variant="ghost">Install AIDE on more repositories</GitHubLink>}
+        {installUrl && <GitHubLink href={installUrl} variant="ghost">Install Tevrin on more repositories</GitHubLink>}
       </div>
       <CreateRepoDialog
         open={creating}

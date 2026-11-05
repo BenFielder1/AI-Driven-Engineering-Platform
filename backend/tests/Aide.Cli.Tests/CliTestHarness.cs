@@ -142,7 +142,7 @@ internal sealed class CliTestHarness : IDisposable
         return this;
     }
 
-    /// <summary>Saves a config file with this token (and optional API URL), bound to that URL as `aide login` would.</summary>
+    /// <summary>Saves a config file with this token (and optional API URL), bound to that URL as `tevrin login` would.</summary>
     public CliTestHarness LoggedIn(string token = Token, string? apiUrl = null) =>
         WriteConfig(token, apiUrl, apiUrl ?? "http://localhost:8080");
 
@@ -154,6 +154,9 @@ internal sealed class CliTestHarness : IDisposable
         File.WriteAllText(DefaultConfigPath, $"{{\"apiUrl\":{Json(apiUrl)},\"token\":{Json(token)},\"tokenApiUrl\":{Json(tokenApiUrl)}}}");
         return this;
     }
+
+    /// <summary>FR-200: run as the deprecated <c>aide</c> alias instead of <c>tevrin</c>.</summary>
+    public bool AsAlias { get; set; }
 
     /// <summary>The clock behind --follow's poll interval (default: timers fire at once).</summary>
     public TimeProvider TimeProvider { get; set; } = new ImmediateTimeProvider();
@@ -175,7 +178,9 @@ internal sealed class CliTestHarness : IDisposable
             UserConfigRoot = ConfigRoot,
             TimeProvider = TimeProvider,
         };
-        var exitCode = await CliApp.RunAsync(args, host, cancellationToken);
+        var exitCode = AsAlias
+            ? await CliApp.RunAliasAsync(args, host, cancellationToken)
+            : await CliApp.RunAsync(args, host, cancellationToken);
         return new CliRun(exitCode, output.ToString(), error.ToString());
     }
 

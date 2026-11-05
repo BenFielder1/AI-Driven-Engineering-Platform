@@ -1,85 +1,133 @@
 import { useSyncExternalStore } from 'react'
 
 /**
- * SPEC §7.1: system / light / dark, system by default; the user's override is kept in localStorage.
- * src/lib/theme-init.ts applies the same rule before first paint (keep the two in step).
+ * FR-204 (amends SPEC v3 §7.1): Light, Dark and System; System is the default. The choice is stored in localStorage
+ * `aide.theme` as `light` | `dark` | `system` (the key keeps its v5 name, so a saved theme carries over: FR-201).
+ * src/lib/theme-init.ts applies the same rule before first paint and follows the OS while System is chosen: keep the
+ * two in step.
  */
 export type ThemePreference = 'system' | 'light' | 'dark'
+export type ResolvedTheme = 'light' | 'dark'
 
 export const THEME_STORAGE_KEY = 'aide.theme'
-const DARK_QUERY = '(prefers-color-scheme: dark)'
-const LIGHT_QUERY = '(prefers-color-scheme: light)'
+export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark']
+export const DARK_SCHEME_QUERY = '(prefers-color-scheme: dark)'
 
-const listeners = new Set<() => void>()
-
-function isPreference(value: unknown): value is ThemePreference {
+export function isThemePreference(value: unknown): value is ThemePreference {
   return value === 'system' || value === 'light' || value === 'dark'
 }
+
+// Only used when localStorage is unavailable (private mode, quota): the choice then lasts for this page.
+let memoryPreference: ThemePreference | null = null
 
 export function readThemePreference(): ThemePreference {
   try {
     const stored = globalThis.localStorage.getItem(THEME_STORAGE_KEY)
-    return isPreference(stored) ? stored : 'system'
+    return isThemePreference(stored) ? stored : 'system'
   } catch {
-    return 'system'
+    return memoryPreference ?? 'system'
   }
 }
 
-/** Dark first: only an explicit system preference for light gives light. */
-function systemPrefersDark(): boolean {
-  return !(typeof globalThis.matchMedia === 'function' && globalThis.matchMedia(LIGHT_QUERY).matches)
+function darkQuery(): MediaQueryList | null {
+  return typeof globalThis.matchMedia === 'function' ? globalThis.matchMedia(DARK_SCHEME_QUERY) : null
 }
 
-/** Applies the effective theme to <html>: `.dark` or `.light` selects the token set (dark is also the unclassed default). */
-export function applyTheme(preference: ThemePreference = readThemePreference()): void {
-  const dark = preference === 'dark' || (preference === 'system' && systemPrefersDark())
+/** Whether the OS asks for dark. No answer (or no matchMedia) means light, the CSS default. */
+export function systemPrefersDark(): boolean {
+  return darkQuery()?.matches ?? false
+}
+
+export function resolveTheme(preference: ThemePreference, systemDark: boolean = systemPrefersDark()): ResolvedTheme {
+  return preference === 'dark' || (preference === 'system' && systemDark) ? 'dark' : 'light'
+}
+
+/** Applies the effective theme to <html>: `.dark` or `.light` selects the token set (index.css). */
+export function applyTheme(preference: ThemePreference = readThemePreference()): ResolvedTheme {
+  const resolved = resolveTheme(preference)
   const root = document.documentElement
-  root.classList.toggle('dark', dark)
-  root.classList.toggle('light', !dark)
-  root.style.colorScheme = dark ? 'dark' : 'light'
+  root.classList.toggle('dark', resolved === 'dark')
+  root.classList.toggle('light', resolved === 'light')
+  root.style.colorScheme = resolved
+  return resolved
 }
 
-export function setThemePreference(preference: ThemePreference): void {
-  try {
-    if (preference === 'system') {
-      globalThis.localStorage.removeItem(THEME_STORAGE_KEY)
-    } else {
-      globalThis.localStorage.setItem(THEME_STORAGE_KEY, preference)
-    }
-  } catch {
-    // Storage unavailable (private mode, quota): the choice lasts for this page only.
-  }
-  current = preference
-  applyTheme(preference)
+const listeners = new Set<() => void>()
+
+function notify() {
   listeners.forEach((listener) => {
     listener()
   })
 }
 
-let current: ThemePreference | null = null
+export function setThemePreference(preference: ThemePreference): void {
+  try {
+    globalThis.localStorage.setItem(THEME_STORAGE_KEY, preference)
+  } catch {
+    memoryPreference = preference
+  }
+  applyTheme(preference)
+  notify()
+}
 
-/** Applies the stored theme now and follows system changes while the preference is `system`. */
-export function initTheme(): void {
-  current = readThemePreference()
-  applyTheme(current)
-  if (typeof globalThis.matchMedia === 'function') {
-    globalThis.matchMedia(DARK_QUERY).addEventListener('change', () => {
-      if ((current ?? 'system') === 'system') {
-        applyTheme('system')
-      }
-    })
+/** The OS switched between light and dark: follow it while System is chosen (the init script does the same). */
+function onSystemChange() {
+  if (readThemePreference() === 'system') {
+    applyTheme('system')
+  }
+  notify()
+}
+
+/** Another tab changed the theme. */
+function onStorage(event: StorageEvent) {
+  if (event.key === THEME_STORAGE_KEY || event.key === null) {
+    applyTheme()
+    notify()
   }
 }
 
+let query: MediaQueryList | null = null
+
 function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0) {
+    query = darkQuery()
+    query?.addEventListener('change', onSystemChange)
+    globalThis.addEventListener('storage', onStorage)
+  }
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) {
+      query?.removeEventListener('change', onSystemChange)
+      query = null
+      globalThis.removeEventListener('storage', onStorage)
+    }
+  }
 }
 
-function getSnapshot(): ThemePreference {
-  return current ?? readThemePreference()
+/** Applies the stored theme now (the init script has normally done so already) and keeps <html> following the OS. */
+export function initTheme(): () => void {
+  applyTheme()
+  return subscribe(() => undefined)
 }
 
+const getPreference = () => readThemePreference()
+const getResolved = () => resolveTheme(readThemePreference())
+
+/** The stored choice (`system` by default). The server render (and first client render) is `system`. */
 export function useThemePreference(): ThemePreference {
-  return useSyncExternalStore(subscribe, getSnapshot, () => 'system')
+  return useSyncExternalStore(subscribe, getPreference, () => 'system')
+}
+
+/** The theme in effect (`light` or `dark`), following the OS while System is chosen. */
+export function useResolvedTheme(): ResolvedTheme {
+  return useSyncExternalStore(subscribe, getResolved, () => 'light')
+}
+
+/**
+ * FR-204 theme hook for selectors (ThemeSelector, the user menu, the marketing footer): the stored choice, the theme
+ * in effect, and a setter that stores and applies a new choice.
+ */
+export function useTheme(): { preference: ThemePreference; resolvedTheme: ResolvedTheme; setPreference: (preference: ThemePreference) => void } {
+  return { preference: useThemePreference(), resolvedTheme: useResolvedTheme(), setPreference: setThemePreference }
 }

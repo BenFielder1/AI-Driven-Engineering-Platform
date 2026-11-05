@@ -372,7 +372,7 @@ public static class EventTypes
 
     /// <summary>
     /// FR-153, §4.21: a pull request head was merged other than the commit the pre-merge production migrations ran on
-    /// (Bitbucket can't pin its merge; a person merged on the host before AIDE migrated that head):
+    /// (Bitbucket can't pin its merge; a person merged on the host before Tevrin migrated that head):
     /// <c>{releaseId, expectedHeadSha, mergedHeadSha, mergeCommitSha}</c>, <c>expectedHeadSha</c> <c>null</c> when no pre-merge
     /// run succeeded. The production rollout's post-merge run on the merge commit applies whatever the merged head added.
     /// </summary>

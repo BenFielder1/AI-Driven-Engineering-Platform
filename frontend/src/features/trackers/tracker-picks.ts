@@ -95,7 +95,7 @@ export function removePickedItem(picks: readonly PickedImport[], pickIndex: numb
   })
 }
 
-/** Only http(s) links reach an href: tracker URLs and the session-storage draft are outside AIDE's control. */
+/** Only http(s) links reach an href: tracker URLs and the session-storage draft are outside Tevrin's control. */
 export function safeExternalUrl(url: string): string | null {
   try {
     const { protocol } = new URL(url)

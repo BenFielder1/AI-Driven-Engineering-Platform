@@ -94,7 +94,7 @@ public sealed partial class DeploymentGroupService(
         var resume = request.Create is not null && existing is not null && existing.Name == request.Create.Name;
         if (!rebind && !resume && existing is not null && await HasResourcesAsync(existing, cancellationToken))
         {
-            return Fail(new DomainError(ErrorCodes.Conflict, "The group already has platform resources. Remove the group first; AIDE keeps those resources."), provider);
+            return Fail(new DomainError(ErrorCodes.Conflict, "The group already has platform resources. Remove the group first; Tevrin keeps those resources."), provider);
         }
 
         var checkedProject = await CheckWithPlatformAsync(provider, parts, request, existing, resume, rebind, auth.Value, projectId, cancellationToken);

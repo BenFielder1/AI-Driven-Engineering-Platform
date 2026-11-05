@@ -339,7 +339,7 @@ public sealed partial class DeploymentTargetService
 
         if (resolved.Value?.InstallationPermissions is { } permissions && GitHubRules.PagesPermission(permissions) != GitHubPagesAccess.Granted)
         {
-            return new DomainError(ErrorCodes.PlatformPermissionMissing, "The AIDE GitHub App needs the Pages permission. Update it in GitHub settings, then accept it on the installation.")
+            return new DomainError(ErrorCodes.PlatformPermissionMissing, "The Tevrin GitHub App needs the Pages permission. Update it in GitHub settings, then accept it on the installation.")
             {
                 Reason = await AppSettingsUrlAsync(cancellationToken),
             };
@@ -361,7 +361,7 @@ public sealed partial class DeploymentTargetService
         }
 
         return resolved.Value?.InstallationPermissions is { } permissions && GitHubRules.VariablesPermission(permissions) != GitHubPagesAccess.Granted
-            ? new DomainError(ErrorCodes.PlatformPermissionMissing, "The AIDE GitHub App needs the Variables permission to pass build-time values to GitHub Pages. Update it in GitHub settings, then accept it on the installation.")
+            ? new DomainError(ErrorCodes.PlatformPermissionMissing, "The Tevrin GitHub App needs the Variables permission to pass build-time values to GitHub Pages. Update it in GitHub settings, then accept it on the installation.")
             {
                 Reason = await AppSettingsUrlAsync(cancellationToken),
             }

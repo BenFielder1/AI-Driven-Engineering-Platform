@@ -159,7 +159,7 @@ function LlmChoice({
             <div
               key={option.provider}
               className={cn(
-                'flex items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3 transition-colors',
+                'flex items-start gap-3 rounded-lg border border-border/60 bg-background p-3 transition-colors',
                 option.usable ? 'has-checked:border-primary/60 has-checked:bg-primary/10' : 'opacity-90',
               )}
             >

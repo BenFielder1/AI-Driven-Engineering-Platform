@@ -16,7 +16,7 @@ public static class GitHubPagesRules
     /// <summary>GitHub refuses repository variables with this prefix (422).</summary>
     public const string ReservedVariablePrefix = "GITHUB_";
 
-    /// <summary>AIDE's id for the Pages deployment of a commit (Pages has no deployment AIDE creates).</summary>
+    /// <summary>Tevrin's id for the Pages deployment of a commit (Pages has no deployment Tevrin creates).</summary>
     public static string DeploymentId(string sha)
     {
         ArgumentNullException.ThrowIfNull(sha);
@@ -27,7 +27,7 @@ public static class GitHubPagesRules
     public static string? ShaOf(string deploymentId) =>
         deploymentId is not null && deploymentId.StartsWith("pages:", StringComparison.Ordinal) && deploymentId.Length > 6 ? deploymentId[6..] : null;
 
-    /// <summary>AIDE's id of a synced (key, environment): <c>pages:&lt;environment&gt;:&lt;key&gt;</c>. Only production has a variable.</summary>
+    /// <summary>Tevrin's id of a synced (key, environment): <c>pages:&lt;environment&gt;:&lt;key&gt;</c>. Only production has a variable.</summary>
     public static string EnvId(string key, DeploymentEnvironment environment) =>
         string.Create(CultureInfo.InvariantCulture, $"pages:{environment.ToWire()}:{key}");
 
@@ -69,7 +69,7 @@ public static class GitHubPagesRules
     /// <summary>
     /// FR-145, FR-146: whether the Pages workflow run on the merge commit started before the newest variable sync, so its
     /// build may not hold those values (the run reads <c>vars.X</c> when its job starts). A run still queued reads them when
-    /// it starts. A run already re-run isn't re-run again: GitHub's and AIDE's clocks differ, and that must not loop.
+    /// it starts. A run already re-run isn't re-run again: GitHub's and Tevrin's clocks differ, and that must not loop.
     /// </summary>
     public static bool BuildPredatesVariables(string? runStatus, DateTimeOffset? runStartedAt, int runAttempt, DateTimeOffset variablesSyncedAt) =>
         runStartedAt is { } started

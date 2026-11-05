@@ -10,12 +10,15 @@ import { applyFieldErrors, errorMessage, errorMessages, isApiError } from '../..
 import { Link, useAppRouter } from '../../lib/navigation'
 import { safeReturnUrl } from '../../lib/return-url'
 import { useRegister } from './auth-api'
-import { AuthCard, SocialSignIn } from './auth-layout'
+import { AuthSplit, SocialSignIn } from './auth-layout'
 import { registerSchema, type RegisterValues } from './schemas'
 
 const fieldIds = { email: 'register-email', name: 'register-name', password: 'register-password' } as const
 
-/** /register (FR-1). The first account becomes Admin (FR-3), decided by the server. */
+/**
+ * /register (FR-1; layout FR-223: split screen, providers above the form). After sign-up the user lands on a same-origin
+ * `returnUrl`, else /home. The first account becomes Admin (FR-3), decided by the server.
+ */
 export function RegisterPage({ returnUrl }: { returnUrl?: string }) {
   const router = useAppRouter()
   const registerUser = useRegister()
@@ -58,7 +61,8 @@ export function RegisterPage({ returnUrl }: { returnUrl?: string }) {
   ]
 
   return (
-    <AuthCard title="Create your AIDE account">
+    <AuthSplit title="Create your Tevrin account">
+      <SocialSignIn returnUrl={destination} />
       <ErrorSummary title="We couldn't create your account" errors={summary} />
       <form noValidate onSubmit={(e) => void onSubmit(e)} className="mt-2 flex flex-col gap-4">
         <TextField
@@ -89,13 +93,12 @@ export function RegisterPage({ returnUrl }: { returnUrl?: string }) {
           Create account
         </Button>
       </form>
-      <SocialSignIn returnUrl={destination} />
       <p className="mt-6 text-sm text-muted-foreground">
         Already have an account?{' '}
         <Link to="/login" search={returnUrl ? { returnUrl } : {}} className="font-medium text-primary underline">
           Sign in
         </Link>
       </p>
-    </AuthCard>
+    </AuthSplit>
   )
 }

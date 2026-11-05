@@ -265,7 +265,7 @@ export function isActiveHref(
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Settling navigations: navigate() resolves once the new URL has rendered (NavigationEvents, mounted in Providers).
+// Settling navigations: navigate() resolves once the new URL has rendered (NavigationEvents, mounted in Providers and MarketingShell).
 // ---------------------------------------------------------------------------------------------------------------------
 
 const pending = new Set<() => void>()
@@ -283,7 +283,7 @@ function waitForNavigation(): Promise<void> {
   })
 }
 
-/** Resolves pending `navigate()` promises when the location changes. Render once near the root (Providers). */
+/** Resolves pending `navigate()` promises when the location changes. Render once near the root (Providers, MarketingShell). */
 export function NavigationEvents(): null {
   const { href } = useLocation()
   useEffect(() => {

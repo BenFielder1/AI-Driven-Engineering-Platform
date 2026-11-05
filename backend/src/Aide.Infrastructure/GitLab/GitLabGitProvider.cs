@@ -96,7 +96,7 @@ internal sealed partial class GitLabGitProvider(
     /// <summary>
     /// FR-137: reuses the open merge request from the project branch to the default branch (its title and description
     /// brought up to date, staying a draft while it is one); otherwise opens it as a draft (<c>Draft: </c>, the description
-    /// linking back to the AIDE project, <c>remove_source_branch: false</c>). A create that races another (409/422) looks
+    /// linking back to the Tevrin project, <c>remove_source_branch: false</c>). A create that races another (409/422) looks
     /// it up again, so one merge request exists per release version. The outcome's number is the <c>iid</c>.
     /// </summary>
     public async Task<PullRequestOutcome> OpenPullRequestAsync(GitConnectionSettings settings, PullRequestRequest request, string? token, CancellationToken cancellationToken)
@@ -427,7 +427,7 @@ internal sealed partial class GitLabGitProvider(
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 LogGitFailed(logger, settings.ProjectId, operation, ex.GetType().Name);
-                return GitOutcome.Failed("The working copy could not be written on the AIDE server. Ask an admin to check the server log and the Workspaces:Root volume.", transient: true, ErrorCodes.GitError);
+                return GitOutcome.Failed("The working copy could not be written on the Tevrin server. Ask an admin to check the server log and the Workspaces:Root volume.", transient: true, ErrorCodes.GitError);
             }
 
             if (error is null)
@@ -460,7 +460,7 @@ internal sealed partial class GitLabGitProvider(
         }
     }
 
-    /// <summary>A request-path call with the caller's connection (already checked to be theirs): errors as AIDE codes.</summary>
+    /// <summary>A request-path call with the caller's connection (already checked to be theirs): errors as Tevrin codes.</summary>
     private async Task<Result<T>> UserCallAsync<T>(Guid connectionId, Func<GitLabClient, string, Task<Result<T>>> call, CancellationToken cancellationToken)
     {
         var access = await tokens.GetAccessTokenAsync(connectionId, cancellationToken);

@@ -77,7 +77,7 @@ function ConnectionRow({
         )}
         {c.status === 'insufficient_scope' && (
           <span className="text-destructive">
-            This connection is missing scopes AIDE needs. Connect a token with all the listed scopes, then delete this one.
+            This connection is missing scopes Tevrin needs. Connect a token with all the listed scopes, then delete this one.
           </span>
         )}
       </div>
@@ -271,7 +271,7 @@ export function BitbucketConnectionSection({
         }}
       >
         <p>
-          AIDE forgets this connection&apos;s tokens. Projects bound to it lose the binding until an Owner re-binds one, and
+          Tevrin forgets this connection&apos;s tokens. Projects bound to it lose the binding until an Owner re-binds one, and
           their Git work fails until then. Signing in with Bitbucket still works and reconnects it.
         </p>
       </ConfirmDialog>

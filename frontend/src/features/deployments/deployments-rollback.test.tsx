@@ -1,3 +1,4 @@
+// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, onTestFinished } from 'vitest'
@@ -195,15 +196,15 @@ describe('FR-151: production URLs on the project overview', () => {
 })
 
 describe('PLATFORM_RATE_LIMITED copy (FR-150, §6)', () => {
-  it('FR150_rate_limited_copy: the code names the platform and says AIDE retries, also as a message prefix', () => {
-    expect(errorMessages.PLATFORM_RATE_LIMITED).toBe('{platform} is rate limiting deployments. AIDE will retry.')
-    expect(platformCopy('PLATFORM_RATE_LIMITED', 'render')).toBe('Render is rate limiting deployments. AIDE will retry.')
-    expect(copyForCode('PLATFORM_RATE_LIMITED')).toContain('AIDE will retry')
+  it('FR150_rate_limited_copy: the code names the platform and says Tevrin retries, also as a message prefix', () => {
+    expect(errorMessages.PLATFORM_RATE_LIMITED).toBe('{platform} is rate limiting deployments. Tevrin will retry.')
+    expect(platformCopy('PLATFORM_RATE_LIMITED', 'render')).toBe('Render is rate limiting deployments. Tevrin will retry.')
+    expect(copyForCode('PLATFORM_RATE_LIMITED')).toContain('Tevrin will retry')
     const err = new ApiError({ status: 429, errorCode: 'PLATFORM_RATE_LIMITED', platform: 'netlify' })
-    expect(errorMessage(err)).toBe('Netlify is rate limiting deployments. AIDE will retry.')
+    expect(errorMessage(err)).toBe('Netlify is rate limiting deployments. Tevrin will retry.')
     expect(
       deploymentFailure({ errorCode: 'PLATFORM_ERROR', errorMessage: 'PLATFORM_RATE_LIMITED: 429 Too Many Requests', provider: 'fake', platform: 'cloudflare' }),
-    ).toBe('Cloudflare is rate limiting deployments. AIDE will retry. 429 Too Many Requests')
+    ).toBe('Cloudflare is rate limiting deployments. Tevrin will retry. 429 Too Many Requests')
     expect(deploymentFailure({ errorCode: null, errorMessage: 'NOT_A_CODE: boom', provider: 'vercel' })).toBe('NOT_A_CODE: boom')
   })
 })

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 namespace Aide.Api.Auth;
 
 /// <summary>
-/// D-V2-7, FR-80, FR-81: the GitHub sign-in handler. Once an AIDE GitHub App exists (configured or registered) the flow
+/// D-V2-7, FR-80, FR-81: the GitHub sign-in handler. Once a Tevrin GitHub App exists (configured or registered) the flow
 /// uses the App's user authorization — the App's client id and secret, no scopes, PKCE (S256) and the protected,
 /// correlated <c>state</c> of the built-in OAuth handler — and the token pair is kept for the GitHub connection. Without
 /// an App it is the v1 OAuth App flow, unchanged. With neither, the callback path isn't handled (the endpoint answers 404).
@@ -72,7 +72,7 @@ public sealed class GitHubOAuthHandler(IOptionsMonitor<OAuthOptions> options, IL
         var app = await Resolver.AppAsync(Context.RequestAborted);
         if (app is null || app.ClientId != clientId)
         {
-            return OAuthTokenResponse.Failed(new AuthenticationFailureException("The AIDE GitHub App changed during sign-in."));
+            return OAuthTokenResponse.Failed(new AuthenticationFailureException("The Tevrin GitHub App changed during sign-in."));
         }
 
         var fields = new Dictionary<string, string>

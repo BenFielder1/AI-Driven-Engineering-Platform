@@ -34,6 +34,8 @@ import { MarkdownView } from './markdown-view'
 import { isPlanType } from './plan-block'
 import { PlanSteps } from './plan-steps'
 import { RestoreVersionAction } from './restore-version'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const versionOption = (a: ArtifactSummary) =>
   `v${String(a.version)} · ${a.status ? artifactStatusLabels[a.status] : 'Unknown'}${a.integrity === 'corrupted' ? ' · integrity check failed' : ''}`
@@ -53,7 +55,7 @@ function HistoryTable({
   selected: number
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md">
+    <div className={cn(panelClass, 'overflow-x-auto')}>
       <table className="w-full border-collapse text-sm">
         <caption className="sr-only">Version history, newest first</caption>
         <thead>
@@ -373,7 +375,7 @@ export function ArtifactDetailPage({
       <div className="flex flex-col gap-6">
         {regenerating && (
           <p role="status" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm" aria-busy="true">
-            <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
+            <span aria-hidden="true" className="mr-2 inline-block size-3 motion-safe:animate-pulse rounded-full bg-primary align-middle" />
             The agent is regenerating the {label.toLowerCase()} with your feedback. The new draft appears here when it&apos;s
             ready.
           </p>

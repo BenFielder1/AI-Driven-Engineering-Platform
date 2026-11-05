@@ -26,6 +26,8 @@ import {
 } from './execution-api'
 import { ToolCallsTable } from '../runs/tool-calls'
 import { stepTones } from './step-tones'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 const runTones: Record<PlanRunStatus, StatusTone> = {
   pending: 'neutral',
@@ -300,7 +302,7 @@ function RunGroup({
   const Heading = headingLevel === 3 ? 'h3' : 'h4'
   const Chevron = expanded ? ChevronDown : ChevronRight
   return (
-    <li id={`run-${run.id}`} aria-labelledby={titleId} className="flex scroll-mt-24 flex-col gap-3 rounded-xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-md">
+    <li id={`run-${run.id}`} aria-labelledby={titleId} className={cn(panelClass, 'flex scroll-mt-24 flex-col gap-3 p-4')}>
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Heading id={titleId} className="text-base">

@@ -30,6 +30,8 @@ import {
   type RefinementRoundHistory,
 } from './refinement-api'
 import { answersSchema, type AnswersValues } from './refinement-schemas'
+import { panelClass } from '../../components/shared/panel-class'
+import { cn } from '../../lib/utils'
 
 type Trigger = NonNullable<RefinementRound['trigger']>
 
@@ -43,7 +45,7 @@ const triggerLabels: Record<Trigger, string> = {
 
 function Card({ id, title, children, actions }: { id: string; title: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-md p-4">
+    <section aria-labelledby={id} className={cn(panelClass, 'flex flex-col gap-3 p-4')}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 id={id} className="text-lg">
           {title}
@@ -115,7 +117,7 @@ function RoundStatus({ projectId, round }: { projectId: string; round: Refinemen
 
       {isRoundPending(round) && (
         <p role="status" aria-busy="true" className="rounded-lg border border-border/60 bg-muted/60 p-3 text-sm">
-          <span aria-hidden="true" className="mr-2 inline-block size-3 animate-pulse rounded-full bg-primary align-middle" />
+          <span aria-hidden="true" className="mr-2 inline-block size-3 motion-safe:animate-pulse rounded-full bg-primary align-middle" />
           The Idea Refinement agent is {round.status === 'queued' ? 'about to start' : 'working'} on this round. The new draft and
           any clarifying questions appear here when it&apos;s done.
         </p>

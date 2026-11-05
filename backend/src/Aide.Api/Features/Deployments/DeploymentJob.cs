@@ -207,7 +207,7 @@ public sealed partial class DeploymentJobHandler(
     /// FR-145, FR-146: GitHub Pages builds on the merge push, before this job runs: the sync happens first, even when the
     /// run is adopted, and a run that started before the newest synced variable is replaced
     /// (<see cref="IDeploymentProvider.RefreshBuildAsync"/>), so the production build holds the values. Returns when to look
-    /// again while that happens. After the deployment ceiling AIDE stops replacing it and the poll times it out. A refused
+    /// again while that happens. After the deployment ceiling Tevrin stops replacing it and the poll times it out. A refused
     /// re-run fails the deployment with its reason rather than letting a stale build count as ready.
     /// </summary>
     private async Task<DateTimeOffset?> SyncPagesBuildAsync(Deployment deployment, DeploymentContext context, DateTimeOffset now, CancellationToken cancellationToken)
@@ -379,7 +379,7 @@ public sealed partial class DeploymentJobHandler(
         }
     }
 
-    /// <summary>A stopped row whose create may have happened anyway: find it by the AIDE id and cancel it.</summary>
+    /// <summary>A stopped row whose create may have happened anyway: find it by the Tevrin id and cancel it.</summary>
     private async Task CancelOrphanAsync(Deployment deployment, CancellationToken cancellationToken)
     {
         var resolved = await access.ResolveAsync(deployment.ProjectId, cancellationToken, component: deployment.Component);
@@ -418,7 +418,7 @@ public sealed partial class DeploymentJobHandler(
     [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId}: the Pages build started before its variables were synced ({Refresh})")]
     private static partial void LogBuildRefreshed(ILogger logger, Guid deploymentId, BuildRefresh refresh);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Cancelled provider deployment {ProviderDeploymentId}: no AIDE deployment polls it")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cancelled provider deployment {ProviderDeploymentId}: no Tevrin deployment polls it")]
     private static partial void LogOrphanCancelled(ILogger logger, string providerDeploymentId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Deployment {DeploymentId}: cancelling an unrecorded provider deployment failed ({Failure})")]

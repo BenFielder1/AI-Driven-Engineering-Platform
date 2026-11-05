@@ -1,6 +1,8 @@
 import { Link } from '../../lib/navigation'
 
+import { panelClass } from '../../components/shared/panel-class'
 import { Alert } from '../../components/ui/alert'
+import { cn } from '../../lib/utils'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { useDocumentTitle } from '../../lib/use-document-title'
 import { SelectField } from '../../components/ui/select-field'
@@ -34,10 +36,7 @@ function ArtifactCard({ projectId, type, latest }: { projectId: string; type: Ar
     <li>
       <section
         aria-labelledby={headingId}
-        className={
-          'flex h-full flex-col gap-3 rounded-xl border bg-card/70 p-4 shadow-sm backdrop-blur-md ' +
-          (latest?.integrity === 'corrupted' ? 'border-destructive' : 'border-border/60')
-        }
+        className={cn(panelClass, 'flex h-full flex-col gap-3 p-4', latest?.integrity === 'corrupted' && 'border-destructive')}
       >
         <h2 id={headingId} className="text-lg">
           {artifactTypeLabels[type]}

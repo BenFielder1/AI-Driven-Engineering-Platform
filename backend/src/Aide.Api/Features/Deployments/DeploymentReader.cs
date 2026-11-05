@@ -164,7 +164,7 @@ public static class DeploymentReader
     /// <summary>
     /// FR-150: when the latest migration reached production (<see cref="MigrationWarningRules"/>): Supabase BaaS → the
     /// newest successful production run that applied a file (applies to every component); host mode (a production
-    /// database without AIDE runs) → the newest ready production backend deploy (its pre-deploy ran; backend only).
+    /// database without Tevrin runs) → the newest ready production backend deploy (its pre-deploy ran; backend only).
     /// </summary>
     private sealed record MigrationMarks(DateTimeOffset? Baas, DateTimeOffset? HostBackend)
     {

@@ -14,7 +14,7 @@ public static class DeploymentStates
         status is DeploymentStatus.Ready or DeploymentStatus.Error or DeploymentStatus.Canceled;
 
     /// <summary>
-    /// §4.15: Vercel's <c>readyState</c> (or <c>state</c>) as an AIDE state: <c>QUEUED</c> → queued; <c>INITIALIZING</c>,
+    /// §4.15: Vercel's <c>readyState</c> (or <c>state</c>) as a Tevrin state: <c>QUEUED</c> → queued; <c>INITIALIZING</c>,
     /// <c>BUILDING</c>, <c>DEPLOYING</c> and anything unknown → building; <c>READY</c> → ready; <c>ERROR</c> → error;
     /// <c>CANCELED</c> → canceled.
     /// </summary>
@@ -120,21 +120,21 @@ public static class DeploymentPollRules
     }
 
     /// <summary>The message recorded with <c>DEPLOYMENT_TIMEOUT</c>.</summary>
-    public const string TimeoutMessage = "The deployment didn't finish within 30 minutes; AIDE stopped polling it.";
+    public const string TimeoutMessage = "The deployment didn't finish within 30 minutes; Tevrin stopped polling it.";
 
     /// <summary>The message recorded on an older preview whose polling a newer one replaced (§4.15).</summary>
-    public const string SupersededMessage = "A newer preview of this branch replaced it; AIDE stopped polling this one.";
+    public const string SupersededMessage = "A newer preview of this branch replaced it; Tevrin stopped polling this one.";
 }
 
 /// <summary>
 /// FR-91, §4.15: the release's production deployment is the one Vercel auto-created for the merge commit (production
-/// auto-deploys from the default branch stay on, FR-89) or, when Vercel hasn't made one shortly after the merge, one AIDE
+/// auto-deploys from the default branch stay on, FR-89) or, when Vercel hasn't made one shortly after the merge, one Tevrin
 /// creates. Pure.
 /// </summary>
 public static class ProductionDeploymentRules
 {
     /// <summary>
-    /// How long after recording the deployment AIDE looks for the platform's own deployment of the SHA before creating one
+    /// How long after recording the deployment Tevrin looks for the platform's own deployment of the SHA before creating one
     /// (FR-149: matched within 60 s; v2 waited 30 s).
     /// </summary>
     public static readonly TimeSpan AdoptWindow = TimeSpan.FromSeconds(60);
@@ -274,7 +274,7 @@ public enum DeploymentFailure
     /// (<c>PLATFORM_PERMISSION_MISSING</c>).</summary>
     PermissionMissing = 8,
 
-    /// <summary>§4.20: AIDE can't call this provider for real yet (only its Fake mode works); <c>PLATFORM_ERROR</c>.</summary>
+    /// <summary>§4.20: Tevrin can't call this provider for real yet (only its Fake mode works); <c>PLATFORM_ERROR</c>.</summary>
     NotSupported = 9,
 }
 
@@ -359,14 +359,14 @@ public static class VercelErrorRules
 /// <summary>One write of a project env var to Vercel for one target: create (no id yet) or update an existing Vercel var.</summary>
 public sealed record EnvTargetWrite(DeploymentEnvironment Target, string? ExistingVercelId);
 
-/// <summary>One delete of a Vercel env var (a target the AIDE var no longer has).</summary>
+/// <summary>One delete of a Vercel env var (a target the Tevrin var no longer has).</summary>
 public sealed record EnvTargetDelete(DeploymentEnvironment Target, string VercelId);
 
 /// <summary>What pushing an env var to Vercel does: write each of its targets, delete the Vercel vars of dropped targets.</summary>
 public sealed record EnvSyncPlan(IReadOnlyList<EnvTargetWrite> Writes, IReadOnlyList<EnvTargetDelete> Deletes);
 
 /// <summary>
-/// §4.15 env sync: an AIDE env var is one Vercel env var per target, so upserts and deletes are by <c>(key, target)</c>;
+/// §4.15 env sync: a Tevrin env var is one Vercel env var per target, so upserts and deletes are by <c>(key, target)</c>;
 /// Vercel's ids are kept per target (<c>deployment_env_vars.vercel_env_ids</c>). Vercel allows 120 env writes a minute:
 /// writes are counted in a sliding minute and creates are sent in batches. Pure.
 /// </summary>

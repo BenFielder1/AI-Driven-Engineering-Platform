@@ -246,7 +246,7 @@ public static class CodeGeneration
     }
 
     /// <summary>
-    /// FR-34: subject <c>[AIDE][Phase:execution][Step:N] &lt;title&gt;</c> (title on one line, at most
+    /// FR-34: subject <c>[Tevrin][Phase:execution][Step:N] &lt;title&gt;</c> (title on one line, at most
     /// <see cref="MaxSubjectTitleLength"/> characters) and a body listing the files, ending with the
     /// <see cref="StepTrailer"/> trailer, then FR-174's <paramref name="coAuthorLine"/> in the same trailer block.
     /// </summary>
@@ -260,7 +260,7 @@ public static class CodeGeneration
             cleanTitle = cleanTitle[..MaxSubjectTitleLength].TrimEnd();
         }
 
-        var subject = $"[AIDE][Phase:execution][Step:{stepNumber.ToString(CultureInfo.InvariantCulture)}] {cleanTitle}".TrimEnd();
+        var subject = $"[Tevrin][Phase:execution][Step:{stepNumber.ToString(CultureInfo.InvariantCulture)}] {cleanTitle}".TrimEnd();
         var sorted = paths.Select(PathRules.Normalize).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
         var body = new StringBuilder("Files:\n");
         foreach (var path in sorted)

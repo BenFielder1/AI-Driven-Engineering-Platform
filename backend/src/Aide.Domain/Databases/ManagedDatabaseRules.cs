@@ -14,7 +14,7 @@ public enum DatabaseSetupMode
     External = 2,
 }
 
-/// <summary>A provider's state of a database, mapped to AIDE's (§4.21): the status and whether polling ends.</summary>
+/// <summary>A provider's state of a database, mapped to Tevrin's (§4.21): the status and whether polling ends.</summary>
 public sealed record DatabaseStateMapping(ManagedDatabaseStatus Status, bool Terminal);
 
 /// <summary>
@@ -194,7 +194,7 @@ public static partial class ManagedDatabaseRules
     }
 
     /// <summary>
-    /// §4.21 Supabase project status → AIDE's: <c>ACTIVE_HEALTHY</c> available (the health check still decides),
+    /// §4.21 Supabase project status → Tevrin's: <c>ACTIVE_HEALTHY</c> available (the health check still decides),
     /// <c>INACTIVE</c>/<c>PAUSING</c>/<c>PAUSE_FAILED</c> paused, <c>INIT_FAILED</c>/<c>RESTORE_FAILED</c> error,
     /// <c>REMOVED</c>/<c>GOING_DOWN</c> removed, anything else (<c>COMING_UP</c>, <c>RESTORING</c>, <c>UPGRADING</c>, …) provisioning.
     /// </summary>
@@ -216,7 +216,7 @@ public static partial class ManagedDatabaseRules
     }
 
     /// <summary>
-    /// §4.21 Render Postgres status → AIDE's: <c>available</c> (and <c>maintenance_*</c>) available, or <c>expiring</c>
+    /// §4.21 Render Postgres status → Tevrin's: <c>available</c> (and <c>maintenance_*</c>) available, or <c>expiring</c>
     /// within 7 days of <paramref name="expiresAt"/>; <c>suspended</c> paused; <c>recovery_failed</c> error; anything else
     /// (<c>creating</c>, …) provisioning.
     /// </summary>

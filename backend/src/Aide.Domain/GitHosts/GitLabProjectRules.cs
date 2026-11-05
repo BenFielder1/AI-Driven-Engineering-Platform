@@ -23,7 +23,7 @@ public static partial class GitLabProjectRules
     /// <summary>FR-137, §4.19: GitLab's draft marker; a merge request is ready once it is removed from the title.</summary>
     public const string DraftPrefix = "Draft: ";
 
-    /// <summary>The longest <c>group/sub/project</c> path accepted (GitLab allows 20 levels of 255 characters; AIDE stores 255).</summary>
+    /// <summary>The longest <c>group/sub/project</c> path accepted (GitLab allows 20 levels of 255 characters; Tevrin stores 255).</summary>
     public const int MaxFullPathLength = 255;
 
     /// <summary>The longest repo id accepted (GitLab project ids are integers).</summary>
@@ -72,7 +72,7 @@ public static partial class GitLabProjectRules
 
         if (!string.IsNullOrEmpty(token))
         {
-            problems.Add($"{prefix}token: Not used with gitlab: AIDE uses your GitLab connection.");
+            problems.Add($"{prefix}token: Not used with gitlab: Tevrin uses your GitLab connection.");
         }
 
         if (installationId is not null)
@@ -166,7 +166,7 @@ public static partial class GitLabProjectRules
     }
 
     /// <summary>
-    /// FR-137: the title a reused merge request gets: the new title, kept a draft while the existing one is a draft (AIDE
+    /// FR-137: the title a reused merge request gets: the new title, kept a draft while the existing one is a draft (Tevrin
     /// never marks it ready by updating its description).
     /// </summary>
     public static string ReusedTitle(string existingTitle, string newTitle) =>

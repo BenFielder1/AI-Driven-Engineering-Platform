@@ -208,7 +208,7 @@ export function DeploymentsPage() {
             variant="no_data"
             headingLevel={3}
             title={environment === 'all' && component === 'all' ? 'No deployments yet' : 'No deployments match these filters'}
-            description="AIDE deploys a preview when execution opens or updates the pull request, and production after each release."
+            description="Tevrin deploys a preview when execution opens or updates the pull request, and production after each release."
           />
         }
       />
