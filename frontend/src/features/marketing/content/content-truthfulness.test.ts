@@ -31,7 +31,7 @@ const modules = { changelog, faq, headings, home, howItWorks, integrations, life
 const copy = Object.entries(modules).flatMap(([name, mod]) => strings(mod, name))
 
 describe('FR-222 content truthfulness', () => {
-  it('FR222_Q3_no_open_source: no copy claims "open source" (SPEC Q3: "source available on GitHub")', () => {
+  it('FR222_Q3_no_open_source: no copy claims "open source" (SPEC Q3, D-V6-21: "source available on GitHub")', () => {
     expect(copy.filter((c) => /open[\s-]?source/i.test(c.text))).toEqual([])
   })
 

@@ -111,12 +111,10 @@ function Paragraphs({ items }: { items: readonly string[] }) {
 export function HowItWorksPage() {
   return (
     <>
-      <div className="mx-auto grid max-w-6xl items-end gap-8 lg:grid-cols-[1fr_auto]">
-        <PageIntro eyebrow={page.name} title={pageTitles.howItWorks}>
-          {page.description}
-        </PageIntro>
-        <AnimatedLifecycleDiagram className="px-4 pb-12" />
-      </div>
+      <PageIntro eyebrow={page.name} title={pageTitles.howItWorks}>
+        {page.description}
+      </PageIntro>
+      <AnimatedLifecycleDiagram className="mx-auto max-w-6xl px-4 pb-12" />
       <Section id="phases" {...howItWorksHeadings.phases}>
         <ol className="flex flex-col gap-4">
           {phaseDetails.map((phase, i) => (

@@ -27,7 +27,7 @@ titles_from_headings:
   enabled: true
   strip_title: false
 
-logo: /v6/tevrin-logo.svg
+logo: /v6/brand/tevrin-lockup-light.svg
 
 search_enabled: true
 search:

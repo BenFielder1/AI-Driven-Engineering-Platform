@@ -1,13 +1,11 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/v6/brand/tevrin-lockup-dark.svg">
-    <img src="docs/v6/brand/tevrin-lockup-light.svg" alt="Tevrin" width="320">
-  </picture>
+  <img src="docs/v6/brand/tevrin-lockup-light.svg#gh-light-mode-only" alt="Tevrin" width="320">
+  <img src="docs/v6/brand/tevrin-lockup-dark.svg#gh-dark-mode-only" alt="Tevrin" width="320">
 </p>
 
 # Tevrin
 
-Tevrin coordinates specialised AI agents through a governed software lifecycle: Refinement, Specification, Planning, Execution, Review and Release. It turns an idea into released software with versioned artifacts, approval gates, rollback and a full audit trail, for engineers and project owners who want AI-driven delivery with deterministic state. Source available on GitHub. Tevrin was called AIDE before v6, and some internal identifiers keep that name.
+Tevrin coordinates specialised AI agents through a governed software lifecycle: Refinement, Specification, Planning, Execution, Review and Release. It turns an idea into released software with versioned artifacts, approval gates, rollback and a full audit trail, for engineers and project owners who want AI-driven delivery with deterministic state. Source available on GitHub under the [PolyForm Shield License 1.0.0](LICENSE.md). Tevrin was called AIDE before v6, and some internal identifiers keep that name.
 
 Documentation: <https://benfielder1.github.io/AI-Driven-Engineering-Platform/>
 
@@ -86,3 +84,13 @@ SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md
 | [Brand](docs/brand.md) | Logo files, colours, usage rules |
 
 [`SPEC.md`](SPEC.md) is the source of truth for behaviour, [`CLAUDE.md`](CLAUDE.md) holds the conventions, and [`PROGRESS.md`](PROGRESS.md) logs build decisions.
+
+## Licence
+
+Tevrin is source available under the [PolyForm Shield License 1.0.0](LICENSE.md). You may use, modify and self-host it for any purpose, including at work, except providing a product that competes with Tevrin, such as selling it or offering it as a hosted service. Keep [`LICENSE.md`](LICENSE.md), including its `Required Notice` line, with any copy you share.
+
+Tevrin is the work of one author: pull requests aren't accepted. Bug reports and questions are welcome in [GitHub issues](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/issues).
+
+The Tevrin name and logo aren't covered by the licence. You may keep them in a copy you run yourself, modified or not, and say your work is based on Tevrin. Don't use them to name or brand a product or service you offer to others, or in a way that suggests it's Tevrin or endorsed by Ben Fielder.
+
+Copyright 2026 Ben Fielder ([benfielder.com](https://benfielder.com)).

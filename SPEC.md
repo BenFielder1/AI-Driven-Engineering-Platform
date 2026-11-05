@@ -156,7 +156,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - Given reduced motion, then previews are static.
 - **FR-221** *(frontend)* **SEO and metadata.** Each marketing route has a server `layout.tsx` exporting `metadata` (title, description, Open Graph and Twitter card with `og.png`), keeping pages as client components (D-V3-2). `robots.txt` allows marketing and auth routes and disallows app routes; `sitemap.xml` lists the marketing routes with absolute URLs built from the request host. Both are route handlers using the validated request Host (malformed → `http://localhost`). `X-Robots-Tag: noindex` is sent on `/home`, `/projects`, `/account`, `/connections`, `/notifications`, `/approvals` and `/admin`.
   - Given `GET /robots.txt` and `GET /sitemap.xml`, then both return 200 with the content above (tests in `src/server` or route tests).
-- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in v1–v6; no customer logos, testimonials, invented metrics or "open source" claims (Q3). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name; OpenAI, Slack and Teams have no Simple Icons mark and use neutral icons. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
+- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in v1–v6; no customer logos, testimonials, invented metrics or "open source" claims (Q3, D-V6-21). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name; OpenAI, Slack and Teams have no Simple Icons mark and use neutral icons. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
 
 ### 3.5 Auth pages
 
@@ -168,7 +168,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 
 ### 3.6 Documentation
 
-- **FR-224** *(docs)* **README.** At most 150 lines: name and one-paragraph overview, a 6–8 bullet feature summary, stack table, architecture diagram (mermaid) with 4–6 bullets, repo layout, deployment (Railway and local Kubernetes, one short paragraph each), and a **Documentation** table linking each docs section. The Tevrin lockup at the top (light/dark via `<picture>`).
+- **FR-224** *(docs)* **README.** At most 150 lines: name and one-paragraph overview, a 6–8 bullet feature summary, stack table, architecture diagram (mermaid) with 4–6 bullets, repo layout, deployment (Railway and local Kubernetes, one short paragraph each), and a **Documentation** table linking each docs section. The Tevrin lockup at the top, light or dark to follow the reader's GitHub theme (`#gh-light-mode-only` / `#gh-dark-mode-only`, D-V6-20).
   - Given the README, then every section removed from it has a home on the docs site (the mapping in §4.33), and no link in it is broken.
 - **FR-225** *(docs)* **Docs site content.** `docs/` becomes the site source with this structure (front matter for navigation):
   - `index.md` (overview, where to start) · `getting-started/` (prerequisites, dev loop, first project) · `guides/` (connections and sign-in, GitHub App, GitLab, Bitbucket, LLM providers, issue trackers, stacks and inference, deployments and databases, notifications, CLI) · `operations/` (local Kubernetes and troubleshooting, Railway, PostgreSQL 17→18 upgrade, CI and the commit gate) · `reference/` (configuration and environment variables, API and contract, architecture, testing, error codes, repo layout) · `history/` (one page per version linking the frozen `docs/v1`–`docs/v6` specs and build logs) · `brand.md` (logo files, colours, usage rules).
@@ -322,6 +322,8 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-17 | Palette values shifted to pass AA (§4.31); `text-lg` is 20 px; `aide.theme` stores `system` explicitly; `metadataBase` comes from the validated request Host | Build | agreed |
 | D-V6-18 | Providers move to group layouts, Zod jitless, `marketing-session.tsx`, JS budget in CI (§8), to meet the 200 KB first-load budget and the CSP | Build | agreed |
 | D-V6-19 | Shell and page details: native `title` rail tooltips, theme radio items, server-side search meets FR-208, `?source=import`, root 404 in the marketing shell, robots and sitemap handlers, neutral icons for OpenAI, Slack and Teams, link check skips frozen pages as sources, "In preview" for v6 | Build | agreed |
+| D-V6-20 | Post-v6 fixes: the README logo uses GitHub's `#gh-*-mode-only` fragments, which follow the GitHub theme setting (`<picture>` follows the OS); the docs site logo is the v6 light lockup; the How it works lifecycle diagram sits under the page intro, horizontal at `lg` and vertical below (FR-214, FR-224, FR-225) | Build | agreed |
+| D-V6-21 | Licence: PolyForm Shield License 1.0.0 (`LICENSE.md`, with `Required Notice` and `Licensor Line of Business` lines). Anyone may use, modify and self-host Tevrin, but not provide a competing product (selling it or offering it as a hosted service). Single author: outside pull requests are not accepted. The name and logo are not licensed (stated in `LICENSE.md`, the README and the brand page): a copy you run may keep them and say it's based on Tevrin, but they can't brand a product or service offered to others or suggest endorsement. The CLI packages ship `LICENSE.md` (`PackageLicenseFile`); copy stays "source available", never "open source" (FR-218, FR-222, FR-224, Q3) | Ben | agreed |
 
 ## 11. Open questions
 
@@ -329,7 +331,7 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | --- | --- | --- | --- |
 | Q1 | New domain (e.g. `tevrin.<tld>`) and repo rename? Both change URLs in the docs site, README and `DOCS_URL`. Proposed: later, as a one-line constant change | Ben | nothing |
 | Q2 | Rename the existing GitHub App and Railway-visible names to Tevrin? Manual in GitHub/Railway settings | Ben | nothing (manual check) |
-| Q3 | Add a licence? Until there is one, copy says "source available on GitHub", never "open source" | Ben | FR-218 FAQ wording |
+| Q3 | ~~Add a licence?~~ **Resolved (D-V6-21):** PolyForm Shield License 1.0.0 in `LICENSE.md`. Copy says "source available", never "open source" | Ben | nothing |
 | Q4 | Terms and Privacy text for the footer and sign-up? Omitted until supplied | Ben | nothing |
 
 ## 12. Milestones

@@ -2,7 +2,7 @@ import { docsUrl, GITHUB_URL, type NavLink } from './site-nav'
 
 /**
  * FR-218, FR-212, FR-222: the FAQ. Every answer is true of v6 and comes from the specs (docs/v1–v5/SPEC.md, SPEC.md)
- * and the docs site. The licence wording follows SPEC Q3 ("source available on GitHub"). "Was it called AIDE?" is
+ * and the docs site. The licence wording follows SPEC D-V6-21 (PolyForm Shield; "source available", never "open source"). "Was it called AIDE?" is
  * the one marketing answer that names the old product (with the Changelog's "(as AIDE)").
  */
 export interface FaqItem {
@@ -88,7 +88,7 @@ export const faqs: readonly FaqItem[] = [
     question: 'Is it free?',
     answer: [
       'Yes. Tevrin is free while in preview, and there is no billing. You run it yourself; the platforms and LLM providers you connect bill you under your own accounts.',
-      'The source is available on GitHub.',
+      'The source is available on GitHub under the PolyForm Shield License 1.0.0. You can use, modify and self-host it, including at work, but not sell it or offer it as a competing hosted service.',
     ],
     link: { label: 'Tevrin on GitHub', href: GITHUB_URL, external: true },
   },

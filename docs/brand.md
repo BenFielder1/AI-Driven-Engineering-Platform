@@ -14,7 +14,7 @@ Tevrin's mark is a hexagon of six segments. The six segments are the six lifecyc
 | [Lockup, light](v6/brand/tevrin-lockup-light.svg) | Mark and wordmark on light backgrounds |
 | [Lockup, dark](v6/brand/tevrin-lockup-dark.svg) | Mark and wordmark on dark backgrounds |
 
-The files live in `docs/v6/brand/`. The README switches between the two lockups with a `<picture>` element, so the logo follows the reader's theme.
+The files live in `docs/v6/brand/`. The README shows the light lockup with a `#gh-light-mode-only` fragment and the dark lockup with `#gh-dark-mode-only`, so the logo follows the theme the reader has chosen on GitHub. Other Markdown viewers (such as an editor preview) ignore the fragments and show both lockups.
 
 ## Colours
 
@@ -41,4 +41,6 @@ The brand gradient runs from indigo `#4F46E5` to cyan `#06B6D4`. Type is Geist S
 - Keep clear space around the mark of at least the width of one segment.
 - Warning colours are never used for text.
 - Status badges pair a colour with a dot and a label, so colour is never the only signal.
-- Write the name as "Tevrin". Describe the code as "source available on GitHub".
+- Write the name as "Tevrin". Describe the code as "source available on GitHub", never "open source".
+
+The code is licensed under the [PolyForm Shield License 1.0.0](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/LICENSE.md). The Tevrin name and logo aren't covered by that licence. You may keep them in a copy you run yourself, modified or not, and say your work is based on Tevrin. Don't use them to name or brand a product or service you offer to others, or in a way that suggests it's Tevrin or endorsed by Ben Fielder.

@@ -106,11 +106,14 @@ describe('FR-218 FAQ', () => {
     expect(more.getByRole('link', { name: /^Ask on GitHub issues/ })).toHaveAttribute('href', `${GITHUB_URL}/issues`)
   })
 
-  it('FR218_Q3_wording: the licence answer says "source available on GitHub", and no answer says "open source"', () => {
+  it('FR218_Q3_wording: the licence answer names PolyForm Shield and says "source available on GitHub", and no answer says "open source"', () => {
     const all = faqs.map((f) => [f.question, ...f.answer].join(' ')).join(' ')
+    const free = faqs.find((f) => f.id === 'free')?.answer.join(' ')
 
     expect(all).not.toMatch(/open[\s-]?source/i)
-    expect(faqs.find((f) => f.id === 'free')?.answer.join(' ')).toMatch(/source is available on GitHub/)
+    expect(free).toMatch(/source is available on GitHub/)
+    // SPEC D-V6-21: the licence is PolyForm Shield 1.0.0.
+    expect(free).toMatch(/PolyForm Shield License 1\.0\.0/)
   })
 
   it.each(THEMES.map((t) => [t]))('FR218_axe: /faq has no axe violations, closed and open (%s)', async (theme) => {
