@@ -1,8 +1,6 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/v6/brand/tevrin-lockup-dark.svg">
-    <img src="docs/v6/brand/tevrin-lockup-light.svg" alt="Tevrin" width="320">
-  </picture>
+  <img src="docs/v6/brand/tevrin-lockup-light.svg#gh-light-mode-only" alt="Tevrin" width="320">
+  <img src="docs/v6/brand/tevrin-lockup-dark.svg#gh-dark-mode-only" alt="Tevrin" width="320">
 </p>
 
 # Tevrin

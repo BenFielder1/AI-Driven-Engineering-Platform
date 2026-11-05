@@ -77,12 +77,19 @@ describe('FR-214 How it works', () => {
   it('FR214_diagram: an aria-hidden SVG with a text equivalent; its animation is motion-safe only', async () => {
     await renderPage()
     const figure = screen.getByTestId('lifecycle-diagram')
-    const svg = figure.querySelector('svg')
+    const svgs = Array.from(figure.querySelectorAll('svg'))
 
-    expect(svg).toHaveAttribute('aria-hidden', 'true')
+    // A horizontal rail on wide screens and a vertical one on narrow screens; CSS shows exactly one.
+    expect(svgs.map((svg) => svg.dataset.layout)).toEqual(['horizontal', 'vertical'])
+    expect(svgs[0]).toHaveClass('hidden', 'lg:block')
+    expect(svgs[1]).toHaveClass('lg:hidden')
+    for (const svg of svgs) {
+      expect(svg).toHaveAttribute('aria-hidden', 'true')
+      // Six phases and five gates in each.
+      expect(svg.querySelectorAll('[data-animated]')).toHaveLength(11)
+    }
     expect(within(figure).getByText(/The Tevrin lifecycle: Refinement, Specification, Planning, Execution, Review, Release/)).toBeInTheDocument()
     const animated = Array.from(figure.querySelectorAll('[data-animated]'))
-    expect(animated.length).toBe(11)
     for (const el of animated) {
       const classes = (el.getAttribute('class') ?? '').split(/\s+/)
       expect(classes.filter((c) => c.includes('animate-'))).toEqual(['motion-safe:animate-pulse'])

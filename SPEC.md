@@ -168,7 +168,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 
 ### 3.6 Documentation
 
-- **FR-224** *(docs)* **README.** At most 150 lines: name and one-paragraph overview, a 6–8 bullet feature summary, stack table, architecture diagram (mermaid) with 4–6 bullets, repo layout, deployment (Railway and local Kubernetes, one short paragraph each), and a **Documentation** table linking each docs section. The Tevrin lockup at the top (light/dark via `<picture>`).
+- **FR-224** *(docs)* **README.** At most 150 lines: name and one-paragraph overview, a 6–8 bullet feature summary, stack table, architecture diagram (mermaid) with 4–6 bullets, repo layout, deployment (Railway and local Kubernetes, one short paragraph each), and a **Documentation** table linking each docs section. The Tevrin lockup at the top, light or dark to follow the reader's GitHub theme (`#gh-light-mode-only` / `#gh-dark-mode-only`, D-V6-20).
   - Given the README, then every section removed from it has a home on the docs site (the mapping in §4.33), and no link in it is broken.
 - **FR-225** *(docs)* **Docs site content.** `docs/` becomes the site source with this structure (front matter for navigation):
   - `index.md` (overview, where to start) · `getting-started/` (prerequisites, dev loop, first project) · `guides/` (connections and sign-in, GitHub App, GitLab, Bitbucket, LLM providers, issue trackers, stacks and inference, deployments and databases, notifications, CLI) · `operations/` (local Kubernetes and troubleshooting, Railway, PostgreSQL 17→18 upgrade, CI and the commit gate) · `reference/` (configuration and environment variables, API and contract, architecture, testing, error codes, repo layout) · `history/` (one page per version linking the frozen `docs/v1`–`docs/v6` specs and build logs) · `brand.md` (logo files, colours, usage rules).
@@ -322,6 +322,7 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-17 | Palette values shifted to pass AA (§4.31); `text-lg` is 20 px; `aide.theme` stores `system` explicitly; `metadataBase` comes from the validated request Host | Build | agreed |
 | D-V6-18 | Providers move to group layouts, Zod jitless, `marketing-session.tsx`, JS budget in CI (§8), to meet the 200 KB first-load budget and the CSP | Build | agreed |
 | D-V6-19 | Shell and page details: native `title` rail tooltips, theme radio items, server-side search meets FR-208, `?source=import`, root 404 in the marketing shell, robots and sitemap handlers, neutral icons for OpenAI, Slack and Teams, link check skips frozen pages as sources, "In preview" for v6 | Build | agreed |
+| D-V6-20 | Post-v6 fixes: the README logo uses GitHub's `#gh-*-mode-only` fragments, which follow the GitHub theme setting (`<picture>` follows the OS); the docs site logo is the v6 light lockup; the How it works lifecycle diagram sits under the page intro, horizontal at `lg` and vertical below (FR-214, FR-224, FR-225) | Build | agreed |
 
 ## 11. Open questions
 
