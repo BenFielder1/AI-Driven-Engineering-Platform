@@ -91,6 +91,6 @@ Tevrin is source available under the [PolyForm Shield License 1.0.0](LICENSE.md)
 
 Tevrin is the work of one author: pull requests aren't accepted. Bug reports and questions are welcome in [GitHub issues](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/issues).
 
-The Tevrin name and logo aren't covered by the licence. Don't use them for your own product or fork.
+The Tevrin name and logo aren't covered by the licence. You may keep them in a copy you run yourself, modified or not, and say your work is based on Tevrin. Don't use them to name or brand a product or service you offer to others, or in a way that suggests it's Tevrin or endorsed by Ben Fielder.
 
 Copyright 2026 Ben Fielder ([benfielder.com](https://benfielder.com)).
