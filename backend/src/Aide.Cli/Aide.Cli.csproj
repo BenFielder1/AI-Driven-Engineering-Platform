@@ -9,7 +9,6 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>tevrin</ToolCommandName>
     <PackageId>Tevrin.Cli</PackageId>
-    <Version>0.2.0</Version>
     <Description>Command-line client for Tevrin.</Description>
     <!-- InvariantGlobalization is on, so localized System.CommandLine resources are never used. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

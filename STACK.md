@@ -72,8 +72,8 @@ npm ci --prefix .railway && npm --prefix .railway run typecheck
     timeout, healthcheck `/api/health/ready`, `ForwardedHeaders__ForwardLimit=2`
   - `web` also sets `TRUST_EDGE_FORWARDED=true`, so it keeps the edge's `X-Forwarded-Proto`/`-Host`
   - `postgres`: Railway Postgres (18), with backups on
-- **How deploys happen:** `.github/workflows/deploy.yml` deploys `preview` after green CI on `main` and `production` on
-  manual dispatch. It runs `railway config plan` (drift fails the deploy) and `deploy/scripts/smoke-remote.sh`. Ops
+- **How deploys happen:** `.github/workflows/deploy.yml` deploys `preview` after green CI on `main` and `production` when
+  a GitHub release `x.y.z` is published (SPEC FR-231; CLAUDE.md "Releases") or on manual dispatch. It runs `railway config plan` (drift fails the deploy) and `deploy/scripts/smoke-remote.sh`. Ops
   docs: `deploy/railway/README.md`, `deploy/railway/variables.md`.
 - **Config as code:** Railway IaC in `.railway/railway.ts` (`railway config plan` / `apply`). Not the deprecated
   `railway.json`/`railway.toml`. Set watch paths per service so a frontend change doesn't redeploy the API.

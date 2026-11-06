@@ -5,7 +5,7 @@
 
 # Tevrin
 
-Tevrin coordinates specialised AI agents through a governed software lifecycle: Refinement, Specification, Planning, Execution, Review and Release. It turns an idea into released software with versioned artifacts, approval gates, rollback and a full audit trail, for engineers and project owners who want AI-driven delivery with deterministic state. Source available on GitHub under the [PolyForm Shield License 1.0.0](LICENSE.md). Tevrin was called AIDE before v6, and some internal identifiers keep that name.
+Tevrin coordinates specialised AI agents through a governed software lifecycle: Refinement, Specification, Planning, Execution, Review and Release. It turns an idea into released software with versioned artifacts, approval gates, rollback and a full audit trail, for engineers and project owners who want AI-driven delivery with deterministic state. Source available on GitHub under the [PolyForm Shield License 1.0.0](LICENSE.md). Tevrin was called AIDE before version 0.6.0, and some internal identifiers keep that name.
 
 Documentation: <https://docs.tevrin.dev/>
 
@@ -80,7 +80,7 @@ SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md
 | [Guides](docs/guides/index.md) | Connections, GitHub App, GitLab, Bitbucket, LLM providers, trackers, stacks, deployments, notifications, CLI |
 | [Operations](docs/operations/index.md) | Local Kubernetes, Railway, PostgreSQL 17 to 18 upgrade, CI |
 | [Reference](docs/reference/index.md) | Configuration, API, architecture, testing, error codes, repo layout |
-| [History](docs/history/index.md) | Specs and build logs for v1 to v6 |
+| [History](docs/history/index.md) | Specs and build logs for versions 0.1.0 to 0.6.0 |
 | [Brand](docs/brand.md) | Logo files, colours, usage rules |
 
 [`SPEC.md`](SPEC.md) is the source of truth for behaviour, [`CLAUDE.md`](CLAUDE.md) holds the conventions, and [`PROGRESS.md`](PROGRESS.md) logs build decisions.

@@ -113,7 +113,7 @@ export const faqs: readonly FaqItem[] = [
     id: 'aide',
     question: 'Was it called AIDE?',
     answer: [
-      'Yes. Versions 1 to 5 shipped as AIDE (AI-Driven Engineering). Version 6 renamed it Tevrin.',
+      'Yes. Versions 0.1.0 to 0.5.0 shipped as AIDE (AI-Driven Engineering). Version 0.6.0 renamed it Tevrin.',
       'Nothing you hold breaks: existing sessions, API tokens and webhook signatures keep working, and the old aide command still runs as a deprecated alias of tevrin.',
     ],
     link: { label: 'Changelog', href: '/changelog' },

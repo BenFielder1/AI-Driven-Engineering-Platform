@@ -1,8 +1,8 @@
-# Tevrin (formerly AIDE) — Specification (v6)
+# Tevrin (formerly AIDE) — Specification (0.6.0)
 
-2026-11-04 · Ben Fielder · **v6**, built on the v5 codebase in this repo. Earlier versions: [`docs/v1/SPEC.md`](docs/v1/SPEC.md) … [`docs/v5/SPEC.md`](docs/v5/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's v6 brief (2026-11-04), the interview answers in §10, a codebase survey of the frontend and the name's footprint, and UX research on developer SaaS products (sources in §13).
+2026-11-04 · Ben Fielder · **0.6.0** (v6), built on the v5 codebase in this repo. Earlier versions: [`docs/v1/SPEC.md`](docs/v1/SPEC.md) … [`docs/v5/SPEC.md`](docs/v5/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's v6 brief (2026-11-04), the interview answers in §10, a codebase survey of the frontend and the name's footprint, and UX research on developer SaaS products (sources in §13).
 
-> **How this spec relates to v1–v5.** v6 is an increment on the running v5 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends …)*. New requirements continue from **FR-196**, domain rules from **§4.29**, decisions use `D-V6-n`, and milestones continue from **M38**. Earlier tests stay green unless an amendment changes what they assert; then update the test and name the amendment in it.
+> **How this spec relates to v1–v5.** v6 is an increment on the running v5 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends …)*. New requirements continue from **FR-196**, domain rules from **§4.29**, decisions use `D-V6-n`, and milestones continue from **M38**. **Version numbers are semver (FR-229):** v1–v5 are 0.1.0–0.5.0 and v6 is **0.6.0**. "vN" in requirement text, IDs (`D-V6-n`) and paths (`docs/v6/`) is kept as an identifier and means version 0.N.0 (D-V6-24). Earlier tests stay green unless an amendment changes what they assert; then update the test and name the amendment in it.
 
 ## 1. Overview
 
@@ -20,7 +20,7 @@ Success means:
 - No visible "AIDE" remains in the app, notifications or docs outside history, and every existing session, API token and webhook keeps working.
 - The README fits on two screens, and every topic it dropped is one link away on the docs site.
 
-**In scope (v6):** rename (§3.1) · brand and design system (§3.2) · app shell and Home (§3.3) · marketing site (§3.4) · auth pages (§3.5) · documentation (§3.6).
+**In scope (v6):** rename (§3.1) · brand and design system (§3.2) · app shell and Home (§3.3) · marketing site (§3.4) · auth pages (§3.5) · documentation (§3.6) · versioning and releases (§3.7).
 
 **Out of scope (v6):**
 - Renaming internal identifiers: C# projects and namespaces, database and user names, cookies, `aide_pat_` tokens, `X-AIDE-*` webhook headers, environment variables other than the CLI's, stored formats (`aide-plan`, `aide-stack-profile`, `aide_merges`, `aide/<slug>/v<ver>` branches, `.aide/`), Kubernetes, Docker and Railway resource names (§4.29).
@@ -59,6 +59,9 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 | v1 FR-34 commit subject | Reads `[Tevrin][Phase:…][Step:N]`. Nothing parses it: step detection uses the kept `AIDE-Step-Id` trailer | D-V6-15 |
 | Stack catalog 1.2.0 | 1.2.1: agent text renamed, because it feeds the codegen prompt | D-V6-15 |
 | README | Condensed; detail moves to the docs site | FR-224–FR-226 |
+| Version labels v1–v6 (docs, changelog, CLI package 0.2.0) | Semver: v1–v5 are 0.1.0–0.5.0, v6 is 0.6.0, and the CLI packages carry the release version | FR-229 |
+| v3 FR-110 `production` by manual dispatch only | Publishing a GitHub release `x.y.z` also deploys `production` (manual dispatch stays) | FR-230, FR-231 |
+| FR-219 changelog entry labels | Labelled `0.N.0`. From 0.6.0 the version's final PR sets the entry's date (the day it merges and is released), because the tagged commit carries it | FR-229, FR-230 |
 
 ### 3.1 Rename to Tevrin
 
@@ -186,6 +189,22 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - Site URL: `https://docs.tevrin.dev/` (custom domain, empty `baseurl`, D-V6-22). The frontend's docs links use a build-time constant `DOCS_URL` in `src/lib/site.ts`.
   - Given a PR that adds a broken relative link under `docs/`, then the docs job fails.
 - **FR-227** *(docs)* **Repo docs.** CLAUDE.md, STACK.md and `deploy/railway/README.md` name Tevrin (keeping the internal `aide` identifiers they document). CLAUDE.md gains the v6 Versions row, the docs-site layout and the `docs.yml` workflow.
+
+### 3.7 Versioning and releases
+
+- **FR-229** *(deploy + backend + frontend + docs)* **Semver version numbers.** Tevrin's versions are numbered `x.y.z` (semver, no `v` prefix). The versions built as v1–v5 are **0.1.0–0.5.0** and v6 is **0.6.0**; a later feature version raises the minor number (0.7.0), a fix-only release the patch number (0.6.1).
+  - The release version is written in three places that must agree: `<Version>` in `backend/Directory.Build.props` (every assembly, and both CLI packages `Tevrin.Cli` and `Aide.Cli`, which were 0.2.0), `version` in `frontend/package.json` (and its lock file), and the newest entry of the marketing changelog (`changelog.ts`). `scripts/ci/check-version.sh` checks them in CI.
+  - Labels readers see use the semver number: the changelog (FR-219: `0.6.0` … `0.1.0`, "(as AIDE)" on 0.1.0–0.5.0), the FAQ, the README, the docs site's history pages and CLAUDE.md's Versions table. Paths, URLs and IDs keep `vN` (D-V6-24).
+  - Given the three version sources differ, or one is not `x.y.z`, then CI fails.
+- **FR-230** *(deploy + docs)* **Tags and GitHub releases.** When a version is finalised (its work merged into `main`, CI green on that merge commit, and SPEC/PROGRESS moved to `docs/v<N>/`), the merge commit on `main` gets an annotated tag `x.y.z` equal to the version in that commit, and a GitHub release is created from the tag with the title `Tevrin x.y.z` and notes from the version's history page and changelog entry. Ben tags and releases, or an agent does once Ben confirms the version and commit in the session (CLAUDE.md "Releases"). Tags are never moved or deleted once a release uses them; a fix ships as a new patch version.
+  - Given an agent, then it creates or pushes a tag, or publishes a release, only after Ben confirms in the session.
+- **FR-231** *(deploy)* **A published release deploys production.** `.github/workflows/deploy.yml` also runs on `release: published` and deploys the tagged commit to Railway `production` through the existing production job (the `production` environment's required reviewer, drift check, api then web, FR-111 checks and smoke test). Before deploying, the workflow requires:
+  - the tag is `x.y.z`, else it fails;
+  - the release is not a pre-release and is the repo's latest release, else it skips with a notice (so a release published for an older version, e.g. backfilled history, never rolls production back);
+  - the tagged commit is on `main` with a green CI run (as for a dispatch), and `scripts/ci/check-version.sh <tag>` passes on that commit, else it fails.
+  - Manual dispatch for `production` stays, for redeploys.
+  - The `production` GitHub environment must allow deployments from branch `main` and tags `*.*.*` and have Ben as required reviewer; a promoted pre-release (`released` event) doesn't deploy.
+  - Given a release `0.6.0` published on a green `main` commit whose version is 0.6.0, then production is deployed after approval. Given a release `v0.6.0`, `0.7.0` on a 0.6.0 commit, or a commit not on `main`, then nothing is deployed.
 
 ## 4. Domain rules
 
@@ -315,7 +334,7 @@ Devices: responsive from 360 px; marketing designed mobile-first, app desktop-fi
 
 ## 9. Environments
 
-Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as in v5. New: GitHub Pages for the docs site (public repo; Pages source "GitHub Actions" must be enabled in repo settings by Ben). No new secrets or services. The docs site is served at the custom domain `docs.tevrin.dev` (D-V6-22). The production app's custom domain stays `aide.benfielder.com` until the rest of Q1 is answered.
+Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as in v5. New: GitHub Pages for the docs site (public repo; Pages source "GitHub Actions" must be enabled in repo settings by Ben). No new secrets or services. The docs site is served at the custom domain `docs.tevrin.dev` (D-V6-22). The production app's custom domain stays `aide.benfielder.com` until the rest of Q1 is answered. `production` is deployed by publishing a GitHub release `x.y.z` (FR-231), or by manual dispatch.
 
 ## 10. Decisions and assumptions
 
@@ -344,6 +363,8 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-21 | Licence: PolyForm Shield License 1.0.0 (`LICENSE.md`, with `Required Notice` and `Licensor Line of Business` lines). Anyone may use, modify and self-host Tevrin, but not provide a competing product (selling it or offering it as a hosted service). Single author: outside pull requests are not accepted. The name and logo are not licensed (stated in `LICENSE.md`, the README and the brand page): a copy you run may keep them and say it's based on Tevrin, but they can't brand a product or service offered to others or suggest endorsement. The CLI packages ship `LICENSE.md` (`PackageLicenseFile`); copy stays "source available", never "open source" (FR-218, FR-222, FR-224, Q3) | Ben | agreed |
 | D-V6-22 | Docs site custom domain: GitHub Pages serves the docs at `https://docs.tevrin.dev/` (set in repo Settings → Pages, DNS `CNAME docs → benfielder1.github.io`). `docs/_config.yml` has `url: https://docs.tevrin.dev` and an empty `baseurl`; the link check no longer swaps a base path; `DOCS_URL` and the README point at the new URL. The old `benfielder1.github.io/AI-Driven-Engineering-Platform/` URL redirects there (GitHub Pages does this once a custom domain is set). Answers the docs-site part of Q1 (FR-224, FR-226) | Ben | agreed |
 | D-V6-23 | Post-v6 fix: the GitHub App's slug comes from GitHub (`GET /app`, 10-minute cache shared with the FR-80 details, 1-minute retry after a failure, 5-second timeout), so a rename is picked up without a redeploy. A registered App's row is updated; a configured App logs a warning to set `GitHub__App__Slug` (FR-228, Q2) | Ben | agreed |
+| D-V6-24 | Semver version numbers: v1–v5 are 0.1.0–0.5.0 and v6 is 0.6.0. Only labels change. Folder and URL paths (`docs/v1`–`docs/v6`, `docs/history/v<N>.md`, `history/v<N>/` on the docs site), requirement and decision IDs (`D-V6-n`), milestone names and code comments keep `vN`, which reads as version 0.N.0, so no frozen file or published link changes. One `<Version>` in `Directory.Build.props` replaces the CLI projects' own (FR-229) | Ben | agreed |
+| D-V6-25 | Releases: annotated tag `x.y.z` (no `v` prefix) on the `main` merge commit, a GitHub release from it, and `release: published` deploys `production` (FR-230, FR-231). Only the repo's latest, non-pre-release release deploys; the `production` environment's required reviewer still approves. Agents tag and release only after Ben confirms. Releases for 0.1.0–0.5.0 are optional and, if made, must not be marked latest | Ben | agreed |
 
 ## 11. Open questions
 
@@ -364,6 +385,7 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 4. **M41 Marketing site and auth** (depends on M38, M39): shell, routing, eight pages, previews, SEO, content modules, auth pages. FR-210–FR-223.
 5. **M42 Documentation** (depends on M39 for names; can run beside M40–M41): docs site, README, Pages workflow, repo docs. FR-224–FR-227.
 6. **M43 Integrate and harden:** E2E (marketing navigation, sign-up from Home, routing table §4.32, reduced motion, theme), axe in both themes, JS budget, spec verifier over **v1–v6**. Manual checks for Ben: enable GitHub Pages, favicon legibility at 16 px, Lighthouse on preview, Docker Desktop redeploy and smoke, an existing session and `aide_pat_` token still working after the preview deploy, GitHub App rename (Q2).
+7. **M44 Versioning and releases** (after M43): semver version sources and labels, the version check in CI, the release-triggered production deploy, CLAUDE.md "Releases" and the docs. FR-229–FR-231. Manual checks for Ben: tag protection, then tag and release 0.6.0 when v6 is done.
 
 ## 13. Research sources
 

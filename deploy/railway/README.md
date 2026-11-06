@@ -16,10 +16,10 @@ The browser only talks to `web`, which proxies `/api` and the SignalR WebSockets
 | Infrastructure as Code | [`.railway/railway.ts`](../../.railway/railway.ts) (`railway config plan` / `apply`) |
 | Every variable | [`variables.md`](variables.md) |
 | Smoke test | [`deploy/scripts/smoke-remote.sh`](../scripts/smoke-remote.sh) `<web-url>` |
-| Deploys | `.github/workflows/deploy.yml`: `preview` after green CI on `main`, `production` by manual dispatch with approval (FR-110) |
+| Deploys | `.github/workflows/deploy.yml`: `preview` after green CI on `main`; `production` when a GitHub release `x.y.z` is published (FR-231) or by manual dispatch, with approval either way (FR-110) |
 
 Agents follow STACK.md autonomy (`preview`). They can run `railway config plan` and deploy to `preview`. Production
-deploys and `config apply` against production happen only on Ben's explicit request. Nobody runs
+deploys (including publishing a release, which starts one) and `config apply` against production happen only on Ben's explicit request. Nobody runs
 `--confirm-destructive` without reviewing the exact destroys.
 
 ## Prerequisites
@@ -41,6 +41,8 @@ deploys and `config apply` against production happen only on Ben's explicit requ
    with "Unauthorized" even when `railway status` works with them (found on the first preview deploy, 2026-10-24), so
    `deploy.yml` runs only the read-only plan with this token, scoped by `RAILWAY_PROJECT_ID` and `--environment`.
    Everything else (`railway up`, deployment, domain and TCP-proxy listing) uses the project token.
+7. **The `production` GitHub environment** (FR-231). Before the first release, the `production` GitHub environment must exist (Settings → Environments → New environment `production`) with Ben as **required reviewer**, the `RAILWAY_TOKEN`, `RAILWAY_API_TOKEN`, `SMOKE_EMAIL` and `SMOKE_PASSWORD` secrets and the `RAILWAY_WEB_URL` variable, and **Deployment branches and tags** set to *Selected branches and tags*: branch `main` **and** tag `*.*.*`. A release run's ref is the tag, so a `main`-only rule rejects it. If the environment doesn't exist, publishing a release creates it with no reviewer. See
+   [Releases](../../docs/operations/releases.md).
 
 ## First-time setup
 

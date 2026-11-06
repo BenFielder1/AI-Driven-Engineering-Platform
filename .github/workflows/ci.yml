@@ -195,6 +195,11 @@ jobs:
           # POSIX sh (the API image's entrypoint, FR-106): parse it as sh, not bash.
           echo "sh -n backend/entrypoint.sh"
           sh -n backend/entrypoint.sh
+      # FR-229: Directory.Build.props, frontend/package.json (+ lock) and the newest changelog entry name one x.y.z.
+      - name: Release version is consistent (FR-229)
+        run: |
+          bash scripts/ci/check-version.test.sh
+          bash scripts/ci/check-version.sh
       # Error severity only: the deploy scripts carry warning/style findings that are not bugs (lib.sh variables
       # used by the scripts that source it). Pinned image, so local runs match.
       - name: shellcheck (severity error)

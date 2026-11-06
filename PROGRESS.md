@@ -1,4 +1,4 @@
-# Build progress (v6)
+# Build progress (0.6.0, v6)
 
 Spec: `SPEC.md` (v6; v1–v5 in `docs/`) · Stack: `STACK.md` · Branch: `build/tevrin-v6` · Started: 2026-11-04
 
@@ -47,6 +47,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-226 | GitHub Pages workflow + link check | 3.6 | deploy (CI) | M42 | done | docs 41926888441 |
 | FR-227 | Repo docs name Tevrin | 3.6 | docs | M42 | done | CI 41855800502 |
 | FR-228 | GitHub App slug follows a rename on GitHub | 3.1, 4.34 | backend | post-v6 fix | done | [CI 42210821139](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42210821139) |
+| FR-229 | Semver version numbers (0.1.0–0.6.0), one version in three sources, CI check | 3.7 | deploy + backend + frontend + docs | M44 | in review | |
+| FR-230 | Tag `x.y.z` + GitHub release on the `main` merge commit (CLAUDE.md "Releases") | 3.7 | deploy + docs | M44 | in review | |
+| FR-231 | `release: published` deploys `production` | 3.7 | deploy | M44 | in review | first real run: the 0.6.0 release |
 
 ## Phases
 - [x] M0 Baseline (base: b349c5b): CI green on `main` ([run 41828267279](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41828267279)); v5 docs moved to `docs/v5/`; no re-scaffold
@@ -56,6 +59,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M41 Marketing site and auth: FR-210–FR-223 ([CI 41899659376](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41899659376), head bdebfdf)
 - [x] M42 Documentation: FR-224–FR-227 (content in 134f907; `docs.yml` runs first on the PR)
 - [x] M43 Integrate and harden: E2E (marketing routing §4.32, above-the-fold on every route, keyboard header/footer/FAQ/mobile menu, reduced motion, same-origin, LCP in HTML, Home), axe in both themes, JS budget 192.6/200 KB, acceptance audit over v1–v6 (29 Done, 3 Partial → closed, docs.yml green on PR #29 [run 41926888441](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41926888441); 1 v4 toast regression → safeguarded), SPEC synced (D-V6-14–19) ([CI 41905207049](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41905207049), head 08bc7b1)
+- [ ] M44 Versioning and releases: FR-229–FR-231 (branch `build/tevrin-v6-releases`)
 
 ## Decisions
 - 2026-11-04 (M38): palette values shifted to pass AA (roles unchanged, §4.31 allows it): light danger rose-700 (rose-600 is 4.49:1 on card), dark primary indigo-300 (indigo-400 fails on its 15% tint), light sidebar-accent slate-100. `text-lg` is 20 px (the FR-203 scale has no 18 px step). `aide.theme` now stores `system` explicitly (v5 deleted the key); stored `light`/`dark` still honoured. Brand assets come from one generator (`npm run brand:assets`, `src/components/brand-geometry.ts`); a test fails on drift. `metadataBase` comes from the validated request Host (switch to a configured public origin if a CDN is added).
@@ -67,6 +71,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-04 (M42): docs link check skips the frozen `docs/v1`–`v5` pages as link *sources* (their repo-root links break on the site; fixing them is allowed later), but checks links into them from `history/`.
 - 2026-11-06 (D-V6-22): docs site moved to the custom domain `https://docs.tevrin.dev/`: `_config.yml` `url` set and `baseurl` emptied, link check `swap_urls` dropped, `DOCS_URL`, README, SPEC (FR-226, §9, Q1) and CLAUDE.md updated. No `docs/CNAME`: with the GitHub Actions Pages source the domain lives in repo settings. CI green: https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42209095309
 - 2026-11-06 (D-V6-23, FR-228): the GitHub App was renamed from AIDE to Tevrin, which changed its slug, and the stored slug left install links pointing at the old App. `GitHubAppStore` now takes the slug from `GET /app` (same App id and a usable slug, §4.34) through `GitHubAppInfoCache`: one cached answer (10 min) serves both the slug and the FR-80 details, a failed lookup is retried after 1 min, and the call times out after 5 s. A registered App's row is updated (`ExecuteUpdate`, no migration). A configured App logs a warning to set `GitHub__App__Slug`. The FR-81 "no Administration" test now sets its `GET /app` answer before the first request, because that answer is cached once asked.
+- 2026-11-06 (D-V6-24, D-V6-25, M44): versions are semver; v1–v6 are 0.1.0–0.6.0. Only labels changed (changelog, FAQ, README, docs history titles, CLAUDE.md); paths (`docs/vN`, `history/vN/` URLs), IDs and code comments keep `vN`. One `<Version>0.6.0</Version>` in `backend/Directory.Build.props` replaces the CLI projects' `0.2.0`; `frontend/package.json` 0.0.0 → 0.6.0; `scripts/ci/check-version.sh` (CI `scripts` job) checks they match the newest changelog entry. Releases: annotated tag `x.y.z` on the `main` merge commit and a GitHub release; `deploy.yml` runs on `release: published`, resolves the tag (annotated or lightweight) to its commit, skips pre-releases and any release that isn't the repo's latest, checks the tag against the version in that commit, then runs the existing production job (environment approval, drift check, deploy, FR-111, smoke). Agents tag and release only after Ben confirms. Review: `check-version.sh <tag>` also requires the changelog date and checks the lock's root package; `scripts/ci/check-version.test.sh` (CI) covers the FR-229/FR-231 negative paths; `release: published` only, so a promoted pre-release doesn't deploy (documented; adding `released` would deploy twice per normal publish); the release steps tag the newest green `main` commit (CI skips docs-only commits). The tag-resolution branch (`gh api git/ref/tags`, needs `jq`) was only simulated locally; its first real run is the 0.6.0 release.
 
 ## Known issues
 - Cosmetic: a handed-off toast's timer restarts if a Toaster remounts within 4 s (`lib/toast-handoff.ts`).
@@ -79,5 +84,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Favicon legibility at 16 px (FR-196).
 - Lighthouse performance and accessibility ≥ 90 on `/` against preview.
 - Docker Desktop redeploy and smoke.
+- **Before the first release (FR-231, review M44):** the `production` GitHub environment does **not exist yet** (only `preview` and `github-pages`; `gh api …/environments/production` → 404). Create it with Ben as required reviewer, secrets `RAILWAY_TOKEN`, `RAILWAY_API_TOKEN`, `SMOKE_EMAIL`, `SMOKE_PASSWORD`, variable `RAILWAY_WEB_URL`, and deployment branches and tags = branch `main` + tag `*.*.*` (a `main`-only rule rejects release runs). Otherwise publishing a release auto-creates it with no reviewer. Optionally add a tag ruleset (target `*.*.*`, restrict deletions and updates) so release tags can't be moved.
+- When v6 is done: tag `0.6.0` on the `main` merge commit and publish the release (CLAUDE.md "Releases"), approve the production deploy, and check the summary names the release.
 - An existing session and an `aide_pat_` token still work after the preview deploy (FR-201).
 - GitHub App rename (Q2): after the deploy, Admin → Integrations → GitHub shows the new slug and its install link opens the Tevrin App (FR-228). If the App is configured through `GitHub__App__*`, set `GitHub__App__Slug` to the new slug to clear the warning in the API log.

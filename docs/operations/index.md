@@ -15,3 +15,4 @@ How to run Tevrin yourself and keep it healthy.
 | [Railway](railway.md) | The `preview` and `production` deploys and the one-time setup |
 | [PostgreSQL 17 to 18 upgrade](postgres-18-upgrade.md) | Move local data to the new major version |
 | [CI and the commit gate](ci.md) | What CI checks, and how changes reach `main` |
+| [Releases](releases.md) | Version numbers, tags, GitHub releases and the production deploy they start |

@@ -10,7 +10,6 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>aide</ToolCommandName>
     <PackageId>Aide.Cli</PackageId>
-    <Version>0.2.0</Version>
     <Description>Deprecated alias of the Tevrin command-line client: use the tevrin command (package Tevrin.Cli).</Description>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
