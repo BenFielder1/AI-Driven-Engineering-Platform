@@ -5,8 +5,8 @@
 #
 # Usage (from docs/, after `bundle exec jekyll build`):  bundle exec ruby ../scripts/ci/check-docs-links.rb _site
 #
-# The site is built with baseurl /AI-Driven-Engineering-Platform, so root-relative URLs are swapped back to the
-# _site root before resolving.
+# The site is served from the root of its custom domain (https://docs.tevrin.dev/, empty baseurl), so root-relative
+# URLs resolve against the _site root as they are.
 #
 # Frozen docs/v1-v5 pages are not scanned as link *sources*: they predate the site and were written with repo-root
 # paths (e.g. `docs/v1/SPEC.md` from inside docs/v2/), and frozen docs may only change to fix links. Links *to* them
@@ -27,7 +27,6 @@ options = {
   allow_missing_href: true, # theme buttons/anchors without href aren't links
   ignore_missing_alt: false,
   ignore_files: [FROZEN],
-  swap_urls: { %r{\A/AI-Driven-Engineering-Platform(/|\z)} => "/" },
   log_level: :info,
 }
 

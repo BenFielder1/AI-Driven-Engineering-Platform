@@ -64,6 +64,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-04 (M41): the root `not-found.tsx` renders the marketing shell for every unmatched URL (signed-in users see Open app); `notFound()` inside the app still uses `(app)/not-found.tsx`. robots.txt and sitemap.xml are route handlers built from the validated request Host (malformed → `http://localhost`). `X-Robots-Tag: noindex` on `/home`, `/projects`, `/account`, `/connections`, `/notifications`, `/approvals`, `/admin`. Signed-in `/` redirects to `/home` client-side once `me` resolves; content is never blocked.
 - 2026-11-04 (M41 CI): Zod's `new Function` probe tripped the strict CSP (`script-src eval`) on project pages once chunk order changed; `src/instrumentation-client.ts` now sets Zod jitless before hydration. To meet the 200 KB first-load budget for `/`, the root layout no longer renders `Providers`: `(app)` and `(public)` group layouts wrap themselves (one browser QueryClient shared across groups), marketing pages read `me` via `marketing-session.tsx` (generated client, no TanStack), the root `error.tsx` is plain markup, the mobile sheet is lazy. Budget enforced in CI by `scripts/ci/check-js-budget.mjs` (first measured 192.6 KB gz of 200 KB, CI 41899659376 — little headroom). Home lifecycle labels the Execution→Review gap "Guardian checks on every step" (no human gate exists there). `/integrations` also lists Local Git and PostgreSQL. Simple Icons lacks OpenAI, Slack and Teams marks (neutral icons used).
 - 2026-11-04 (M42): docs link check skips the frozen `docs/v1`–`v5` pages as link *sources* (their repo-root links break on the site; fixing them is allowed later), but checks links into them from `history/`.
+- 2026-11-06 (D-V6-22): docs site moved to the custom domain `https://docs.tevrin.dev/`: `_config.yml` `url` set and `baseurl` emptied, link check `swap_urls` dropped, `DOCS_URL`, README, SPEC (FR-226, §9, Q1) and CLAUDE.md updated. No `docs/CNAME`: with the GitHub Actions Pages source the domain lives in repo settings.
 
 ## Known issues
 - Cosmetic: a handed-off toast's timer restarts if a Toaster remounts within 4 s (`lib/toast-handoff.ts`).
@@ -72,6 +73,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Manual checks (Ben)
 - Enable GitHub Pages (Settings → Pages → Source "GitHub Actions").
+- Docs custom domain (D-V6-22): DNS `CNAME docs.tevrin.dev → benfielder1.github.io`, Settings → Pages → Custom domain `docs.tevrin.dev` verified, "Enforce HTTPS" on; after the next docs deploy, `https://docs.tevrin.dev/` loads with styles and search, and the old github.io URL redirects.
 - Favicon legibility at 16 px (FR-196).
 - Lighthouse performance and accessibility ≥ 90 on `/` against preview.
 - Docker Desktop redeploy and smoke.

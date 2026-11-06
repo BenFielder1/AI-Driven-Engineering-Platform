@@ -177,7 +177,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - Given any page, then its relative links resolve (link check in FR-226). The check skips frozen `docs/v1`–`v5` pages as link sources (their repo-root links break on the site), but checks links into them.
 - **FR-226** *(deploy)* **GitHub Pages.** `.github/workflows/docs.yml` builds the site with Jekyll and the `just-the-docs` theme (mermaid enabled, search on) from `docs/`:
   - On pull requests touching `docs/**`, `README.md` or the workflow: build plus an offline internal link check (html-proofer, external links skipped). On push to `main` touching the same: build, check, then deploy with `actions/deploy-pages`.
-  - Site URL: `https://benfielder1.github.io/AI-Driven-Engineering-Platform/` until a custom domain is chosen (Q1). The frontend's docs links use a build-time constant `DOCS_URL` in `src/lib/site.ts`.
+  - Site URL: `https://docs.tevrin.dev/` (custom domain, empty `baseurl`, D-V6-22). The frontend's docs links use a build-time constant `DOCS_URL` in `src/lib/site.ts`.
   - Given a PR that adds a broken relative link under `docs/`, then the docs job fails.
 - **FR-227** *(docs)* **Repo docs.** CLAUDE.md, STACK.md and `deploy/railway/README.md` name Tevrin (keeping the internal `aide` identifiers they document). CLAUDE.md gains the v6 Versions row, the docs-site layout and the `docs.yml` workflow.
 
@@ -297,7 +297,7 @@ Devices: responsive from 360 px; marketing designed mobile-first, app desktop-fi
 
 ## 9. Environments
 
-Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as in v5. New: GitHub Pages for the docs site (public repo; Pages source "GitHub Actions" must be enabled in repo settings by Ben). No new secrets or services. The production custom domain stays `aide.benfielder.com` until Q1 is answered.
+Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as in v5. New: GitHub Pages for the docs site (public repo; Pages source "GitHub Actions" must be enabled in repo settings by Ben). No new secrets or services. The docs site is served at the custom domain `docs.tevrin.dev` (D-V6-22). The production app's custom domain stays `aide.benfielder.com` until the rest of Q1 is answered.
 
 ## 10. Decisions and assumptions
 
@@ -324,12 +324,13 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-19 | Shell and page details: native `title` rail tooltips, theme radio items, server-side search meets FR-208, `?source=import`, root 404 in the marketing shell, robots and sitemap handlers, neutral icons for OpenAI, Slack and Teams, link check skips frozen pages as sources, "In preview" for v6 | Build | agreed |
 | D-V6-20 | Post-v6 fixes: the README logo uses GitHub's `#gh-*-mode-only` fragments, which follow the GitHub theme setting (`<picture>` follows the OS); the docs site logo is the v6 light lockup; the How it works lifecycle diagram sits under the page intro, horizontal at `lg` and vertical below (FR-214, FR-224, FR-225) | Build | agreed |
 | D-V6-21 | Licence: PolyForm Shield License 1.0.0 (`LICENSE.md`, with `Required Notice` and `Licensor Line of Business` lines). Anyone may use, modify and self-host Tevrin, but not provide a competing product (selling it or offering it as a hosted service). Single author: outside pull requests are not accepted. The name and logo are not licensed (stated in `LICENSE.md`, the README and the brand page): a copy you run may keep them and say it's based on Tevrin, but they can't brand a product or service offered to others or suggest endorsement. The CLI packages ship `LICENSE.md` (`PackageLicenseFile`); copy stays "source available", never "open source" (FR-218, FR-222, FR-224, Q3) | Ben | agreed |
+| D-V6-22 | Docs site custom domain: GitHub Pages serves the docs at `https://docs.tevrin.dev/` (set in repo Settings → Pages, DNS `CNAME docs → benfielder1.github.io`). `docs/_config.yml` has `url: https://docs.tevrin.dev` and an empty `baseurl`; the link check no longer swaps a base path; `DOCS_URL` and the README point at the new URL. The old `benfielder1.github.io/AI-Driven-Engineering-Platform/` URL redirects there (GitHub Pages does this once a custom domain is set). Answers the docs-site part of Q1 (FR-224, FR-226) | Ben | agreed |
 
 ## 11. Open questions
 
 | # | Question | Who can answer | Blocks |
 | --- | --- | --- | --- |
-| Q1 | New domain (e.g. `tevrin.<tld>`) and repo rename? Both change URLs in the docs site, README and `DOCS_URL`. Proposed: later, as a one-line constant change | Ben | nothing |
+| Q1 | New domain (e.g. `tevrin.<tld>`) and repo rename? Both change URLs in the docs site, README and `DOCS_URL`. **Partly resolved (D-V6-22):** the docs site is at `docs.tevrin.dev`. Still open: the app's production domain and the repo rename | Ben | nothing |
 | Q2 | Rename the existing GitHub App and Railway-visible names to Tevrin? Manual in GitHub/Railway settings | Ben | nothing (manual check) |
 | Q3 | ~~Add a licence?~~ **Resolved (D-V6-21):** PolyForm Shield License 1.0.0 in `LICENSE.md`. Copy says "source available", never "open source" | Ben | nothing |
 | Q4 | Terms and Privacy text for the footer and sign-up? Omitted until supplied | Ben | nothing |
