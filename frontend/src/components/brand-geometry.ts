@@ -214,36 +214,29 @@ export function lockupSvg(palette: BrandPalette, options: { mono?: boolean } = {
 }
 
 /**
- * favicon.svg: the heavier favicon mark, light colours by default and dark ones when the browser UI is dark (SVG
- * favicons honour prefers-color-scheme).
- */
-export function faviconSvg(light: BrandPalette, dark: BrandPalette) {
-  const style =
-    `<style>.ink{stroke:${light.ink}}.from{stop-color:${light.from}}.to{stop-color:${light.to}}` +
-    `@media (prefers-color-scheme: dark){.ink{stroke:${dark.ink}}.from{stop-color:${dark.from}}.to{stop-color:${dark.to}}}</style>`
-  const segments = FAVICON_MARK.segments.map((s) => `<path d="${linePath(s)}"/>`).join('')
-  const monogram = FAVICON_MARK.monogram.map((s) => `<path d="${linePath(s)}"/>`).join('')
-  return (
-    `${svgOpen('0 0 64 64', 32, 32, 'Tevrin')}${COMMENT}${style}` +
-    `<defs><linearGradient id="tevrin-gradient" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">` +
-    `<stop offset="0" class="from" stop-color="${light.from}"/><stop offset="1" class="to" stop-color="${light.to}"/></linearGradient></defs>` +
-    `<g fill="none" stroke="url(#tevrin-gradient)" stroke-width="${String(FAVICON_MARK.segmentWidth)}" stroke-linecap="round">${segments}</g>` +
-    `<g class="ink" fill="none" stroke="${light.ink}" stroke-width="${String(FAVICON_MARK.monogramWidth)}" stroke-linecap="round">${monogram}</g></svg>\n`
-  )
-}
-
-/**
- * An app icon on a solid tile (icon-32.png, apple-touch-icon.png): the favicon mark, scaled into the tile. `radius` 0
- * gives a full-bleed square (iOS rounds it itself).
+ * An app icon on a solid tile (favicon.svg, icon-32.png, apple-touch-icon.png): the favicon mark, scaled into the tile.
+ * `radius` 0 gives a full-bleed square (iOS rounds it itself).
  */
 export function tileIconSvg(palette: BrandPalette & { surface: string }, options: { size: number; radius: number; scale: number }) {
-  const offset = 32 * (1 - options.scale)
+  const offset = round(32 * (1 - options.scale))
   return (
     svgOpen('0 0 64 64', options.size, options.size, 'Tevrin') +
+    COMMENT +
     `<rect width="64" height="64" rx="${String(options.radius)}" fill="${palette.surface}"/>` +
     gradientDef('tevrin-gradient', palette) +
     `<g transform="translate(${String(offset)} ${String(offset)}) scale(${String(options.scale)})">${markShapes(FAVICON_MARK, 'url(#tevrin-gradient)', palette.ink)}</g></svg>\n`
   )
+}
+
+/**
+ * The favicon tile: a black rounded square behind the dark-theme mark, so the icon reads the same on light and dark
+ * browser UI. Scaled to 0.96 so the narrowest gap stays at least 8 units (2 px at 16 × 16, asserted in brand.test.tsx).
+ */
+export const FAVICON_TILE = { surface: '#000000', radius: 12, scale: 0.96 } as const
+
+/** favicon.svg (and icon-32.png): the dark-theme favicon mark on the black favicon tile. */
+export function faviconSvg(dark: BrandPalette) {
+  return tileIconSvg({ ...dark, surface: FAVICON_TILE.surface }, { size: 32, radius: FAVICON_TILE.radius, scale: FAVICON_TILE.scale })
 }
 
 export const TAGLINE = 'Ship software with AI agents, under human control.'

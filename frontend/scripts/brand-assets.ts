@@ -3,7 +3,7 @@
  * src/lib/ui/tokens.ts). Reproducible: `npm run brand:assets`, then commit the output.
  *
  * - docs/v6/brand/  source SVGs: mark and lockup in light (#0F172A ink) and dark (#F8FAFC ink), each also mono, and the
- *                   favicon mark
+ *                   favicon (dark mark on a black tile)
  * - public/         served copies: favicon.svg, icon-32.png, apple-touch-icon.png (180 px), og.png (1200 × 630), and
  *                   the mark and lockup SVGs under public/brand/
  *
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 
 import { Resvg } from '@resvg/resvg-js'
 
-import { faviconSvg, lockupSvg, markSvg, ogSvg, tileIconSvg } from '../src/components/brand-geometry.ts'
+import { FAVICON_TILE, faviconSvg, lockupSvg, markSvg, ogSvg, tileIconSvg } from '../src/components/brand-geometry.ts'
 import { BRAND_COLORS } from '../src/lib/ui/tokens.ts'
 
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -59,12 +59,12 @@ for (const [name, svg] of Object.entries(svgFiles)) {
   write(path.join(docsBrand, name), svg)
   write(path.join(publicBrand, name), svg)
 }
-const favicon = faviconSvg(light, dark)
+const favicon = faviconSvg(dark)
 write(path.join(docsBrand, 'tevrin-favicon.svg'), favicon)
 write(path.join(publicDir, 'favicon.svg'), favicon)
 
-write(path.join(publicDir, 'icon-32.png'), png(tileIconSvg(dark, { size: 32, radius: 14, scale: 0.86 }), 32))
-write(path.join(publicDir, 'apple-touch-icon.png'), png(tileIconSvg(dark, { size: 180, radius: 0, scale: 0.72 }), 180))
+write(path.join(publicDir, 'icon-32.png'), png(faviconSvg(dark), 32))
+write(path.join(publicDir, 'apple-touch-icon.png'), png(tileIconSvg({ ...dark, surface: FAVICON_TILE.surface }, { size: 180, radius: 0, scale: 0.72 }), 180))
 
 const og = path.join(publicDir, 'og.png')
 write(og, png(ogSvg({ ...dark, muted: OG_MUTED }, 'Geist'), 1200, true))

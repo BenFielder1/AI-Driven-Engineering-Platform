@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { BRAND_COLORS } from '../lib/ui/tokens'
 import { axeViolations, setTheme, THEMES } from '../test/axe'
 import { BrandLockup, BrandMark } from './brand'
-import { FAVICON_MARK, faviconSvg, lockupSvg, MARK, markSvg, narrowestGap } from './brand-geometry'
+import { FAVICON_MARK, FAVICON_TILE, faviconSvg, lockupSvg, MARK, markSvg, narrowestGap } from './brand-geometry'
 
 // Vitest runs from frontend/.
 const frontend = process.cwd()
@@ -125,8 +125,8 @@ describe('FR-196: static brand files (written by `npm run brand:assets`)', () =>
       expect(read(path.join(docsBrand, name)), `docs/v6/brand/${name}`).toBe(svg)
       expect(read(path.join(publicDir, 'brand', name)), `public/brand/${name}`).toBe(svg)
     }
-    expect(read(path.join(docsBrand, 'tevrin-favicon.svg'))).toBe(faviconSvg(light, dark))
-    expect(read(path.join(publicDir, 'favicon.svg'))).toBe(faviconSvg(light, dark))
+    expect(read(path.join(docsBrand, 'tevrin-favicon.svg'))).toBe(faviconSvg(dark))
+    expect(read(path.join(publicDir, 'favicon.svg'))).toBe(faviconSvg(dark))
   })
 
   it('FR196_files_ink: light files use #0F172A ink and the light gradient; dark files #F8FAFC and the dark gradient', () => {
@@ -144,9 +144,15 @@ describe('FR-196: static brand files (written by `npm run brand:assets`)', () =>
     expect(read(path.join(docsBrand, 'tevrin-lockup-mono-dark.svg'))).not.toContain('linearGradient')
   })
 
-  it('FR196_favicon_scheme: favicon.svg switches to the dark colours when the browser UI is dark', () => {
+  it('FR196_favicon_tile: favicon.svg is the dark-theme mark on a black tile, gaps still 2 px at 16 x 16', () => {
     const svg = read(path.join(publicDir, 'favicon.svg'))
-    expect(svg).toMatch(/@media \(prefers-color-scheme: dark\)\{\.ink\{stroke:#F8FAFC\}/)
+    expect(svg).toContain('<rect width="64" height="64" rx="12" fill="#000000"/>')
+    expect(svg).toContain('stroke="#F8FAFC"')
+    expect(svg).toContain('stop-color="#818CF8"')
+    expect(svg).toContain('stop-color="#22D3EE"')
+    expect(svg).not.toContain('#0F172A')
+    expect(svg).not.toContain('prefers-color-scheme')
+    expect((narrowestGap(FAVICON_MARK) * FAVICON_TILE.scale) / 4).toBeGreaterThanOrEqual(2)
   })
 
   it('FR196_png: icon-32.png is 32 px, apple-touch-icon.png 180 px, og.png 1200 x 630 and under 100 KB', () => {

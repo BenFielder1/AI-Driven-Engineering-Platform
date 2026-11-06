@@ -8,7 +8,7 @@ import { docsUrl } from './site-nav'
  */
 
 /** Marks for brands Simple Icons doesn't carry: a neutral icon, never a lookalike logo. */
-export type GenericIcon = 'openai' | 'slack' | 'teams' | 'email' | 'webhook' | 'in-app'
+export type GenericIcon = 'slack' | 'teams' | 'email' | 'webhook' | 'in-app'
 
 export type IntegrationIcon = { brand: BrandIconSlug } | { generic: GenericIcon }
 
@@ -75,7 +75,7 @@ export const integrationGroups: readonly IntegrationGroup[] = [
     docsHref: docsUrl('guides/llm-providers/'),
     items: [
       { name: 'Anthropic', icon: { brand: 'anthropic' }, does: 'Claude models for every agent, with streaming and continued long answers.' },
-      { name: 'OpenAI', icon: { generic: 'openai' }, does: 'GPT models for every agent, with your own key or an allowed system key.' },
+      { name: 'OpenAI', icon: { brand: 'openai' }, does: 'GPT models for every agent, with your own key or an allowed system key.' },
       { name: 'Ollama', icon: { brand: 'ollama' }, does: 'Local models with no API key, on Kubernetes and the dev loop (turned off on Railway).' },
     ],
   },
@@ -134,6 +134,6 @@ export const worksWith: readonly { name: string; icon: IntegrationIcon }[] = [
   { name: 'Cloudflare', icon: { brand: 'cloudflare' } },
   { name: 'Supabase', icon: { brand: 'supabase' } },
   { name: 'Anthropic', icon: { brand: 'anthropic' } },
-  { name: 'OpenAI', icon: { generic: 'openai' } },
+  { name: 'OpenAI', icon: { brand: 'openai' } },
   { name: 'Ollama', icon: { brand: 'ollama' } },
 ]

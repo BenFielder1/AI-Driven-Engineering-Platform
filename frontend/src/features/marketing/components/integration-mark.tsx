@@ -1,11 +1,10 @@
-import { Bell, Mail, MessageSquare, Sparkles, Users, Webhook, type LucideIcon } from 'lucide-react'
+import { Bell, Mail, MessageSquare, Users, Webhook, type LucideIcon } from 'lucide-react'
 
 import { cn } from '../../../lib/utils'
 import { brandIcons } from '../content/brand-icons'
 import type { GenericIcon, IntegrationIcon } from '../content/integrations'
 
 const genericIcons: Record<GenericIcon, LucideIcon> = {
-  openai: Sparkles,
   slack: MessageSquare,
   teams: Users,
   email: Mail,
