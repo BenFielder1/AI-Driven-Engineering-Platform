@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
+using System.Security.Cryptography;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
 using Aide.Infrastructure.Git;
@@ -52,6 +54,8 @@ internal sealed partial class GitHubAppStore(
     AideDbContext db,
     IOptions<GitHubAppOptions> options,
     ISecretProtectors protectors,
+    GitHubApi api,
+    GitHubAppInfoCache appInfo,
     TimeProvider time,
     ILogger<GitHubAppStore> logger) : IGitHubAppStore
 {
@@ -90,8 +94,55 @@ internal sealed partial class GitHubAppStore(
             }
         }
 
+        if (_app is not null)
+        {
+            _app = await WithCurrentSlugAsync(_app, cancellationToken);
+        }
+
         _loaded = true;
         return _app;
+    }
+
+    /// <summary>
+    /// FR-228: the App with GitHub's current slug, so install links, App pages and the bot identity follow a rename. A
+    /// registered App's row is updated (slug and page) once; a configured App keeps its configuration, and the cache logs
+    /// a warning to update <c>GitHub__App__Slug</c>. When GitHub can't be asked, the stored slug is used.
+    /// </summary>
+    private async Task<GitHubAppCredentials> WithCurrentSlugAsync(GitHubAppCredentials app, CancellationToken cancellationToken)
+    {
+        var current = await appInfo.GetCurrentAsync(app, api, cancellationToken);
+        var slug = GitHubRules.CurrentSlug(app.AppId, app.Slug, current?.Id, current?.Slug);
+        if (current is null || string.Equals(slug, app.Slug, StringComparison.Ordinal))
+        {
+            return app;
+        }
+
+        if (app.Source != GitHubAppSource.Database)
+        {
+            return app with { Slug = slug };
+        }
+
+        var htmlUrl = current.HtmlUrl ?? GitHubRules.AppHtmlUrl(slug);
+        if (db.Database.CurrentTransaction is not null)
+        {
+            // Not inside a caller's transaction (its locks, or an aborted transaction on failure): a later request updates the row.
+            return app with { Slug = slug, HtmlUrl = htmlUrl };
+        }
+
+        try
+        {
+            await db.GitHubApps
+                .Where(a => a.AppId == app.AppId && a.Slug == app.Slug)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.Slug, slug).SetProperty(a => a.HtmlUrl, htmlUrl), cancellationToken);
+            LogSlugUpdated(logger, app.AppId, app.Slug, slug);
+        }
+        catch (DbException ex)
+        {
+            // Still use the current slug for this request; the row is updated on a later one.
+            LogSlugUpdateFailed(logger, ex, app.AppId);
+        }
+
+        return app with { Slug = slug, HtmlUrl = htmlUrl };
     }
 
     public async Task<bool> SaveAsync(GitHubManifestConversion conversion, CancellationToken cancellationToken)
@@ -133,6 +184,12 @@ internal sealed partial class GitHubAppStore(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "The registered GitHub App {AppId} can't be decrypted (Data Protection keys changed?); it is ignored")]
     private static partial void LogUnreadable(ILogger logger, long appId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "GitHub App {AppId} renamed on GitHub: stored slug {StoredSlug} updated to {Slug}")]
+    private static partial void LogSlugUpdated(ILogger logger, long appId, string storedSlug, string slug);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "GitHub App {AppId}: the stored slug couldn't be updated; it is retried on a later request")]
+    private static partial void LogSlugUpdateFailed(ILogger logger, Exception exception, long appId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "GitHub App {AppId} ({Slug}) registered through the manifest flow")]
     private static partial void LogRegistered(ILogger logger, long appId, string slug);
@@ -245,14 +302,20 @@ public sealed class GitHubBotIdentities(GitHubApi api)
 }
 
 /// <summary>
-/// FR-80: what GitHub says about the App (<c>GET /app</c>: owner, page, granted permissions), for an App configured
-/// through <c>GitHub:App:*</c> (a registered App stores it). Cached in memory for 10 minutes.
+/// FR-80: what GitHub says about the App (<c>GET /app</c>: slug, owner, page, granted permissions), for an App configured
+/// through <c>GitHub:App:*</c> (a registered App stores it), and FR-228: the App's current slug for either source. One
+/// cached answer serves both, kept 10 minutes; a failed FR-228 lookup is remembered for a minute so an unreachable GitHub
+/// isn't asked on every request.
 /// </summary>
-public sealed class GitHubAppInfoCache(TimeProvider time)
+public sealed partial class GitHubAppInfoCache(TimeProvider time, ILogger<GitHubAppInfoCache> logger)
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    private (long AppId, GitHubAppInfo Info, DateTimeOffset FetchedAt)? _cached;
+    private readonly Lock _gate = new();
+    private volatile Entry? _cached;
+    private (long AppId, Task<GitHubAppInfo> Task)? _inflight;
 
     /// <summary>The App's details; the registered row's for a database App; <c>null</c> when GitHub can't be asked.</summary>
     public async Task<GitHubAppInfo?> GetAsync(GitHubAppCredentials app, GitHubApi api, CancellationToken cancellationToken)
@@ -265,20 +328,96 @@ public sealed class GitHubAppInfoCache(TimeProvider time)
         }
 
         var now = time.GetUtcNow();
-        if (_cached is { } cached && cached.AppId == app.AppId && now - cached.FetchedAt < Lifetime)
+        if (_cached is { Info: { } info } cached && cached.AppId == app.AppId && now < cached.UsableUntil)
         {
-            return cached.Info;
+            return info;
         }
 
         try
         {
-            var info = await api.GetAppAsync(GitHubAppJwt.Create(app.AppId, app.PrivateKeyPem, now), cancellationToken);
-            _cached = (app.AppId, info, now);
-            return info;
+            return await FetchAsync(app, api, now, cancellationToken);
         }
         catch (GitHubApiException)
         {
             return null;
         }
     }
+
+    /// <summary>
+    /// FR-228: GitHub's current answer for the App (<c>GET /app</c>), whatever its source, or <c>null</c> when GitHub can't
+    /// be asked (unreachable, rate limited, refused, over 5 seconds, unreadable key). Never throws, except when
+    /// <paramref name="cancellationToken"/> is cancelled.
+    /// </summary>
+    public async Task<GitHubAppInfo?> GetCurrentAsync(GitHubAppCredentials app, GitHubApi api, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(api);
+        var now = time.GetUtcNow();
+        var seen = _cached;
+        if (seen is { } cached && cached.AppId == app.AppId && now < cached.UsableUntil)
+        {
+            return cached.Info;
+        }
+
+        try
+        {
+            return await FetchAsync(app, api, now, cancellationToken);
+        }
+        catch (Exception ex) when (ex is GitHubApiException or GitHubRateLimitedException or CryptographicException or ArgumentException
+            || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            // Only over what this lookup saw: a newer answer stored meanwhile by another request wins.
+            Interlocked.CompareExchange(ref _cached, new Entry(app.AppId, null, now + RetryAfter), seen);
+            LogCurrentUnavailable(logger, ex, app.AppId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// One <c>GET /app</c> at a time per App: concurrent callers wait on the same lookup (each can stop waiting on its own
+    /// token). Over 5 seconds is a <see cref="GitHubApiException"/>, like the client's own timeout.
+    /// </summary>
+    private Task<GitHubAppInfo> FetchAsync(GitHubAppCredentials app, GitHubApi api, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_inflight is not { Task.IsCompleted: false } inflight || inflight.AppId != app.AppId)
+            {
+                inflight = (app.AppId, FetchOnceAsync(app, api, now));
+                _inflight = inflight;
+            }
+
+            return inflight.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private async Task<GitHubAppInfo> FetchOnceAsync(GitHubAppCredentials app, GitHubApi api, DateTimeOffset now)
+    {
+        using var timeout = new CancellationTokenSource(Timeout, time);
+        GitHubAppInfo info;
+        try
+        {
+            info = await api.GetAppAsync(GitHubAppJwt.Create(app.AppId, app.PrivateKeyPem, now), timeout.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            throw new GitHubApiException(GitHubFailureKind.Upstream, null, "GitHub didn't answer GET /app within 5 seconds.");
+        }
+
+        _cached = new Entry(app.AppId, info, now + Lifetime);
+        if (info.Id == app.AppId && !string.Equals(info.Slug, app.Slug, StringComparison.Ordinal))
+        {
+            LogSlugChanged(logger, app.AppId, app.Slug, info.Slug, app.Source);
+        }
+
+        return info;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "GitHub App {AppId} is now {Slug} on GitHub (stored as {StoredSlug}, source {Source}); the current slug is used. For a configured App, set GitHub__App__Slug to it")]
+    private static partial void LogSlugChanged(ILogger logger, long appId, string storedSlug, string slug, GitHubAppSource source);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "GitHub App {AppId}: GitHub couldn't be asked for the current slug; the stored slug is used for a minute")]
+    private static partial void LogCurrentUnavailable(ILogger logger, Exception exception, long appId);
+
+    private sealed record Entry(long AppId, GitHubAppInfo? Info, DateTimeOffset UsableUntil);
 }

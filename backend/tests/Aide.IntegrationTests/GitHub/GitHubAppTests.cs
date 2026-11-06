@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Aide.IntegrationTests.GitHub;
 
 /// <summary>
-/// FR-80–FR-83, FR-86, §4.14 against a fake GitHub (<see cref="GitHubAppHarness"/>): the App's status and manifest flow,
+/// FR-80–FR-83, FR-86, FR-228, §4.14 against a fake GitHub (<see cref="GitHubAppHarness"/>): the App's status and manifest flow,
 /// sign-in and connect through the App's user authorization, the connection and its refresh, the repo picker, repository
 /// creation, github_app projects and the PAT fallback's switch to the App.
 /// </summary>
@@ -150,6 +150,94 @@ public sealed class GitHubAppTests(AideApiFactory factory)
 
         Assert.DoesNotContain(harness.Api.Requests, r => r.Path.StartsWith("/app-manifests/", StringComparison.Ordinal));
     }
+
+    // ---------------------------------------------------------------- FR-228 current App slug
+
+    [Fact]
+    public async Task FR228_Given_a_configured_App_renamed_on_GitHub_then_its_status_and_install_links_use_the_new_slug()
+    {
+        await using var harness = GitHubAppHarness.Create(factory);
+        harness.Api.On(HttpMethod.Get, "/app", HttpStatusCode.OK, AppJson(GitHubAppHarness.AppId, "tevrin-test"));
+        using var admin = await ApiSession.AdminAsync(harness.App);
+
+        var status = await ProjectApi.ReadAsync<AdminGitHubAppDto>(await admin.Client.GetAsync(U("/api/admin/integrations/github"), Ct));
+        var connection = await ProjectApi.ReadAsync<GitHubConnectionDto>(await admin.Client.GetAsync(U("/api/me/connections/github"), Ct));
+
+        Assert.Equal((GitHubAppSource.Configuration, "tevrin-test"), (status.Source, status.Slug));
+        Assert.Equal("https://github.com/apps/tevrin-test/installations/new", status.InstallUrl);
+        Assert.Equal("https://github.com/apps/tevrin-test", status.HtmlUrl);
+        Assert.Equal("https://github.com/apps/tevrin-test/installations/new", connection.InstallUrl);
+
+        // One GET /app (cached) answers both the slug and the status.
+        harness.AssertAppJwt(harness.Api.Requests.Single(r => r.Path == "/app").Authorization);
+    }
+
+    [Fact]
+    public async Task FR228_Given_a_registered_App_renamed_on_GitHub_then_the_stored_slug_and_page_are_updated()
+    {
+        var connectionString = await factory.CreateMigratedDatabaseAsync(Ct);
+        await using var harness = GitHubAppHarness.Create(
+            factory, configureApp: false, configure: b => b.UseSetting($"ConnectionStrings:{DependencyInjection.ConnectionStringName}", connectionString));
+        using var admin = await ApiSession.RegisterAsync(harness.App); // the first account of this database is the Admin
+        var started = await ProjectApi.ReadAsync<GitHubAppManifestResponseDto>(
+            await admin.Client.PostAsJsonAsync("/api/admin/integrations/github/manifest", new { ownerType = "user" }, Ct));
+        harness.Api.On(HttpMethod.Post, "/app-manifests/manifest-code/conversions", HttpStatusCode.Created, JsonSerializer.Serialize(new
+        {
+            id = GitHubAppHarness.AppId,
+            slug = "aide-localhost",
+            owner = new { login = "ben", type = "User" },
+            client_id = "Iv23manifestClient",
+            client_secret = "manifest-client-secret-abcdef",
+            pem = harness.Key.ExportRSAPrivateKeyPem(),
+            html_url = "https://github.com/apps/aide-localhost",
+            permissions = new { contents = "write", administration = "write", metadata = "read" },
+        }));
+
+        // Registered as aide-localhost, renamed on GitHub since: GET /app reports the new slug.
+        harness.Api.On(HttpMethod.Get, "/app", HttpStatusCode.OK, AppJson(GitHubAppHarness.AppId, "tevrin-localhost"));
+        var callback = await admin.Client.GetAsync(U($"/api/admin/integrations/github/callback?code=manifest-code&state={Uri.EscapeDataString(started.State)}"), Ct);
+        Assert.Equal("/admin/integrations?github=configured", callback.Headers.Location?.OriginalString);
+
+        var status = await ProjectApi.ReadAsync<AdminGitHubAppDto>(await admin.Client.GetAsync(U("/api/admin/integrations/github"), Ct));
+
+        Assert.Equal((GitHubAppSource.Database, "tevrin-localhost"), (status.Source, status.Slug));
+        Assert.Equal("https://github.com/apps/tevrin-localhost/installations/new", status.InstallUrl);
+        Assert.Equal("https://github.com/apps/tevrin-localhost", status.HtmlUrl);
+        var row = await ProjectApi.WithDbAsync(harness.App, db => db.GitHubApps.AsNoTracking().SingleAsync(Ct));
+        Assert.Equal(("tevrin-localhost", "https://github.com/apps/tevrin-localhost"), (row.Slug, row.HtmlUrl));
+    }
+
+    [Fact]
+    public async Task FR228_When_GitHub_cannot_be_asked_or_answers_for_another_App_then_the_stored_slug_is_kept()
+    {
+        await using (var unreachable = GitHubAppHarness.Create(factory))
+        {
+            unreachable.Api.On(HttpMethod.Get, "/app", HttpStatusCode.BadGateway, """{"message":"Server Error"}""");
+            using var admin = await ApiSession.AdminAsync(unreachable.App);
+
+            var status = await ProjectApi.ReadAsync<AdminGitHubAppDto>(await admin.Client.GetAsync(U("/api/admin/integrations/github"), Ct));
+
+            Assert.Equal((GitHubAppHarness.Slug, "https://github.com/apps/aide-test/installations/new"), (status.Slug, status.InstallUrl));
+        }
+
+        await using var other = GitHubAppHarness.Create(factory);
+        other.Api.On(HttpMethod.Get, "/app", HttpStatusCode.OK, AppJson(GitHubAppHarness.AppId + 1, "someone-else"));
+        using var otherAdmin = await ApiSession.AdminAsync(other.App);
+
+        var otherStatus = await ProjectApi.ReadAsync<AdminGitHubAppDto>(await otherAdmin.Client.GetAsync(U("/api/admin/integrations/github"), Ct));
+
+        Assert.Equal(GitHubAppHarness.Slug, otherStatus.Slug);
+    }
+
+    private static string AppJson(long id, string slug) =>
+        JsonSerializer.Serialize(new
+        {
+            id,
+            slug,
+            owner = new { login = "acme", type = "Organization" },
+            html_url = $"https://github.com/apps/{slug}",
+            permissions = new Dictionary<string, string> { ["contents"] = "write", ["pull_requests"] = "write", ["metadata"] = "read", ["administration"] = "write" },
+        });
 
     [Fact]
     public async Task FR80_An_organization_manifest_needs_the_org_and_a_configured_App_is_CONFLICT()
@@ -564,8 +652,8 @@ public sealed class GitHubAppTests(AideApiFactory factory)
     [Fact]
     public async Task FR81_Without_the_Administration_permission_creating_is_FORBIDDEN()
     {
-        await using var harness = await ConnectedAsync();
-        harness.Harness.Api.On(HttpMethod.Get, "/app", HttpStatusCode.OK, GitHubAppHarness.AppJson(administration: false));
+        // Before any request: GET /app is cached for 10 minutes once asked (FR-228 asks on the first App lookup).
+        await using var harness = await ConnectedAsync(administration: false);
         harness.Harness.OnInstallations((OrgInstallation, "acme", "Organization", "all"));
 
         await Problems.AssertAsync(
@@ -761,9 +849,14 @@ public sealed class GitHubAppTests(AideApiFactory factory)
 
     // ---------------------------------------------------------------- helpers
 
-    private async Task<ConnectedUser> ConnectedAsync()
+    private async Task<ConnectedUser> ConnectedAsync(bool administration = true)
     {
         var harness = GitHubAppHarness.Create(factory);
+        if (!administration)
+        {
+            harness.Api.On(HttpMethod.Get, "/app", HttpStatusCode.OK, GitHubAppHarness.AppJson(administration: false));
+        }
+
         var user = await ApiSession.RegisterAsync(harness.App);
         await harness.SeedConnectionAsync(user.User!.Id, NewGitHubId(), "octo");
         return new ConnectedUser(harness, user);

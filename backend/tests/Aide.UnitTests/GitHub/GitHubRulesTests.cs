@@ -6,7 +6,7 @@ using Aide.Domain.Projects;
 
 namespace Aide.UnitTests.GitHub;
 
-/// <summary>FR-80–FR-83, FR-86, D-V2-7: GitHub sign-in mode, git mode resolution and App repository rules.</summary>
+/// <summary>FR-80–FR-83, FR-86, FR-228, D-V2-7: GitHub sign-in mode, git mode resolution, App repository rules and the App slug.</summary>
 public class GitHubRulesTests
 {
     // ---------------------------------------------------------------- D-V2-7 sign-in mode
@@ -114,4 +114,31 @@ public class GitHubRulesTests
     [InlineData(GitProvider.GithubPat, GitProvider.Local, true)]
     public void FR83_Only_switch_to_app_moves_a_project_onto_the_App(GitProvider previous, GitProvider next, bool allowed) =>
         Assert.Equal(allowed, ProjectSettingsRules.ValidateProviderChange(previous, next).IsSuccess);
+
+    // ---------------------------------------------------------------- FR-228 current App slug
+
+    [Theory]
+    [InlineData(42L, "tevrin", "tevrin")] // renamed on GitHub: the current slug wins
+    [InlineData(42L, "aide", "aide")] // unchanged
+    [InlineData(7L, "tevrin", "aide")] // GitHub answered for another App
+    [InlineData(null, null, "aide")] // GitHub couldn't be asked
+    [InlineData(42L, "", "aide")]
+    [InlineData(42L, "tevrin/../x", "aide")]
+    [InlineData(42L, "tev rin", "aide")]
+    public void FR228_The_current_slug_follows_a_rename_on_GitHub_and_falls_back_to_the_stored_one(long? liveAppId, string? liveSlug, string expected) =>
+        Assert.Equal(expected, GitHubRules.CurrentSlug(42, "aide", liveAppId, liveSlug));
+
+    [Theory]
+    [InlineData("tevrin", true)]
+    [InlineData("tevrin-local_2.app", true)]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("a/b", false)]
+    [InlineData("é", false)]
+    public void FR228_A_usable_slug_is_ASCII_letters_digits_and_dashes_underscores_or_dots(string? slug, bool usable) =>
+        Assert.Equal(usable, GitHubRules.IsUsableSlug(slug));
+
+    [Fact]
+    public void FR228_A_slug_over_100_characters_is_not_usable() =>
+        Assert.False(GitHubRules.IsUsableSlug(new string('a', 101)));
 }

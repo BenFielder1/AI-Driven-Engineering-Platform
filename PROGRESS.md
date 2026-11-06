@@ -46,6 +46,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-225 | Docs site content | 3.6, 4.33 | docs | M42 | done | CI 41855800502, docs 41926888441 (155 internal links) |
 | FR-226 | GitHub Pages workflow + link check | 3.6 | deploy (CI) | M42 | done | docs 41926888441 |
 | FR-227 | Repo docs name Tevrin | 3.6 | docs | M42 | done | CI 41855800502 |
+| FR-228 | GitHub App slug follows a rename on GitHub | 3.1, 4.34 | backend | post-v6 fix | in progress | |
 
 ## Phases
 - [x] M0 Baseline (base: b349c5b): CI green on `main` ([run 41828267279](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41828267279)); v5 docs moved to `docs/v5/`; no re-scaffold
@@ -64,6 +65,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - 2026-11-04 (M41): the root `not-found.tsx` renders the marketing shell for every unmatched URL (signed-in users see Open app); `notFound()` inside the app still uses `(app)/not-found.tsx`. robots.txt and sitemap.xml are route handlers built from the validated request Host (malformed → `http://localhost`). `X-Robots-Tag: noindex` on `/home`, `/projects`, `/account`, `/connections`, `/notifications`, `/approvals`, `/admin`. Signed-in `/` redirects to `/home` client-side once `me` resolves; content is never blocked.
 - 2026-11-04 (M41 CI): Zod's `new Function` probe tripped the strict CSP (`script-src eval`) on project pages once chunk order changed; `src/instrumentation-client.ts` now sets Zod jitless before hydration. To meet the 200 KB first-load budget for `/`, the root layout no longer renders `Providers`: `(app)` and `(public)` group layouts wrap themselves (one browser QueryClient shared across groups), marketing pages read `me` via `marketing-session.tsx` (generated client, no TanStack), the root `error.tsx` is plain markup, the mobile sheet is lazy. Budget enforced in CI by `scripts/ci/check-js-budget.mjs` (first measured 192.6 KB gz of 200 KB, CI 41899659376 — little headroom). Home lifecycle labels the Execution→Review gap "Guardian checks on every step" (no human gate exists there). `/integrations` also lists Local Git and PostgreSQL. Simple Icons lacks OpenAI, Slack and Teams marks (neutral icons used).
 - 2026-11-04 (M42): docs link check skips the frozen `docs/v1`–`v5` pages as link *sources* (their repo-root links break on the site; fixing them is allowed later), but checks links into them from `history/`.
+- 2026-11-06 (D-V6-23, FR-228): the GitHub App was renamed from AIDE to Tevrin, which changed its slug, and the stored slug left install links pointing at the old App. `GitHubAppStore` now takes the slug from `GET /app` (same App id and a usable slug, §4.34) through `GitHubAppInfoCache`: one cached answer (10 min) serves both the slug and the FR-80 details, a failed lookup is retried after 1 min, and the call times out after 5 s. A registered App's row is updated (`ExecuteUpdate`, no migration). A configured App logs a warning to set `GitHub__App__Slug`. The FR-81 "no Administration" test now sets its `GET /app` answer before the first request, because that answer is cached once asked.
 
 ## Known issues
 - Cosmetic: a handed-off toast's timer restarts if a Toaster remounts within 4 s (`lib/toast-handoff.ts`).
@@ -76,4 +78,4 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Lighthouse performance and accessibility ≥ 90 on `/` against preview.
 - Docker Desktop redeploy and smoke.
 - An existing session and an `aide_pat_` token still work after the preview deploy (FR-201).
-- GitHub App rename (Q2).
+- GitHub App rename (Q2): after the deploy, Admin → Integrations → GitHub shows the new slug and its install link opens the Tevrin App (FR-228). If the App is configured through `GitHub__App__*`, set `GitHub__App__Slug` to the new slug to clear the warning in the API log.
