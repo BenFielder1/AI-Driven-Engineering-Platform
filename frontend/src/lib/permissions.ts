@@ -43,7 +43,7 @@ const contributor: readonly ProjectCapability[] = [
   'startExecution',
   'createDraft',
   'triggerReview',
-  // FR-90 (SPEC §2 v2): Contributors trigger (and redeploy) preview deployments.
+  // FR-90 (0.2.0 SPEC §2): Contributors trigger (and redeploy) preview deployments.
   'deployPreview',
 ]
 const owner: readonly ProjectCapability[] = [
@@ -52,12 +52,12 @@ const owner: readonly ProjectCapability[] = [
   'approveArtifacts',
   'requestRelease',
   'rollback',
-  // FR-60 (SPEC §2 v2): only Owners start a new release version.
+  // FR-60 (0.2.0 SPEC §2): only Owners start a new release version.
   'startVersion',
-  // FR-117 (SPEC §2 v4): only Owners compose or change the stack, until the version's plan is locked.
+  // FR-117 (0.4.0 SPEC §2): only Owners compose or change the stack, until the version's plan is locked.
   'changeStack',
   'changeSettings',
-  // FR-88, FR-91 (SPEC §2 v2): bind a Vercel connection, edit env vars, promote and redeploy production.
+  // FR-88, FR-91 (0.2.0 SPEC §2): bind a Vercel connection, edit env vars, promote and redeploy production.
   'manageDeployment',
   'manageMembers',
   'deleteProject',

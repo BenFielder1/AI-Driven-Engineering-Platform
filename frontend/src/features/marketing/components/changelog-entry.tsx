@@ -5,7 +5,7 @@ import { AS_AIDE, formatChangelogDate, type ChangelogEntry } from '../content/ch
 import { SiteLink } from './site-link'
 
 /**
- * One version (FR-219): version, date (or "In preview"), title with "(as AIDE)" for v1–v5, highlights and a link to the
+ * One version (FR-219): version, date (or "In preview"), title with "(as AIDE)" for 0.1.0–0.5.0, highlights and a link to the
  * version's page on the docs site. `compact` (Home's Latest changes) shows the first three highlights.
  */
 export function ChangelogEntryCard({

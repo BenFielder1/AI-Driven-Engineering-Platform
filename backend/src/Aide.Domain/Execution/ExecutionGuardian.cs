@@ -8,7 +8,7 @@ public sealed record ProducedFile(string Path, string Content);
 
 /// <summary>
 /// Everything the Guardian checks a step's output against. FR-125: with a composition (<see cref="Stack"/>) its packs'
-/// protected paths join v1's; <see cref="ExistsOnBase"/> answers "does this file exist on the version's base commit" for
+/// protected paths join 0.1.0's; <see cref="ExistsOnBase"/> answers "does this file exist on the version's base commit" for
 /// their <c>existingOnBase</c> entries (unknown: <c>false</c>), so migrations on the base commit are immutable for every data pack.
 /// </summary>
 public sealed record GuardianInput(
@@ -36,7 +36,7 @@ public sealed record GuardianResult(IReadOnlyList<GuardianViolation> Violations)
 /// <summary>
 /// The Execution Guardian (§4.6, FR-32, D18): runs all six checks and reports every violation.
 /// Paths are normalised and compared exactly. FR-125: a composition adds its packs' protected paths to scope creep (the
-/// union of v1's and the packs' protected paths, with the "declared in this step" exception).
+/// union of 0.1.0's and the packs' protected paths, with the "declared in this step" exception).
 /// </summary>
 public static class ExecutionGuardian
 {

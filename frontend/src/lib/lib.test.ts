@@ -118,7 +118,7 @@ describe('permissions.ts (SPEC §2)', () => {
   })
 })
 
-// FR-207 (amends FR-1): the fallback landing is /home (it was /projects before v6).
+// FR-207 (amends FR-1): the fallback landing is /home (it was /projects before 0.6.0).
 describe('safeReturnUrl', () => {
   it.each([
     ['/account', '/account'],

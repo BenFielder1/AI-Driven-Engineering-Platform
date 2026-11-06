@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Aide.IntegrationTests.Notifications;
 
 /// <summary>
-/// FR-155: the v4 notification types (Owners only, channels), the feed and admin log, and the database expiry sweep on the
+/// FR-155: the 0.4.0 notification types (Owners only, channels), the feed and admin log, and the database expiry sweep on the
 /// Fake database provider: "Given a Render free Postgres 7 days from expiry, then Owners get a 'database expiring'
 /// notification with the date", once per database per expiry across repeated sweeps and restarts.
 /// </summary>

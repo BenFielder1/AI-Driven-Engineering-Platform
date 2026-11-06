@@ -259,11 +259,11 @@ public sealed class GitHubAppTests(AideApiFactory factory)
     // ---------------------------------------------------------------- FR-80, D-V2-7 sign-in through the App
 
     [Fact]
-    public async Task FR80_Given_a_v1_user_linked_to_GitHub_id_42_when_they_sign_in_through_the_App_then_they_reach_the_same_account_and_are_connected()
+    public async Task FR80_Given_a_0_1_0_user_linked_to_GitHub_id_42_when_they_sign_in_through_the_App_then_they_reach_the_same_account_and_are_connected()
     {
         await using var harness = GitHubAppHarness.Create(factory, configure: b =>
         {
-            // The v1 OAuth App is still configured, but no longer used once an App exists (D-V2-7).
+            // The 0.1.0 OAuth App is still configured, but no longer used once an App exists (D-V2-7).
             b.UseSetting("GitHub:OAuth:ClientId", "v1-oauth-client");
             b.UseSetting("GitHub:OAuth:ClientSecret", "v1-oauth-secret");
         });

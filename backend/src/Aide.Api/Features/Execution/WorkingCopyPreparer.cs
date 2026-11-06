@@ -64,7 +64,7 @@ public sealed partial class WorkingCopyPreparer(
         var recordedBranch = versionId is { } id
             ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == id).Select(v => v.BranchName).FirstOrDefaultAsync(cancellationToken)
             : null;
-        // FR-82, §4.10: the branch is the one stored on the release version (migrated v1 versions keep their
+        // FR-82, §4.10: the branch is the one stored on the release version (migrated 0.1.0 versions keep their
         // aide/<slug>-<short-id> name); a version without one gets aide/<slug>/v<version>, stored below. The stored name
         // is also the "working copy prepared" fact (LifecycleSnapshotLoader), so it is only written here.
         var branch = BranchFor(recordedBranch, project.Slug, project.Id, project.DevelopmentVersion);
@@ -94,7 +94,7 @@ public sealed partial class WorkingCopyPreparer(
         return new WorkingCopyPreparation(Result.Success(new PreparedWorkingCopy(provider, connection, branch, token)), Transient: false);
     }
 
-    /// <summary>The version's branch: the recorded one, else <c>aide/&lt;slug&gt;/v&lt;version&gt;</c> (v1 name without a version).</summary>
+    /// <summary>The version's branch: the recorded one, else <c>aide/&lt;slug&gt;/v&lt;version&gt;</c> (0.1.0 name without a version).</summary>
     public static string BranchFor(string? recordedBranch, string slug, Guid projectId, string? developmentVersion) =>
         recordedBranch ?? (SemVer.TryParse(developmentVersion, out var version)
             ? ReleaseVersionRules.BranchName(slug, projectId, version)

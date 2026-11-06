@@ -9,7 +9,7 @@ namespace Aide.Api.Features.Execution;
 /// <summary>
 /// One step of an execution run (FR-57): number, title, the specialist that runs it (<c>agentKey</c>, FR-121; null for the
 /// base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
-/// (<c>commitUrl</c> is null for the Local provider). <c>legacyAgentKey</c> (§4.23): the v2 agent key a plan locked before
+/// (<c>commitUrl</c> is null for the Local provider). <c>legacyAgentKey</c> (§4.23): the 0.2.0 agent key a plan locked before
 /// the upgrade named, which now runs as <c>agentKey</c>; null otherwise.
 /// </summary>
 public sealed record ExecutionStepSummaryDto(

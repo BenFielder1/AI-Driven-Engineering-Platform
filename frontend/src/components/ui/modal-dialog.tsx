@@ -147,7 +147,7 @@ export function DetailSheet({
         {...(description ? {} : { 'aria-describedby': undefined })}
         onOpenAutoFocus={(event) => {
           focus.onOpenAutoFocus(event)
-          // Start on Close (the last focusable rendered by SheetContent), like the v1 drawer.
+          // Start on Close (the last focusable rendered by SheetContent), like the 0.1.0 drawer.
           const content = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
           const close = content?.querySelector<HTMLElement>('[data-slot="sheet-close-button"]')
           if (close) {

@@ -1,6 +1,6 @@
 namespace Aide.Domain.Lifecycle;
 
-/// <summary>Phase ordering and the status-follows-phase table (§4.1; v5 §4.27 puts <c>analysis</c> first).</summary>
+/// <summary>Phase ordering and the status-follows-phase table (§4.1; 0.5.0 §4.27 puts <c>analysis</c> first).</summary>
 public static class PhaseOrder
 {
     /// <summary>Every phase in order. §4.27: <c>analysis</c> comes first and is only entered by a version that infers its stack.</summary>

@@ -18,6 +18,7 @@ plugins:
   - jekyll-titles-from-headings
   - jekyll-seo-tag
   - jekyll-include-cache
+  - jekyll-redirect-from
 
 relative_links:
   enabled: true
@@ -27,7 +28,7 @@ titles_from_headings:
   enabled: true
   strip_title: false
 
-logo: /v6/brand/tevrin-lockup-light.svg
+logo: /0.6.0/brand/tevrin-lockup-light.svg
 
 search_enabled: true
 search:
@@ -75,36 +76,94 @@ defaults:
       path: ""
     values:
       layout: default
-  # Frozen version docs (CLAUDE.md, SPEC D-V6-13): never edited, so no front matter. Built as plain pages
+  # Frozen version docs docs/0.1.0-0.5.0 (CLAUDE.md, SPEC D-V6-13): never edited, so no front matter. Built as plain pages
   # (jekyll-optional-front-matter), kept out of the nav and search (linked from history/), and not run through Liquid
   # because they contain literal `{{ ... }}` (prompt placeholders, Railway `${{ ... }}` references).
   - scope:
-      path: v1
+      path: "0.1.0"
     values:
       nav_exclude: true
       search_exclude: true
       render_with_liquid: false
   - scope:
-      path: v2
+      path: "0.2.0"
     values:
       nav_exclude: true
       search_exclude: true
       render_with_liquid: false
   - scope:
-      path: v3
+      path: "0.3.0"
     values:
       nav_exclude: true
       search_exclude: true
       render_with_liquid: false
   - scope:
-      path: v4
+      path: "0.4.0"
     values:
       nav_exclude: true
       search_exclude: true
       render_with_liquid: false
   - scope:
-      path: v5
+      path: "0.5.0"
     values:
       nav_exclude: true
       search_exclude: true
       render_with_liquid: false
+  # D-V6-26: the version folders were renamed from vN to x.y.z. The old URLs of the frozen pages redirect here,
+  # because their files can't take front matter; the history pages carry their own redirect_from.
+  - scope:
+      path: "0.1.0/PROGRESS.md"
+    values:
+      redirect_from: /v1/PROGRESS/
+  - scope:
+      path: "0.1.0/SPEC.md"
+    values:
+      redirect_from: /v1/SPEC/
+  - scope:
+      path: "0.2.0/PROGRESS.md"
+    values:
+      redirect_from: /v2/PROGRESS/
+  - scope:
+      path: "0.2.0/SPEC.md"
+    values:
+      redirect_from: /v2/SPEC/
+  - scope:
+      path: "0.3.0/PROGRESS.md"
+    values:
+      redirect_from: /v3/PROGRESS/
+  - scope:
+      path: "0.3.0/SPEC.md"
+    values:
+      redirect_from: /v3/SPEC/
+  - scope:
+      path: "0.4.0/DRAFT_SPEC.md"
+    values:
+      redirect_from: /v4/DRAFT_SPEC/
+  - scope:
+      path: "0.4.0/PROGRESS.md"
+    values:
+      redirect_from: /v4/PROGRESS/
+  - scope:
+      path: "0.4.0/SPEC.md"
+    values:
+      redirect_from: /v4/SPEC/
+  - scope:
+      path: "0.5.0/COMMIT_CO_AUTHORSHIP.md"
+    values:
+      redirect_from: /v5/COMMIT_CO_AUTHORSHIP/
+  - scope:
+      path: "0.5.0/ISSUE_TRACKER_CONNECTIONS.md"
+    values:
+      redirect_from: /v5/ISSUE_TRACKER_CONNECTIONS/
+  - scope:
+      path: "0.5.0/MICROSOFT_AGENT_FRAMEWORK.md"
+    values:
+      redirect_from: /v5/MICROSOFT_AGENT_FRAMEWORK/
+  - scope:
+      path: "0.5.0/PROGRESS.md"
+    values:
+      redirect_from: /v5/PROGRESS/
+  - scope:
+      path: "0.5.0/SPEC.md"
+    values:
+      redirect_from: /v5/SPEC/

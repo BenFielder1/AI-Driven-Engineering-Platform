@@ -5,7 +5,7 @@ namespace Aide.Domain.GitHosts;
 
 /// <summary>
 /// FR-138: a merge readiness answer from GitLab or Bitbucket: re-poll (GitLab hasn't finished computing the merge status:
-/// <see cref="Verdict"/> is <c>null</c>), or the verdict in the v2 shape (FR-84).
+/// <see cref="Verdict"/> is <c>null</c>), or the verdict in the 0.2.0 shape (FR-84).
 /// </summary>
 public sealed record HostMergeReadiness(bool RePoll, MergeReadinessVerdict? Verdict)
 {
@@ -61,7 +61,7 @@ public sealed record GitLabMergeFacts
 }
 
 /// <summary>
-/// FR-138, §4.19: GitLab merge readiness, mapped onto the v2 reason codes (FR-84). The merge status is re-polled while it
+/// FR-138, §4.19: GitLab merge readiness, mapped onto the 0.2.0 reason codes (FR-84). The merge status is re-polled while it
 /// is transient (<c>unchecked</c>, <c>checking</c>, <c>preparing</c>, <c>approvals_syncing</c>). Pure.
 /// </summary>
 public static class GitLabMergeReadiness
@@ -81,7 +81,7 @@ public static class GitLabMergeReadiness
 
     /// <summary>
     /// FR-138: whether Tevrin may merge the MR now, and why not. A closed MR is <c>pr_not_open</c> alone; a transient merge
-    /// status re-polls. Otherwise every reason the facts and the status show, in the v2 order: permission, conflicts,
+    /// status re-polls. Otherwise every reason the facts and the status show, in the 0.2.0 order: permission, conflicts,
     /// rebase, draft, review, discussions, failing then pending pipeline, and <c>branch_protected</c> for any other
     /// GitLab block (e.g. <c>merge_request_blocked</c>, <c>locked_paths</c>) when nothing else explains it. The
     /// <c>manual</c> strategy adds <c>manual_strategy</c> without changing <c>canMerge</c> (FR-65).
@@ -171,7 +171,7 @@ public static class GitLabMergeReadiness
 
     /// <summary>
     /// FR-138, FR-65, FR-137: Tevrin opens the merge request as a draft and marks it ready itself before merging (under both
-    /// strategies), so until it has (<paramref name="markedReady"/> false) the draft doesn't block Tevrin (as v2 does for
+    /// strategies), so until it has (<paramref name="markedReady"/> false) the draft doesn't block Tevrin (as 0.2.0 does for
     /// GitHub drafts): the facts without <see cref="GitLabMergeFacts.Draft"/>, and without GitLab's <c>draft_status</c>
     /// (which hides the other merge checks; the approvals endpoint, conflicts, discussions and the head pipeline still say
     /// what blocks). Once Tevrin marked it ready, a draft (made again by someone, or never cleared) blocks: facts unchanged.
@@ -271,7 +271,7 @@ public sealed record MergeabilityCheck(string Type, string? Key, string Status, 
 
 /// <summary>
 /// FR-138, §4.19: Bitbucket merge readiness from the single mergeability call: ready means no check has
-/// <c>blocking: true</c>. Blocking checks map to the v2 reason codes by their key: builds (<c>FAILED</c> →
+/// <c>blocking: true</c>. Blocking checks map to the 0.2.0 reason codes by their key: builds (<c>FAILED</c> →
 /// <c>checks_failing</c>, <c>PENDING</c>/<c>UNKNOWN</c> → <c>checks_pending</c>), approvals and default reviewers →
 /// <c>review_required</c>, changes requested, tasks → <c>discussions_unresolved</c>, conflicts, draft, write access →
 /// <c>no_permission</c>; anything else → <c>branch_protected</c>. Pure.
@@ -314,7 +314,7 @@ public static class MergeabilityChecks
 
     /// <summary>
     /// FR-138, FR-137: Tevrin opens the pull request as a draft and marks it ready itself before merging, so until it has
-    /// (<paramref name="markedReady"/> false) a draft check doesn't block Tevrin (as for GitLab and v2's GitHub drafts). Once
+    /// (<paramref name="markedReady"/> false) a draft check doesn't block Tevrin (as for GitLab and 0.2.0's GitHub drafts). Once
     /// Tevrin marked it ready, a draft (made again by someone) blocks: the checks are unchanged.
     /// </summary>
     public static IReadOnlyList<MergeabilityCheck> IgnoringAideDraft(IEnumerable<MergeabilityCheck> checks, bool markedReady = false)
@@ -377,7 +377,7 @@ public static class MergeabilityChecks
         (check.Key ?? string.Empty).Contains(part, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Reasons de-duplicated by code (first message wins), then the v2 verdict (FR-84, FR-65).</summary>
+/// <summary>Reasons de-duplicated by code (first message wins), then the 0.2.0 verdict (FR-84, FR-65).</summary>
 internal sealed class ReasonList
 {
     private readonly List<MergeReadinessReason> _reasons = [];

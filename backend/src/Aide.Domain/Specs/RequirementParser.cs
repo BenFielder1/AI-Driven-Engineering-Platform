@@ -25,7 +25,7 @@ namespace Aide.Domain.Specs;
 /// </summary>
 public static partial class RequirementParser
 {
-    /// <summary>The section that holds the functional requirements (v1 FR-28).</summary>
+    /// <summary>The section that holds the functional requirements (0.1.0 FR-28).</summary>
     public const string SectionTitle = "Functional Requirements";
 
     /// <summary>Entry text is shortened to this many characters in problems.</summary>

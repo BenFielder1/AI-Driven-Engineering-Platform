@@ -806,7 +806,7 @@ public sealed partial class ArtifactService(
         UserInstructions = step.UserInstructions,
 
         // FR-76, FR-124: the agent that runs the step (generalist without a stack) and the requirements it covers; §4.23:
-        // a migrated v2 plan's steps run as their mapped specialist and keep the v2 key as history.
+        // a migrated 0.2.0 plan's steps run as their mapped specialist and keep the 0.2.0 key as history.
         AgentKey = step.Agent,
         LegacyAgentKey = step.LegacyAgent,
         Covers = step.Covers,

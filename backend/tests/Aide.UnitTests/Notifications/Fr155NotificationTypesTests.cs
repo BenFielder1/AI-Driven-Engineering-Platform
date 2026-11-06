@@ -6,7 +6,7 @@ using Aide.Domain.Notifications;
 
 namespace Aide.UnitTests.Notifications;
 
-/// <summary>FR-155: the v4 events and notification types: which events raise them, who gets them, their wording, and the expiry rule.</summary>
+/// <summary>FR-155: the 0.4.0 events and notification types: which events raise them, who gets them, their wording, and the expiry rule.</summary>
 public class Fr155NotificationTypesTests
 {
     private static readonly Guid Project = Guid.Parse("0199a000-0000-7000-8000-000000000001");

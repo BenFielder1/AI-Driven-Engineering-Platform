@@ -67,7 +67,7 @@ public static class StackEndpoints
 
         projectStack.MapGet("/", GetProjectStack)
             .WithName("GetProjectStack")
-            .WithSummary("Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired v2 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs).")
+            .WithSummary("Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired 0.2.0 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs).")
             .Produces<ProjectStackDto>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project."));

@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 
 namespace Aide.Cli.Tests;
 
-/// <summary>FR-93: the v2 CLI commands (version start, versions, deployments, artifact restore), `status` and the exit codes.</summary>
+/// <summary>FR-93: the 0.2.0 CLI commands (version start, versions, deployments, artifact restore), `status` and the exit codes.</summary>
 public sealed class Fr93CommandTests : IDisposable
 {
     private const string VersionId = "0199f2a0-6666-7000-8000-000000000001";
@@ -88,7 +88,8 @@ public sealed class Fr93CommandTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, run.ExitCode);
         Assert.Equal(2, run.ExitCode);
-        Assert.Contains("presets were removed in v4; use --frontend", run.Error, StringComparison.Ordinal);
+        // D-V6-26 (FR-229): the message names the version in semver ("in v4" before 0.6.0).
+        Assert.Contains("presets were removed in 0.4.0; use --frontend", run.Error, StringComparison.Ordinal);
         Assert.Empty(_cli.Requests);
     }
 
@@ -177,7 +178,7 @@ public sealed class Fr93CommandTests : IDisposable
     [InlineData(HttpStatusCode.BadRequest, "VALIDATION", ExitCodes.Error)]
     [InlineData(HttpStatusCode.Forbidden, "FORBIDDEN", ExitCodes.Auth)]
     [InlineData(HttpStatusCode.BadGateway, "UPSTREAM_ERROR", ExitCodes.Error)]
-    public async Task FR93_other_errors_keep_the_v1_mapping(HttpStatusCode status, string errorCode, int expected)
+    public async Task FR93_other_errors_keep_the_0_1_0_mapping(HttpStatusCode status, string errorCode, int expected)
     {
         _cli.Respond(_ => FakeHttpHandler.Problem(status, errorCode, "Failed"));
 

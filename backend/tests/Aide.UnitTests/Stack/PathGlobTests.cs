@@ -2,7 +2,7 @@ using Aide.Domain.Stack;
 
 namespace Aide.UnitTests.Stack;
 
-/// <summary>§4.16, §4.23: pack and frozen v2 globs (owned paths, plan rules, protected paths).</summary>
+/// <summary>§4.16, §4.23: pack and frozen 0.2.0 globs (owned paths, plan rules, protected paths).</summary>
 public class PathGlobTests
 {
     [Theory]

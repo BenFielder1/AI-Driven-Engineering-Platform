@@ -13,6 +13,9 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <InvariantGlobalization>true</InvariantGlobalization>
     <Deterministic>true</Deterministic>
+    <!-- FR-229: the Tevrin release version (semver x.y.z), shared by every assembly and the CLI packages. It must equal
+         frontend/package.json and the newest changelog entry (scripts/ci/check-version.sh); a release tag must equal it. -->
+    <Version>0.6.0</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aide.UnitTests' Or '$(MSBuildProjectName)' == 'Aide.IntegrationTests' Or '$(MSBuildProjectName)' == 'Aide.Cli.Tests'">

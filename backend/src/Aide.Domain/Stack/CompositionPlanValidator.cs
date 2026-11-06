@@ -8,8 +8,8 @@ namespace Aide.Domain.Stack;
 public sealed record PlanIssue(string Code, string Message);
 
 /// <summary>
-/// FR-124, FR-127, v2 §4.11 with the rules generated from the composition (<see cref="StackResolution.PlanRules"/>),
-/// checked on the normalised steps after the v1 rules (<see cref="PlanValidator"/>). Errors:
+/// FR-124, FR-127, 0.2.0 §4.11 with the rules generated from the composition (<see cref="StackResolution.PlanRules"/>),
+/// checked on the normalised steps after the 0.1.0 rules (<see cref="PlanValidator"/>). Errors:
 /// <list type="bullet">
 /// <item><see cref="AgentErrors"/>: an unknown or missing <c>agent</c> (<c>INVALID_PLAN</c>; <see cref="PlanValidator"/>
 /// reports the same through <see cref="PlanAgents"/>, so callers use one or the other);</item>
@@ -136,7 +136,7 @@ public static class CompositionPlanValidator
 
     /// <summary>
     /// The composition warnings: <c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c>, <c>UNDECLARED_GENERATED_FILE</c> (at most one of each, in
-    /// that order). §4.23: a step mapped from a v2 key (<see cref="PlanStep.LegacyAgent"/>) is checked against the frozen v2
+    /// that order). §4.23: a step mapped from a 0.2.0 key (<see cref="PlanStep.LegacyAgent"/>) is checked against the frozen 0.2.0
     /// globs of <paramref name="legacy"/> (the migrated version's preset) instead of its specialist's.
     /// </summary>
     public static IReadOnlyList<ValidationWarning> Warnings(IReadOnlyList<PlanStep> steps, StackResolution resolution, LegacyPreset? legacy = null)
@@ -248,7 +248,7 @@ public static class CompositionPlanValidator
 
     private static IEnumerable<string> OrderViolations(IReadOnlyList<PlanStep> steps, StackOrderRule rule, string scaffolder)
     {
-        // As v2: for each step matching "after", every later step matching "before" is out of order (once per pair).
+        // As 0.2.0: for each step matching "after", every later step matching "before" is out of order (once per pair).
         // Scaffolder steps are exempt: the skeleton comes first by design.
         foreach (var early in steps.Where(s => s.Agent != scaffolder))
         {

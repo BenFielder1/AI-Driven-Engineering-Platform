@@ -19,7 +19,7 @@ public enum GitTokenFailureAction
     /// <summary>Refresh the OAuth token once (storing the rotated refresh token atomically) and retry.</summary>
     Refresh = 0,
 
-    /// <summary>Mark the connection <c>invalid</c> and notify its owner (v2 <c>connection_invalid</c>).</summary>
+    /// <summary>Mark the connection <c>invalid</c> and notify its owner (0.2.0 <c>connection_invalid</c>).</summary>
     MarkInvalid = 1,
 
     /// <summary>A transient failure (host error, network): keep the connection's status and retry the job.</summary>

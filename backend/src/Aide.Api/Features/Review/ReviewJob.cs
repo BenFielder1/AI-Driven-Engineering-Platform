@@ -73,8 +73,8 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// FR-126, FR-127: with a stack composition the agent scores against the composed checklist (<see cref="StackGuidance.Review"/>,
 /// mapped by <see cref="StackReviewChecklist"/>, no penalty), the deterministic checks gain the packs' registered checks
 /// (<see cref="StackReviewFindings"/>, with the base commit's files, the branch tree and the backend's source for
-/// <c>health_endpoints</c>; a committed secret v1's scan already found is penalised once), <c>deploy_branch_control</c>
-/// replaces the v2 Vercel check, and optimisation steps may name the specialists. Failed CI freshness checks stay CI-status
+/// <c>health_endpoints</c>; a committed secret 0.1.0's scan already found is penalised once), <c>deploy_branch_control</c>
+/// replaces the 0.2.0 Vercel check, and optimisation steps may name the specialists. Failed CI freshness checks stay CI-status
 /// findings (FR-85).
 /// FR-90: the version's latest Vercel preview is waited for first (<see cref="PreviewCollector"/>); a failed build is a
 /// critical <c>architecture</c> finding and the preview is stored in <c>external_checks.preview</c>.

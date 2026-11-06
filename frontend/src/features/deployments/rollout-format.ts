@@ -94,7 +94,7 @@ function isPreDeployFailure(step: RolloutStep): boolean {
 
 /**
  * FR-90, FR-147: the titles of a preview rollout's failed builds, as the report's critical findings name them: a failed
- * build is "{Host} preview build failed" (v2's "Vercel preview build failed"), a failed backend pre-deploy is "Backend
+ * build is "{Host} preview build failed" (0.2.0's "Vercel preview build failed"), a failed backend pre-deploy is "Backend
  * preview pre-deploy migration failed" (RolloutFindings on the backend).
  */
 export function previewBuildFailureTitles(steps: readonly RolloutStep[]): string[] {

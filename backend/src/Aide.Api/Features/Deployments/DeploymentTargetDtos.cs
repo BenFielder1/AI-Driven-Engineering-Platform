@@ -114,7 +114,7 @@ public sealed record DeploymentEnvInventoryDto(string? PublicPrefix, IReadOnlyLi
 public sealed record DeploymentOriginModelDto(string? Model, string? PackModel, IReadOnlyList<string> Options, string? Explanation);
 
 /// <summary>
-/// Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): <c>targets</c>, <c>databases</c>,
+/// Settings → Deployment (FR-144, any member; D-V4-4 replaced 0.2.0's single Vercel shape): <c>targets</c>, <c>databases</c>,
 /// the environment inventory (<c>env</c>; keys only) and the <c>originModel</c>. <c>canManage</c>: the caller is an Owner.
 /// <c>fakeMode</c>: <c>Deployments:Provider=Fake</c>. FR-191: <c>groups</c>: the group cards; parts' full cards stay in
 /// <c>targets</c> and <c>databases</c>, tied to a group by their <c>groupId</c>.

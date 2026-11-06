@@ -200,7 +200,7 @@ describe("Overview → Activity (FR-50)", () => {
   it("FR63_activity_shows_version_and_checkpoint_and_reads_legacy_keys", async () => {
     await openOverviewAs("owner", {}, (p) => {
       const versionId = p.releaseVersions[0]?.id ?? "";
-      // Stored before D-V2-11: the v1 keys.
+      // Stored before D-V2-11: the 0.1.0 keys.
       addEvent(p, {
         type: "PHASE_CHANGED",
         category: "transition",
@@ -213,7 +213,7 @@ describe("Overview → Activity (FR-50)", () => {
         summary: "old",
         payload: { fromVersion: 5, targetVersion: 3 },
       });
-      // v2 keys with the release version.
+      // 0.2.0 keys with the release version.
       addEvent(p, {
         type: "PHASE_CHANGED",
         category: "transition",

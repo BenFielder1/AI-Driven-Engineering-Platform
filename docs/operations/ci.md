@@ -17,7 +17,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pull requests, pushes to `ma
 | scripts | `bash -n` on the shell scripts, shellcheck at error severity |
 | railway-workflows | Typecheck of `.railway`, actionlint on the workflows |
 | images | `api` and `web` images build (no push) |
-| e2e | Three shards on `chromium` against the API (E2E mode: Fake LLM, Fake deployments, Local Git with a seeded import repo) and the Next.js dev server: `v1` specs, `v2` specs (versions, import, preset), and `a11y` |
+| e2e | Three shards on `chromium` against the API (E2E mode: Fake LLM, Fake deployments, Local Git with a seeded import repo) and the Next.js dev server: `core` specs, `flows` specs (versions, import, preset), and `a11y` |
 
 CI uses no secrets and no real LLM, Git host, deployment platform or database access. The Firefox, WebKit and Edge projects and the perf scripts run locally or against Kubernetes. The E2E shards.
 

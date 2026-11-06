@@ -1,6 +1,6 @@
 # AIDE Platform — Specification (v5)
 
-2026-11-01 · Ben Fielder · **v5**, built on the v4 codebase in this repo. Earlier versions: [`docs/v1/SPEC.md`](docs/v1/SPEC.md), [`docs/v2/SPEC.md`](docs/v2/SPEC.md), [`docs/v3/SPEC.md`](docs/v3/SPEC.md), [`docs/v4/SPEC.md`](docs/v4/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's v5 brief (2026-11-01), the interview answers in §10, and the research notes [`docs/v5/ISSUE_TRACKER_CONNECTIONS.md`](docs/v5/ISSUE_TRACKER_CONNECTIONS.md) and [`docs/v5/COMMIT_CO_AUTHORSHIP.md`](docs/v5/COMMIT_CO_AUTHORSHIP.md).
+2026-11-01 · Ben Fielder · **v5**, built on the v4 codebase in this repo. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md), [`docs/0.2.0/SPEC.md`](docs/0.2.0/SPEC.md), [`docs/0.3.0/SPEC.md`](docs/0.3.0/SPEC.md), [`docs/0.4.0/SPEC.md`](docs/0.4.0/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's v5 brief (2026-11-01), the interview answers in §10, and the research notes [`docs/0.5.0/ISSUE_TRACKER_CONNECTIONS.md`](docs/0.5.0/ISSUE_TRACKER_CONNECTIONS.md) and [`docs/0.5.0/COMMIT_CO_AUTHORSHIP.md`](docs/0.5.0/COMMIT_CO_AUTHORSHIP.md).
 
 > **How this spec relates to v1–v4.** v5 is an increment on the running v4 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends FR-n)*. New requirements continue from **FR-163**, domain rules from **§4.25**, decisions use `D-V5-n`, and milestones continue from **M32**. Earlier tests stay green unless an amendment changes what they assert. In that case, update the test and name the amendment in it.
 
@@ -26,7 +26,7 @@ Success means:
 - Other trackers (Azure DevOps Boards, YouTrack, Plane, Shortcut and so on), Jira Data Center and Bitbucket Issues.
 - Tracker access through MCP servers.
 - Option B or C from the co-authorship research: the user as author, or commits through a user token. FR-82 stays: background Git work uses installation tokens.
-- Microsoft Agent Framework (`docs/v5/MICROSOFT_AGENT_FRAMEWORK.md`). The brief didn't ask for it.
+- Microsoft Agent Framework (`docs/0.5.0/MICROSOFT_AGENT_FRAMEWORK.md`). The brief didn't ask for it.
 - New stack packs. A repository whose stack isn't in the catalog gets a blank or `unsupported` finding, never a new option.
 
 ## 2. Users and permissions
@@ -620,7 +620,7 @@ v1–v4 decisions stand, except where amended.
 
 ## 12. Milestones
 
-**M0 Baseline:** the repo, CI and v4 app exist. **Do not re-scaffold.** v4's SPEC and PROGRESS are already moved to `docs/v4/`. Add the v5 row to CLAUDE.md's Versions table, the v5 note on increments and verifier scope, and fix its `SSPEC.md` link. Create a root `PROGRESS.md`. Work on `build/aide-v5`. Confirm CI is green on the baseline.
+**M0 Baseline:** the repo, CI and v4 app exist. **Do not re-scaffold.** v4's SPEC and PROGRESS are already moved to `docs/0.4.0/`. Add the v5 row to CLAUDE.md's Versions table, the v5 note on increments and verifier scope, and fix its `SSPEC.md` link. Create a root `PROGRESS.md`. Work on `build/aide-v5`. Confirm CI is green on the baseline.
 
 1. **M32 PostgreSQL 18** (independent; first, because every later CI run depends on it; FR-195 added after M37): images, data paths, renamed volume, the `deploy-local.sh` check, docs, D-V3-13 note. FR-163, FR-164.
 2. **M33 Commit co-authorship** (independent): `CommitAttribution`, `CommitTrailers`, every commit and merge site, settings, migration. FR-174–FR-177.
@@ -631,9 +631,9 @@ v1–v4 decisions stand, except where amended.
 
 ## Revision notes
 
-- 2026-11-01: v5 spec created from Ben's brief, the interview and the `docs/v5` research notes.
+- 2026-11-01: v5 spec created from Ben's brief, the interview and the `docs/0.5.0` research notes.
   - **Corrections to the research, checked against the code:** the trailer is `AIDE-Step-Id`, not `AIDE-Step`. Plan approval exists only in Strict mode, so "plan approver" needed fallbacks.
-  - `docs/v5/MICROSOFT_AGENT_FRAMEWORK.md` was not in the brief, so it isn't in scope.
+  - `docs/0.5.0/MICROSOFT_AGENT_FRAMEWORK.md` was not in the brief, so it isn't in scope.
 - 2026-11-02: synced with the v5 build (M32-M37).
   - **Data:** `deployment_targets.platform_project_id`, `tracker_import.supersedes_import_id`.
   - **API:** `windows[]` and `caveats[]` on `/stack/options`, `?type=` pickers, nullable `link.resourceId`, `POST /sources` errors, `PATCH` connection rules, `PATCH /api/auth/me`.

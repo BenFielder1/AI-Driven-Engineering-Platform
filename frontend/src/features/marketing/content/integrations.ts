@@ -4,7 +4,7 @@ import { docsUrl } from './site-nav'
 /**
  * FR-212, FR-215, FR-222: what Tevrin works with. Every name here is implemented in the backend (the provider enums
  * listed in pages/integrations-page.test.tsx); nothing planned or unimplemented is listed. Sources: docs/guides/*.md and the
- * v1–v5 specs.
+ * 0.1.0–0.5.0 specs.
  */
 
 /** Marks for brands Simple Icons doesn't carry: a neutral icon, never a lookalike logo. */

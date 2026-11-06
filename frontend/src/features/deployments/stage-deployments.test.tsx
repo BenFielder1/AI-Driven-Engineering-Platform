@@ -107,7 +107,7 @@ describe('Review page → preview deployment (FR-90)', () => {
     expect(preview).toHaveTextContent('after 20 min')
   })
 
-  it('FR147_cycle_detail_rollout: a v4 cycle shows the whole preview rollout it waited for, read-only', async () => {
+  it('FR147_cycle_detail_rollout: a 0.4.0 cycle shows the whole preview rollout it waited for, read-only', async () => {
     const project = seedProjectAs('owner', (p) => {
       seedReviewPhase(p)
       const rollout = makeRollout(p, {

@@ -4,7 +4,7 @@ namespace Aide.Domain.Entities;
 /// <see cref="ProjectLlmSettings.CredentialId"/> (FR-79). The key is encrypted at rest and never returned.</summary>
 public sealed class LlmCredential
 {
-    /// <summary><see cref="Last4"/> of a key migrated from v1 before its plaintext was read (it can't be computed in SQL).</summary>
+    /// <summary><see cref="Last4"/> of a key migrated from 0.1.0 before its plaintext was read (it can't be computed in SQL).</summary>
     public const string UnknownLast4 = "????";
 
     public Guid Id { get; set; } = Guid.CreateVersion7();

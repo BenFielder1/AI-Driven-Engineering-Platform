@@ -240,13 +240,13 @@ public class StackCatalogLoaderTests
     }
 
     [Fact]
-    public void FR113_The_content_hash_is_the_v2_preset_algorithm_over_sorted_paths_with_normalised_line_endings_and_no_BOM()
+    public void FR113_The_content_hash_is_the_0_2_0_preset_algorithm_over_sorted_paths_with_normalised_line_endings_and_no_BOM()
     {
         var a = new Dictionary<string, string> { ["b.md"] = "two\r\n", ["a.json"] = "﻿one\n" };
         var b = new Dictionary<string, string> { ["a.json"] = "one\n", ["b.md"] = "two\n" };
 
         Assert.Equal(StackCatalogLoader.ContentHash(a), StackCatalogLoader.ContentHash(b));
-        Assert.Equal("5b403d1f0ab433eb3f92e0684d6595b349ecacf8e9c126bc2d82cbd20da5c5da", StackCatalogLoader.ContentHash(b)); // the v2 preset hash of these files
+        Assert.Equal("5b403d1f0ab433eb3f92e0684d6595b349ecacf8e9c126bc2d82cbd20da5c5da", StackCatalogLoader.ContentHash(b)); // the 0.2.0 preset hash of these files
         Assert.NotEqual(StackCatalogLoader.ContentHash(b), StackCatalogLoader.ContentHash(new Dictionary<string, string> { ["a.json"] = "one\n", ["b.md"] = "three\n" }));
 
         var files = ShippedFiles();

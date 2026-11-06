@@ -49,7 +49,7 @@ const operatorSetApiVariables = [
   // Optional: the Stack Analyst's model (FR-180); unset = the provider's DefaultModel.
   'Llm__Providers__Anthropic__Models__StackAnalyst',
   'Llm__Providers__OpenAI__Models__StackAnalyst',
-  // Optional: GitHub App override (all five or none) and v1 OAuth sign-in.
+  // Optional: GitHub App override (all five or none) and 0.1.0 OAuth sign-in.
   'GitHub__App__AppId',
   'GitHub__App__ClientId',
   'GitHub__App__ClientSecret',
@@ -71,7 +71,7 @@ const operatorSetApiVariables = [
   'Bitbucket__OAuth__ClientSecret',
   // Optional: how often the database expiry sweep runs (FR-155).
   'Notifications__DatabaseExpirySweepInterval',
-  // Optional: how often Jira/Linear connection expiry is checked (FR-165) and one tracker search/fetch (v5 §9).
+  // Optional: how often Jira/Linear connection expiry is checked (FR-165) and one tracker search/fetch (0.5.0 §9).
   // Trackers__Provider is deliberately NOT listed: Railway never uses Fake trackers, so a stray value is planned for
   // deletion (and fails CI's drift check) instead of being kept.
   'Notifications__ConnectionExpirySweepInterval',

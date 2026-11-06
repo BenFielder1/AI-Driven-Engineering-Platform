@@ -1,9 +1,9 @@
 # AIDE Platform — Specification (v3)
 
-2026-10-23 · Ben Fielder · **v3**, built on the v2 codebase in this repo. Earlier versions: v1 [`docs/v1/SPEC.md`](docs/v1/SPEC.md), v2 [`docs/v2/SPEC.md`](docs/v2/SPEC.md). Stack: [`STACK.md`](STACK.md).
+2026-10-23 · Ben Fielder · **v3**, built on the v2 codebase in this repo. Earlier versions: v1 [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md), v2 [`docs/0.2.0/SPEC.md`](docs/0.2.0/SPEC.md). Stack: [`STACK.md`](STACK.md).
 
 > **How this spec relates to v1 and v2.** v3 is a **platform version with no new product features**. Everything in
-> `docs/v1/SPEC.md` and `docs/v2/SPEC.md` stays in force unless this document amends it. That covers FR-1 to FR-93,
+> `docs/0.1.0/SPEC.md` and `docs/0.2.0/SPEC.md` stays in force unless this document amends it. That covers FR-1 to FR-93,
 > the domain rules, data model, API, UI, NFRs and decisions. Amendments are listed in §3.0. New requirements continue the
 > numbering from **FR-94**. Users must see the same app, at the same URLs, with the same behaviour. Existing tests stay
 > green. Where a test has to change because the framework changed (not the behaviour), it is ported, keeping its
@@ -479,6 +479,6 @@ v1 D1–D21 and v2 D-V2-1 to D-V2-15 stand.
 
 ## Revision notes
 
-- 2026-10-23: v3 spec created. The v2 spec and build log moved to `docs/v2/`. The stack was recorded in `STACK.md`
+- 2026-10-23: v3 spec created. The v2 spec and build log moved to `docs/0.2.0/`. The stack was recorded in `STACK.md`
   (compose-stack). Decisions D-V3-1 to D-V3-4, D-V3-7, D-V3-8 and D-V3-11 were confirmed with Ben in the compose-stack
   and spec interviews.

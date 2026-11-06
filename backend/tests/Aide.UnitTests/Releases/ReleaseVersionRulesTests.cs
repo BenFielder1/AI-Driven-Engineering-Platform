@@ -188,7 +188,7 @@ public class ReleaseVersionRulesTests
     [Fact]
     public void S4_10_Released_version_is_the_highest_released_or_imported_by_semver_not_insertion()
     {
-        // v1 migration: versions 0.1.0, 0.2.0 inserted in any order; 0.10.0 sorts above 0.9.0.
+        // Migration from 0.1.0: versions 0.1.0, 0.2.0 inserted in any order; 0.10.0 sorts above 0.9.0.
         ReleaseVersionRow[] versions =
         [
             new("0.10.0", ReleaseVersionStatus.Released),

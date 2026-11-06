@@ -5,7 +5,7 @@ using Aide.Domain.Common;
 namespace Aide.Domain.Stack;
 
 /// <summary>
-/// FR-121: the prompt of a plan step run by a specialist (the composition equivalent of v2's <c>SpecialistPrompt</c>).
+/// FR-121: the prompt of a plan step run by a specialist (the composition equivalent of 0.2.0's <c>SpecialistPrompt</c>).
 /// Order: (1) the base <c>code_generator.md</c> system prompt, already rendered with its output contract → (2) the
 /// composition summary → (3) the agent's prompt, with the paths it owns → (4) each resolved skill, as
 /// <c>## Skill: &lt;pack&gt; — &lt;section&gt;</c> → (5) the step input (the base template's user message, unchanged).

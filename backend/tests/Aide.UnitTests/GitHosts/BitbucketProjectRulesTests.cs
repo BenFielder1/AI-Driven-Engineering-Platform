@@ -117,7 +117,7 @@ public class BitbucketProjectRulesTests
     [InlineData("restrict_merges_write_access", "FAILED", MergeReadinessReasonCode.NoPermission)]
     [InlineData("fast_forward_rebase_needed", "FAILED", MergeReadinessReasonCode.RebaseRequired)]
     [InlineData("something_new", "FAILED", MergeReadinessReasonCode.BranchProtected)]
-    public void FR138_Blocking_checks_map_to_the_v2_reason_codes(string key, string status, MergeReadinessReasonCode expected) =>
+    public void FR138_Blocking_checks_map_to_the_0_2_0_reason_codes(string key, string status, MergeReadinessReasonCode expected) =>
         Assert.Equal(expected, Assert.Single(MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", key, status, true, true)], MergeStrategy.AideMerges).Verdict!.Reasons).Code);
 
     [Fact]

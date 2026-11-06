@@ -1,7 +1,7 @@
 import { toast } from 'sonner'
 
 /**
- * Toasts that must survive a move between the `(public)` and `(app)` route groups (v4 FR-131/FR-134: "account linked"
+ * Toasts that must survive a move between the `(public)` and `(app)` route groups (0.4.0 FR-131/FR-134: "account linked"
  * on /login, then the page navigates into the app). Each group's layout mounts its own `Providers` and so its own
  * `<Toaster/>` (marketing routes load neither, SPEC §8), so a toast raised just before the switch could be lost with the
  * unmounting Toaster. The toast is shown right away and also kept here for a few seconds; the next Toaster to mount

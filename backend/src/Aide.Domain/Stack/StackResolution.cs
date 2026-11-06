@@ -34,10 +34,10 @@ public sealed record StackResolution
     /// <summary>FR-123: the required spec sections (deduplicated by title, case-insensitive), with their guidance.</summary>
     public required IReadOnlyList<StackSpecSection> SpecSections { get; init; }
 
-    /// <summary>FR-124: the composed plan rules (v2 §4.11 shapes).</summary>
+    /// <summary>FR-124: the composed plan rules (0.2.0 §4.11 shapes).</summary>
     public required CompositionPlanRules PlanRules { get; init; }
 
-    /// <summary>FR-125: the packs' protected paths (added to the v1 Guardian rules).</summary>
+    /// <summary>FR-125: the packs' protected paths (added to the 0.1.0 Guardian rules).</summary>
     public required IReadOnlyList<StackProtectedPath> ProtectedPaths { get; init; }
 
     /// <summary>FR-127: how each generated file is handled, with its CI check expanded.</summary>
@@ -155,7 +155,7 @@ public sealed record StackPackRecord(string Id, string Version, IReadOnlyList<st
 /// <summary>FR-123: a required spec section, its guidance, and where it comes from (a pack id or <c>core</c>).</summary>
 public sealed record StackSpecSection(string Title, string Guidance, string Source);
 
-/// <summary>FR-124: the composed plan rules, in the v2 §4.11 shapes (<see cref="CompositionPlanValidator"/>).</summary>
+/// <summary>FR-124: the composed plan rules, in the 0.2.0 §4.11 shapes (<see cref="CompositionPlanValidator"/>).</summary>
 public sealed record CompositionPlanRules(
     string Scaffolder,
     IReadOnlyList<StackOrderRule> Order,
@@ -192,7 +192,7 @@ public sealed record StackProtectedPath(PathGlob Glob, bool ExistingOnBase, IRea
 /// <summary>FR-127: a generated file (expanded glob), its handling and its CI check (expanded), and the pack declaring it.</summary>
 public sealed record StackGeneratedFile(string Glob, PathGlob Matcher, string Handling, string? CiCheck, string Pack);
 
-/// <summary>FR-126: a checklist item of a pack, mapped to a v1 compliance category and severity.</summary>
+/// <summary>FR-126: a checklist item of a pack, mapped to a 0.1.0 compliance category and severity.</summary>
 public sealed record StackChecklistItem(string Pack, string Item, ReviewCategory Category, Severity Severity);
 
 /// <summary>§4.22: a required environment variable: the components it applies to, its targets and the packs requiring it.</summary>

@@ -66,7 +66,7 @@ function humanizeType(type: string): string {
 
 /**
  * A checkpoint from the payload as "1.2.0 · checkpoint 4" (FR-63), or "checkpoint 4" when the release version isn't
- * known. v2 payloads use `key` (e.g. `checkpoint`); events stored before D-V2-11 still carry `legacyKey`
+ * known. 0.2.0 payloads use `key` (e.g. `checkpoint`); events stored before D-V2-11 still carry `legacyKey`
  * (e.g. `projectVersion`), so that is read as a fallback.
  */
 function checkpointAt(
@@ -628,7 +628,7 @@ function describeStackProfile(type: string, payload: Payload): string {
   }
 }
 
-/** FR-155: the v4 events the admin log words like the activity feed; older events keep the server's summary there. */
+/** FR-155: the 0.4.0 events the admin log words like the activity feed; older events keep the server's summary there. */
 export const fr155EventTypes: ReadonlySet<string> = new Set([
   "STACK_CHANGED",
   "STACK_DETECTED",

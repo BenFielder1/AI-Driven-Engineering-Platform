@@ -21,7 +21,7 @@ import type { CategoryScore, ComplianceReportDetail, FindingSeverity } from './r
 import { panelClass } from '../../components/shared/panel-class'
 import { cn } from '../../lib/utils'
 
-/** The report fields the sections read (the v2 detail DTO; the v1 latest-report DTO has the same shapes). */
+/** The report fields the sections read (the 0.2.0 detail DTO; the 0.1.0 latest-report DTO has the same shapes). */
 type Report = Pick<ComplianceReportDetail, 'categoryScores' | 'driftLevel' | 'driftAreas' | 'violations' | 'missingFeatures'>
 
 const severityTones: Record<FindingSeverity, BadgeTone> = {
@@ -239,7 +239,7 @@ function waitedCopy(seconds: number): string {
 /**
  * FR-90: the preview deployment the cycle waited for: its final state, URL, how long review waited and whether it gave
  * up, and the build-log tail. An `error` preview is a critical architecture finding in the report ("Vercel preview
- * build failed"), listed under Violations. FR-147: a v4 report holds the whole preview rollout it waited for, shown as
+ * build failed"), listed under Violations. FR-147: a 0.4.0 report holds the whole preview rollout it waited for, shown as
  * its steps (migrations, backend, frontend) read-only.
  */
 function PreviewCheckBlock({ preview }: { preview: PreviewCheck | null }) {

@@ -7,9 +7,9 @@ using static Aide.UnitTests.Stack.StackTestCatalog;
 namespace Aide.UnitTests.Stack;
 
 /// <summary>
-/// FR-129, §4.23: the frozen v2 preset data (<c>legacy/presets.json</c>) — the agent-key map at plan and run time, the
-/// frozen owned globs for migrated in-flight plans, and history labels — plus the v2 preset rules that moved to the
-/// composition path (RLS check, client files, starter-only repositories, ownable v1-protected paths).
+/// FR-129, §4.23: the frozen 0.2.0 preset data (<c>legacy/presets.json</c>) — the agent-key map at plan and run time, the
+/// frozen owned globs for migrated in-flight plans, and history labels — plus the 0.2.0 preset rules that moved to the
+/// composition path (RLS check, client files, starter-only repositories, ownable 0.1.0-protected paths).
 /// </summary>
 public sealed class LegacyPresetTests
 {
@@ -35,7 +35,7 @@ public sealed class LegacyPresetTests
     // ---------- the shipped legacy data ----------
 
     [Fact]
-    public void FR129_The_shipped_catalog_has_the_frozen_v2_presets_and_the_4_23_agent_key_table()
+    public void FR129_The_shipped_catalog_has_the_frozen_0_2_0_presets_and_the_4_23_agent_key_table()
     {
         Assert.Equal("1.2.1", Catalog.Version); // FR-199
         Assert.Equal(
@@ -55,7 +55,7 @@ public sealed class LegacyPresetTests
     [InlineData("api-engineer", "frontend-engineer")]
     [InlineData("ui-engineer", "frontend-engineer")]
     [InlineData("test-engineer", "test-engineer")]
-    public void S4_23_v2_agent_keys_map_to_v4_specialists(string v2, string v4)
+    public void S4_23_0_2_0_agent_keys_map_to_0_4_0_specialists(string v2, string v4)
     {
         var mapped = Legacy.Map(v2, ["app/page.tsx"])!;
 
@@ -113,7 +113,7 @@ public sealed class LegacyPresetTests
     // ---------- plans of migrated versions ----------
 
     [Fact]
-    public void S4_23_A_migrated_plan_naming_v2_keys_validates_and_keeps_the_v2_key_on_each_step()
+    public void S4_23_A_migrated_plan_naming_0_2_0_keys_validates_and_keeps_the_0_2_0_key_on_each_step()
     {
         var stack = MigratedSupabase();
         var plan = PlanValidator.Validate(
@@ -129,7 +129,7 @@ public sealed class LegacyPresetTests
     }
 
     [Fact]
-    public void S4_23_Without_the_legacy_map_v2_keys_are_unknown_agents_and_a_new_plan_of_a_migrated_version_keeps_v4_keys()
+    public void S4_23_Without_the_legacy_map_0_2_0_keys_are_unknown_agents_and_a_new_plan_of_a_migrated_version_keeps_0_4_0_keys()
     {
         var stack = MigratedSupabase();
         var unknown = PlanValidator.Validate([Step(1, "db-engineer", "supabase/migrations/0002_tasks.sql")], 20, true, PlanAgents.ForStack(stack));
@@ -140,7 +140,7 @@ public sealed class LegacyPresetTests
     }
 
     [Fact]
-    public void S4_23_A_migrated_plans_owned_path_checks_use_the_frozen_v2_globs()
+    public void S4_23_A_migrated_plans_owned_path_checks_use_the_frozen_0_2_0_globs()
     {
         var stack = MigratedSupabase();
         var legacy = Legacy.Find("nextjs-supabase");
@@ -186,7 +186,7 @@ public sealed class LegacyPresetTests
         Assert.Empty(result.Catalog!.Legacy.Presets);
     }
 
-    // ---------- v2 rules kept on the composition path ----------
+    // ---------- 0.2.0 rules kept on the composition path ----------
 
     [Fact]
     public void FR126_A_migration_creating_tasks_without_RLS_is_a_critical_security_finding()
@@ -235,7 +235,7 @@ public sealed class LegacyPresetTests
     [InlineData(".gitlab-ci.yml", true)]
     [InlineData("package-lock.json", false)]
     [InlineData(".env", false)]
-    public void FR125_The_v1_protected_paths_an_owning_specialist_may_declare(string path, bool ownable) =>
+    public void FR125_The_0_1_0_protected_paths_an_owning_specialist_may_declare(string path, bool ownable) =>
         Assert.Equal(ownable, StackPathRules.IsOwnableV1Protected(path));
 
     [Fact]

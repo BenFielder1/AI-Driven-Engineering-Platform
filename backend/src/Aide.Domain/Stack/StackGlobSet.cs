@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace Aide.Domain.Stack;
 
 /// <summary>
-/// A set of expanded composition globs with exclusions (the v2 <see cref="GlobSet"/> semantics: a path matches when it matches
+/// A set of expanded composition globs with exclusions (the 0.2.0 <see cref="GlobSet"/> semantics: a path matches when it matches
 /// a positive glob and no <c>!</c>-prefixed one), built from a process-wide cache of compiled <see cref="PathGlob"/>s. Each
 /// resolution expands a few hundred pack globs, and compiling a non-backtracking pattern is the expensive part, so each
 /// distinct pattern is compiled once. Invalid patterns are left out (the catalog loader already rejects them).

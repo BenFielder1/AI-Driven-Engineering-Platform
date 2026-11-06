@@ -22,13 +22,13 @@ public static class AgentRunWarnings
     public const string SourceItemsUnavailable = "source_items_unavailable";
 
     /// <summary>
-    /// FR-162 (v2 FR-23/FR-71): the answer was still cut off at the model's output limit after the last continuation (or
+    /// FR-162 (0.2.0 FR-23/FR-71): the answer was still cut off at the model's output limit after the last continuation (or
     /// continuing would overflow the context window), so the output may be incomplete. The run still completes.
     /// </summary>
     public const string OutputTruncated = "output_truncated";
 
     /// <summary>
-    /// §4.23, FR-129: a step of a plan locked before the upgrade named a v2 agent key whose v4 specialist was ambiguous (a
+    /// §4.23, FR-129: a step of a plan locked before the upgrade named a 0.2.0 agent key whose 0.4.0 specialist was ambiguous (a
     /// <c>devops-engineer</c> step declaring <c>.github/**</c> and other files) or isn't in the stack, so another one ran it.
     /// </summary>
     public const string LegacyAgentMapped = "legacy_agent_mapped";

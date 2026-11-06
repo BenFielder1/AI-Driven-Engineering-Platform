@@ -6,7 +6,7 @@ import { projectKeys, unwrap, type ProjectSettings } from '../projects/projects-
 
 export type AdminGitHubApp = Schemas['AdminGitHubAppDto']
 
-/** FR-143: GitHub Pages deploys need the App's Pages permission, which App registrations from before v4 lack. */
+/** FR-143: GitHub Pages deploys need the App's Pages permission, which App registrations from before 0.4.0 lack. */
 export const PAGES_PERMISSION_MISSING_COPY =
   "Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"
 

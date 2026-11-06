@@ -16,11 +16,11 @@ public sealed record ReleaseVersionCheckpointsDto(int Current, int Max);
 
 /// <summary>
 /// A release version of a project (§4.10, FR-60–FR-62). <c>version</c> is the normalised semver (no leading <c>v</c>);
-/// <c>tag</c> is the release tag once released (or the imported/migrated tag, e.g. v1's <c>v7-aide</c>); <c>baseTag</c> and
+/// <c>tag</c> is the release tag once released (or the imported/migrated tag, e.g. 0.1.0's <c>v7-aide</c>); <c>baseTag</c> and
 /// <c>baseCommitSha</c> are the released tag and merge commit the version started from (null for a first version);
 /// <c>branchName</c> and <c>pullRequestUrl</c> are the version's working branch and PR once they exist; <c>request</c> is
 /// what the version was started with (the project idea for a first version); <c>startedBy</c> is null for versions created
-/// by migration or import. <c>presetId</c>/<c>presetVersion</c>/<c>presetName</c> are history (FR-129): the retired v2 preset
+/// by migration or import. <c>presetId</c>/<c>presetVersion</c>/<c>presetName</c> are history (FR-129): the retired 0.2.0 preset
 /// the version was pinned to before its migration to a composition, shown as "Preset &lt;id&gt;@&lt;version&gt; (retired,
 /// migrated)"; all <c>null</c> for versions never pinned to a preset.
 /// </summary>
@@ -54,7 +54,7 @@ public sealed record ReleaseVersionDto(
 /// version. <c>stack</c> (FR-117,
 /// "Change stack") is the new version's stack composition, validated like project create (<c>STACK_INCOMPATIBLE</c>,
 /// <c>VCS_MISMATCH</c>, <c>VALIDATION</c> on <c>stack.*</c>); omitted or <c>null</c>, the base version's composition is kept,
-/// re-pinned to the current catalog (<c>STACK_INCOMPATIBLE</c> if the catalog no longer allows it). FR-129: the v2
+/// re-pinned to the current catalog (<c>STACK_INCOMPATIBLE</c> if the catalog no longer allows it). FR-129: the 0.2.0
 /// <c>presetId</c> was removed (D-V4-4).
 /// </summary>
 public sealed record StartReleaseVersionRequest

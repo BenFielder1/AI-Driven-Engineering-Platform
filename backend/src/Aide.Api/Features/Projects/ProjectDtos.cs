@@ -20,7 +20,7 @@ namespace Aide.Api.Features.Projects;
 /// checkpoint within the current release version <c>releaseVersionId</c> (§4.10, D-V2-11: was <c>projectVersion</c>);
 /// <c>releasedVersion</c> is the highest released version (<c>null</c>: not released) and <c>developmentVersion</c> the
 /// version in development (<c>null</c>: none) (FR-62). <c>idea</c> is the request of the version in development.
-/// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are history (FR-129): the retired v2 preset the current release
+/// <c>presetId</c>, <c>presetName</c> and <c>presetVersion</c> are history (FR-129): the retired 0.2.0 preset the current release
 /// version was pinned to before it was migrated to a composition (all <c>null</c>: never pinned to a preset). <c>deploymentsEnabled</c>: the project has deployment settings (FR-88), so
 /// the Deployments page is in its navigation (§7.2). <c>stackPacks</c> are the pack ids of the current release version's
 /// stack composition (FR-117, §5; empty: no stack), e.g. <c>["fe-react-vite", "be-aspnet", "vcs-github"]</c>.
@@ -103,8 +103,8 @@ public enum SortOrder
 /// Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). <c>mode</c> picks the Git provider.
 /// <c>github_app</c>: a repo picked or created through the Tevrin GitHub App; send <c>installationId</c> and
 /// <c>repoFullName</c> (<c>owner/name</c>), no <c>repoUrl</c> or <c>token</c> (409 <c>GITHUB_APP_NOT_INSTALLED</c> when the
-/// App can't access the repo). <c>github_pat</c>: <c>repoUrl</c> plus an optional <c>token</c> (FR-83, the v1 behaviour).
-/// <c>local</c>: no remote. <c>provider</c> is the v1 name of <c>mode</c>, kept so v1 clients work: send one of the two;
+/// App can't access the repo). <c>github_pat</c>: <c>repoUrl</c> plus an optional <c>token</c> (FR-83, the 0.1.0 behaviour).
+/// <c>local</c>: no remote. <c>provider</c> is the 0.1.0 name of <c>mode</c>, kept so 0.1.0 clients work: send one of the two;
 /// when both are sent they must be equal (else 400 <c>VALIDATION</c> on <c>git.mode</c>).
 /// </summary>
 public sealed record CreateProjectGitRequest
@@ -124,7 +124,7 @@ public sealed record CreateProjectGitRequest
         }
     }
 
-    /// <summary>v1 alias of <c>mode</c> (deprecated; send <c>mode</c>).</summary>
+    /// <summary>0.1.0 alias of <c>mode</c> (deprecated; send <c>mode</c>).</summary>
     public GitProvider Provider
     {
         get => _provider;
@@ -261,7 +261,7 @@ public sealed record CreateProjectRequest
     /// (400 <c>STACK_INCOMPATIBLE</c> with <c>violations</c>; <c>VALIDATION</c> on <c>stack.*</c> fields) plus R5: the VCS
     /// layer is the repository's host (GitHub for <c>github_app</c>/<c>github_pat</c>; omitted, it is set from it; another
     /// one is 400 <c>VCS_MISMATCH</c>). It is pinned with the catalog version and hash on the version to develop. Omitted or
-    /// <c>null</c>: no stack ("No stack (general)"). FR-129: the v2 <c>presetId</c> was removed (D-V4-4).
+    /// <c>null</c>: no stack ("No stack (general)"). FR-129: the 0.2.0 <c>presetId</c> was removed (D-V4-4).
     /// </summary>
     public Stack.StackCompositionRequest? Stack { get; init; }
 
@@ -419,7 +419,7 @@ public sealed record UpdateMemberRoleRequest
 
 /// <summary>
 /// Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only <c>hasToken</c>. <c>branchName</c> is the
-/// project branch, once the working copy has been prepared. <c>mode</c> is the v2 name of <c>provider</c> (always equal).
+/// project branch, once the working copy has been prepared. <c>mode</c> is the 0.2.0 name of <c>provider</c> (always equal).
 /// For <c>github_app</c>, <c>installationId</c>, <c>repoId</c> and <c>repoFullName</c> identify the repo (else
 /// <c>null</c>). <c>appInstalledOnRepo</c> says whether the Tevrin GitHub App can access a <c>github_pat</c> project's repo
 /// (<c>null</c>: not checked, no App, or not a PAT project); <c>canSwitchToApp</c> is true when it can and the caller is an
@@ -519,7 +519,7 @@ public sealed record LlmBindingDto(
 
 /// <summary>
 /// LLM settings (FR-9, FR-22, FR-79). Keys are never returned. <c>hasApiKey</c> is true while a connection is bound
-/// (kept from v1); <c>binding</c> describes it (<c>null</c> when nothing is bound). <c>canBind</c> is true when the caller
+/// (kept from 0.1.0); <c>binding</c> describes it (<c>null</c> when nothing is bound). <c>canBind</c> is true when the caller
 /// is a project Owner and so may bind one of their own connections or unbind. <c>providers</c> lists every provider with
 /// whether it's usable and its system default model; only providers enabled on this deployment are listed (FR-157).
 /// </summary>
@@ -600,7 +600,7 @@ public sealed record UpdateGitSettingsRequest
 /// <summary>
 /// Partial update of the LLM settings (Owner). Omitted fields are unchanged; <c>modelsByAgent</c>, when sent, replaces the
 /// map. FR-79: <c>credentialId</c> binds one of the caller's own connections for the (new) provider; <c>null</c> unbinds.
-/// Changing the provider without sending <c>credentialId</c> drops a binding of the old provider. v1's per-project
+/// Changing the provider without sending <c>credentialId</c> drops a binding of the old provider. 0.1.0's per-project
 /// <c>apiKey</c>/<c>clearApiKey</c> are gone: keys are added under Account → Connections (FR-78).
 /// </summary>
 public sealed record UpdateLlmSettingsRequest

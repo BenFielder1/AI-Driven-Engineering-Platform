@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test'
 
 import { apiJson, registerViaApi, waitForDraft } from './support/api.ts'
-import { AGENT_TIMEOUT } from './support/v2.ts'
-import { browseFakeTracker, createLinearConnection, fakeItemCheckbox } from './support/v5.ts'
+import { AGENT_TIMEOUT } from './support/lifecycle.ts'
+import { browseFakeTracker, createLinearConnection, fakeItemCheckbox } from './support/tracker-inference.ts'
 
 /**
- * SPEC v5 §8 E2E "import items in the wizard, then see them as refinement inputs" (Fake LLM, Local Git, Fake tracker):
+ * SPEC 0.5.0 §8 E2E "import items in the wizard, then see them as refinement inputs" (Fake LLM, Local Git, Fake tracker):
  * FR-169 browse and tick, FR-171 chips and the required idea, FR-170 the locked snapshot, FR-172 the refinement run's input.
  */
 

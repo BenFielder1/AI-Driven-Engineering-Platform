@@ -21,19 +21,21 @@ afterEach(() => {
 })
 
 describe('FR-219 Changelog', () => {
-  it('FR219_order_and_count: v1–v6, newest first, with the PR merge dates and v6 in preview', () => {
-    expect(changelog.map((e) => e.version)).toEqual(['v6', 'v5', 'v4', 'v3', 'v2', 'v1'])
+  it('FR219_FR229_order_and_count: 0.1.0–0.6.0 (semver), newest first, with the PR merge dates and 0.6.0 in preview', () => {
+    expect(changelog.map((e) => e.version)).toEqual(['0.6.0', '0.5.0', '0.4.0', '0.3.0', '0.2.0', '0.1.0'])
     // Merge dates of PRs #28, #27, #23, #13 and #1 (gh pr view <n> --json mergedAt).
     expect(changelog.map((e) => e.date)).toEqual([null, '2026-11-04', '2026-11-01', '2026-10-24', '2026-10-22', '2026-10-10'])
     for (const entry of changelog) {
+      expect(entry.version, 'FR-229: x.y.z').toMatch(/^\d+\.\d+\.\d+$/)
       expect(entry.highlights.length, entry.version).toBeGreaterThanOrEqual(3)
       expect(entry.highlights.length, entry.version).toBeLessThanOrEqual(6)
-      expect(entry.asAide, entry.version).toBe(entry.version !== 'v6')
+      expect(entry.asAide, entry.version).toBe(entry.version !== '0.6.0')
+      // FR-229, D-V6-26: the docs history pages are named by version (history/0.N.0/).
       expect(entry.specHref).toBe(`${DOCS_URL}history/${entry.version}/`)
     }
   })
 
-  it('FR219_page: one entry per version with date, title, "(as AIDE)" for v1–v5 and a link to its docs page', async () => {
+  it('FR219_page: one entry per version with date, title, "(as AIDE)" for 0.1.0–0.5.0 and a link to its docs page', async () => {
     await renderRoute('/changelog')
     await screen.findByRole('heading', { level: 1, name: 'Changelog' })
     const entries = screen.getAllByTestId('changelog-entry')
@@ -43,7 +45,7 @@ describe('FR-219 Changelog', () => {
     expect(within(nth(entries, 0)).getByRole('heading', { level: 2 })).toHaveTextContent(/^Tevrin$/)
     expect(within(nth(entries, 1)).getByRole('heading', { level: 2 })).toHaveTextContent('(as AIDE)')
     expect(within(nth(entries, 1)).getByText('4 Nov 2026')).toHaveAttribute('datetime', '2026-11-04')
-    expect(within(nth(entries, 5)).getByRole('link', { name: /^v1 spec and notes/ })).toHaveAttribute('href', `${DOCS_URL}history/v1/`)
+    expect(within(nth(entries, 5)).getByRole('link', { name: /^0\.1\.0 spec and notes/ })).toHaveAttribute('href', `${DOCS_URL}history/0.1.0/`)
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   })
 

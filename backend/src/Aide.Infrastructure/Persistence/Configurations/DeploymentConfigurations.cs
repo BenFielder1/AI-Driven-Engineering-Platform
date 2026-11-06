@@ -56,7 +56,7 @@ internal sealed class DeploymentTargetConfiguration : IEntityTypeConfiguration<D
         builder.Property(t => t.RowVersion).IsXminRowVersion();
         builder.HasOne<Project>().WithMany().HasForeignKey(t => t.ProjectId).OnDelete(DeleteBehavior.Cascade);
 
-        // §5: null for standalone and v4 rows; deleting the group leaves the target standing.
+        // §5: null for standalone and 0.4.0 rows; deleting the group leaves the target standing.
         builder.HasOne<DeploymentGroup>().WithMany().HasForeignKey(t => t.GroupId).OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(t => t.GroupId);
 

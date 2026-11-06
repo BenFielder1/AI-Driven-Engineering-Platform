@@ -4,7 +4,7 @@ import { describeActivity } from './activity-summary'
 
 const d = (type: string, payload: Record<string, unknown>) => describeActivity({ type, payload, summary: 'server summary' })
 
-describe('FR-92: activity summaries of the v2 events', () => {
+describe('FR-92: activity summaries of the 0.2.0 events', () => {
   it('FR92_activity_summaries_describe_every_v2_event_from_its_payload', () => {
     expect(d('VERSION_STARTED', { version: '1.3.0', baseTag: 'v1.2.0' })).toBe('Version 1.3.0 started from v1.2.0')
     expect(d('CODEBASE_SUMMARY_CREATED', { type: 'codebase_summary', version: 2 })).toBe(

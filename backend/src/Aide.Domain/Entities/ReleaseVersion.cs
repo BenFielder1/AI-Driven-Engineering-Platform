@@ -19,7 +19,7 @@ public sealed class ReleaseVersion
 
     public ReleaseVersionStatus Status { get; set; } = ReleaseVersionStatus.InDevelopment;
 
-    /// <summary>The tag the version was released (or imported) with; v1 migrated versions keep their <c>v&lt;N&gt;-aide</c> tag.</summary>
+    /// <summary>The tag the version was released (or imported) with; 0.1.0 migrated versions keep their <c>v&lt;N&gt;-aide</c> tag.</summary>
     public string? Tag { get; set; }
 
     public string TagPrefix { get; set; } = DefaultTagPrefix;
@@ -31,7 +31,7 @@ public sealed class ReleaseVersion
 
     public string? MergeCommitSha { get; set; }
 
-    /// <summary>The working branch of the version, e.g. <c>aide/&lt;slug&gt;-&lt;short-id&gt;</c> (v1 name kept on migration).</summary>
+    /// <summary>The working branch of the version, e.g. <c>aide/&lt;slug&gt;-&lt;short-id&gt;</c> (0.1.0 name kept on migration).</summary>
     public string? BranchName { get; set; }
 
     /// <summary>The version's pull request (FR-36), merged by the release job (FR-64, FR-65).</summary>
@@ -61,7 +61,7 @@ public sealed class ReleaseVersion
     /// <summary>FR-117: the content hash of the stack catalog the composition was validated against.</summary>
     public string? CatalogHash { get; set; }
 
-    /// <summary>Legacy (§5, read-only since v4): the preset the version was pinned to (FR-74), replaced by the composition.</summary>
+    /// <summary>Legacy (§5, read-only since 0.4.0): the preset the version was pinned to (FR-74), replaced by the composition.</summary>
     public string? PresetId { get; set; }
 
     public string? PresetVersion { get; set; }

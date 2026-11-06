@@ -68,7 +68,7 @@ public static class DependencyInjection
         services.TryAddSingleton<NotificationOutboxInterceptor>();
         services.TryAddSingleton<ReleaseVersionStampingInterceptor>();
 
-        // FR-79: fills last4 of LLM keys migrated from v1 projects (needs ISecretProtector from AddAideDataProtection).
+        // FR-79: fills last4 of LLM keys migrated from 0.1.0 projects (needs ISecretProtector from AddAideDataProtection).
         services.AddHostedService<LlmCredentialLast4Backfill>();
 
         // LLM provider configuration (FR-22): defaults and which providers have a system key.

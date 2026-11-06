@@ -8,7 +8,7 @@ using Aide.Infrastructure.Git;
 namespace Aide.Infrastructure.Deployments;
 
 /// <summary>
-/// §4.15, §9: the v2 deterministic Fake of Vercel's API, now used for Vercel connection checks, pickers and the wizard's
+/// §4.15, §9: the 0.2.0 deterministic Fake of Vercel's API, now used for Vercel connection checks, pickers and the wizard's
 /// project link in Fake mode (deployments go through <see cref="FakeDeploymentProvider"/>) (<c>Deployments:Provider=Fake</c>; Development and E2E). No HTTP:
 /// any non-empty token is accepted (tokens starting <c>fake_invalid</c> are rejected; <c>fake_team</c> ones are
 /// team-scoped to <c>fake-team</c>), projects are created or linked as named, env writes get stable ids. A deployment is

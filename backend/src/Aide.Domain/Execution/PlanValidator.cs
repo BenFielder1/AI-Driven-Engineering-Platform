@@ -11,7 +11,7 @@ public sealed record DeclaredFile(string Path, FileAction Action);
 /// One step of a structured plan (FR-29, D6). <see cref="Agent"/> (FR-76, FR-124) is the agent that runs the step: a
 /// specialist of the composition, or <see cref="PlanAgents.Generalist"/> without a stack (validation fills it in when
 /// omitted). <see cref="Covers"/> (FR-76, §4.13) lists the requirement IDs (<c>FR-n</c>) the step implements.
-/// <see cref="LegacyAgent"/> (§4.23): the v2 preset key a migrated plan named, which validation mapped to <see cref="Agent"/>.
+/// <see cref="LegacyAgent"/> (§4.23): the 0.2.0 preset key a migrated plan named, which validation mapped to <see cref="Agent"/>.
 /// </summary>
 public sealed record PlanStep(
     int Number,
@@ -25,22 +25,22 @@ public sealed record PlanStep(
 {
     public IReadOnlyList<string> Covers { get; init; } = Covers ?? [];
 
-    /// <summary>§4.23: the v2 preset agent key the step was planned with (mapped to <see cref="Agent"/>), or <c>null</c>.</summary>
+    /// <summary>§4.23: the 0.2.0 preset agent key the step was planned with (mapped to <see cref="Agent"/>), or <c>null</c>.</summary>
     public string? LegacyAgent { get; init; }
 }
 
 /// <summary>
-/// FR-76, FR-124: the agents a plan step may name. Two modes (the v2 presets were retired by FR-129):
+/// FR-76, FR-124: the agents a plan step may name. Two modes (the 0.2.0 presets were retired by FR-129):
 /// <list type="bullet">
-/// <item>No stack ("No stack (general)", v1): only <see cref="Generalist"/> (the default when a step names none, so v1
+/// <item>No stack ("No stack (general)", 0.1.0): only <see cref="Generalist"/> (the default when a step names none, so 0.1.0
 /// plans stay valid).</item>
 /// <item>A stack composition (<see cref="ForStack"/>): the composition's specialists (FR-120) and its resolution, whose
 /// composed plan rules <see cref="PlanValidator.Validate"/> checks (<see cref="CompositionPlanValidator"/>); never
 /// <see cref="Generalist"/> except in optimisation plans.</item>
 /// </list>
-/// <see cref="RepoEmpty"/> feeds the scaffold-first rule. §4.23: with <see cref="Legacy"/> (a version migrated from a v2
-/// preset), a step may also name a v2 agent key, which validation maps to its v4 specialist (<see cref="PlanStep.LegacyAgent"/>
-/// keeps the v2 key).
+/// <see cref="RepoEmpty"/> feeds the scaffold-first rule. §4.23: with <see cref="Legacy"/> (a version migrated from a 0.2.0
+/// preset), a step may also name a 0.2.0 agent key, which validation maps to its 0.4.0 specialist (<see cref="PlanStep.LegacyAgent"/>
+/// keeps the 0.2.0 key).
 /// </summary>
 public sealed record PlanAgents(IReadOnlyCollection<string> Keys)
 {
@@ -69,7 +69,7 @@ public sealed record PlanAgents(IReadOnlyCollection<string> Keys)
     /// <summary>Whether <see cref="Generalist"/> is allowed (and the default) next to the specialists (optimisation plans).</summary>
     public bool GeneralistAllowed { get; init; }
 
-    /// <summary>§4.23: the v2 agent-key map and the frozen preset of a migrated version, or <c>null</c>.</summary>
+    /// <summary>§4.23: the 0.2.0 agent-key map and the frozen preset of a migrated version, or <c>null</c>.</summary>
     public LegacyPlanAgents? Legacy { get; init; }
 
     /// <summary>FR-124: the specialists of a resolved composition (never <see cref="Generalist"/>) and its plan rules.</summary>
@@ -103,7 +103,7 @@ public sealed record PlanAgents(IReadOnlyCollection<string> Keys)
     public string? DefaultAgent => Stack is null || GeneralistAllowed ? Generalist : null;
 }
 
-/// <summary>§4.23: what a migrated version's plans may still name: the v2 agent-key map and the frozen preset's globs.</summary>
+/// <summary>§4.23: what a migrated version's plans may still name: the 0.2.0 agent-key map and the frozen preset's globs.</summary>
 public sealed record LegacyPlanAgents(LegacyPresets Map, LegacyPreset? Preset);
 
 /// <summary>
@@ -121,9 +121,9 @@ public sealed record LegacyPlanAgents(LegacyPresets Map, LegacyPreset? Preset);
 /// </para>
 /// <para>
 /// FR-76, FR-124: a step's <c>agent</c> must be allowed by <see cref="PlanAgents"/> (without a stack: omitted, which
-/// becomes <c>generalist</c>, or <c>generalist</c>; §4.23: a migrated version's v2 keys are mapped); its <c>covers</c> must be requirement IDs (<c>FR-n</c>, normalised
+/// becomes <c>generalist</c>, or <c>generalist</c>; §4.23: a migrated version's 0.2.0 keys are mapped); its <c>covers</c> must be requirement IDs (<c>FR-n</c>, normalised
 /// and de-duplicated). §4.13: steps may modify files that already exist in the repository, and "a file is created by one
-/// step only" applies within the plan. With a composition, its plan rules follow the v1 rules
+/// step only" applies within the plan. With a composition, its plan rules follow the 0.1.0 rules
 /// (<see cref="CompositionPlanValidator.Errors"/>); its warnings come from <see cref="CompositionPlanValidator.Warnings"/>.
 /// </para>
 /// </summary>
@@ -153,8 +153,8 @@ public static class PlanValidator
             reasons.Add($"The plan has {steps.Count} steps; at most {MaxSteps} are allowed.");
         }
 
-        // §4.23: a plan of a migrated version naming any v2-only key is a v2 plan: every v2 key in it is mapped (test-engineer
-        // too, whose key didn't change), so its steps keep the frozen v2 globs for owned-path checks.
+        // §4.23: a plan of a migrated version naming any 0.2.0-only key is a 0.2.0 plan: every 0.2.0 key in it is mapped (test-engineer
+        // too, whose key didn't change), so its steps keep the frozen 0.2.0 globs for owned-path checks.
         var legacyPlan = agents.Legacy is { } legacyMap
             && steps.Any(s => s.Agent?.Trim() is { Length: > 0 } key && legacyMap.Map.IsLegacyKey(key) && !agents.Allows(key));
         var created = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -207,7 +207,7 @@ public static class PlanValidator
 
             var agent = string.IsNullOrWhiteSpace(step.Agent) ? agents.DefaultAgent : step.Agent.Trim();
 
-            // §4.23: a migrated plan's v2 key runs as its mapped specialist (decided by the declared files for devops-engineer).
+            // §4.23: a migrated plan's 0.2.0 key runs as its mapped specialist (decided by the declared files for devops-engineer).
             var legacy = legacyPlan && agent is not null && agents.Legacy is { } legacyAgents
                 ? legacyAgents.Map.Map(agent, step.Files.Select(f => f.Path))
                 : null;
@@ -230,7 +230,7 @@ public static class PlanValidator
                 }
 
                 // §4.6, FR-125: a generated plan declares no protected path, except a specialist's own (StackPathRules); an
-                // Owner-edited one may declare v1-protected paths, but never an immutable file that exists on the base commit
+                // Owner-edited one may declare 0.1.0-protected paths, but never an immutable file that exists on the base commit
                 // (with a composition, every data pack's migrations).
                 var existsOnBase = agents.BaseFiles?.Contains(path);
                 var refusal = agents.Stack is { } stack

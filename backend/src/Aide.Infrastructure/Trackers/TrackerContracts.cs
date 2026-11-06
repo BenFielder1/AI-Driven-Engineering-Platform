@@ -379,7 +379,7 @@ internal sealed class IssueTrackers(IOptions<TrackerOptions> options, IEnumerabl
 }
 
 /// <summary>
-/// FR-165, FR-166: Jira and Linear as platform connections: the v4 flow (validated on save, encrypted, re-test) on top of the tracker
+/// FR-165, FR-166: Jira and Linear as platform connections: the 0.4.0 flow (validated on save, encrypted, re-test) on top of the tracker
 /// adapter. A tracker failure becomes the matching platform failure.
 /// </summary>
 internal sealed class TrackerConnectionValidator(PlatformProvider provider, IIssueTrackers trackers) : IPlatformConnectionValidator

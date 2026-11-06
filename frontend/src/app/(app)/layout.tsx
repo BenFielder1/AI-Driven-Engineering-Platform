@@ -12,9 +12,9 @@ import { useLocation, useNavigate } from '../../lib/navigation'
 import { Providers } from '../providers'
 
 /**
- * Authenticated layout (v2 `_app`, FR-97): signed-out users go to /login?returnUrl=<path+search>. The check runs
+ * Authenticated layout (0.2.0 `_app`, FR-97): signed-out users go to /login?returnUrl=<path+search>. The check runs
  * whenever a URL is entered, against the cached `me`. `me` refetches when invalidated (e.g. FR-3 self-demotion closes
- * the admin area), as in v2; the API stays the authority.
+ * the admin area), as in 0.2.0; the API stays the authority.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   // The client providers sit here, not in the root layout, so marketing routes don't load them (SPEC §8).

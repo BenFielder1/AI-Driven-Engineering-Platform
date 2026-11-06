@@ -9,12 +9,12 @@ using Aide.IntegrationTests.Support;
 namespace Aide.IntegrationTests.Performance;
 
 /// <summary>
-/// §8 v5 Performance, measured as <see cref="V4PerformanceTests"/> does: p95 over sequential requests through the API against the
+/// §8 0.5.0 Performance, measured as <see cref="Performance_0_4_0_Tests"/> does: p95 over sequential requests through the API against the
 /// Testcontainers database, after a warm-up. The tracker timeouts (search, <c>sources/check</c>) are in
 /// <see cref="Trackers.TrackerLimitsTests"/>.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class V5PerformanceTests(AideApiFactory factory) : IAsyncLifetime
+public sealed class Performance_0_5_0_Tests(AideApiFactory factory) : IAsyncLifetime
 {
     private const int Samples = 40;
     private const int WarmUp = 5;

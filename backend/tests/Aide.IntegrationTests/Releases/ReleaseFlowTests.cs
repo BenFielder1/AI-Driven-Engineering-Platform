@@ -67,7 +67,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
         Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status);
-        // §4.10: release completion doesn't create a checkpoint (v1 incremented the project version to 7).
+        // §4.10: release completion doesn't create a checkpoint (0.1.0 incremented the project version to 7).
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal((Phase.Release, ProjectStatus.Released, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
         Assert.Equal(("0.1.0", (string?)null), (project.ReleasedVersion, project.DevelopmentVersion));
@@ -118,7 +118,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         Assert.True(noOp.GetProperty("alreadyTagged").GetBoolean());
         Assert.Equal((ReleaseStatus.Succeeded, main), ((await LatestAsync(fixture.Viewer.Client, id)).Status, (await LatestAsync(fixture.Viewer.Client, id)).MergeCommitSha));
 
-        // A tag of that name on a commit without the branch is never moved: FR-64 fails the release with TAG_EXISTS (v1 took
+        // A tag of that name on a commit without the branch is never moved: FR-64 fails the release with TAG_EXISTS (0.1.0 took
         // the next free v<N>-aide.<k>).
         await UnrecordAsync(app, id);
         await GitAsync(id, "tag", "-f", "-a", Tag, "-m", "Someone else's tag", "main^1");

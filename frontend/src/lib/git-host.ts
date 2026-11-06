@@ -4,7 +4,7 @@ import type { Schemas } from '../api/client'
  * How the review and release UI names a project's Git host and its change request (FR-138, FR-140). GitHub and
  * Bitbucket have pull requests; GitLab has merge requests and its own Releases. `release` is the host's release object
  * ("GitHub Release", "GitLab Release"), or `null` when the host has none (Bitbucket: an annotated tag, D-V4-7).
- * Unknown (no pull request recorded yet) and Local read as GitHub, the v1–v3 copy.
+ * Unknown (no pull request recorded yet) and Local read as GitHub, the 0.1.0–0.3.0 copy.
  */
 export interface GitHostTerms {
   /** "GitHub", "GitLab" or "Bitbucket". */

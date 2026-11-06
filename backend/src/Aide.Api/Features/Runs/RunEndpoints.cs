@@ -229,7 +229,7 @@ public static class RunEndpoints
     }
 
     /// <summary>
-    /// §4.23, FR-129: the v2 agent key each step was planned with (<c>legacy_agent_key</c>), for the runs of those steps
+    /// §4.23, FR-129: the 0.2.0 agent key each step was planned with (<c>legacy_agent_key</c>), for the runs of those steps
     /// (derived on read, no run column). Steps without one are left out.
     /// </summary>
     public static async Task<Dictionary<Guid, string>> LegacyAgentKeysAsync(AideDbContext db, IReadOnlyList<Guid> stepIds, CancellationToken cancellationToken)

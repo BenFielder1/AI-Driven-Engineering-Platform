@@ -53,7 +53,7 @@ function PlanWarnings({ warnings }: { warnings: readonly Schemas['ArtifactWarnin
   )
 }
 
-/** FR-120: the step's specialist: the generic specialist's display name with its key, or v1's Code Generator. */
+/** FR-120: the step's specialist: the generic specialist's display name with its key, or 0.1.0's Code Generator. */
 function Specialist({ agent }: { agent: string | null }) {
   if (!agent) {
     return <>Code Generator</>

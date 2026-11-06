@@ -2,22 +2,22 @@
 
 2026-10-23 · composed with `compose-stack`
 
-This file records the stack of **Tevrin itself** (formerly AIDE). v6 adds no pack either; it renames the product and adds a docs site. v5 added no pack and changes only the data engine (PostgreSQL 18). It is
-otherwise the v3 stack (Next.js frontend, Railway deploy). v2 used React + Vite with Docker Desktop Kubernetes only. v3 made two stack changes: **deploy to
-Railway**, and **convert the frontend to Next.js**. v4 adds no pack: its stack catalog describes the stacks of the
+This file records the stack of **Tevrin itself** (formerly AIDE). 0.6.0 adds no pack either; it renames the product and adds a docs site. 0.5.0 added no pack and changes only the data engine (PostgreSQL 18). It is
+otherwise the 0.3.0 stack (Next.js frontend, Railway deploy). 0.2.0 used React + Vite with Docker Desktop Kubernetes only. 0.3.0 made two stack changes: **deploy to
+Railway**, and **convert the frontend to Next.js**. 0.4.0 adds no pack: its stack catalog describes the stacks of the
 projects Tevrin builds, not Tevrin's own. `SPEC.md` gives the requirements. This file names the packs and the shared
 conventions.
 
 ## Packs
 | Layer | Pack (skill) | Path in repo | Notes |
 | --- | --- | --- | --- |
-| Frontend | `fe-nextjs` (UI for a separate backend) | `frontend/` | dev port 3000, container port 8080. Since v3; replaced `fe-react-vite` (v2: React 19 + Vite 8, TanStack Router, dev port 5173) |
-| Backend | `be-aspnet` | `backend/` | .NET 10 minimal APIs, dev port 5080, container port 8080. Unchanged from v2 |
+| Frontend | `fe-nextjs` (UI for a separate backend) | `frontend/` | dev port 3000, container port 8080. Since 0.3.0; replaced `fe-react-vite` (0.2.0: React 19 + Vite 8, TanStack Router, dev port 5173) |
+| Backend | `be-aspnet` | `backend/` | .NET 10 minimal APIs, dev port 5080, container port 8080. Unchanged from 0.2.0 |
 | Data | `data-efcore-postgres` | inside `backend/` (`Aide.Infrastructure`) | engine: PostgreSQL 18 everywhere (SPEC D-V5-1) · mode: ORM (EF Core owns migrations; bundle at `/app/efbundle`) |
-| VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for v5: `build/aide-v5` |
-| Deploy | `deploy-railway` (web + api + Postgres) | `.railway/railway.ts` | Added in v3. See Deploy below |
-| Local | `local-docker-desktop-k8s` | `deploy/k8s/`, `deploy/scripts/` | app URL: http://localhost:8080. Kept from v2; the `web` image becomes the Next.js standalone server |
-| Docs | Jekyll + `just-the-docs`, published to GitHub Pages | `docs/`, `.github/workflows/docs.yml` | Added in v6 (SPEC FR-225, FR-226). No stack pack: a static site built in CI |
+| VCS / CI | `vcs-github` | `.github/` | default branch: `main`. Build branch for 0.5.0: `build/aide-v5` |
+| Deploy | `deploy-railway` (web + api + Postgres) | `.railway/railway.ts` | Added in 0.3.0. See Deploy below |
+| Local | `local-docker-desktop-k8s` | `deploy/k8s/`, `deploy/scripts/` | app URL: http://localhost:8080. Kept from 0.2.0; the `web` image becomes the Next.js standalone server |
+| Docs | Jekyll + `just-the-docs`, published to GitHub Pages | `docs/`, `.github/workflows/docs.yml` | Added in 0.6.0 (SPEC FR-225, FR-226). No stack pack: a static site built in CI |
 
 ## Conventions shared by every pack
 - **API prefix:** backend routes live under `/api`, including SignalR hubs at `/api/hubs/`. Health: `/api/health/live`
@@ -72,8 +72,8 @@ npm ci --prefix .railway && npm --prefix .railway run typecheck
     timeout, healthcheck `/api/health/ready`, `ForwardedHeaders__ForwardLimit=2`
   - `web` also sets `TRUST_EDGE_FORWARDED=true`, so it keeps the edge's `X-Forwarded-Proto`/`-Host`
   - `postgres`: Railway Postgres (18), with backups on
-- **How deploys happen:** `.github/workflows/deploy.yml` deploys `preview` after green CI on `main` and `production` on
-  manual dispatch. It runs `railway config plan` (drift fails the deploy) and `deploy/scripts/smoke-remote.sh`. Ops
+- **How deploys happen:** `.github/workflows/deploy.yml` deploys `preview` after green CI on `main` and `production` when
+  a GitHub release `x.y.z` is published (SPEC FR-231; CLAUDE.md "Releases") or on manual dispatch. It runs `railway config plan` (drift fails the deploy) and `deploy/scripts/smoke-remote.sh`. Ops
   docs: `deploy/railway/README.md`, `deploy/railway/variables.md`.
 - **Config as code:** Railway IaC in `.railway/railway.ts` (`railway config plan` / `apply`). Not the deprecated
   `railway.json`/`railway.toml`. Set watch paths per service so a frontend change doesn't redeploy the API.
@@ -88,7 +88,7 @@ npm ci --prefix .railway && npm --prefix .railway run typecheck
   Never in git.
 
 ## Caveats
-Resolved in v3:
+Resolved in 0.3.0:
 - **WebSockets through Next.js:** resolved. The custom server `frontend/server.ts` proxies `/api` and the SignalR upgrades.
 - **Runtime upstream:** resolved. `BACKEND_URL` is read at runtime by `server.ts`, so one image runs on both targets.
 - **Security headers and CSP:** resolved. `server.ts` sets the headers and per-request CSP nonce, and redacts
@@ -106,7 +106,7 @@ Still open:
 - **Ollama and Fake are disabled on Railway** (`Llm__Providers__{Ollama,Fake}__Enabled=false`, SPEC FR-157). Local runs
   and CI keep all four LLM providers.
 
-## As built (v3, unchanged in v4)
+## As built (0.3.0, unchanged in 0.4.0)
 - **Frontend:** `frontend/` is on the Next.js App Router (`src/app/`, thin client pages). `server.ts` is a custom Node
   server (Node 24 type stripping) that serves Next, proxies `/api`, sets headers and logs. Standalone image, no nginx.
 - **Railway:** `.railway/railway.ts` defines `web`, `api` and `postgres` for `preview` and `production`. Deploys run

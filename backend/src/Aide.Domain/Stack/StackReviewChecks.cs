@@ -17,8 +17,8 @@ public sealed record StackReviewInput(IReadOnlyList<SourceFile> Files, IReadOnly
 
 /// <summary>
 /// FR-126, §4.18 "Review checks": the deterministic, language-independent text checks the selected packs register
-/// (<see cref="StackResolution.ReviewChecks"/>), with v1 §4.7 categories and severities; every finding is
-/// <see cref="FindingSource.Deterministic"/>, so it carries the §4.7 penalty. Mirrors v2's deterministic preset rules.
+/// (<see cref="StackResolution.ReviewChecks"/>), with 0.1.0 §4.7 categories and severities; every finding is
+/// <see cref="FindingSource.Deterministic"/>, so it carries the §4.7 penalty. Mirrors 0.2.0's deterministic preset rules.
 /// </summary>
 public static partial class StackReviewChecks
 {
@@ -459,7 +459,7 @@ public static partial class StackReviewChecks
     }
 
     /// <summary>
-    /// <c>deploy_branch_control</c> (major architecture, generalises v2 FR-89): each target's config file must stop the platform
+    /// <c>deploy_branch_control</c> (major architecture, generalises 0.2.0 FR-89): each target's config file must stop the platform
     /// building Tevrin branches on its own: <c>vercel.json</c> sets <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c>
     /// (<see cref="VercelConfigRules"/>); <c>netlify.toml</c> has a <c>[build] ignore</c> that skips <c>aide/*</c>. Cloudflare's
     /// branch control is the Workers preview trigger Tevrin configures, so it has no file to check. A config file missing
@@ -855,7 +855,7 @@ public static partial class StackReviewChecks
 }
 
 /// <summary>
-/// FR-126: the composed review checklist in the Code Review agent's reply (the composition equivalent of v2's
+/// FR-126: the composed review checklist in the Code Review agent's reply (the composition equivalent of 0.2.0's
 /// preset checklist). A failed item is reported as an agent violation whose message starts with the
 /// item's marker (<c>[C1]</c>, …, in <see cref="StackResolution.Checklist"/> order); such violations take the item's
 /// category and severity and stay agent findings without penalties.

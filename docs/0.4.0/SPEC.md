@@ -1,8 +1,8 @@
 # AIDE Platform — Specification (v4)
 
-2026-10-25 · Ben Fielder · **v4**, built on the v3 codebase in this repo. Earlier versions: v1 [`docs/v1/SPEC.md`](docs/v1/SPEC.md), v2 [`docs/v2/SPEC.md`](docs/v2/SPEC.md), v3 [`docs/v3/SPEC.md`](docs/v3/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: `docs/v4/DRAFT_SPEC.md` (drafted 2026-10-18 for a v3 that became the Next.js/Railway platform version) plus Ben's v4 brief (2026-10-25).
+2026-10-25 · Ben Fielder · **v4**, built on the v3 codebase in this repo. Earlier versions: v1 [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md), v2 [`docs/0.2.0/SPEC.md`](docs/0.2.0/SPEC.md), v3 [`docs/0.3.0/SPEC.md`](docs/0.3.0/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: `docs/0.4.0/DRAFT_SPEC.md` (drafted 2026-10-18 for a v3 that became the Next.js/Railway platform version) plus Ben's v4 brief (2026-10-25).
 
-> **How this spec relates to v1–v3.** v4 is an increment on the running v3 app. **Everything in `docs/v1/SPEC.md`, `docs/v2/SPEC.md` and `docs/v3/SPEC.md` stays in force unless this document amends or replaces it.** That covers FR-1 to FR-112, the domain rules (v1 §4.1–4.9, v2 §4.10–4.15), the data models, APIs, NFRs and deployment sections. Amended items are listed in §3.0 and marked *(amends FR-n)* where they change. **The v2 tech stack presets (v2 FR-74–FR-77, §4.11, §4.12) are replaced** by stack composition (§3.1–§3.4). New requirements continue from **FR-113**, domain rules from **§4.16**, decisions use `D-V4-n`, and milestones continue from **M23**. Earlier tests stay green unless an amendment changes the behaviour they assert. In that case, update the test and name the amendment in it.
+> **How this spec relates to v1–v3.** v4 is an increment on the running v3 app. **Everything in `docs/0.1.0/SPEC.md`, `docs/0.2.0/SPEC.md` and `docs/0.3.0/SPEC.md` stays in force unless this document amends or replaces it.** That covers FR-1 to FR-112, the domain rules (v1 §4.1–4.9, v2 §4.10–4.15), the data models, APIs, NFRs and deployment sections. Amended items are listed in §3.0 and marked *(amends FR-n)* where they change. **The v2 tech stack presets (v2 FR-74–FR-77, §4.11, §4.12) are replaced** by stack composition (§3.1–§3.4). New requirements continue from **FR-113**, domain rules from **§4.16**, decisions use `D-V4-n`, and milestones continue from **M23**. Earlier tests stay green unless an amendment changes the behaviour they assert. In that case, update the test and name the amendment in it.
 >
 > **Paths.** Links and paths are relative to the repo root. `../stack-packs/stack-packs/plugins/` is Ben's stack-packs marketplace (read-only reference; all plugins at 1.0.0, read 2026-10-25).
 
@@ -1341,7 +1341,7 @@ v1 D1–D21, v2 D-V2-1 to D-V2-15 and v3 D-V3-1 to D-V3-13 stand, except where a
 
 **M0 Baseline:**
 - The repo, CI, Railway and the v3 app already exist. **Do not re-scaffold.**
-- The v3 `SPEC.md` and `PROGRESS.md` are already in `docs/v3/`. Add the v4 row to CLAUDE.md's Versions table and work on `build/aide-v4`.
+- The v3 `SPEC.md` and `PROGRESS.md` are already in `docs/0.3.0/`. Add the v4 row to CLAUDE.md's Versions table and work on `build/aide-v4`.
 - Confirm CI is green on the baseline commit, and record the run URL in a new root `PROGRESS.md`. The gate runs on GitHub Actions (CLAUDE.md "Commit gate").
 
 1. **M23 LLM providers and long outputs** (independent; first, because it's small and unblocks real use on Railway):
@@ -1393,7 +1393,7 @@ v1 D1–D21, v2 D-V2-1 to D-V2-15 and v3 D-V3-1 to D-V3-13 stand, except where a
 
 ## Revision notes
 
-- 2026-10-25: v4 spec created from `docs/v4/DRAFT_SPEC.md` (2026-10-18) and Ben's v4 brief.
+- 2026-10-25: v4 spec created from `docs/0.4.0/DRAFT_SPEC.md` (2026-10-18) and Ben's v4 brief.
   - **Renumbering:** draft FR-94–FR-137 → FR-113–FR-156, D-V3-1–19 → D-V4-1–19, milestones M17–M24 → M24–M31.
   - **Updated against stack-packs as of 2026-10-25:**
     - section headings per layer, and heading-suffix matching

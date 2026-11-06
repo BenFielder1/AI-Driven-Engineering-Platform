@@ -1,16 +1,19 @@
 import { docsUrl } from './site-nav'
 
 /**
- * FR-219, FR-222: one entry per version, newest first. Dates are the merge dates of each version's PR on GitHub
- * (`gh pr view <n> --json mergedAt`): v1 #1, v2 #13, v3 #23 (the last of #16, #20–#23), v4 #27, v5 #28. v6 is not
- * merged yet. Highlights come from the version's spec and docs/history/v<N>.md. v1–v5 shipped under the name AIDE.
+ * FR-219, FR-222, FR-229: one entry per version, newest first, labelled with its semver release version (0.N.0 for the
+ * versions specified as vN). Dates are the merge dates of each version's PR on GitHub (`gh pr view <n> --json mergedAt`):
+ * 0.1.0 #1, 0.2.0 #13, 0.3.0 #23 (the last of #16, #20–#23), 0.4.0 #27, 0.5.0 #28. From 0.6.0 on, the version's final
+ * PR sets the date (the day it merges and is released, FR-230), since the tagged commit carries it. The newest entry's
+ * version must equal backend/Directory.Build.props (scripts/ci/check-version.sh). Highlights come from the version's
+ * spec and docs/history/<x.y.z>.md. 0.1.0–0.5.0 shipped under the name AIDE.
  */
 export interface ChangelogEntry {
   version: string
-  /** ISO date (YYYY-MM-DD) of the merge, or null while in preview. */
+  /** ISO date (YYYY-MM-DD) of the merge or release, or null until the version is released. */
   date: string | null
   title: string
-  /** Shipped under the old name (v1–v5). */
+  /** Shipped under the old name (0.1.0–0.5.0). */
   asAide: boolean
   highlights: readonly string[]
   specHref: string
@@ -20,7 +23,7 @@ export const IN_PREVIEW = 'In preview'
 
 export const changelog: readonly ChangelogEntry[] = [
   {
-    version: 'v6',
+    version: '0.6.0',
     date: null,
     title: 'Tevrin',
     asAide: false,
@@ -31,10 +34,10 @@ export const changelog: readonly ChangelogEntry[] = [
       'This public site, and redesigned sign-in and sign-up pages.',
       'A documentation site published to GitHub Pages.',
     ],
-    specHref: docsUrl('history/v6/'),
+    specHref: docsUrl('history/0.6.0/'),
   },
   {
-    version: 'v5',
+    version: '0.5.0',
     date: '2026-11-04',
     title: 'Trackers, co-authorship and stack inference',
     asAide: true,
@@ -45,10 +48,10 @@ export const changelog: readonly ChangelogEntry[] = [
       'Shared deployment projects: parts on one platform are set up together.',
       'PostgreSQL 18 for the product’s own database.',
     ],
-    specHref: docsUrl('history/v5/'),
+    specHref: docsUrl('history/0.5.0/'),
   },
   {
-    version: 'v4',
+    version: '0.4.0',
     date: '2026-11-01',
     title: 'Stacks, Git hosts and databases',
     asAide: true,
@@ -60,10 +63,10 @@ export const changelog: readonly ChangelogEntry[] = [
       'Managed databases: Supabase, Render Postgres and Railway Postgres.',
       'LLM provider and model chosen per project, with streaming and continued long answers.',
     ],
-    specHref: docsUrl('history/v4/'),
+    specHref: docsUrl('history/0.4.0/'),
   },
   {
-    version: 'v3',
+    version: '0.3.0',
     date: '2026-10-24',
     title: 'Next.js and Railway',
     asAide: true,
@@ -72,10 +75,10 @@ export const changelog: readonly ChangelogEntry[] = [
       'Deploys to Railway preview and production environments, defined as code.',
       'Smoke tests after every deploy, from GitHub Actions.',
     ],
-    specHref: docsUrl('history/v3/'),
+    specHref: docsUrl('history/0.3.0/'),
   },
   {
-    version: 'v2',
+    version: '0.2.0',
     date: '2026-10-22',
     title: 'Release versions and integrations',
     asAide: true,
@@ -87,10 +90,10 @@ export const changelog: readonly ChangelogEntry[] = [
       'Per-user LLM connections, and Vercel preview and production deployments.',
       'One page per lifecycle stage, with execution and review history.',
     ],
-    specHref: docsUrl('history/v2/'),
+    specHref: docsUrl('history/0.2.0/'),
   },
   {
-    version: 'v1',
+    version: '0.1.0',
     date: '2026-10-10',
     title: 'The governed lifecycle',
     asAide: true,
@@ -101,7 +104,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'Step-by-step code generation with the Execution Guardian, review cycles, merge and tag.',
       'Live updates, notifications with one-click approval links, admin pages and the CLI.',
     ],
-    specHref: docsUrl('history/v1/'),
+    specHref: docsUrl('history/0.1.0/'),
   },
 ]
 
@@ -115,5 +118,5 @@ export function formatChangelogDate(date: string | null): string {
   )
 }
 
-/** FR-219: the suffix on v1–v5 titles. */
+/** FR-219: the suffix on the 0.1.0–0.5.0 titles. */
 export const AS_AIDE = '(as AIDE)'

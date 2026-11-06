@@ -15,7 +15,7 @@ public class ReleaseRulesTests
     [InlineData("1.2.0")]
     [InlineData("release/1.2.0-rc.1")]
     [InlineData("v2.0.0-beta.1")]
-    [InlineData("v7-aide")] // v1 tags stay valid names
+    [InlineData("v7-aide")] // 0.1.0 tags stay valid names
     [InlineData("v7-aide.2")]
     public void FR64_Safe_tag_names_are_release_tags(string tag) => Assert.True(ReleaseRules.IsReleaseTag(tag));
 
@@ -43,7 +43,7 @@ public class ReleaseRulesTests
         Assert.False(ReleaseRules.DecideTag("v1.2.0", null).Value);
         Assert.True(ReleaseRules.DecideTag("v1.2.0", new ExistingReleaseTag("v1.2.0", ContainsRelease: true)).Value);
 
-        // The v1 suffix scheme (v<N>-aide.<k>) is gone: a tag on another commit fails the release; nothing is merged.
+        // The 0.1.0 suffix scheme (v<N>-aide.<k>) is gone: a tag on another commit fails the release; nothing is merged.
         var taken = ReleaseRules.DecideTag("v1.2.0", new ExistingReleaseTag("v1.2.0", ContainsRelease: false));
         Assert.Equal(ErrorCodes.TagExists, taken.Error!.Code);
     }

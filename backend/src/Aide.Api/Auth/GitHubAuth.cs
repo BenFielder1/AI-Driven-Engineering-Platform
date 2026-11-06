@@ -18,7 +18,7 @@ public sealed record GitHubAuthState(bool Enabled);
 
 /// <summary>
 /// FR-2, D-V2-7: GitHub sign-in with the built-in OAuth handler (no extra package), through
-/// <see cref="GitHubOAuthHandler"/>: the Tevrin GitHub App's user authorization once an App exists, else the v1 OAuth App.
+/// <see cref="GitHubOAuthHandler"/>: the Tevrin GitHub App's user authorization once an App exists, else the 0.1.0 OAuth App.
 /// The scheme is always registered; with neither configured the routes answer 404.
 /// </summary>
 public static partial class GitHubAuth
@@ -94,7 +94,7 @@ public static partial class GitHubAuth
                     context.HttpContext.RequestServices.GetRequiredService<GitHubSignIn>().CompleteAsync(context),
                 OnAccessDenied = context =>
                 {
-                    // The user declined on GitHub. Connect (FR-81) returns to its page; sign-in keeps the v1 redirect.
+                    // The user declined on GitHub. Connect (FR-81) returns to its page; sign-in keeps the 0.1.0 redirect.
                     context.Response.Redirect(RemoteFailureUrl(context.Properties, "access_denied"));
                     context.HandleResponse();
                     return Task.CompletedTask;

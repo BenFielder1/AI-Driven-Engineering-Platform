@@ -14,17 +14,17 @@ namespace Aide.Api.Features.Stack;
 /// <summary>
 /// FR-120–FR-128, §4.18: the stack a release version's agents run with, and what its rules need from the repository:
 /// whether it is empty (no base commit, or only starter files: scaffold first) and the files on the base commit (immutable
-/// <c>existingOnBase</c> paths; <c>null</c> when unknown). One of two modes (the v2 presets were retired by FR-129):
+/// <c>existingOnBase</c> paths; <c>null</c> when unknown). One of two modes (the 0.2.0 presets were retired by FR-129):
 /// <list type="bullet">
 /// <item><b>composition</b> (<see cref="Stack"/>): the version's pinned composition resolved against the shipped catalog
 /// (<see cref="StackResolver.Resolve"/>, with its <see cref="StackChange"/> and baseline). When it can't be resolved
 /// (the catalog no longer has a pinned option, or the catalog failed to load) <see cref="StackError"/> says why and the
 /// agent jobs fail with it;</item>
-/// <item><b>general</b> (no composition): "No stack (general)", v1 behaviour with the <c>generalist</c>. Nothing is read from Git.</item>
+/// <item><b>general</b> (no composition): "No stack (general)", 0.1.0 behaviour with the <c>generalist</c>. Nothing is read from Git.</item>
 /// </list>
 /// FR-128: <see cref="Detection"/> is the stack detector's report at the base commit (asked for with <c>detect</c>).
-/// §4.23: <see cref="Legacy"/> is set for a version migrated from a v2 preset (its <c>preset_id</c> is kept as history), so
-/// its in-flight plans may still name v2 agent keys.
+/// §4.23: <see cref="Legacy"/> is set for a version migrated from a 0.2.0 preset (its <c>preset_id</c> is kept as history), so
+/// its in-flight plans may still name 0.2.0 agent keys.
 /// </summary>
 public sealed record VersionStackContext(ReleaseVersion? Version, bool RepoEmpty, IReadOnlySet<string>? BaseFiles)
 {
@@ -46,7 +46,7 @@ public sealed record VersionStackContext(ReleaseVersion? Version, bool RepoEmpty
     /// <summary>FR-128: the detector's report at the base commit (with <c>detect</c>, a composition and a base commit), or <c>null</c>.</summary>
     public StackDetectionReport? Detection { get; init; }
 
-    /// <summary>§4.23: the v2 agent-key map and frozen preset globs of a version migrated from a preset, or <c>null</c>.</summary>
+    /// <summary>§4.23: the 0.2.0 agent-key map and frozen preset globs of a version migrated from a preset, or <c>null</c>.</summary>
     public LegacyPlanAgents? Legacy { get; init; }
 
     /// <summary>The agents and rules plan validation uses for a plan of <paramref name="type"/> (FR-124, §4.23).</summary>
@@ -106,7 +106,7 @@ public sealed partial class VersionStackLoader(
     }
 
     /// <summary>
-    /// The stack context of <paramref name="version"/>. A version without a composition reads nothing from Git (v1 rules
+    /// The stack context of <paramref name="version"/>. A version without a composition reads nothing from Git (0.1.0 rules
     /// need no base listing); detection (<paramref name="detect"/>) needs <paramref name="readBase"/>.
     /// </summary>
     public async Task<VersionStackContext> ForVersionAsync(ReleaseVersion version, CancellationToken cancellationToken, bool readBase = true, bool detect = false)

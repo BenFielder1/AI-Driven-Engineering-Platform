@@ -19,7 +19,7 @@ namespace Aide.Domain.Stack;
 /// <item>public env keys get the frontend pack's <c>publicEnvPrefix</c> (Angular: none); <c>appliesTo: backend</c> is the
 /// Next.js app in full-stack mode; <c>AIDE_RUN_MIGRATIONS</c> is computed (the app's host is serverless, i.e. its pack
 /// declares the key, and an ORM data pack has a database host), not taken from pack declarations;</item>
-/// <item>the scaffolder is exempt from the packs' exclusivity entries and order rules (v2 decision); exclusivity is never soft;</item>
+/// <item>the scaffolder is exempt from the packs' exclusivity entries and order rules (0.2.0 decision); exclusivity is never soft;</item>
 /// <item><c>rls_on_every_table</c>/<c>grants_for_exposed_tables</c> only in Supabase BaaS mode; <c>container_non_root</c> only
 /// when the backend runs in a container (a non-serverless backend host, or the Compose dev loop).</item>
 /// </list>

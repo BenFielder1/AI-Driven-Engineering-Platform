@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   poweredByHeader: false,
-  // The dev-mode indicator badge is not part of the v2 UI (and would show up in dev-loop screenshots and axe scans).
+  // The dev-mode indicator badge is not part of the 0.2.0 UI (and would show up in dev-loop screenshots and axe scans).
   devIndicators: false,
   outputFileTracingRoot: root,
   turbopack: { root },

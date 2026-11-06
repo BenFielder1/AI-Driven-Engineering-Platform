@@ -1,6 +1,6 @@
 /**
  * An in-memory router standing in for the Next.js App Router in Vitest (src/test/setup.ts mocks `next/navigation` and
- * `next/link` with it). One instance per test run, reset before each test. Its shape also covers what v2 tests read
+ * `next/link` with it). One instance per test run, reset before each test. Its shape also covers what 0.2.0 tests read
  * from the TanStack router: `router.state.location.{pathname,search,href}`, `router.history.back()`,
  * `router.navigate({ to | href })`.
  */
@@ -83,7 +83,7 @@ export class MemoryRouter {
       get length(): number {
         return router.entries.length
       },
-      /** v2 TanStack history: `location.state.__TSR_index` is the entry's index in the stack. */
+      /** 0.2.0 TanStack history: `location.state.__TSR_index` is the entry's index in the stack. */
       get location() {
         return { state: { __TSR_index: router.index } }
       },

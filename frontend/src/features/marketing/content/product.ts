@@ -1,7 +1,7 @@
 /**
- * FR-213, FR-212, FR-222: the Product page, one anchored section per feature area. Sources: the v1–v5 specs and the
- * docs guides (lifecycle §4.1–§4.5, artifacts §4.3, agents FR-23/FR-70/FR-180, Git hosts v2 §3.7 and v4 §3.5–§3.7,
- * trackers v5 §3.2, stacks v4 §3.1 and v5 §3.4, deployments v4 §3.8–§3.10 and v5 §3.5, notifications FR-47–FR-49,
+ * FR-213, FR-212, FR-222: the Product page, one anchored section per feature area. Sources: the 0.1.0–0.5.0 specs and the
+ * docs guides (lifecycle §4.1–§4.5, artifacts §4.3, agents FR-23/FR-70/FR-180, Git hosts 0.2.0 §3.7 and 0.4.0 §3.5–§3.7,
+ * trackers 0.5.0 §3.2, stacks 0.4.0 §3.1 and 0.5.0 §3.4, deployments 0.4.0 §3.8–§3.10 and 0.5.0 §3.5, notifications FR-47–FR-49,
  * admin FR-51, CLI FR-52 and docs/guides/cli.md).
  */
 export type ProductPreview = 'gates' | 'artifacts' | 'runs' | 'deployments'

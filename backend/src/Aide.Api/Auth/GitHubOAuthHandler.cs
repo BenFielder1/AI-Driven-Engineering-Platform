@@ -13,7 +13,7 @@ namespace Aide.Api.Auth;
 /// D-V2-7, FR-80, FR-81: the GitHub sign-in handler. Once a Tevrin GitHub App exists (configured or registered) the flow
 /// uses the App's user authorization — the App's client id and secret, no scopes, PKCE (S256) and the protected,
 /// correlated <c>state</c> of the built-in OAuth handler — and the token pair is kept for the GitHub connection. Without
-/// an App it is the v1 OAuth App flow, unchanged. With neither, the callback path isn't handled (the endpoint answers 404).
+/// an App it is the 0.1.0 OAuth App flow, unchanged. With neither, the callback path isn't handled (the endpoint answers 404).
 /// The App's credentials are read per request, so registering an App needs no restart.
 /// </summary>
 public sealed class GitHubOAuthHandler(IOptionsMonitor<OAuthOptions> options, ILoggerFactory logger, UrlEncoder encoder)
@@ -121,7 +121,7 @@ public sealed class GitHubOAuthHandler(IOptionsMonitor<OAuthOptions> options, IL
     private GitHubSignInResolver Resolver => Context.RequestServices.GetRequiredService<GitHubSignInResolver>();
 }
 
-/// <summary>D-V2-7: how GitHub sign-in works now (App, v1 OAuth App, or none), per request.</summary>
+/// <summary>D-V2-7: how GitHub sign-in works now (App, 0.1.0 OAuth App, or none), per request.</summary>
 public sealed class GitHubSignInResolver(IGitHubAppStore apps, GitHubAuthState oauth)
 {
     public Task<GitHubAppCredentials?> AppAsync(CancellationToken cancellationToken) => apps.GetAsync(cancellationToken);

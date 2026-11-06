@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 
 import type { A11yFixture } from './a11y-fixture.ts'
-import { stepHeading, wizardTo, type A11yTarget } from './a11y-v2-targets.ts'
+import { stepHeading, wizardTo, type A11yTarget } from './a11y-lifecycle-targets.ts'
 
 /** Picks an option of the Stack step's current layer and goes on to the next layer. */
 async function pickLayer(page: Page, option: string, nextLayer: string) {
@@ -17,12 +17,12 @@ async function composing(page: Page) {
 }
 
 /**
- * SPEC §8 v4: the axe checks of the Stack step (composing, with the forbidden options and their reasons open, and the
+ * SPEC §8 0.4.0: the axe checks of the Stack step (composing, with the forbidden options and their reasons open, and the
  * Deployment layer with the summary), the AI model section with its Advanced overrides open, and Settings → Stack and
  * Settings → Deployment of a project with hosts (target cards, database cards and the environment inventory). Connections
- * is the v2 target (its fixture user now has Vercel, Netlify and Render connections).
+ * is the 0.2.0 target (its fixture user now has Vercel, Netlify and Render connections).
  */
-export function v4Targets(fixture: () => A11yFixture): A11yTarget[] {
+export function stackTargets(fixture: () => A11yFixture): A11yTarget[] {
   const stackProject = (path: string) => () => `/projects/${fixture().stackProjectId}${path}`
   return [
     {

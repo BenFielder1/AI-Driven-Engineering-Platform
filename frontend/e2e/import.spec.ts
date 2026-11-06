@@ -12,8 +12,8 @@ import {
   headerBadges,
   openStage,
   waitForPhase,
-} from './support/v2.ts'
-import { createRailwayConnection, deploymentGroups } from './support/v5.ts'
+} from './support/lifecycle.ts'
+import { createRailwayConnection, deploymentGroups } from './support/tracker-inference.ts'
 
 /**
  * NFR-TEST2 (SPEC §8 "E2E imports a Local 'existing' repo") on the E2E deployment (Fake LLM, Local Git, seeded
@@ -219,7 +219,7 @@ test('NFR-TEST2, FR-70–FR-73, §4.13: a Local repo is imported at v0.2.0 and 0
 })
 
 /**
- * FR-178–FR-185 on the E2E deployment (SPEC v5 §8 "infer a stack, fill a blank, edit a finding, pick one Railway group,
+ * FR-178–FR-185 on the E2E deployment (SPEC 0.5.0 §8 "infer a stack, fill a blank, edit a finding, pick one Railway group,
  * approve, continue to Refinement" and "reject a profile and see a re-run"): a Local import with Infer (preselected) starts
  * in Analysis. The Fake Stack Analyst's `[fake-stack:unknown]` marker in the version request leaves the backend `unknown`.
  * The Owner rejects the first draft (the analyst re-runs with the feedback), answers Needs your input (the layers the

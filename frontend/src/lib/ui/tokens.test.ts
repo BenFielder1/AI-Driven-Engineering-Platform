@@ -19,7 +19,7 @@ describe('oklch colour maths', () => {
     expect(contrastRatio('oklch(1 0 0)', 'oklch(0 0 0)')).toBeCloseTo(21, 1)
   })
 
-  it('composites a tint over a surface in sRGB (the v2 axe run: #007f84 at 15% over the light sidebar)', () => {
+  it('composites a tint over a surface in sRGB (the 0.2.0 axe run: #007f84 at 15% over the light sidebar)', () => {
     const surface = compositeOver('oklch(0.50 0.19 195)', 0.15, 'oklch(0.98 0.003 260)')
     // axe measured 3.74:1 for the old light primary on this surface (#d3e7e9).
     expect(contrastOnSrgb('oklch(0.50 0.19 195)', surface)).toBeCloseTo(3.7, 1)
@@ -145,7 +145,7 @@ describe('FR-202 (amends FR-53): index.css declares exactly the tokens in tokens
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*animation-duration: 0\.01ms !important/)
   })
 
-  it('FR202_no_orbs: the v2/v3 primary glow utility is gone', () => {
+  it('FR202_no_orbs: the 0.2.0/0.3.0 primary glow utility is gone', () => {
     expect(css).not.toContain('.glow-primary')
   })
 })

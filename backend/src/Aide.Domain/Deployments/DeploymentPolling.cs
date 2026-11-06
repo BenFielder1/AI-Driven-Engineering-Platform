@@ -135,7 +135,7 @@ public static class ProductionDeploymentRules
 {
     /// <summary>
     /// How long after recording the deployment Tevrin looks for the platform's own deployment of the SHA before creating one
-    /// (FR-149: matched within 60 s; v2 waited 30 s).
+    /// (FR-149: matched within 60 s; 0.2.0 waited 30 s).
     /// </summary>
     public static readonly TimeSpan AdoptWindow = TimeSpan.FromSeconds(60);
 
@@ -196,7 +196,7 @@ public static class PreviewReviewRules
         _ => DeploymentStatus.Canceled,
     };
 
-    /// <summary>FR-147: review waits up to 30 minutes for the whole preview rollout (the v2 deployment ceiling).</summary>
+    /// <summary>FR-147: review waits up to 30 minutes for the whole preview rollout (the 0.2.0 deployment ceiling).</summary>
     public static readonly TimeSpan WaitLimit = TimeSpan.FromMinutes(30);
 
     public static readonly TimeSpan RecheckInterval = TimeSpan.FromSeconds(10);

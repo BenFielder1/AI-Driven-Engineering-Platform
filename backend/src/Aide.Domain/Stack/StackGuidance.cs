@@ -6,10 +6,10 @@ namespace Aide.Domain.Stack;
 
 /// <summary>
 /// FR-123, FR-124, FR-126, FR-128: the composition text the Spec Generator, Plan Generator, Code Review, Repository Analyst
-/// and refinement agents get (the composition equivalent of v2's preset guidance), as the value of their
+/// and refinement agents get (the composition equivalent of 0.2.0's preset guidance), as the value of their
 /// templates' stack placeholder in the system prompt (the composition is the platform's trusted content, not input data).
 /// Every block starts with the rendered composition summary (<see cref="StackResolution.Summary"/>, whose heading is
-/// <see cref="Heading"/>). The sub-headings are v2's preset ones, so one reader (the Fake provider's) finds
+/// <see cref="Heading"/>). The sub-headings are 0.2.0's preset ones, so one reader (the Fake provider's) finds
 /// the required sections, the agent catalogue and the checklist in either.
 /// </summary>
 public static class StackGuidance

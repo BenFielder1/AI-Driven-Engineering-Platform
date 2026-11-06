@@ -1,10 +1,10 @@
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
 
 import { apiJson } from './api.ts'
-import { AGENT_TIMEOUT } from './v2.ts'
+import { AGENT_TIMEOUT } from './lifecycle.ts'
 
 /**
- * SPEC v5 §8 E2E helpers on the E2E deployment: the Fake issue tracker (`Trackers:Provider=Fake`: container FAKE with
+ * SPEC 0.5.0 §8 E2E helpers on the E2E deployment: the Fake issue tracker (`Trackers:Provider=Fake`: container FAKE with
  * items FAKE-1 (an epic) to FAKE-12, FAKE-11 done), the Fake Stack Analyst (a `[fake-stack:unknown]` marker in the
  * version request leaves the backend `unknown`) and the seeded Local repository under the import root.
  */

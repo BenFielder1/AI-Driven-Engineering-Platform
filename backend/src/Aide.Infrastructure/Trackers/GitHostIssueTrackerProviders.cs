@@ -381,7 +381,7 @@ public sealed class GitHubIssueTrackerProvider(GitHubApi api) : IIssueTrackerPro
 }
 
 /// <summary>
-/// FR-168, §4.26: GitLab Issues on the connection's Admin-registered instance, under the v4 SSRF guard (the <c>gitlab</c> handler). A
+/// FR-168, §4.26: GitLab Issues on the connection's Admin-registered instance, under the 0.4.0 SSRF guard (the <c>gitlab</c> handler). A
 /// container is the project's path. Keyset pagination. Epics aren't read: items group by milestone (a <c>milestone:…</c> label) and label.
 /// </summary>
 public sealed class GitLabIssueTrackerProvider(IGitLabClients clients) : IIssueTrackerProvider

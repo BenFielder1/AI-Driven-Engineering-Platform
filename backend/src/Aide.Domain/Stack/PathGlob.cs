@@ -4,8 +4,8 @@ using System.Text.RegularExpressions;
 namespace Aide.Domain.Stack;
 
 /// <summary>
-/// §4.16, §4.18: a path glob of a pack or the frozen v2 globs (owned paths, plan rules, protected paths), matched against normalised repository paths
-/// (forward slashes, no leading <c>./</c>, case-insensitive like v1 <c>PathRules</c>, so a case-insensitive checkout
+/// §4.16, §4.18: a path glob of a pack or the frozen 0.2.0 globs (owned paths, plan rules, protected paths), matched against normalised repository paths
+/// (forward slashes, no leading <c>./</c>, case-insensitive like 0.1.0 <c>PathRules</c>, so a case-insensitive checkout
 /// can't sneak past a protected path). A pattern with a <c>/</c> is anchored at the repository root;
 /// one without (<c>.env*</c>, <c>package.json</c>) matches that file name in any folder, as in <c>.gitignore</c>.
 /// <list type="bullet">

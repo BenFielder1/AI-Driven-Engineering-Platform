@@ -52,7 +52,7 @@ public sealed class ForwardedHeadersTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR105_Default_ForwardLimit_1_uses_the_right_most_entry_as_in_v2()
+    public async Task FR105_Default_ForwardLimit_1_uses_the_right_most_entry_as_in_0_2_0()
     {
         await using var app = Behind(forwardLimit: null);
         using var client = app.CreateDefaultClient(AideApiFactory.BaseUri);

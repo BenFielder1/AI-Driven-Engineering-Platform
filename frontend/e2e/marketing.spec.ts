@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { password, registerViaApi } from './support/api.ts'
 
 /**
- * v6 M41: the marketing site and the root/auth routing (FR-210, FR-211, FR-221, §4.32). Visitors use a fresh
+ * 0.6.0 M41: the marketing site and the root/auth routing (FR-210, FR-211, FR-221, §4.32). Visitors use a fresh
  * (signed-out) context; signed-in rows register through the API (support/api.ts's register lock).
  */
 

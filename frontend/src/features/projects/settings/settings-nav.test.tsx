@@ -27,7 +27,7 @@ describe('Settings secondary nav (SPEC §7.2)', () => {
     expect(screen.getByRole('link', { name: 'General', current: 'page' })).toBeInTheDocument()
   })
 
-  it('FR53_settings_nav: a v1 ?tab= link lands on its section, and the links are sub-routes', async () => {
+  it('FR53_settings_nav: a 0.1.0 ?tab= link lands on its section, and the links are sub-routes', async () => {
     signInAsOwner()
     const project = seedProject()
     const { router } = await renderRoute(`/projects/${project.id}/settings?tab=git`)

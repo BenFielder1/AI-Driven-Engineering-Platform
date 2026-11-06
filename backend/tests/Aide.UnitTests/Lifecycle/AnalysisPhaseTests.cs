@@ -204,13 +204,13 @@ public class AnalysisPhaseTests
         Assert.Equal(ErrorCodes.NotReleased, LifecycleStateMachine.Apply(InAnalysis(), TransitionRequest.NewVersion(), ProfileApproved).Error!.Code);
     }
 
-    // ---- rollback → a checkpoint in analysis: v1 rollback rules; rolled_back status applies ----
+    // ---- rollback → a checkpoint in analysis: 0.1.0 rollback rules; rolled_back status applies ----
 
     [Theory]
     [InlineData(Phase.Refinement)]
     [InlineData(Phase.Planning)]
     [InlineData(Phase.Review)]
-    public void FR179_S4_27_Rollback_to_a_checkpoint_in_analysis_follows_v1_rules(Phase from)
+    public void FR179_S4_27_Rollback_to_a_checkpoint_in_analysis_follows_0_1_0_rules(Phase from)
     {
         var result = LifecycleStateMachine.Apply(new LifecycleState(from, PhaseOrder.StatusFor(from), 4), TransitionRequest.Rollback(Phase.Analysis, 1), LifecycleSnapshot.Empty);
 

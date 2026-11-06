@@ -1,8 +1,8 @@
 # AIDE Platform — Specification (v2)
 
-2026-10-15 · Ben Fielder · **v2**, built on the v1 codebase in this repo. v1: [`docs/v1/SPEC.md`](docs/v1/SPEC.md), build log [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md)
+2026-10-15 · Ben Fielder · **v2**, built on the v1 codebase in this repo. v1: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md), build log [`docs/0.1.0/PROGRESS.md`](docs/0.1.0/PROGRESS.md)
 
-> **How this spec relates to v1.** v2 is an increment on the running v1 app, not a rewrite. **Everything in `docs/v1/SPEC.md` stays in force unless this document amends or replaces it.** That covers FR-1 to FR-52, §4 domain rules, §5 data model, §6 API, §8 NFRs and §9 deployment. Amended v1 items are listed in §3.0 and marked *(amends FR-n)* where they change. New requirements continue the numbering from **FR-53**, so every ID is unique across versions. v1 tests stay green unless an amendment changes the behaviour they assert; in that case, update the test and name the amendment in the test.
+> **How this spec relates to v1.** v2 is an increment on the running v1 app, not a rewrite. **Everything in `docs/0.1.0/SPEC.md` stays in force unless this document amends or replaces it.** That covers FR-1 to FR-52, §4 domain rules, §5 data model, §6 API, §8 NFRs and §9 deployment. Amended v1 items are listed in §3.0 and marked *(amends FR-n)* where they change. New requirements continue the numbering from **FR-53**, so every ID is unique across versions. v1 tests stay green unless an amendment changes the behaviour they assert; in that case, update the test and name the amendment in the test.
 
 ## 1. Overview
 
@@ -39,7 +39,7 @@ Success means:
 
 ## 2. Users and permissions
 
-The v1 roles are unchanged (`docs/v1/SPEC.md` §2). v2 adds:
+The v1 roles are unchanged (`docs/0.1.0/SPEC.md` §2). v2 adds:
 
 | Role | Can (new in v2) | Cannot |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ Auth: v1 cookie auth, API tokens and antiforgery are unchanged. **GitHub sign-in
 
 ### 3.1 UI redesign and lifecycle navigation
 
-1. **FR-53** The app uses the v2 design system and app shell (§7.1): a collapsible side navigation, a sticky header with breadcrumbs, the ⌘K command palette, a notifications bell, the theme menu and the user menu. The AIDE logo comes from `docs/v2/brand/`. The v1 top-bar shell is removed.
+1. **FR-53** The app uses the v2 design system and app shell (§7.1): a collapsible side navigation, a sticky header with breadcrumbs, the ⌘K command palette, a notifications bell, the theme menu and the user menu. The AIDE logo comes from `docs/0.2.0/brand/`. The v1 top-bar shell is removed.
    - Given a signed-in user at 1440 px, when any page loads, then the sidebar shows the AIDE lockup, the search trigger and the workspace nav, and the header shows breadcrumbs matching the route.
    - Given a 375 px viewport, when the user opens the menu, then the navigation opens as a left drawer and no horizontal scroll appears.
 2. **FR-54** Inside a project, the sidebar switches to **project mode**:
@@ -637,7 +637,7 @@ Port the *design*, not the Next.js code. AIDE stays React + Vite + TanStack Rout
   - Primary glow on primary CTAs.
   - A `prefers-reduced-motion` kill switch.
 - **Logo:**
-  - `docs/v2/brand/aide-mark.svg` (mark) and `aide-logo.svg` (lockup) are the source.
+  - `docs/0.2.0/brand/aide-mark.svg` (mark) and `aide-logo.svg` (lockup) are the source.
   - The app renders them as React components (`BrandMark`, `BrandLockup`) with gradient stops bound to `--chart-1`/`--chart-2`.
   - `frontend/public/favicon.svg` is replaced by the mark.
   - The lockup is in the sidebar (mark only when collapsed), on auth pages and in the mobile drawer.
@@ -741,7 +741,7 @@ v1 §9 applies, plus:
 
 ## 10. Decisions
 
-v1 decisions D1–D21 (`docs/v1/SPEC.md` §10) stand. v2 decisions:
+v1 decisions D1–D21 (`docs/0.1.0/SPEC.md` §10) stand. v2 decisions:
 
 - **D-V2-1 — UI rebuilt on shadcn/Radix with the Space Worm design language.** Old (v1): hand-rolled components, top bar plus project tabs, SVG chart. Why: a consistent SaaS feel, accessible primitives, less custom UI code, and charts that scale to cycle history. The Vite/TanStack stack is unchanged.
 - **D-V2-2 — Semver release versions + per-version checkpoints.** Old: one integer "project version" that incremented per stage and on release, shown to users as the version. New: users see the semver they chose, which changes only when a new version starts. Checkpoints keep rollback precise. Release doesn't create a checkpoint. Tags are the user's version (`v1.2.0`) instead of `v<N>-aide`.
@@ -851,7 +851,7 @@ Behaviour that differs from, or adds to, the sections above. Each item is a deci
 
 **M0 Baseline (replaces the kit's scaffold phase):**
 - The repo, CI, deploy scripts and the v1 app already exist. **Do not re-scaffold.**
-- Branch `build/aide-v2` from `main`. Run the full gate and `deploy-local.sh`, and record the baseline in a new root `PROGRESS.md` (v1's is in `docs/v1/`).
+- Branch `build/aide-v2` from `main`. Run the full gate and `deploy-local.sh`, and record the baseline in a new root `PROGRESS.md` (v1's is in `docs/0.1.0/`).
 
 1. **M9 Design system + shell:**
    - Tokens, fonts, shadcn primitives, logo components, favicon, sidebar/header/drawer, command palette, nav config, restyle of all v1 pages onto the new primitives, project-mode sidebar and stage stepper (FR-53, FR-54).
@@ -876,4 +876,4 @@ Behaviour that differs from, or adds to, the sections above. Each item is a deci
 
 ## Revision notes
 
-- 2026-10-15: v2 spec created. The v1 spec and build log moved to `docs/v1/`. Decisions D-V2-3, -4, -5, -6 and -10 were confirmed with Ben in the spec interview. Research sources: GitHub Apps docs (permissions, user and installation tokens, manifest flow, rules API), Vercel REST API (projects, deployments, env, promote, access tokens, limits), `BenFielder1/claude-kits@14ada86`, and Space Worm Analytics UI.
+- 2026-10-15: v2 spec created. The v1 spec and build log moved to `docs/0.1.0/`. Decisions D-V2-3, -4, -5, -6 and -10 were confirmed with Ben in the spec interview. Research sources: GitHub Apps docs (permissions, user and installation tokens, manifest flow, rules API), Vercel REST API (projects, deployments, env, promote, access tokens, limits), `BenFielder1/claude-kits@14ada86`, and Space Worm Analytics UI.

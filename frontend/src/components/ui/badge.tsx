@@ -13,7 +13,7 @@ const toneMap: Record<BadgeTone, StatusTone> = {
 }
 
 /**
- * A small status label, drawn as the v2 StatusBadge (dot plus tinted pill, SPEC §7.1). Colour is decorative only: the
+ * A small status label, drawn as the 0.2.0 StatusBadge (dot plus tinted pill, SPEC §7.1). Colour is decorative only: the
  * text always carries the meaning.
  */
 export function Badge({ tone = 'neutral', children, className = '' }: { tone?: BadgeTone; children: ReactNode; className?: string }) {

@@ -13,7 +13,7 @@ Tevrin runs on Railway as one project with two environments, `preview` and `prod
 | Environment | Trigger |
 | --- | --- |
 | `preview` | `.github/workflows/deploy.yml` runs after green CI on `main` |
-| `production` | Manual dispatch of the same workflow, with approval |
+| `production` | Publishing a GitHub release `x.y.z` ([Releases](releases.md)), or manual dispatch of the same workflow. Both wait for approval |
 
 Each deploy runs the read-only `railway config plan` (drift fails the deploy) and then the smoke test. You don't deploy from your machine. These two commands are the ones to run by hand:
 

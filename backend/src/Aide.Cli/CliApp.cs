@@ -32,7 +32,7 @@ internal static class CliApp
     /// <summary>FR-200: the tool's command.</summary>
     public const string CommandName = "tevrin";
 
-    /// <summary>FR-200: the deprecated alias (the v1–v5 command), kept for v6.</summary>
+    /// <summary>FR-200: the deprecated alias (the 0.1.0–0.5.0 command), kept for 0.6.0.</summary>
     public const string AliasCommandName = "aide";
 
     /// <summary>FR-200: what the <c>aide</c> alias prints to stderr before behaving exactly like <c>tevrin</c>.</summary>

@@ -10,7 +10,7 @@ const tones: Record<AgentRunStatus, BadgeTone> = {
   cancelled: 'warning',
 }
 
-/** FR-23: run status as text (colour is decorative). A running run shows "Running…": nothing streams in v1. */
+/** FR-23: run status as text (colour is decorative). A running run shows "Running…": nothing streams in 0.1.0. */
 export function RunStatusBadge({ status }: { status: AgentRunStatus }) {
   return <Badge tone={tones[status]}>{runStatusLabels[status]}</Badge>
 }

@@ -1,5 +1,5 @@
 /**
- * FR-98: the same-origin `/api` proxy of the web server (replaces the v2 nginx `location /api/` blocks), including
+ * FR-98: the same-origin `/api` proxy of the web server (replaces the 0.2.0 nginx `location /api/` blocks), including
  * WebSocket upgrades for the SignalR hubs under `/api/hubs/`. Hand-rolled on node:http so the rules are explicit:
  * - method, path, query, body (≤ 10 MB, else 413), Cookie/Authorization/X-XSRF-TOKEN and the upstream status, headers
  *   and Set-Cookie pass through unchanged (no cookie path/domain rewriting; Host is kept, like nginx `$http_host`)

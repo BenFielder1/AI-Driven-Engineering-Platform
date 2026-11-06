@@ -30,7 +30,7 @@ describe('Overview → next action and stage stepper (FR-11, FR-12, FR-54)', () 
       '6Release (upcoming)',
     ])
     expect(within(list).getAllByRole('link').filter((l) => l.getAttribute('aria-current') === 'step')).toHaveLength(1)
-    // One stepper per page: the v1 timelines are gone.
+    // One stepper per page: the 0.1.0 timelines are gone.
     expect(screen.queryByRole('list', { name: 'Lifecycle phases' })).not.toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Phase timeline' })).not.toBeInTheDocument()
     expect(currentTimelineStep()).toHaveTextContent('Planning')

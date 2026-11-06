@@ -4,7 +4,7 @@ import { ActivityFeed } from './activity-feed'
 import { panelClass } from '../../components/shared/panel-class'
 import { cn } from '../../lib/utils'
 
-/** /projects/:id/activity (SPEC §7.2): the full activity feed with its category filter (v1 FR-50). */
+/** /projects/:id/activity (SPEC §7.2): the full activity feed with its category filter (0.1.0 FR-50). */
 export function ActivityPage() {
   const { project, releaseVersionId } = useProjectAccess()
   useDocumentTitle(`Activity · ${project.name}`)

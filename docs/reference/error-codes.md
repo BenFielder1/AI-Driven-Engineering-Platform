@@ -40,5 +40,5 @@ The CLI maps some of these to exit codes: see the [CLI guide](../guides/cli.md).
 
 | Version | Error table |
 | --- | --- |
-| v1 to v5 | Section 6, API, in [v1](../v1/SPEC.md), [v2](../v2/SPEC.md), [v3](../v3/SPEC.md), [v4](../v4/SPEC.md) and [v5](../v5/SPEC.md) |
-| v6 | No new codes. Copy that names the product now says Tevrin |
+| 0.1.0 to 0.5.0 | Section 6, API, in [0.1.0](../0.1.0/SPEC.md), [0.2.0](../0.2.0/SPEC.md), [0.3.0](../0.3.0/SPEC.md), [0.4.0](../0.4.0/SPEC.md) and [0.5.0](../0.5.0/SPEC.md) |
+| 0.6.0 | No new codes. Copy that names the product now says Tevrin |

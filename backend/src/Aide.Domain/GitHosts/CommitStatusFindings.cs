@@ -25,11 +25,11 @@ public sealed record GitLabCommitStatus(string Name, string? Status, bool AllowF
 public sealed record BitbucketCommitStatus(string Name, string? State, string? Url);
 
 /// <summary>
-/// FR-139 (amends FR-85): GitLab and Bitbucket CI statuses as a deterministic review input, in v2's check shape
+/// FR-139 (amends FR-85): GitLab and Bitbucket CI statuses as a deterministic review input, in 0.2.0's check shape
 /// (<see cref="CheckObservation"/>) and finding shape (<see cref="ReviewFinding"/>). A failed status the host requires for
 /// merge (GitLab "pipelines must succeed" and the job not <c>allow_failure</c>; Bitbucket
 /// <c>require_passing_builds_to_merge</c>) is a major <c>testing</c> finding (−0.10); other failures are minor. Pending
-/// statuses are waited for up to 15 minutes, re-checked every 30 seconds (v2 <see cref="ExternalCheckRules"/>). Pure.
+/// statuses are waited for up to 15 minutes, re-checked every 30 seconds (0.2.0 <see cref="ExternalCheckRules"/>). Pure.
 /// </summary>
 public static class CommitStatusFindings
 {
@@ -68,7 +68,7 @@ public static class CommitStatusFindings
         _ => (CheckRunStatus.InProgress, null),
     };
 
-    /// <summary>FR-139: wait for pending statuses up to 15 minutes (v2 rule, <see cref="ExternalCheckRules.Decide"/>).</summary>
+    /// <summary>FR-139: wait for pending statuses up to 15 minutes (0.2.0 rule, <see cref="ExternalCheckRules.Decide"/>).</summary>
     public static ChecksWaitDecision Wait(IEnumerable<CheckObservation> checks, DateTimeOffset? waitingSince, DateTimeOffset now) =>
         ExternalCheckRules.Decide(checks, waitingSince, now);
 

@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { expect, test } from '@playwright/test'
 
 test('the API is ready behind the same-origin /api proxy', async ({ request }) => {
@@ -10,7 +10,7 @@ test('the API is ready behind the same-origin /api proxy', async ({ request }) =
 test('FR-211: a signed-out visitor to / gets the marketing Home, with Sign in and Get started', async ({ page }) => {
   await page.goto('/')
 
-  // v6: `/` is the marketing Home for visitors (it redirected to /login before v6).
+  // 0.6.0: `/` is the marketing Home for visitors (it redirected to /login before 0.6.0).
   await expect(page).toHaveURL(/\/$/)
   await expect(
     page.getByRole('heading', { level: 1, name: 'Ship software with AI agents, under human control.', exact: true }),

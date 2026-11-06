@@ -8,8 +8,8 @@ using Aide.Infrastructure.Agents;
 namespace Aide.UnitTests.Specs;
 
 /// <summary>
-/// FR-75, §4.13, FR-70, FR-76: the Fake agents' replies pass the v2 validation in every spec mode, so Fake + Local flows
-/// (v1 E2E, two-version and import E2E) still run end to end.
+/// FR-75, §4.13, FR-70, FR-76: the Fake agents' replies pass the 0.2.0 validation in every spec mode, so Fake + Local flows
+/// (0.1.0 E2E, two-version and import E2E) still run end to end.
 /// </summary>
 public class FakeIterationResponderTests
 {

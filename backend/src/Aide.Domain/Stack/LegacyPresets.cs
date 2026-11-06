@@ -1,9 +1,9 @@
 namespace Aide.Domain.Stack;
 
 /// <summary>
-/// §4.23, FR-129: the frozen v2 preset data kept for migrated projects (<c>Stack/legacy/presets.json</c>, loaded with the
-/// catalog by <see cref="StackCatalogLoader"/>). It never changes again: plans locked before the upgrade keep their v2 agent
-/// keys, which are mapped to v4 specialists at run time (<see cref="Map"/>), and their owned-path checks use the v2 globs
+/// §4.23, FR-129: the frozen 0.2.0 preset data kept for migrated projects (<c>Stack/legacy/presets.json</c>, loaded with the
+/// catalog by <see cref="StackCatalogLoader"/>). It never changes again: plans locked before the upgrade keep their 0.2.0 agent
+/// keys, which are mapped to 0.4.0 specialists at run time (<see cref="Map"/>), and their owned-path checks use the 0.2.0 globs
 /// (<see cref="LegacyPreset.Owns"/>) until the plan is replaced, so a locked plan doesn't suddenly produce
 /// <c>AGENT_SCOPE</c> warnings.
 /// </summary>
@@ -12,18 +12,18 @@ public sealed record LegacyPresets(IReadOnlyList<LegacyAgentKeyRule> AgentKeys, 
     /// <summary>No legacy data (a catalog without <c>legacy/</c>).</summary>
     public static LegacyPresets Empty { get; } = new([], new Dictionary<string, LegacyPreset>(StringComparer.Ordinal));
 
-    /// <summary>The frozen preset <paramref name="presetId"/>, or <c>null</c> (no id, or not a v2 preset).</summary>
+    /// <summary>The frozen preset <paramref name="presetId"/>, or <c>null</c> (no id, or not a 0.2.0 preset).</summary>
     public LegacyPreset? Find(string? presetId) =>
         presetId is not null && Presets.TryGetValue(presetId, out var preset) ? preset : null;
 
-    /// <summary>Whether <paramref name="agentKey"/> is a v2 preset agent key (§4.23 table).</summary>
+    /// <summary>Whether <paramref name="agentKey"/> is a 0.2.0 preset agent key (§4.23 table).</summary>
     public bool IsLegacyKey(string? agentKey) => agentKey is not null && AgentKeys.Any(r => r.From == agentKey);
 
     /// <summary>
-    /// §4.23: the v4 specialist a step planned with the v2 key <paramref name="legacyKey"/> runs as, decided by its declared
+    /// §4.23: the 0.4.0 specialist a step planned with the 0.2.0 key <paramref name="legacyKey"/> runs as, decided by its declared
     /// files where the table says so (<c>devops-engineer</c>: <c>ci-engineer</c> when every declared file is under
     /// <c>.github/**</c>, else <c>deploy-engineer</c>; a step with both gets <c>deploy-engineer</c> and a warning).
-    /// <c>null</c> when <paramref name="legacyKey"/> isn't a v2 key.
+    /// <c>null</c> when <paramref name="legacyKey"/> isn't a 0.2.0 key.
     /// </summary>
     public LegacyAgentMapping? Map(string? legacyKey, IEnumerable<string> declaredFiles)
     {
@@ -47,7 +47,7 @@ public sealed record LegacyPresets(IReadOnlyList<LegacyAgentKeyRule> AgentKeys, 
                 return new LegacyAgentMapping(
                     rule.To,
                     rule.From,
-                    $"The v2 step agent '{rule.From}' declares files under {byFiles.Glob.Pattern} and elsewhere, so it runs as '{rule.To}' rather than '{byFiles.To}'.");
+                    $"The 0.2.0 step agent '{rule.From}' declares files under {byFiles.Glob.Pattern} and elsewhere, so it runs as '{rule.To}' rather than '{byFiles.To}'.");
             }
         }
 
@@ -58,7 +58,7 @@ public sealed record LegacyPresets(IReadOnlyList<LegacyAgentKeyRule> AgentKeys, 
     /// §4.23 at run time: <see cref="Map"/>, then, when the mapped specialist isn't in the stack (<paramref name="specialists"/>:
     /// e.g. <c>deploy-engineer</c> without a deploy host), the rule's other specialist that is, else
     /// <see cref="Execution.PlanAgents.Generalist"/> (the base prompt), with a warning. <c>null</c> when
-    /// <paramref name="legacyKey"/> isn't a v2 key.
+    /// <paramref name="legacyKey"/> isn't a 0.2.0 key.
     /// </summary>
     public LegacyAgentMapping? MapInPlay(string? legacyKey, IEnumerable<string> declaredFiles, IReadOnlyCollection<string> specialists)
     {
@@ -79,13 +79,13 @@ public sealed record LegacyPresets(IReadOnlyList<LegacyAgentKeyRule> AgentKeys, 
         return mapped with
         {
             AgentKey = runAs,
-            Warning = $"The v2 step agent '{mapped.LegacyAgentKey}' maps to '{mapped.AgentKey}', which this stack doesn't have, so it runs as '{runAs}'.",
+            Warning = $"The 0.2.0 step agent '{mapped.LegacyAgentKey}' maps to '{mapped.AgentKey}', which this stack doesn't have, so it runs as '{runAs}'.",
         };
     }
 }
 
 /// <summary>
-/// A row of the §4.23 agent-key table: v2 key <see cref="From"/> runs as <see cref="To"/>, unless every declared file of the
+/// A row of the §4.23 agent-key table: 0.2.0 key <see cref="From"/> runs as <see cref="To"/>, unless every declared file of the
 /// step matches one of <see cref="ByFiles"/> (first match wins), which then names the specialist.
 /// </summary>
 public sealed record LegacyAgentKeyRule(string From, string To, IReadOnlyList<LegacyAgentByFiles> ByFiles);
@@ -94,12 +94,12 @@ public sealed record LegacyAgentKeyRule(string From, string To, IReadOnlyList<Le
 public sealed record LegacyAgentByFiles(PathGlob Glob, string To);
 
 /// <summary>
-/// A frozen v2 preset (§4.23): its id, name and last shipped version, and the owned globs of each v2 agent key (the v2
+/// A frozen 0.2.0 preset (§4.23): its id, name and last shipped version, and the owned globs of each 0.2.0 agent key (the 0.2.0
 /// <c>agents[].owns</c>, with <c>!</c> exclusions), used for the owned-path checks of its migrated in-flight plans.
 /// </summary>
 public sealed record LegacyPreset(string Id, string Name, string Version, IReadOnlyDictionary<string, GlobSet> Owns)
 {
-    /// <summary>The owned globs of v2 agent <paramref name="legacyKey"/>, or <c>null</c> when the preset had no such agent.</summary>
+    /// <summary>The owned globs of 0.2.0 agent <paramref name="legacyKey"/>, or <c>null</c> when the preset had no such agent.</summary>
     public GlobSet? OwnsOf(string? legacyKey) =>
         legacyKey is not null && Owns.TryGetValue(legacyKey, out var owns) ? owns : null;
 
@@ -109,7 +109,7 @@ public sealed record LegacyPreset(string Id, string Name, string Version, IReadO
 }
 
 /// <summary>
-/// §4.23: how a step planned with a v2 agent key runs: as <see cref="AgentKey"/> (a v4 specialist), recording
+/// §4.23: how a step planned with a 0.2.0 agent key runs: as <see cref="AgentKey"/> (a 0.4.0 specialist), recording
 /// <see cref="LegacyAgentKey"/>; <see cref="Warning"/> when the declared files made the choice ambiguous.
 /// </summary>
 public sealed record LegacyAgentMapping(string AgentKey, string LegacyAgentKey, string? Warning);

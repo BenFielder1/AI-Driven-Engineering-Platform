@@ -8,10 +8,10 @@ namespace Aide.Domain.Deployments;
 /// <summary>
 /// FR-143, FR-144: the checks of <c>PUT …/settings/deployment/targets/:component</c> that need no platform call. Pure.
 /// <list type="bullet">
-/// <item>The provider must be the composition's host for the component (<c>STACK_INCOMPATIBLE</c>); v2's <c>fake</c>
+/// <item>The provider must be the composition's host for the component (<c>STACK_INCOMPATIBLE</c>); 0.2.0's <c>fake</c>
 /// provider is also accepted in Fake mode.</item>
 /// <item>GitHub Pages needs a GitHub repository (R9, <c>STACK_INCOMPATIBLE</c>).</item>
-/// <item>A Local Git project may use targets only with the Fake provider (v2 decision kept, <c>VALIDATION</c>).</item>
+/// <item>A Local Git project may use targets only with the Fake provider (0.2.0 decision kept, <c>VALIDATION</c>).</item>
 /// <item>A connection where the provider needs one; <c>create</c> or <c>link</c>, not both (GitHub Pages: neither needed);
 /// a valid resource name or id. Neither is a <b>rebind</b> when the target already has a resource on the same provider
 /// (<c>keepsResource</c>): the resource is kept and re-verified with the new connection.</item>

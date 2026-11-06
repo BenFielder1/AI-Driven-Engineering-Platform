@@ -3,7 +3,7 @@ import { expect, type BrowserContext } from '@playwright/test'
 import { apiJson } from './api.ts'
 
 /**
- * SPEC §8 v4 E2E helpers on the Fake deployment and database providers (§9): platform connections, deployment targets and
+ * SPEC §8 0.4.0 E2E helpers on the Fake deployment and database providers (§9): platform connections, deployment targets and
  * managed databases set up through the real API (the jobs run on the API's own workers), and the rollouts they produce.
  */
 

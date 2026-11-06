@@ -18,7 +18,7 @@ using Aide.UnitTests.Stack;
 namespace Aide.UnitTests.Common;
 
 /// <summary>
-/// v6 rename (§4.29): what people and Git hosts see says Tevrin (FR-198, FR-199), and the identifiers users already hold keep
+/// 0.6.0 rename (§4.29): what people and Git hosts see says Tevrin (FR-198, FR-199), and the identifiers users already hold keep
 /// their <c>aide</c> names (FR-201).
 /// </summary>
 public sealed partial class Fr198To201RenameTests

@@ -13,7 +13,7 @@ export const refinementKeys = {
   detail: (id: string) => projectKeys.refinement(id),
 }
 
-/** A round still waiting for its draft (nothing streams in v1, SPEC §8). */
+/** A round still waiting for its draft (nothing streams in 0.1.0, SPEC §8). */
 export const isRoundPending = (round: Pick<RefinementRound, 'status'> | null | undefined) =>
   round?.status === 'queued' || round?.status === 'running'
 

@@ -17,7 +17,7 @@ function Frame({ inShell, children }: { inShell: boolean; children: ReactNode })
   )
 }
 
-/** The v2 not-found page (unknown URLs; `not-found.tsx` files render it). */
+/** The 0.2.0 not-found page (unknown URLs; `not-found.tsx` files render it). */
 export function NotFoundView({ inShell = false }: { inShell?: boolean }) {
   return (
     <Frame inShell={inShell}>
@@ -30,7 +30,7 @@ export function NotFoundView({ inShell = false }: { inShell?: boolean }) {
   )
 }
 
-/** The v2 root error state (`error.tsx` files and the route guards render it). */
+/** The 0.2.0 root error state (`error.tsx` files and the route guards render it). */
 export function RouteErrorView({ error, onRetry, inShell = false }: { error: unknown; onRetry?: () => void; inShell?: boolean }) {
   return (
     <Frame inShell={inShell}>

@@ -15,7 +15,7 @@ public sealed record RolloutMigrationOutcome(MigrationRunStatus Status, string? 
 /// <summary>
 /// FR-147, FR-153: the deterministic review findings of a preview rollout, pure.
 /// <list type="bullet">
-/// <item>A failed build is a critical <c>architecture</c> finding, "&lt;Host&gt; preview build failed" (v2's "Vercel preview build
+/// <item>A failed build is a critical <c>architecture</c> finding, "&lt;Host&gt; preview build failed" (0.2.0's "Vercel preview build
 /// failed"), with the log tail as evidence.</item>
 /// <item>A failed pre-deploy (the platform-run migration, FR-154) is a critical <c>architecture</c> finding, "Backend preview
 /// pre-deploy migration failed", with the pre-deploy log.</item>

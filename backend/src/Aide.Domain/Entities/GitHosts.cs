@@ -50,7 +50,7 @@ public enum GitHostKind
 /// <summary>A provider identity linked to a Tevrin user, used for sign-in matching (FR-131, FR-134, D-V4-18); table
 /// <c>user_external_logins</c>. Unique by (provider, instance, external user id), with a NULL instance (GitHub, or a removed
 /// instance) counted as one value. Existing <c>users.github_id</c> values are backfilled as
-/// <see cref="ExternalLoginProvider.Github"/> rows; <c>users.github_id</c> stays for v2 code paths.</summary>
+/// <see cref="ExternalLoginProvider.Github"/> rows; <c>users.github_id</c> stays for 0.2.0 code paths.</summary>
 public sealed class UserExternalLogin
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
