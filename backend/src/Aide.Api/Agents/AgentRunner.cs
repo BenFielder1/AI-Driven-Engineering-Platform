@@ -68,7 +68,7 @@ public sealed record AgentRunRequest
     /// </summary>
     public string? SpecialistAgentKey { get; init; }
 
-    /// <summary>§4.23: the v2 agent key the step was planned with (its <c>legacy_agent_key</c>), recorded in <c>RUN_STARTED</c>.</summary>
+    /// <summary>§4.23: the 0.2.0 agent key the step was planned with (its <c>legacy_agent_key</c>), recorded in <c>RUN_STARTED</c>.</summary>
     public string? LegacyAgentKey { get; init; }
 
     /// <summary>
@@ -669,7 +669,7 @@ public sealed partial class AgentRunner(
 /// What a run stores in <c>agent_runs.output</c>: the provider's text, why it stopped, and the run's warnings (FR-70,
 /// FR-71; omitted when none). FR-160: <see cref="MaxOutputTokens"/> is the output limit its calls used; FR-162:
 /// <see cref="Continuations"/> is how many continuations its answer took (0–5). Both are <c>null</c> for runs stored before
-/// v4 (no migration: they live in the output JSON).
+/// 0.4.0 (no migration: they live in the output JSON).
 /// </summary>
 public sealed record RunOutput(string Text, string StopReason)
 {

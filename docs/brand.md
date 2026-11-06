@@ -11,10 +11,10 @@ Tevrin's mark is a hexagon of six segments. The six segments are the six lifecyc
 
 | File | Use |
 | --- | --- |
-| [Lockup, light](v6/brand/tevrin-lockup-light.svg) | Mark and wordmark on light backgrounds |
-| [Lockup, dark](v6/brand/tevrin-lockup-dark.svg) | Mark and wordmark on dark backgrounds |
+| [Lockup, light](0.6.0/brand/tevrin-lockup-light.svg) | Mark and wordmark on light backgrounds |
+| [Lockup, dark](0.6.0/brand/tevrin-lockup-dark.svg) | Mark and wordmark on dark backgrounds |
 
-The files live in `docs/v6/brand/`. The README shows the light lockup with a `#gh-light-mode-only` fragment and the dark lockup with `#gh-dark-mode-only`, so the logo follows the theme the reader has chosen on GitHub. Other Markdown viewers (such as an editor preview) ignore the fragments and show both lockups.
+The files live in `docs/0.6.0/brand/`. The README shows the light lockup with a `#gh-light-mode-only` fragment and the dark lockup with `#gh-dark-mode-only`, so the logo follows the theme the reader has chosen on GitHub. Other Markdown viewers (such as an editor preview) ignore the fragments and show both lockups.
 
 ## Colours
 

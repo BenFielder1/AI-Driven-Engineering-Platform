@@ -1,13 +1,13 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { readFileSync } from 'node:fs'
 
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
 
 import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
-import { v2Targets, wizardTo } from './support/a11y-v2-targets.ts'
-import { v4Targets } from './support/a11y-v4-targets.ts'
-import { v5Targets } from './support/a11y-v5-targets.ts'
+import { lifecycleTargets, wizardTo } from './support/a11y-lifecycle-targets.ts'
+import { stackTargets } from './support/a11y-stack-targets.ts'
+import { importTargets } from './support/a11y-import-targets.ts'
 
 /**
  * NFR-A11Y: automated WCAG 2.2 AA checks (axe-core) on the core flows, in the light and the dark theme (the app
@@ -161,13 +161,13 @@ const targets: Target[] = [
     signedIn: true,
     ready: (p) => p.getByRole('table', { name: /^Agent runs, newest first/ }),
   },
-  ...v2Targets(fixture),
-  ...v4Targets(fixture),
-  ...v5Targets(fixture),
+  ...lifecycleTargets(fixture),
+  ...stackTargets(fixture),
+  ...importTargets(fixture),
 ]
 
 /**
- * NFR-A11Y2 (FR-53, FR-54): the v2 shell in its interactive states: the sidebar in project mode with the header's
+ * NFR-A11Y2 (FR-53, FR-54): the 0.2.0 shell in its interactive states: the sidebar in project mode with the header's
  * live indicator and stage stepper (1440 px), the drawer opened at 375 px, the command palette (with its FR-209 Actions
  * group), and the user menu (which holds the theme choice and the Docs link since FR-206). Each state is checked in both
  * themes.
@@ -352,7 +352,7 @@ test('FR-54: stepper ArrowLeft moves back, Home goes to the first stage and arro
 })
 
 /**
- * SPEC §8 v4: from the layer heading (FR-114 moves focus there on every sub-step), Tab reaches the choice's radios, the
+ * SPEC §8 0.4.0: from the layer heading (FR-114 moves focus there on every sub-step), Tab reaches the choice's radios, the
  * arrow keys move through them and Space chooses one.
  */
 async function pickWithKeyboard(page: Page, choice: string, option: string) {

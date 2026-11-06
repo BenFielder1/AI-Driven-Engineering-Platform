@@ -10,7 +10,7 @@ import { FAVICON_MARK, faviconSvg, lockupSvg, MARK, markSvg, narrowestGap } from
 
 // Vitest runs from frontend/.
 const frontend = process.cwd()
-const docsBrand = path.resolve(frontend, '../docs/v6/brand')
+const docsBrand = path.resolve(frontend, '../docs/0.6.0/brand')
 const publicDir = path.join(frontend, 'public')
 
 const read = (file: string) => readFileSync(file, 'utf8')
@@ -110,7 +110,7 @@ describe('FR-196: brand geometry', () => {
 describe('FR-196: static brand files (written by `npm run brand:assets`)', () => {
   const { light, dark } = BRAND_COLORS
 
-  it('FR196_files_fresh: docs/v6/brand and public/brand hold exactly what the generator writes', () => {
+  it('FR196_files_fresh: docs/0.6.0/brand and public/brand hold exactly what the generator writes', () => {
     const expected: Record<string, string> = {
       'tevrin-mark-light.svg': markSvg(light),
       'tevrin-mark-dark.svg': markSvg(dark),
@@ -122,7 +122,7 @@ describe('FR-196: static brand files (written by `npm run brand:assets`)', () =>
       'tevrin-lockup-mono-dark.svg': lockupSvg(dark, { mono: true }),
     }
     for (const [name, svg] of Object.entries(expected)) {
-      expect(read(path.join(docsBrand, name)), `docs/v6/brand/${name}`).toBe(svg)
+      expect(read(path.join(docsBrand, name)), `docs/0.6.0/brand/${name}`).toBe(svg)
       expect(read(path.join(publicDir, 'brand', name)), `public/brand/${name}`).toBe(svg)
     }
     expect(read(path.join(docsBrand, 'tevrin-favicon.svg'))).toBe(faviconSvg(light, dark))

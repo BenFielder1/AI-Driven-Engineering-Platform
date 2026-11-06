@@ -9,7 +9,7 @@ public sealed record GitHostTarget(IGitProvider Provider, GitConnectionSettings 
 
 /// <summary>
 /// FR-138–FR-140: resolves the §4.19 host provider of a project whose Git work goes through the binding Owner's
-/// connection (GitLab, Bitbucket). <c>null</c> for GitHub and Local projects, which keep their v2 paths.
+/// connection (GitLab, Bitbucket). <c>null</c> for GitHub and Local projects, which keep their 0.2.0 paths.
 /// </summary>
 public sealed class GitHostTargets(AideDbContext db, IGitProviderResolver providers)
 {

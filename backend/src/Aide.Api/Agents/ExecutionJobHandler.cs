@@ -55,8 +55,8 @@ public interface IExecutionCompletionHook
 /// with its resolved pack skills (<see cref="StackPrompt"/>; the run records <c>agent_key</c>, <c>packs</c> and
 /// <c>catalog_version</c>), and the Guardian adds the packs' protected paths, every data pack's base-commit migrations being
 /// immutable. A <c>generalist</c> step (an optimisation plan) runs the base prompt. §4.23, FR-129: a step of a plan locked
-/// before the upgrade that still names a v2 agent key runs as its mapped specialist (<see cref="LegacyPresets.MapInPlay"/>);
-/// the step keeps the v2 key in <c>legacy_agent_key</c>, which its runs report as <c>legacyAgentKey</c>.
+/// before the upgrade that still names a 0.2.0 agent key runs as its mapped specialist (<see cref="LegacyPresets.MapInPlay"/>);
+/// the step keeps the 0.2.0 key in <c>legacy_agent_key</c>, which its runs report as <c>legacyAgentKey</c>.
 /// </summary>
 public sealed partial class ExecutionJobHandler(
     AideDbContext db,
@@ -157,8 +157,8 @@ public sealed partial class ExecutionJobHandler(
     }
 
     /// <summary>
-    /// §4.23: a step whose agent isn't a specialist of the version's stack but is (or was, <c>legacy_agent_key</c>) a v2 agent
-    /// key is pointed at its mapped specialist: <c>agent_key</c> becomes the v4 key and <c>legacy_agent_key</c> keeps the v2
+    /// §4.23: a step whose agent isn't a specialist of the version's stack but is (or was, <c>legacy_agent_key</c>) a 0.2.0 agent
+    /// key is pointed at its mapped specialist: <c>agent_key</c> becomes the 0.4.0 key and <c>legacy_agent_key</c> keeps the 0.2.0
     /// one (saved with the step's attempt). The mapping's warning (ambiguous or not in the stack), or <c>null</c>.
     /// </summary>
     private string? MapLegacyAgent(ExecutionStep step, VersionStackContext version)
@@ -171,7 +171,7 @@ public sealed partial class ExecutionJobHandler(
         var map = version.Legacy?.Map ?? catalog.Catalog?.Legacy;
         if (stack.Specialist(step.AgentKey) is not null)
         {
-            // Migrated by RetirePresets (agent_key already v4): re-derive the "devops step with mixed files" warning.
+            // Migrated by RetirePresets (agent_key already 0.4.0): re-derive the "devops step with mixed files" warning.
             return step.LegacyAgentKey is { } migrated ? map?.Map(migrated, step.DeclaredFiles.Select(f => f.Path))?.Warning : null;
         }
 
@@ -488,7 +488,7 @@ public sealed partial class ExecutionJobHandler(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Step {StepNumber} names the v2 agent {LegacyAgentKey}; it runs as {AgentKey} (SPEC 4.23)")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Step {StepNumber} names the 0.2.0 agent {LegacyAgentKey}; it runs as {AgentKey} (SPEC 4.23)")]
     private static partial void LogLegacyAgentMapped(ILogger logger, int stepNumber, string legacyAgentKey, string agentKey);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Step {StepNumber}: {Warning}")]

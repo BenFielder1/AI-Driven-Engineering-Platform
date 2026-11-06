@@ -6,7 +6,7 @@ import { docsUrl } from './site-nav'
  * 0.1.0 #1, 0.2.0 #13, 0.3.0 #23 (the last of #16, #20–#23), 0.4.0 #27, 0.5.0 #28. From 0.6.0 on, the version's final
  * PR sets the date (the day it merges and is released, FR-230), since the tagged commit carries it. The newest entry's
  * version must equal backend/Directory.Build.props (scripts/ci/check-version.sh). Highlights come from the version's
- * spec and docs/history/v<N>.md. 0.1.0–0.5.0 shipped under the name AIDE.
+ * spec and docs/history/<x.y.z>.md. 0.1.0–0.5.0 shipped under the name AIDE.
  */
 export interface ChangelogEntry {
   version: string
@@ -34,7 +34,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'This public site, and redesigned sign-in and sign-up pages.',
       'A documentation site published to GitHub Pages.',
     ],
-    specHref: docsUrl('history/v6/'),
+    specHref: docsUrl('history/0.6.0/'),
   },
   {
     version: '0.5.0',
@@ -48,7 +48,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'Shared deployment projects: parts on one platform are set up together.',
       'PostgreSQL 18 for the product’s own database.',
     ],
-    specHref: docsUrl('history/v5/'),
+    specHref: docsUrl('history/0.5.0/'),
   },
   {
     version: '0.4.0',
@@ -63,7 +63,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'Managed databases: Supabase, Render Postgres and Railway Postgres.',
       'LLM provider and model chosen per project, with streaming and continued long answers.',
     ],
-    specHref: docsUrl('history/v4/'),
+    specHref: docsUrl('history/0.4.0/'),
   },
   {
     version: '0.3.0',
@@ -75,7 +75,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'Deploys to Railway preview and production environments, defined as code.',
       'Smoke tests after every deploy, from GitHub Actions.',
     ],
-    specHref: docsUrl('history/v3/'),
+    specHref: docsUrl('history/0.3.0/'),
   },
   {
     version: '0.2.0',
@@ -90,7 +90,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'Per-user LLM connections, and Vercel preview and production deployments.',
       'One page per lifecycle stage, with execution and review history.',
     ],
-    specHref: docsUrl('history/v2/'),
+    specHref: docsUrl('history/0.2.0/'),
   },
   {
     version: '0.1.0',
@@ -104,7 +104,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'Step-by-step code generation with the Execution Guardian, review cycles, merge and tag.',
       'Live updates, notifications with one-click approval links, admin pages and the CLI.',
     ],
-    specHref: docsUrl('history/v1/'),
+    specHref: docsUrl('history/0.1.0/'),
   },
 ]
 

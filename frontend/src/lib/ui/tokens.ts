@@ -311,7 +311,7 @@ export const BRAND_INK_PAIRS: readonly (readonly [ink: TokenName, surface: Token
 ]
 
 /**
- * FR-196: the brand colours as hex, for the static assets (docs/v6/brand, public/) that can't read CSS variables.
+ * FR-196: the brand colours as hex, for the static assets (docs/0.6.0/brand, public/) that can't read CSS variables.
  * `brand-from` / `brand-to` in `tokens` are these colours in oklch (tokens.test.ts checks they agree). Ink is the `T`
  * and the wordmark: light files are for light backgrounds, dark files for dark ones.
  */

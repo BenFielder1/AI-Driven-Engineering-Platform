@@ -272,7 +272,7 @@ describe('Version badges, switcher and read-only past versions (FR-62)', () => {
     await renderRoute(`/projects/${p.id}?release=1.1.0`)
 
     expect(await screen.findByTestId('version-legacy-preset')).toHaveTextContent('Preset nextjs-supabase@1.0.1 (retired, migrated)')
-    // FR-129: the v2 preset chip is gone from the header.
+    // FR-129: the 0.2.0 preset chip is gone from the header.
     expect(within(projectHeader('Shop')).queryByTestId('preset-chip')).not.toBeInTheDocument()
   })
 

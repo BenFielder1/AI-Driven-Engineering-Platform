@@ -153,7 +153,7 @@ function RunsTable({ projectId, runs, onOpen }: { projectId: string; runs: Agent
 /**
  * /projects/:id/runs (FR-23, SPEC §7): the project's agent runs, newest first, filterable by agent and paged; a row
  * opens a detail drawer with every field, the input artifact versions and the output. Running runs show "Running…"
- * (nothing streams in v1); live `run` events refresh the list (FR-46).
+ * (nothing streams in 0.1.0); live `run` events refresh the list (FR-46).
  */
 export function RunsPage({ search, onSearchChange, onOpenRun, onCloseRun }: RunsPageProps) {
   const { project, releaseVersionId } = useProjectAccess()

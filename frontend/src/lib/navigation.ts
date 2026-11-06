@@ -16,7 +16,7 @@
  * - `Route.useParams()` → `useParams<{ projectId: string }>()`.
  * - `validateSearch` + `Route.useSearch()` → `useSearch(validate)`, where `validate` is the same function
  *   `(raw: Record<string, unknown>) => T` or a Zod schema (`.parse`). Raw values are strings (TanStack parsed JSON);
- *   the v2 validators already accept strings.
+ *   the 0.2.0 validators already accept strings.
  * - `Route.useNavigate()` + `navigate({ search, replace })` → `useSetSearch()` → `setSearch(next, { replace })`.
  * - `useSearch({ strict: false })` → `useSearch()` (raw strings).
  * - `useMatchRoute()({ to, params, fuzzy })` → `useMatchRoute()` (same call shape).
@@ -78,7 +78,7 @@ export interface AppLocation {
 
 /**
  * Search params kept across navigation to matching paths unless the destination sets the key itself (even to
- * `undefined`). v2: `retainSearchParams(['release'])` on /projects/$projectId (FR-62).
+ * `undefined`). 0.2.0: `retainSearchParams(['release'])` on /projects/$projectId (FR-62).
  */
 export const retainedSearchParams: readonly { path: RegExp; keys: readonly string[] }[] = [
   { path: /^\/projects\/(?!new(?:\/|$))[^/]+(?:\/|$)/, keys: ['release'] },

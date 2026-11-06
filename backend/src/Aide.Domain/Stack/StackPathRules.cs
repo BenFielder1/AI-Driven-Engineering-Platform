@@ -3,14 +3,14 @@ using Aide.Domain.Execution;
 namespace Aide.Domain.Stack;
 
 /// <summary>
-/// FR-125, §4.18 (the composition equivalent of v2's preset path rules): the Guardian's protected paths are the
-/// v1 rules plus the packs' <see cref="StackResolution.ProtectedPaths"/>, with the v2 "owner may declare" exception. Which
+/// FR-125, §4.18 (the composition equivalent of 0.2.0's preset path rules): the Guardian's protected paths are the
+/// 0.1.0 rules plus the packs' <see cref="StackResolution.ProtectedPaths"/>, with the 0.2.0 "owner may declare" exception. Which
 /// protected paths a <b>generated</b> plan step may declare:
 /// <list type="bullet">
-/// <item>a v1-protected CI workflow or <c>.env.example</c> (<see cref="IsOwnableV1Protected"/>), when the
+/// <item>a 0.1.0-protected CI workflow or <c>.env.example</c> (<see cref="IsOwnableV1Protected"/>), when the
 /// step's specialist owns it (the ci-engineer, the deploy-engineer);</item>
 /// <item>a path under a pack's own non-<c>existingOnBase</c> entry, when the step's specialist owns it;</item>
-/// <item>never: other v1-protected paths (lockfiles, <c>.git</c>, <c>.aide/</c>, <c>.env</c> files), and a file that exists on
+/// <item>never: other 0.1.0-protected paths (lockfiles, <c>.git</c>, <c>.aide/</c>, <c>.env</c> files), and a file that exists on
 /// the base commit under an <c>existingOnBase</c> entry. Migrations on the base commit are immutable for every data pack.</item>
 /// </list>
 /// </summary>
@@ -55,7 +55,7 @@ public static class StackPathRules
     }
 
     /// <summary>
-    /// The v1-protected paths a specialist that owns them may declare: v2's (GitHub workflows under
+    /// The 0.1.0-protected paths a specialist that owns them may declare: 0.2.0's (GitHub workflows under
     /// <c>.github/workflows/</c>, <c>.env.example</c> in any folder) plus the root CI files of the other VCS packs (<c>.gitlab-ci.yml</c>,
     /// <c>bitbucket-pipelines.yml</c>), which the ci-engineer owns (§4.18).
     /// </summary>

@@ -5,7 +5,7 @@ import type { ComponentProps } from 'react'
 import { cn } from '../../lib/utils'
 
 /*
- * shadcn/ui "new-york" Dialog on radix-ui (SPEC §7.1). Named radix-dialog.tsx while the v1 `dialog.tsx` (custom focus
+ * shadcn/ui "new-york" Dialog on radix-ui (SPEC §7.1). Named radix-dialog.tsx while the 0.1.0 `dialog.tsx` (custom focus
  * trap) is still in use; the restyle pass moves its callers here.
  */
 

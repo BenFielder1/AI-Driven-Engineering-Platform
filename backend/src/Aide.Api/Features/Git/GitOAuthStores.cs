@@ -25,7 +25,7 @@ public interface IGitOAuthFlow
 }
 
 /// <summary>
-/// §8 OAuth <c>state</c> for the Git hosts (FR-131, FR-134; the v2 manifest rule): signed and time-limited with Data
+/// §8 OAuth <c>state</c> for the Git hosts (FR-131, FR-134; the 0.2.0 manifest rule): signed and time-limited with Data
 /// Protection (10 minutes), single-use (its nonce is held in memory and removed by the callback that uses it), and bound to
 /// the browser that started the flow by an HttpOnly cookie holding the nonce (so a state can't be replayed from another
 /// browser: no login CSRF). A state whose nonce isn't held (used, expired, or issued before a restart) is refused.

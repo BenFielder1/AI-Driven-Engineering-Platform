@@ -55,11 +55,11 @@ async function expandAll(toggles: Locator) {
 }
 
 /**
- * NFR-A11Y2 (§8): the v2 pages — every wizard step, the six stage pages of a released project, artifacts, Execution
+ * NFR-A11Y2 (§8): the 0.2.0 pages — every wizard step, the six stage pages of a released project, artifacts, Execution
  * runs with an attempt history open, Review with the charts' table alternatives, deployments, deployment settings and
  * connections.
  */
-export function v2Targets(fixture: () => A11yFixture): A11yTarget[] {
+export function lifecycleTargets(fixture: () => A11yFixture): A11yTarget[] {
   const project = (path: string) => () => `/projects/${fixture().projectId}${path}`
   return [
     ...WIZARD_STEPS.map(

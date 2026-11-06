@@ -15,7 +15,7 @@ import {
   openStage,
   waitForDeployment,
   waitForPhase,
-} from './support/v2.ts'
+} from './support/lifecycle.ts'
 
 /**
  * NFR-TEST2 (SPEC §8 "two-version flow", §1 success criteria) with Fake LLM + Local Git + Fake deployments:

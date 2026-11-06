@@ -14,7 +14,7 @@ Stack/
     stack-api-contract.md   adapted stack-core skill
     composition-summary.md  template rendering the STACK.md equivalent for prompts
   agents/<key>.md           adapted stack-core agent prompts (FR-120); README.md is ignored
-  legacy/presets.json       frozen v2 preset globs and agent-key map (§4.23, FR-129); optional, validated when present
+  legacy/presets.json       frozen 0.2.0 preset globs and agent-key map (§4.23, FR-129); optional, validated when present
 ```
 
 Every adapted file starts with a provenance comment. For `skill.md` it must be
@@ -22,7 +22,7 @@ Every adapted file starts with a provenance comment. For `skill.md` it must be
 
 ## catalog.json
 
-- `version`: semver. With the SHA-256 over every file (v2 preset hash: sorted paths, `path\0content\0`, `\n` endings,
+- `version`: semver. With the SHA-256 over every file (0.2.0 preset hash: sorted paths, `path\0content\0`, `\n` endings,
   BOM stripped) it is what release versions pin and agent runs record (`stack@<version>`).
 - `layers`: the five layers, in order: `frontend`, `backend`, `data`, `vcs`, `deploy`.
 - `choices`: the nine choices in evaluation order: `frontend`, `backend`, `data`, `vcs`, then the deployment choices
@@ -64,12 +64,12 @@ dropped. What the manifests can't express (PROGRESS "M26 inputs") is in `StackRe
 
 ## Legacy presets (SPEC §4.23, FR-129)
 
-`legacy/presets.json` (JSON with `//` comments allowed) is the frozen v2 data: `agentKeys[] {from, to, byFiles?[] {glob, to}}`
+`legacy/presets.json` (JSON with `//` comments allowed) is the frozen 0.2.0 data: `agentKeys[] {from, to, byFiles?[] {glob, to}}`
 (the §4.23 table; every `to` is a specialist key) and `presets[] {id, name, version, owns {v2Key: [globs]}}`. It is loaded
 into `StackCatalog.Legacy` (`LegacyPresets`) and never edited again:
 
 - `PlanValidator` (with `PlanAgents.Legacy`, set for a version whose `preset_id` is kept as history) maps a migrated plan's
-  v2 keys to v4 specialists (`PlanStep.LegacyAgent` keeps the v2 key); `CompositionPlanValidator.Warnings` checks those
+  0.2.0 keys to 0.4.0 specialists (`PlanStep.LegacyAgent` keeps the 0.2.0 key); `CompositionPlanValidator.Warnings` checks those
   steps' files against the frozen globs, so a locked plan doesn't suddenly get `AGENT_SCOPE` warnings.
-- At run time `LegacyPresets.MapInPlay` picks the specialist a step still naming a v2 key runs as (falling back to the
+- At run time `LegacyPresets.MapInPlay` picks the specialist a step still naming a 0.2.0 key runs as (falling back to the
   rule's other specialist, else `generalist`, with the `legacy_agent_mapped` run warning).

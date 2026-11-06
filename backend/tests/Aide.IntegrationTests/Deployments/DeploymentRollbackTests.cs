@@ -14,7 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Aide.IntegrationTests.Deployments;
 
 /// <summary>
-/// FR-150, FR-151: rollback per provider (Netlify restore against a stubbed Netlify API, GitHub Pages unsupported, the v2
+/// FR-150, FR-151: rollback per provider (Netlify restore against a stubbed Netlify API, GitHub Pages unsupported, the 0.2.0
 /// <c>/promote</c> alias), the Deployments list filters and the overview's production URLs.
 /// </summary>
 [Collection(ApiTestGroup.Name)]

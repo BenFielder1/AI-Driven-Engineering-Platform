@@ -47,7 +47,7 @@ public class PlatformConnectionRulesTests
         Assert.Equal(expected, PlatformConnectionRules.Classify(provider, status, code));
 
     [Fact]
-    public void FR142_Vercel_keeps_its_v2_classification_and_Railway_reads_GraphQL_errors()
+    public void FR142_Vercel_keeps_its_0_2_0_classification_and_Railway_reads_GraphQL_errors()
     {
         Assert.Equal(PlatformFailure.Rejected, PlatformConnectionRules.FromVercel(DeploymentFailure.CredentialRejected));
         Assert.Equal(PlatformFailure.MissingPermissions, PlatformConnectionRules.FromVercel(DeploymentFailure.Forbidden));

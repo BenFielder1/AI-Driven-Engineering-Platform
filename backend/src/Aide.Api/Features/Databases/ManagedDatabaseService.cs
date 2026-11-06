@@ -214,7 +214,7 @@ public sealed partial class ManagedDatabaseService(
 
     /// <summary>
     /// §4.28 where this database goes: the group's project; a standalone Railway database's own project (the one the other
-    /// environment already made, if any); else as v4, next to its target.
+    /// environment already made, if any); else as 0.4.0, next to its target.
     /// </summary>
     public async Task<DatabaseHostContext> HostContextAsync(ManagedDatabase row, CancellationToken cancellationToken)
     {

@@ -51,14 +51,14 @@ Server settings keep their internal `aide` names (for example `ConnectionStrings
 | `Llm:Providers:OpenAI:ApiKey` | OpenAI system key (used only with `Llm:AllowSystemKeys=true`) | none | yes |
 | `Llm:Providers:<Name>:BaseUrl` | Endpoint override (`Anthropic`, `OpenAI`, `Ollama`, `Fake`). Ollama: `Llm__Providers__Ollama__BaseUrl` | Ollama: `http://localhost:11434` (Development, no container) or `http://host.docker.internal:11434` (container) | no |
 | `Llm:Providers:<Name>:DefaultModel` | Model when an agent has no own entry | see section below | no |
-| `Llm:Providers:<Name>:Models:<Agent>` | Model per agent, e.g. `Llm__Providers__Anthropic__Models__StackAnalyst` for the v5 Stack Analyst (FR-180) | see section below | no |
+| `Llm:Providers:<Name>:Models:<Agent>` | Model per agent, e.g. `Llm__Providers__Anthropic__Models__StackAnalyst` for the 0.5.0 Stack Analyst (FR-180) | see section below | no |
 | `Llm:Pricing:<model>:InputPerMTok`, `OutputPerMTok` | USD per million tokens, for cost estimates | see appsettings; unpriced = 0 | no |
 | `GitHub:App:AppId` | Tevrin GitHub App id (FR-80). All five `GitHub:App:*` values together override the App registered from Admin → Integrations → GitHub; set none or all | none: the registered App, if any | no |
 | `GitHub:App:ClientId` | The App's client id (sign-in and connections) | none | no |
 | `GitHub:App:ClientSecret` | The App's client secret | none | yes |
 | `GitHub:App:PrivateKey` | The App's PEM private key; `\n` escapes allowed (one line in `secrets.env`) | none | yes |
 | `GitHub:App:Slug` | The App's slug (install link `https://github.com/apps/<slug>/installations/new`) | none | no |
-| `GitHub:OAuth:ClientId` | GitHub sign-in OAuth App client id (v1; used only while no GitHub App exists, D-V2-7) | none: sign-in disabled | no (treat as config) |
+| `GitHub:OAuth:ClientId` | GitHub sign-in OAuth App client id (0.1.0; used only while no GitHub App exists, D-V2-7) | none: sign-in disabled | no (treat as config) |
 | `GitHub:OAuth:ClientSecret` | GitHub sign-in OAuth App secret | none | yes |
 | `GitHub:GitBaseUrl` | Where repos are cloned from and pushed to | `https://github.com/` | no |
 | `GitHub:ApiBaseUrl` | GitHub REST API | `https://api.github.com/` | no |
@@ -100,7 +100,7 @@ Server settings keep their internal `aide` names (for example `ConnectionStrings
 
 `GitHub:AllowInsecureGitBaseUrl` exists for tests only. Do not set it.
 
-**Egress (v5 issue imports):** with real trackers the API calls `*.atlassian.net` (only `https://<site>/_edge/tenant_info`, to resolve a Jira site), `api.atlassian.com` (Jira REST) and `api.linear.app` (Linear GraphQL). GitHub and GitLab issues use the hosts Tevrin already reaches (`api.github.com`, registered GitLab instances). Allow these if outbound traffic is filtered. `Trackers:Provider=Fake` makes no tracker calls.
+**Egress (0.5.0 issue imports):** with real trackers the API calls `*.atlassian.net` (only `https://<site>/_edge/tenant_info`, to resolve a Jira site), `api.atlassian.com` (Jira REST) and `api.linear.app` (Linear GraphQL). GitHub and GitLab issues use the hosts Tevrin already reaches (`api.github.com`, registered GitLab instances). Allow these if outbound traffic is filtered. `Trackers:Provider=Fake` makes no tracker calls.
 
 ## Where each value lives
 

@@ -8,7 +8,7 @@ namespace Aide.Domain.Projects;
 /// <summary>FR-73: where a new project's code comes from (wizard step "Source").</summary>
 public enum ProjectSource
 {
-    /// <summary>Start from scratch (v1 flow plus FR-66's initial version).</summary>
+    /// <summary>Start from scratch (0.1.0 flow plus FR-66's initial version).</summary>
     Scratch = 0,
 
     /// <summary>Import an existing repository with its released version (or "Never released") and a version to develop.</summary>

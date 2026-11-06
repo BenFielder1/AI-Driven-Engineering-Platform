@@ -154,7 +154,7 @@ function RunError({ error, attempts, retrying }: { error: string; attempts: numb
 
 /**
  * FR-70, FR-71: the run's recorded warnings and its repository tool log (from the detail response). FR-160, FR-162:
- * the output token limit its calls used and how many continuations the answer took (null before v4 or until it succeeds).
+ * the output token limit its calls used and how many continuations the answer took (null before 0.4.0 or until it succeeds).
  */
 function RunToolLog({ run }: { run: AgentRunDetail }) {
   return (

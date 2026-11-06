@@ -19,7 +19,7 @@ public enum GitHubAppSource
 }
 
 /// <summary>How "Continue with GitHub" signs in (D-V2-7). Wire values: <c>app</c> (the App's user authorization flow with
-/// PKCE), <c>oauth</c> (the v1 OAuth App, only while no App is registered), <c>none</c> (GitHub sign-in unavailable).</summary>
+/// PKCE), <c>oauth</c> (the 0.1.0 OAuth App, only while no App is registered), <c>none</c> (GitHub sign-in unavailable).</summary>
 public enum GitHubSignInMode
 {
     None = 0,
@@ -62,7 +62,7 @@ public static class GitHubRules
     public const string RepoNamePattern = @"^(?!\.{1,2}$)[A-Za-z0-9._-]+$";
 
     /// <summary>
-    /// D-V2-7: once an App is registered, GitHub sign-in uses its user authorization flow; the v1 OAuth App applies only
+    /// D-V2-7: once an App is registered, GitHub sign-in uses its user authorization flow; the 0.1.0 OAuth App applies only
     /// while no App is registered.
     /// </summary>
     public static GitHubSignInMode SignInMode(bool appConfigured, bool oauthConfigured) =>
@@ -138,7 +138,7 @@ public static class GitHubRules
 
     /// <summary>
     /// FR-143: whether permissions GitHub reported (an App's, or an installation's or its token's) include Pages write:
-    /// <c>granted</c>, <c>missing</c> (App registrations from before v4 until the Owner accepts the new permission), or
+    /// <c>granted</c>, <c>missing</c> (App registrations from before 0.4.0 until the Owner accepts the new permission), or
     /// <c>unknown</c> when GitHub's permissions couldn't be read (<paramref name="permissions"/> <c>null</c>).
     /// </summary>
     public static GitHubPagesAccess PagesPermission(IReadOnlyDictionary<string, string>? permissions) =>

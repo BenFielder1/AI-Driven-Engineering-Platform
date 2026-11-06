@@ -30,7 +30,7 @@ public static partial class SpecSections
     public const string ChangesInThisVersion = "Changes in this version";
 
     /// <summary>
-    /// §4.13 required sections: v1's eleven (<see cref="Required"/>); then the composition's extra sections
+    /// §4.13 required sections: 0.1.0's eleven (<see cref="Required"/>); then the composition's extra sections
     /// (<paramref name="stackSections"/>, FR-123; empty without a stack); then <see cref="ChangesInThisVersion"/> for an
     /// iteration. Duplicates (ignoring case and formatting) are listed once.
     /// </summary>

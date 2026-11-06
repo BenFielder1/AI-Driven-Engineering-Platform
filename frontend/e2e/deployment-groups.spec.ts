@@ -4,7 +4,7 @@ import { apiJson, registerViaApi } from './support/api.ts'
 import { COMPOSITION } from './support/composition.ts'
 
 /**
- * SPEC v5 §8 E2E "Railway ×3 wizard shows one window, then separating the database shows two" (FR-187–FR-189, §4.28
+ * SPEC 0.5.0 §8 E2E "Railway ×3 wizard shows one window, then separating the database shows two" (FR-187–FR-189, §4.28
  * #1 and #5). A Local repository allows Railway: its VCS layer is GitHub (R5, R9).
  */
 
@@ -52,7 +52,7 @@ test('FR-188, FR-189: Railway for all three parts shows one group window; separa
   await next(page)
   await expect(page.getByRole('heading', { name: 'Step 7 of 8: Deployment' })).toBeVisible()
 
-  // FR-188 (§4.28 #1): one window where v4 had three, covering both database environments.
+  // FR-188 (§4.28 #1): one window where 0.4.0 had three, covering both database environments.
   const group = page.getByRole('region', { name: /Frontend, backend and database on Railway$/ })
   await expect(group).toBeVisible()
   await expect(windows(page)).toHaveCount(1)

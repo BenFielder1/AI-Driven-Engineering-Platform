@@ -60,7 +60,7 @@ function LlmSystemKeysPanel() {
 }
 
 /**
- * /admin/integrations (SPEC §7.2): the GitHub App (FR-80), GitLab instances (FR-130), the Bitbucket consumer (FR-133), the system-key policy and the stack catalog (FR-113; the v2
+ * /admin/integrations (SPEC §7.2): the GitHub App (FR-80), GitLab instances (FR-130), the Bitbucket consumer (FR-133), the system-key policy and the stack catalog (FR-113; the 0.2.0
  * presets are retired, FR-129). `callback` is
  * the manifest flow's outcome from `?github=configured` / `?error=GITHUB_AUTH_FAILED`.
  */

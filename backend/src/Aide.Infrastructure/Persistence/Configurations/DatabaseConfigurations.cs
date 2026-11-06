@@ -30,7 +30,7 @@ internal sealed class ManagedDatabaseConfiguration : IEntityTypeConfiguration<Ma
         // FR-152: the Owner's connection the database was made with; deleting it keeps the database, unbound.
         builder.HasOne<PlatformConnection>().WithMany().HasForeignKey(d => d.ConnectionId).OnDelete(DeleteBehavior.SetNull);
 
-        // §5: null for standalone and v4 rows; deleting the group leaves the database standing.
+        // §5: null for standalone and 0.4.0 rows; deleting the group leaves the database standing.
         builder.HasOne<DeploymentGroup>().WithMany().HasForeignKey(d => d.GroupId).OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(d => d.GroupId);
 

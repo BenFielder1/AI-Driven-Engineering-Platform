@@ -22,7 +22,7 @@ namespace Aide.IntegrationTests.Stack;
 
 /// <summary>
 /// FR-129, §4.23, D-V4-4 end to end with the Fake provider and Local Git: the preset API is gone, a project migrated from
-/// <c>nextjs-supabase</c> keeps the retired preset as history, and its in-flight plan still runs: a step naming the v2 key
+/// <c>nextjs-supabase</c> keeps the retired preset as history, and its in-flight plan still runs: a step naming the 0.2.0 key
 /// <c>db-engineer</c> runs as <c>data-engineer</c> with the <c>data-supabase</c> skill and the run reports
 /// <c>legacyAgentKey: db-engineer</c>.
 /// </summary>
@@ -161,7 +161,7 @@ public sealed class PresetRetirementTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR129_A_step_the_migration_already_mapped_runs_as_its_v4_specialist_and_reports_the_v2_key()
+    public async Task FR129_A_step_the_migration_already_mapped_runs_as_its_0_4_0_specialist_and_reports_the_0_2_0_key()
     {
         await using var app = AgentJobs.WithResponders(factory, new FakeCodeGeneratorResponder());
         using var fixture = await ProjectApi.FixtureAsync(app);

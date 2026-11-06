@@ -28,7 +28,7 @@ describe('FR-99 security headers', () => {
     expect([...nonces][0]).toMatch(/^[A-Za-z0-9+/]{22}==$/)
   })
 
-  it('FR-99: the v2 nginx headers plus no-cache HTML', () => {
+  it('FR-99: the 0.2.0 nginx headers plus no-cache HTML', () => {
     expect(pageSecurityHeaders('n', false)).toMatchObject({
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',

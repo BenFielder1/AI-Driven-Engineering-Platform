@@ -12,8 +12,8 @@ import { useLocation, useNavigate } from '../../lib/navigation'
 import { Providers } from '../providers'
 
 /**
- * Layout for /login and /register (v2 `_public`). Signed-in users are sent on (to a same-origin `returnUrl`, or /home). Like the
- * v2 guard, the check runs when a URL is entered, not when signing in on the page (the page then navigates itself).
+ * Layout for /login and /register (0.2.0 `_public`). Signed-in users are sent on (to a same-origin `returnUrl`, or /home). Like the
+ * 0.2.0 guard, the check runs when a URL is entered, not when signing in on the page (the page then navigates itself).
  */
 export default function PublicLayout({ children }: { children: ReactNode }) {
   // The client providers sit here, not in the root layout, so marketing routes don't load them (SPEC §8).

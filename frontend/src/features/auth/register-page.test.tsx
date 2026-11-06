@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http } from 'msw'
@@ -19,7 +19,7 @@ async function fillAndSubmit(values: { email: string; name: string; password: st
 }
 
 describe('RegisterPage', () => {
-  it('FR-1 / FR-207: registering signs the user in and lands on Home in the shell (it was /projects before v6)', async () => {
+  it('FR-1 / FR-207: registering signs the user in and lands on Home in the shell (it was /projects before 0.6.0)', async () => {
     const { queryClient, router } = await renderRoute('/register')
 
     await fillAndSubmit({ email: 'a@x.com', name: 'Ada', password: 'password1' })

@@ -9,7 +9,7 @@ using Npgsql;
 namespace Aide.IntegrationTests.Persistence;
 
 /// <summary>
-/// FR-80–FR-83: the GitHubApp migration applied to a database at LlmCredentials holding a v1 GitHub (PAT) project, a
+/// FR-80–FR-83: the GitHubApp migration applied to a database at LlmCredentials holding a 0.1.0 GitHub (PAT) project, a
 /// local project and a user linked to GitHub id 42; then the github_apps / github_connections / github_app rules.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
@@ -26,7 +26,7 @@ public sealed class GitHubAppMigrationTests(AideApiFactory factory)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task FR82_v1_github_project_becomes_github_pat_and_keeps_its_repo_and_token()
+    public async Task FR82_0_1_0_github_project_becomes_github_pat_and_keeps_its_repo_and_token()
     {
         await using var db = await MigratedDatabaseAsync();
 
@@ -43,7 +43,7 @@ public sealed class GitHubAppMigrationTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR80_v1_github_link_stays_on_the_user_and_no_connection_is_created()
+    public async Task FR80_0_1_0_github_link_stays_on_the_user_and_no_connection_is_created()
     {
         await using var db = await MigratedDatabaseAsync();
 
@@ -136,7 +136,7 @@ public sealed class GitHubAppMigrationTests(AideApiFactory factory)
     private static Task<string> ProviderValueAsync(AideDbContext db, Guid projectId) =>
         db.Database.SqlQuery<string>($"SELECT provider AS \"Value\" FROM project_git_settings WHERE project_id = {projectId}").SingleAsync(Ct);
 
-    /// <summary>A new database at LlmCredentials, seeded with v1-style Git settings, then migrated to the latest version.</summary>
+    /// <summary>A new database at LlmCredentials, seeded with 0.1.0-style Git settings, then migrated to the latest version.</summary>
     private async Task<AideDbContext> MigratedDatabaseAsync()
     {
         var connectionString = await factory.CreateEmptyDatabaseAsync(Ct);
@@ -160,7 +160,7 @@ public sealed class GitHubAppMigrationTests(AideApiFactory factory)
         return db;
     }
 
-    /// <summary>Project 2a0 is a v1 GitHub (PAT) project; 2b0 is local. User 2e1 signed in with GitHub id 42.</summary>
+    /// <summary>Project 2a0 is a 0.1.0 GitHub (PAT) project; 2b0 is local. User 2e1 signed in with GitHub id 42.</summary>
     private const string Seed =
         """
         INSERT INTO users (id, user_name, normalized_user_name, email, normalized_email, email_confirmed, name, system_role, github_id, created_at,

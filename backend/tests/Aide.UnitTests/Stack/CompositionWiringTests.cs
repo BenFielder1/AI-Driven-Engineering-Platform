@@ -251,7 +251,7 @@ public sealed class CompositionWiringTests
     }
 
     [Fact]
-    public void FR126_A_committed_secret_found_by_the_v1_scan_is_not_penalised_twice()
+    public void FR126_A_committed_secret_found_by_the_0_1_0_scan_is_not_penalised_twice()
     {
         var stack = Aspnet();
         SourceFile[] files = [new("backend/appsettings.json", "{\n  \"x\": 1,\n  \"key\": \"sk_live_abcdefghijklmnopqrstuvwx\"\n}\n")];

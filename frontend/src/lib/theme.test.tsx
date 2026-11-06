@@ -80,7 +80,7 @@ describe('FR-204: the theme init script (before first paint)', () => {
     expect(html().style.colorScheme).toBe('dark')
   })
 
-  it('FR204_FR201_stored: a stored light or dark (including one saved before v6) wins over the OS', () => {
+  it('FR204_FR201_stored: a stored light or dark (including one saved before 0.6.0) wins over the OS', () => {
     os = fakeOsScheme('dark')
     localStorage.setItem(THEME_STORAGE_KEY, 'light')
     runInitScript()

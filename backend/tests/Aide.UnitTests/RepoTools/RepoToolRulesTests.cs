@@ -2,7 +2,7 @@ using Aide.Domain.RepoTools;
 
 namespace Aide.UnitTests.RepoTools;
 
-/// <summary>FR-71: repo tool argument validation, path safety (v1 §4.6), hidden paths, limits and read slicing (pure rules).</summary>
+/// <summary>FR-71: repo tool argument validation, path safety (0.1.0 §4.6), hidden paths, limits and read slicing (pure rules).</summary>
 public class RepoToolRulesTests
 {
     [Theory]

@@ -4,7 +4,7 @@ using Aide.Domain.Entities;
 namespace Aide.Infrastructure.Deployments;
 
 /// <summary>
-/// §4.20 Vercel on the generic interface (the v2 logic, moved): create with <c>gitRepository</c> for GitHub, GitLab and
+/// §4.20 Vercel on the generic interface (the 0.2.0 logic, moved): create with <c>gitRepository</c> for GitHub, GitLab and
 /// Bitbucket, link an existing project (it must be unlinked or linked to this repository), env sync per (key, environment),
 /// deployments with <c>gitSource {ref, sha}</c>, adoption of Vercel's production deployment of the merge commit, build log
 /// tail, cancel and promote (rollback). Branch control is the repository's <c>vercel.json</c>

@@ -216,7 +216,7 @@ public class CompositionPlanValidatorTests
     }
 
     [Fact]
-    public void FR125_Generated_steps_may_declare_v1_protected_paths_their_specialist_owns_but_never_lockfiles()
+    public void FR125_Generated_steps_may_declare_0_1_0_protected_paths_their_specialist_owns_but_never_lockfiles()
     {
         var resolution = Aspnet();
 

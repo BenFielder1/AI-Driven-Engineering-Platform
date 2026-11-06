@@ -18,12 +18,12 @@ import {
   waitForPreviewRollout,
   waitForProductionRollout,
 } from './support/hosted-stack.ts'
-import { AGENT_TIMEOUT, approveDraftViaApi, approveStageGate, createLocalProject, openStage, waitForPhase } from './support/v2.ts'
+import { AGENT_TIMEOUT, approveDraftViaApi, approveStageGate, createLocalProject, openStage, waitForPhase } from './support/lifecycle.ts'
 
 /**
- * SPEC §8 v4 E2E (Fake LLM + Local Git + Fake deployments and databases): a hosted composition rolled out to preview and
+ * SPEC §8 0.4.0 E2E (Fake LLM + Local Git + Fake deployments and databases): a hosted composition rolled out to preview and
  * production, a Supabase BaaS composition with a Fake migration run, the Stack step's filtering and the wizard's AI model
- * section. The migrated v2 preset project releasing a version is in migrated-preset.a11y.spec.ts (it needs the seed Admin).
+ * section. The migrated 0.2.0 preset project releasing a version is in migrated-preset.a11y.spec.ts (it needs the seed Admin).
  */
 
 const IDEA = 'A recipe box: save recipes with their ingredients through an API and browse them in a web app.'

@@ -103,7 +103,7 @@ public interface IPlatformConnectionValidator
 }
 
 /// <summary>§9: the validator for a provider: the Fake for every provider but Vercel when <c>Deployments:Provider=Fake</c>
-/// (Vercel goes through the Fake deployment provider, as in v2).</summary>
+/// (Vercel goes through the Fake deployment provider, as in 0.2.0).</summary>
 public interface IPlatformConnectionValidators
 {
     IPlatformConnectionValidator ForProvider(PlatformProvider provider);

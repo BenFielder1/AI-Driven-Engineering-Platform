@@ -5,7 +5,7 @@ namespace Aide.Domain.Lifecycle;
 
 /// <summary>
 /// The project's lifecycle position. <see cref="Version"/> is the lifecycle <b>checkpoint</b> within the current release
-/// version (§4.10; v1's "project version"), not the semver release version.
+/// version (§4.10; 0.1.0's "project version"), not the semver release version.
 /// </summary>
 public sealed record LifecycleState(Phase Phase, ProjectStatus Status, int Version)
 {

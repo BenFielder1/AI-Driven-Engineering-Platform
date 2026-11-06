@@ -65,7 +65,7 @@ export const errorMessages = {
   ROLLBACK_BLOCKED:
     "A rollback isn't possible while an execution step or agent run is in progress. Wait for it to finish (or pause execution), then try again.",
   RATE_LIMITED: "Too many attempts. Wait a moment and try again.",
-  // Recorded on a failed release attempt, and returned when starting a version (FR-60, FR-61; replaces v1 TAG_CONFLICT)
+  // Recorded on a failed release attempt, and returned when starting a version (FR-60, FR-61; replaces 0.1.0 TAG_CONFLICT)
   TAG_EXISTS: "A tag for this version already exists in the repository.",
   // Release versions (FR-60, FR-61)
   VERSION_INVALID: "Enter a version as MAJOR.MINOR.PATCH, for example 1.2.0.",
@@ -418,7 +418,7 @@ export const contextualErrorMessages = {
     NOT_FOUND: "That import or connection no longer exists. The list now shows the latest.",
     CONFLICT: "Someone else changed the source items at the same time. The list now shows the latest; try again.",
   },
-  /** FR-142 Vercel: the v2 copy (FR-87), naming team tokens. */
+  /** FR-142 Vercel: the 0.2.0 copy (FR-87), naming team tokens. */
   vercelConnection: {
     UPSTREAM_ERROR: "We couldn't reach Vercel to check the token. Nothing changed; try again in a moment.",
     FORBIDDEN: "Connections can only be changed from a signed-in browser session, not with an API token.",
@@ -507,7 +507,7 @@ export const contextualErrorMessages = {
     FORBIDDEN: "Only Contributors and Owners can deploy a preview, and only Owners can redeploy production.",
     UPSTREAM_ERROR: "The deployment platform failed or couldn't be reached, so no deployment was created. Try again in a moment.",
   },
-  /** POST /api/projects/:id/deployments/:deploymentId/rollback (FR-91, FR-150; `/promote` is its v2 alias). */
+  /** POST /api/projects/:id/deployments/:deploymentId/rollback (FR-91, FR-150; `/promote` is its 0.2.0 alias). */
   rollbackDeployment: {
     FORBIDDEN: "Only project Owners can roll back a production deployment.",
     INVALID_DEPLOYMENT:
@@ -947,7 +947,7 @@ export function trackerBrowseMessage(error: unknown, tracker: string): string {
 }
 
 /**
- * Codes recorded on deployments and events before v4 renamed them (D-V4-4: VERCEL_* → PLATFORM_*). They are no
+ * Codes recorded on deployments and events before 0.4.0 renamed them (D-V4-4: VERCEL_* → PLATFORM_*). They are no
  * longer API codes, so they aren't in `errorMessages`; copyForCode() still reads them so history stays readable.
  */
 const legacyCodeCopy: Readonly<Record<string, string>> = {

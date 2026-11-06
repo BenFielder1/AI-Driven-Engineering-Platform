@@ -370,7 +370,7 @@ describe('Agent runs page (FR-23)', () => {
   })
 })
 
-describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
+describe('Agent runs page (SPEC §7.2, 0.2.0 columns)', () => {
   it('FR129_FR121_run_shows_the_legacy_agent_key_the_retired_preset_label_and_the_mapping_warning', async () => {
     const project = seedProjectAs('viewer', (p) => {
       seedRun(p, {
@@ -385,7 +385,7 @@ describe('Agent runs page (SPEC §7.2, v2 columns)', () => {
     })
     const { user } = await openRuns(project)
 
-    // FR-129: no preset column any more; the specialist names the v2 key it was planned as.
+    // FR-129: no preset column any more; the specialist names the 0.2.0 key it was planned as.
     expect(within(table()).queryByRole('columnheader', { name: 'Preset' })).not.toBeInTheDocument()
     const row = rowFor('Code generator')
     expect(row).toHaveTextContent('data-engineer (was db-engineer)')

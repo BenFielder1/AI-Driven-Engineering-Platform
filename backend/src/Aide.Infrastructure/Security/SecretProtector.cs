@@ -20,11 +20,11 @@ public interface ISecretProtector
 /// they are versioned and fixed.</summary>
 public static class SecretPurposes
 {
-    /// <summary>The v1 purpose, shared by every v1 secret kind (Git tokens, project LLM keys, webhook secrets).</summary>
+    /// <summary>The 0.1.0 purpose, shared by every 0.1.0 secret kind (Git tokens, project LLM keys, webhook secrets).</summary>
     public const string V1Shared = "Aide.Secrets.v1";
 
-    /// <summary>LLM API keys: v1 per-project keys and v2 user connections (<c>llm_credentials.secret_encrypted</c>).
-    /// It must stay equal to <see cref="V1Shared"/>: the <c>LlmCredentials</c> migration copies v1 project-key
+    /// <summary>LLM API keys: 0.1.0 per-project keys and 0.2.0 user connections (<c>llm_credentials.secret_encrypted</c>).
+    /// It must stay equal to <see cref="V1Shared"/>: the <c>LlmCredentials</c> migration copies 0.1.0 project-key
     /// ciphertext into <c>llm_credentials</c> unchanged (FR-79, D-V2-5).</summary>
     public const string LlmApiKey = V1Shared;
 
@@ -41,7 +41,7 @@ public static class SecretPurposes
     public const string VercelToken = "Aide.Secrets.VercelToken";
 
     /// <summary>Platform connection tokens of every provider (<c>platform_connections.secret_encrypted</c>, FR-142). It must
-    /// stay equal to <see cref="VercelToken"/>: the PlatformsAndTargets migration copies v2 Vercel ciphertext unchanged.</summary>
+    /// stay equal to <see cref="VercelToken"/>: the PlatformsAndTargets migration copies 0.2.0 Vercel ciphertext unchanged.</summary>
     public const string PlatformToken = VercelToken;
 
     /// <summary>FR-165, FR-166: Jira email + token and Linear API keys (<c>platform_connections.secret_encrypted</c>), §8: their own purpose.</summary>

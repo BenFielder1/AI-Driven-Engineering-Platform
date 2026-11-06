@@ -1,13 +1,13 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { expect, test, type Page, type WebSocket } from '@playwright/test'
 
 import { createProjectViaApi, password, registerViaApi } from './support/api.ts'
 
 /**
- * v3 web server checks in a real browser (runs in CI's v1 shard: every spec not named as v2 or a11y):
+ * 0.3.0 web server checks in a real browser (runs in CI's core shard: every spec not named as a flows or a11y spec):
  * - FR-98: on a project page, SignalR's projects hub runs over a WebSocket through the same-origin /api proxy
  * - FR-99: the security headers and the per-request CSP nonce on /login, and no CSP violations during a smoke flow
- * - FR-95: an unknown path renders the v2 not-found page with HTTP 404
+ * - FR-95: an unknown path renders the 0.2.0 not-found page with HTTP 404
  * - FR-101: the theme class is on <html> before hydration (the inline theme-init script, no light flash), and a smoke
  *   flow requests nothing from a third-party origin (fonts are self-hosted)
  * Test-only observation goes through Playwright (WebSocket events, init scripts); the app has no test hooks.
@@ -86,7 +86,7 @@ test('FR-98, FR-99: a project page runs live updates over a WebSocket through /a
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1, name: 'Ship software with AI agents, under human control.', exact: true })).toBeVisible()
   await registerViaApi(context, 'v3web')
-  const project = await createProjectViaApi(context, `V3 web ${String(Date.now())}`)
+  const project = await createProjectViaApi(context, `Web server ${String(Date.now())}`)
   await page.goto('/projects')
   await expect(page.getByRole('heading', { level: 1, name: 'Projects', exact: true })).toBeVisible()
   await page.goto(`/projects/${project.id}`)
@@ -122,7 +122,7 @@ for (const scheme of ['dark', 'light'] as const) {
   })
 }
 
-test('FR-95: an unknown path renders the v2 not-found page with HTTP 404', async ({ page }) => {
+test('FR-95: an unknown path renders the 0.2.0 not-found page with HTTP 404', async ({ page }) => {
   const res = await page.goto('/this-route-does-not-exist')
   expect(res?.status()).toBe(404)
   await expect(page.getByRole('heading', { level: 1, name: 'Page not found', exact: true })).toBeVisible()
@@ -132,7 +132,7 @@ test('FR-101: a smoke flow (sign in → home → a project) requests nothing fro
   // The user and project are set up in a separate context, so this page signs in through the form.
   const setup = await browser.newContext()
   const user = await registerViaApi(setup, 'v3origin')
-  const project = await createProjectViaApi(setup, `V3 origin ${String(Date.now())}`)
+  const project = await createProjectViaApi(setup, `Web origin ${String(Date.now())}`)
   await setup.close()
 
   const requested: string[] = []

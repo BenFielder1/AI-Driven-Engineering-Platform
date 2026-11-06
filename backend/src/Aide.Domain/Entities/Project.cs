@@ -19,7 +19,7 @@ public sealed class Project
 
     public ProjectStatus Status { get; set; } = ProjectStatus.Active;
 
-    /// <summary>The lifecycle checkpoint within the current release version (§4.10; v1's "project version").</summary>
+    /// <summary>The lifecycle checkpoint within the current release version (§4.10; 0.1.0's "project version").</summary>
     public int Checkpoint { get; set; } = ProjectDefaults.InitialVersion;
 
     /// <summary>The release version the lifecycle state belongs to (the one in development, or the latest released).</summary>

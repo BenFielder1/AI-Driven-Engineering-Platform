@@ -10,7 +10,7 @@ using Aide.IntegrationTests.Support;
 namespace Aide.IntegrationTests.Auth;
 
 /// <summary>
-/// FR-201: the v6 rename keeps every identifier a user already holds (§4.29), so a browser signed in before the deploy stays
+/// FR-201: the 0.6.0 rename keeps every identifier a user already holds (§4.29), so a browser signed in before the deploy stays
 /// signed in. FR-198: the server's own text names Tevrin, with unchanged error codes and statuses.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
@@ -35,7 +35,7 @@ public sealed class Fr201CompatibilityTests(AideApiFactory factory)
         using var session = new ApiSession(factory);
 
         var response = await session.Client.PostAsJsonAsync(
-            "/api/auth/register", new { email = ApiSession.NewEmail(), name = "Before v6", password = AideApiFactory.Password }, Ct);
+            "/api/auth/register", new { email = ApiSession.NewEmail(), name = "Before 0.6.0", password = AideApiFactory.Password }, Ct);
 
         Assert.Contains(response.Headers.GetValues("Set-Cookie"), c => c.StartsWith("aide.auth=", StringComparison.Ordinal));
     }

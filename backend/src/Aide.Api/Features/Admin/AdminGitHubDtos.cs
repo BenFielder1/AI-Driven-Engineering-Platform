@@ -13,7 +13,7 @@ namespace Aide.Api.Features.Admin;
 /// <c>https://github.com/apps/{slug}/installations/new</c>; <c>permissions</c> are the App's granted permissions
 /// (e.g. <c>contents: write</c>); <c>canCreateRepositories</c> is true when <c>administration: write</c> is granted (§4.14).
 /// <c>pagesPermission</c> (FR-143) is <c>granted</c> when the App has <c>pages: write</c>, <c>missing</c> for an App registered
-/// before v4 ("Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"),
+/// before 0.4.0 ("Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"),
 /// and <c>unknown</c> when the App isn't configured or GitHub couldn't be asked.
 /// </summary>
 public sealed record AdminGitHubAppDto(

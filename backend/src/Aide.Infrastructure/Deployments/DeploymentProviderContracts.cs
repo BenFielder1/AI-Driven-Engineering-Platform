@@ -81,7 +81,7 @@ public sealed record DeploymentEnvSyncRequest(IReadOnlyList<DeploymentEnvWrite> 
 public sealed record DeploymentResource(string Id, string Name, string? Detail);
 
 /// <summary>
-/// §4.20: the deployment provider interface (generalising v2's). One instance per platform; in Fake mode
+/// §4.20: the deployment provider interface (generalising 0.2.0's). One instance per platform; in Fake mode
 /// (<c>Deployments:Provider=Fake</c>) every platform is the deterministic Fake. Never called from endpoints for builds and
 /// polls (those are jobs). Failures throw <see cref="DeploymentProviderException"/>.
 /// </summary>
@@ -161,7 +161,7 @@ public interface IDeploymentProviderResolver
 
     IDeploymentProvider ForPlatform(DeploymentProvider platform);
 
-    /// <summary>Vercel's client (the v2 Fake of it in Fake mode), for connection checks, pickers and the wizard.</summary>
+    /// <summary>Vercel's client (the 0.2.0 Fake of it in Fake mode), for connection checks, pickers and the wizard.</summary>
     IVercelClient Vercel { get; }
 }
 

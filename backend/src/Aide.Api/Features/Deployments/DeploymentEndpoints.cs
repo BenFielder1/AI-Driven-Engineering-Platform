@@ -127,7 +127,7 @@ public static class DeploymentEndpoints
 
         deployments.MapGet("/", ListDeployments)
             .WithName("ListDeployments")
-            .WithSummary("The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the v2 name) and releaseVersionId.")
+            .WithSummary("The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the 0.2.0 name) and releaseVersionId.")
             .Produces<IReadOnlyList<DeploymentDto>>()
             .ProducesValidationProblem();
 
@@ -163,7 +163,7 @@ public static class DeploymentEndpoints
 
         deployments.MapPost("/{deploymentId:guid}/promote", RollbackDeployment)
             .WithName("PromoteDeployment")
-            .WithSummary("v2 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback.")
+            .WithSummary("0.2.0 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback.")
             .Produces<DeploymentDto>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -514,7 +514,7 @@ public static class DeploymentEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        // FR-151: `environment` (v4) wins over the v2 name `target`.
+        // FR-151: `environment` (0.4.0) wins over the 0.2.0 name `target`.
         var environmentText = environment ?? target;
         DeploymentEnvironment? filter = environmentText is not null && EnumStrings.TryParse<DeploymentEnvironment>(environmentText, out var parsed) ? parsed : null;
         DeploymentComponent? componentFilter = component is not null && EnumStrings.TryParse<DeploymentComponent>(component, out var c) ? c : null;
@@ -622,7 +622,7 @@ public static class DeploymentEndpoints
         ApiProblems.Of(ErrorCodes.InvalidState, "The preview database is being reset. Wait for it to finish, then deploy the preview.");
 
     /// <summary>
-    /// FR-150 (and v2 FR-91 promote, its alias): makes an earlier ready production deployment current by the provider's
+    /// FR-150 (and 0.2.0 FR-91 promote, its alias): makes an earlier ready production deployment current by the provider's
     /// rollback (<see cref="DeploymentRollbackRules.MethodFor"/>) and records a <c>rollback</c> row (<c>promote</c> on
     /// Vercel) pointing at the same platform deployment, which the Deployments page then shows as current.
     /// </summary>

@@ -8,9 +8,9 @@ using Aide.Domain.Projects;
 namespace Aide.Domain.Deployments;
 
 /// <summary>
-/// FR-144, §5: the state of a deployment target as v2's Vercel flow keeps it (slice 1): <c>ready</c> with a bound
+/// FR-144, §5: the state of a deployment target as 0.2.0's Vercel flow keeps it (slice 1): <c>ready</c> with a bound
 /// connection and a linked resource; <c>attention</c> (<c>connection_missing</c>) when the resource is linked but the binding
-/// was cleared; <c>not_configured</c> otherwise. The PlatformsAndTargets migration applies the same rule to v2 settings.
+/// was cleared; <c>not_configured</c> otherwise. The PlatformsAndTargets migration applies the same rule to 0.2.0 settings.
 /// </summary>
 public static class DeploymentTargetRules
 {
@@ -287,11 +287,11 @@ public static partial class DeploymentEnvRules
         return projectVars.TryGetValue(key, out var targets) && requiredTargets.All(targets.Contains);
     }
 
-    /// <summary>The public prefix of v2's Next.js frontends (FR-145: <c>NEXT_PUBLIC_</c> variables reach the browser).</summary>
+    /// <summary>The public prefix of 0.2.0's Next.js frontends (FR-145: <c>NEXT_PUBLIC_</c> variables reach the browser).</summary>
     public const string NextPublicPrefix = "NEXT_PUBLIC_";
 
     /// <summary>
-    /// FR-145 (v2 flow and the PlatformsAndTargets backfill): a user variable is public when its key has the Next.js public
+    /// FR-145 (0.2.0 flow and the PlatformsAndTargets backfill): a user variable is public when its key has the Next.js public
     /// prefix (<see cref="NextPublicPrefix"/>, case-sensitive as Next.js).
     /// </summary>
     public static bool IsPublicKey(string key)

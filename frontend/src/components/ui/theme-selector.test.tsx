@@ -28,7 +28,7 @@ describe('FR-204: ThemeSelector', () => {
     expect(screen.getByRole('radio', { name: 'System' })).toBeChecked()
   })
 
-  it('FR204_FR201_selector_stored: a theme saved before v6 (aide.theme = dark) is shown as the choice', () => {
+  it('FR204_FR201_selector_stored: a theme saved before 0.6.0 (aide.theme = dark) is shown as the choice', () => {
     localStorage.setItem(THEME_STORAGE_KEY, 'dark')
     render(<ThemeSelector />)
     expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()

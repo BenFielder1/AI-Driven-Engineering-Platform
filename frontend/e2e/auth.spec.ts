@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { expect, test, type Page } from '@playwright/test'
 
 import { password, registerViaApi, registerViaUi } from './support/api.ts'
@@ -18,7 +18,7 @@ async function openUserMenu(page: Page) {
 test('FR-1: register, see yourself, sign out, sign back in', async ({ page }) => {
   const name = 'E2E User'
 
-  // Register → signed in, on /home (FR-207; it was /projects before v6).
+  // Register → signed in, on /home (FR-207; it was /projects before 0.6.0).
   const { email } = await registerViaUi(page, 'auth', name)
   await expect(page).toHaveURL(/\/home$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome, E2E', exact: true })).toBeVisible()

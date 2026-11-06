@@ -60,7 +60,7 @@ public sealed record GitTestResult(bool Ok, bool Reachable, bool Writable, bool 
 }
 
 /// <summary>
-/// One Git hosting provider (FR-35, D12): GitHub and Local in v1; GitLab can be added later (§11 Q1) by implementing
+/// One Git hosting provider (FR-35, D12): GitHub and Local in 0.1.0; GitLab can be added later (§11 Q1) by implementing
 /// this interface. Tokens are passed in decrypted per call and never stored, logged or echoed in results.
 /// </summary>
 /// <remarks>
@@ -110,9 +110,9 @@ public interface IGitProvider
     /// </summary>
     Task<TagLookup> FindTagAsync(GitConnectionSettings settings, string tag, string? token, CancellationToken cancellationToken);
 
-    // §4.19 common operations (v4). User-scoped ones take the caller's own connection (already checked to be theirs);
+    // §4.19 common operations (0.4.0). User-scoped ones take the caller's own connection (already checked to be theirs);
     // project-scoped ones the project's settings (the binding connection). A provider that doesn't implement one answers
-    // NotSupported (GitHub keeps its v2 services for the picker and import; Local has no host).
+    // NotSupported (GitHub keeps its 0.2.0 services for the picker and import; Local has no host).
 
     /// <summary>§4.19, FR-132: the repos the connection's user can develop in (search, keyset cursor).</summary>
     Task<Result<GitHostRepoPage>> ListReposAsync(Guid connectionId, string? search, string? cursor, CancellationToken cancellationToken) =>

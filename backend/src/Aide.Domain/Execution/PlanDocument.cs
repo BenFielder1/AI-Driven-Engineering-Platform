@@ -163,7 +163,7 @@ public static partial class PlanDocument
 
     /// <summary>
     /// FR-76: <c>agent</c> is written only when it isn't the default <c>generalist</c> and <c>covers</c> only when not empty,
-    /// so v1 plan documents render byte-identically (reading them back defaults the agent again).
+    /// so 0.1.0 plan documents render byte-identically (reading them back defaults the agent again).
     /// </summary>
     private static Dictionary<string, object?> WithAgentAndCovers(this Dictionary<string, object?> step, PlanStep source)
     {

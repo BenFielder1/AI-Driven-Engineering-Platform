@@ -115,7 +115,7 @@ public sealed class RollbackEndpointTests(AideApiFactory factory)
         var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.RollbackCompleted)).Payload);
         Assert.Equal(rollback.Id.ToString(), completed.GetProperty("rollbackId").GetString());
 
-        // History and the checkpoint picker (D-V2-11: GET /checkpoints replaces v1's GET /versions).
+        // History and the checkpoint picker (D-V2-11: GET /checkpoints replaces 0.1.0's GET /versions).
         var history = await ProjectApi.ReadAsync<List<RollbackDto>>(await seeded.Fixture.Viewer.Client.GetAsync(new Uri($"{seeded.Fixture.Path}/rollbacks", UriKind.Relative), Ct));
         var listed = Assert.Single(history);
         Assert.Equal((rollback.Id, rollback.ToCheckpoint, rollback.RestoredPhase, rollback.CreatedBy), (listed.Id, listed.ToCheckpoint, listed.RestoredPhase, listed.CreatedBy));
@@ -186,12 +186,12 @@ public sealed class RollbackEndpointTests(AideApiFactory factory)
         var fixture = seeded.Fixture;
         await LifecycleSeed.AddTransitionAsync(factory, seeded.Id, Phase.Review, Phase.Release, 7, DateTimeOffset.UtcNow.AddMinutes(-1));
 
-        // v1 let a released project roll back; since v2 a released version is closed (D-V2-3).
+        // 0.1.0 let a released project roll back; since 0.2.0 a released version is closed (D-V2-3).
         await LifecycleSeed.SetProjectAsync(factory, seeded.Id, Phase.Release, 8, ApprovalMode.Advisory, ProjectStatus.Released);
         var closed = await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, seeded.Id, 6), HttpStatusCode.Conflict, ErrorCodes.RollbackBlocked);
         Assert.Equal(["reason: version_released"], closed.GetProperty("details").EnumerateArray().Select(d => d.GetString()));
 
-        // Releasing (not yet released) at checkpoint 8: the v1 target checks apply.
+        // Releasing (not yet released) at checkpoint 8: the 0.1.0 target checks apply.
         await LifecycleSeed.SetProjectAsync(factory, seeded.Id, Phase.Release, 8, ApprovalMode.Advisory, ProjectStatus.Releasing);
         await Problems.AssertAsync(await RollbackAsync(fixture.Contributor.Client, seeded.Id, 4), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
         await Problems.AssertAsync(await RollbackAsync(fixture.Outsider.Client, seeded.Id, 4), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -205,9 +205,9 @@ public sealed class RollbackEndpointTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR45_restored_phase_is_required_in_the_database_since_the_v2_versions_migration()
+    public async Task FR45_restored_phase_is_required_in_the_database_since_the_0_2_0_versions_migration()
     {
-        // v2 SPEC §5 migration notes: the v1 deploy-window exception (nullable restored_phase) is closed by the
+        // 0.2.0 SPEC §5 migration notes: the 0.1.0 deploy-window exception (nullable restored_phase) is closed by the
         // ReleaseVersions migration, which backfills the column and sets it NOT NULL.
         using var seeded = await SeedVersion7InReviewAsync();
         var rollback = await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(seeded.Fixture.Owner.Client, seeded.Id, 4));

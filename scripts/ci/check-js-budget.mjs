@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CI: first-load JS budget for `/` (v6 SPEC §8 Performance, milestone M43). Run after `npm run build`.
+// CI: first-load JS budget for `/` (0.6.0 SPEC §8 Performance, milestone M43). Run after `npm run build`.
 //
 // Usage: node scripts/ci/check-js-budget.mjs [frontend-dir]   (default: ./frontend, or . when run from frontend/)
 // Exit:  0 within budget · 1 over budget · 2 the build output for `/` could not be found or read (never a silent pass)

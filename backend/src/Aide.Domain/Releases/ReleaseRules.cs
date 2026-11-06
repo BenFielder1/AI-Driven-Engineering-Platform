@@ -52,7 +52,7 @@ public static partial class ReleaseRules
     /// FR-64 (amends FR-42): the release tag <c>&lt;tagPrefix&gt;&lt;version&gt;</c> is created on the merge commit when it doesn't
     /// exist; an existing tag that already holds the release is reused (idempotent, nothing merged or tagged:
     /// <c>true</c>); a tag on another commit fails the release with <c>TAG_EXISTS</c> before anything is merged. Tags are
-    /// never moved, and v1's <c>v&lt;N&gt;-aide.&lt;k&gt;</c> suffixes are gone.
+    /// never moved, and 0.1.0's <c>v&lt;N&gt;-aide.&lt;k&gt;</c> suffixes are gone.
     /// </summary>
     public static Result<bool> DecideTag(string tag, ExistingReleaseTag? existing)
     {

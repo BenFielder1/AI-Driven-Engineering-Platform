@@ -67,7 +67,7 @@ public static class DeploymentPlatforms
     public static DeploymentProvider? ProviderOf(StackComposition? composition, DeploymentComponent component) =>
         FromHostOption(HostOf(composition, component));
 
-    /// <summary>§4.20 capabilities per provider. The v2 <c>fake</c> provider behaves like Vercel.</summary>
+    /// <summary>§4.20 capabilities per provider. The 0.2.0 <c>fake</c> provider behaves like Vercel.</summary>
     public static DeploymentCapabilities Capabilities(DeploymentProvider provider) => provider switch
     {
         DeploymentProvider.Vercel or DeploymentProvider.Fake => new(ShaPinned: true, Previews: true, Rollback: true, PerEnvironmentVariables: true, RuntimeSecrets: true),
@@ -100,7 +100,7 @@ public static class DeploymentPlatforms
 
     /// <summary>
     /// FR-142, FR-143: the platform connection a target of <paramref name="provider"/> binds; <c>null</c> for GitHub Pages,
-    /// which uses the project's GitHub App installation or PAT. The v2 <c>fake</c> provider binds Vercel connections.
+    /// which uses the project's GitHub App installation or PAT. The 0.2.0 <c>fake</c> provider binds Vercel connections.
     /// </summary>
     public static PlatformProvider? ConnectionProvider(DeploymentProvider provider) => provider switch
     {
@@ -125,7 +125,7 @@ public static class DeploymentPlatforms
 
     /// <summary>
     /// FR-149: whether the platform deploys the default branch by itself, so a release's production deployment first adopts
-    /// the platform's deployment of the merge commit (GitHub Pages: the Pages workflow run). The v2 Fake never does.
+    /// the platform's deployment of the merge commit (GitHub Pages: the Pages workflow run). The 0.2.0 Fake never does.
     /// </summary>
     public static bool AutoDeploysDefaultBranch(DeploymentProvider provider) => provider != DeploymentProvider.Fake;
 

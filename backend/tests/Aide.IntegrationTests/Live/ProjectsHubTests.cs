@@ -240,7 +240,7 @@ public sealed class ProjectsHubTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
 
-        // A reverse proxy (the Next.js web server, v2's nginx) may send Host without the port and the browser's host:port as X-Forwarded-Host.
+        // A reverse proxy (the Next.js web server, 0.2.0's nginx) may send Host without the port and the browser's host:port as X-Forwarded-Host.
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/hubs/projects/negotiate?negotiateVersion=1");
         request.Headers.Add("Origin", "https://localhost:8080");
         request.Headers.Add("X-Forwarded-Host", "localhost:8080");

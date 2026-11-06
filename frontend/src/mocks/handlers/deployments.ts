@@ -67,7 +67,7 @@ export const deploymentDb = {
 /** Deployments the platform never reported (tests add ids): `unknown_at_platform` (FR-151). */
 export const unknownAtPlatform = new Set<string>()
 
-/** The v2 name of the knobs (the wizard's Vercel flow). */
+/** The 0.2.0 name of the knobs (the wizard's Vercel flow). */
 export const vercelDb = deploymentDb
 
 export function resetDeploymentDb() {
@@ -269,7 +269,7 @@ function readyTarget(
 }
 
 /**
- * Sets a project up with a ready Vercel frontend target (the v2 shape most deployment tests need): bound to
+ * Sets a project up with a ready Vercel frontend target (the 0.2.0 shape most deployment tests need): bound to
  * `connection` (if any) and linked to the Vercel project `inventory`.
  */
 export function seedDeploymentSettings(
@@ -453,7 +453,7 @@ export function seedEnvVar(p: StoredProject, overrides: Partial<StoredEnvVar> & 
 
 let deploymentClock = Date.parse('2026-09-05T10:00:00Z')
 
-/** FR-150: the row a rollback records is `promote` on Vercel (v2 wording), `rollback` elsewhere. */
+/** FR-150: the row a rollback records is `promote` on Vercel (0.2.0 wording), `rollback` elsewhere. */
 const rollbackTrigger = (platform: Provider): 'promote' | 'rollback' =>
   platform === 'vercel' || platform === 'fake' ? 'promote' : 'rollback'
 
@@ -713,7 +713,7 @@ export function seedHostsFromComposition(p: StoredProject, deploy: Schemas['Stac
   d.groups = groups.map((g) => makeGroup(g.provider, [...g.parts], g.capability))
 }
 
-/** FR-88 wizard (`POST /projects` `deployment`): v2's Vercel flow, now the project's frontend target (FR-144). */
+/** FR-88 wizard (`POST /projects` `deployment`): 0.2.0's Vercel flow, now the project's frontend target (FR-144). */
 export function applyVercelSetup(
   p: StoredProject,
   userId: string,
@@ -1069,7 +1069,7 @@ export function rolloutStepOf(d: Deployment): RolloutStep {
 
 /**
  * Without a seeded environment, the newest preview rollout is built from the current version's preview deployments:
- * one step per component that has one (backend first), as the API does for a v2 single-Vercel project.
+ * one step per component that has one (backend first), as the API does for a 0.2.0 single-Vercel project.
  */
 function derivedPreview(p: StoredProject): PreviewEnvironment {
   const version = currentVersionOf(p)
@@ -1715,7 +1715,7 @@ export const deploymentHandlers = [
     return HttpResponse.json<Deployment>(created, { status: 202 })
   }),
 
-  // FR-150: rollback per provider capability; `/promote` is its v2 alias.
+  // FR-150: rollback per provider capability; `/promote` is its 0.2.0 alias.
   ...(['rollback', 'promote'] as const).map((action) =>
     http.post(`*/api/projects/:id/deployments/:deploymentId/${action}`, async ({ request, params }) => {
       const a = ownerMutation(request, params.id)

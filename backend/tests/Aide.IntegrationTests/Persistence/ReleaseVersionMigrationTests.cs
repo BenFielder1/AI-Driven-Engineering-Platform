@@ -10,8 +10,8 @@ using Npgsql;
 namespace Aide.IntegrationTests.Persistence;
 
 /// <summary>
-/// FR-67 / §4.10 "Migration from v1": the ReleaseVersions migration applied to a database holding v1-shaped data
-/// (migrated to AdminListIndexes, seeded with SQL in the v1 schema, then migrated to the latest version).
+/// FR-67 / §4.10 "Migration from 0.1.0": the ReleaseVersions migration applied to a database holding 0.1.0-shaped data
+/// (migrated to AdminListIndexes, seeded with SQL in the 0.1.0 schema, then migrated to the latest version).
 /// </summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class ReleaseVersionMigrationTests(AideApiFactory factory)
@@ -49,7 +49,7 @@ public sealed class ReleaseVersionMigrationTests(AideApiFactory factory)
         Assert.Equal((8, "0.1.0", (string?)null, version.Id), (project.Checkpoint, project.ReleasedVersion, project.DevelopmentVersion, project.CurrentReleaseVersionId));
         Assert.Equal((MergeStrategy.AideMerges, "v"), (project.MergeStrategy, project.TagPrefix));
 
-        // Every v1 row of the project belongs to 0.1.0; checkpoints keep the v1 project version numbers.
+        // Every 0.1.0 row of the project belongs to 0.1.0; checkpoints keep the 0.1.0 project version numbers.
         Assert.All(await db.Artifacts.AsNoTracking().Where(a => a.ProjectId == Released).ToListAsync(Ct), a => Assert.Equal(version.Id, a.ReleaseVersionId));
         Assert.All(await db.ExecutionSteps.AsNoTracking().Where(s => s.ProjectId == Released).ToListAsync(Ct), s => Assert.Equal(version.Id, s.ReleaseVersionId));
         Assert.All(await db.AgentRuns.AsNoTracking().Where(r => r.ProjectId == Released).ToListAsync(Ct), r => Assert.Equal(version.Id, r.ReleaseVersionId));
@@ -110,14 +110,14 @@ public sealed class ReleaseVersionMigrationTests(AideApiFactory factory)
         Assert.All(transitions.Where(t => t.Checkpoint > 3), t => Assert.Equal(released.Id, t.ReleaseVersionId));
         Assert.Equal(released.Id, (await db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == RolledBack, Ct)).ReleaseVersionId);
 
-        // v1 known issue folded in: the rollback written without restored_phase is backfilled (column now NOT NULL).
+        // 0.1.0 known issue folded in: the rollback written without restored_phase is backfilled (column now NOT NULL).
         var rollback = await db.RollbackEvents.AsNoTracking().SingleAsync(r => r.Id == RolledBackRollback, Ct);
         Assert.Equal((development.Id, 8, 3, Phase.Planning), (rollback.ReleaseVersionId, rollback.FromCheckpoint, rollback.TargetCheckpoint, rollback.RestoredPhase));
         Assert.Equal("NO", await IsNullableAsync(db, "rollback_events", "restored_phase"));
     }
 
     [Fact]
-    public async Task FR67_step_attempts_are_backfilled_from_v1_step_events_and_agent_runs()
+    public async Task FR67_step_attempts_are_backfilled_from_0_1_0_step_events_and_agent_runs()
     {
         await using var db = await MigratedV1DatabaseAsync();
 
@@ -144,7 +144,7 @@ public sealed class ReleaseVersionMigrationTests(AideApiFactory factory)
             $"SELECT is_nullable AS \"Value\" FROM information_schema.columns WHERE table_name = {table} AND column_name = {column}")
             .SingleAsync(Ct);
 
-    /// <summary>A new database at the last v1 migration, seeded with v1 rows, then migrated to the latest version.</summary>
+    /// <summary>A new database at the last 0.1.0 migration, seeded with 0.1.0 rows, then migrated to the latest version.</summary>
     private async Task<AideDbContext> MigratedV1DatabaseAsync()
     {
         var connectionString = await factory.CreateEmptyDatabaseAsync(Ct);
@@ -169,13 +169,13 @@ public sealed class ReleaseVersionMigrationTests(AideApiFactory factory)
     }
 
     /// <summary>
-    /// Three v1 projects (ids end in a, b, c; timestamps are hours after @t0):
+    /// Three 0.1.0 projects (ids end in a, b, c; timestamps are hours after @t0):
     /// <list type="bullet">
     /// <item>a: released once at checkpoint 7 as <c>v7-aide</c> (completion → checkpoint 8), GitHub PR #12, one step with a
     /// rejected then an accepted attempt.</item>
     /// <item>b: never released, in specification at checkpoint 2.</item>
     /// <item>c: released as <c>v7-aide</c>, then rolled back to checkpoint 3 (planning); the rollback row has no
-    /// restored_phase (written by an old pod during a v1 deploy).</item>
+    /// restored_phase (written by an old pod during a 0.1.0 deploy).</item>
     /// </list>
     /// </summary>
     private const string V1Seed =

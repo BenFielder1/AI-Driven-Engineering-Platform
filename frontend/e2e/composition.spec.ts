@@ -25,15 +25,15 @@ import {
   openStage,
   waitForDeployment,
   waitForPhase,
-} from './support/v2.ts'
+} from './support/lifecycle.ts'
 
 /**
- * FR-129 replaces the v2 preset E2E with the composition path (SPEC §8) on the E2E deployment (Fake LLM +
+ * FR-129 replaces the 0.2.0 preset E2E with the composition path (SPEC §8) on the E2E deployment (Fake LLM +
  * FakeStackScripts, Local Git): the wizard's Stack step composes React + Vite + ASP.NET Core + EF Core + PostgreSQL
  * (FR-114, FR-115) → Settings → Stack shows it with no legacy preset (FR-117, FR-129) → the spec has the composition's
  * sections (FR-123) → plan steps carry the specialists, scaffolder first (FR-124) → every code_generator run is a
  * specialist of the composition with no preset (FR-120, FR-121, FR-129) → review is release eligible (FR-126) → the
- * release is approved on the Release page. A second test keeps the v2 preview build-failure path (FR-90) on a project
+ * release is approved on the Release page. A second test keeps the 0.2.0 preview build-failure path (FR-90) on a project
  * without a stack.
  */
 

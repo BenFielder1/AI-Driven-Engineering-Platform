@@ -17,7 +17,7 @@ Tevrin's versions are numbered [semver](https://semver.org/), `x.y.z`. Each fini
 | Next feature version | 0.7.0 |
 | A fix-only release of 0.6.0 | 0.6.1 |
 
-Spec IDs (`D-V6-1`), folder names (`docs/v6/`) and these history page URLs keep `vN`, which means version 0.N.0.
+Spec IDs (`D-V6-1`) keep `V<N>`, which means version 0.N.0. Folders (`docs/0.6.0/`) and history pages (`/history/0.6.0/`) use semver; the old `/history/v<N>/` URLs redirect.
 
 The version is written in three places, and CI fails if they differ (`scripts/ci/check-version.sh`):
 
@@ -37,7 +37,7 @@ Optionally, add a tag ruleset (Settings → Rules → Rulesets → New tag rules
 
 The tag is `x.y.z` with no `v` prefix, on the `main` merge commit of the version. Ben makes the release, or an agent makes it after Ben confirms the version and the commit.
 
-1. Merge the version's pull request into `main`, and wait for CI to pass on the merge commit. Before merging, the root `SPEC.md` and `PROGRESS.md` have moved to `docs/v<N>/`, and the changelog entry's `date` is set to the release day.
+1. Merge the version's pull request into `main`, and wait for CI to pass on the merge commit. Before merging, the root `SPEC.md` and `PROGRESS.md` have moved to `docs/<x.y.z>/`, and the changelog entry's `date` is set to the release day.
 2. Find the newest `main` commit with a green CI run. CI skips commits that only change docs, so this may not be the head of `main`. Check the version on that commit, and tag it:
 
    ```bash

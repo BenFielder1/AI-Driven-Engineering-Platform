@@ -1,6 +1,6 @@
 # Build progress (v2)
 
-Spec: `SPEC.md` (v2; v1 requirements FR-1–FR-52 from `docs/v1/SPEC.md` stay in force unless amended, §3.0) · Branch: `build/aide-v2` · Started: 2026-10-15 · v1 log: `docs/v1/PROGRESS.md`
+Spec: `SPEC.md` (v2; v1 requirements FR-1–FR-52 from `docs/0.1.0/SPEC.md` stay in force unless amended, §3.0) · Branch: `build/aide-v2` · Started: 2026-10-15 · v1 log: `docs/0.1.0/PROGRESS.md`
 
 ## Environment
 - .NET SDK: 10.0.401 · Node: v24.21.0 · Docker: 29.8.2 (Docker Desktop) · gh: installed
@@ -9,7 +9,7 @@ Spec: `SPEC.md` (v2; v1 requirements FR-1–FR-52 from `docs/v1/SPEC.md` stay in
 - Local app URL: http://localhost:8080 · Dev loop: API :5080, Vite :5173, DB :5432
 
 ## Requirements
-Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live in `docs/v1/PROGRESS.md`; amended v1 IDs are listed here when their amendment lands.
+Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live in `docs/0.1.0/PROGRESS.md`; amended v1 IDs are listed here when their amendment lands.
 
 | ID | Summary | Spec § | Area | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -231,4 +231,4 @@ Spec IDs are used directly (FR-n). NFR rows use the spec section. v1 rows live i
 - E2E lifecycle spec lost its rollback-after-release scenario (FR-63 blocks it); add a rollback-before-release scenario — e2e-qa-engineer (phase 10)
 - ReleaseVersionStampingInterceptor still needed by integration-test seeds (LifecycleSeed, direct inserts); remove once they set release_version_id — ef-data-engineer
 - M9a screenshot check left a test user and project "Shell check" in the k8s DB — delete if unwanted — Ben
-- Carried from v1 (see `docs/v1/PROGRESS.md`): rollback_events.restored_phase nullable (folded into the M10 versions migration per SPEC §5); TAG_CONFLICT cleanup; gates list unpaged — orchestrator
+- Carried from v1 (see `docs/0.1.0/PROGRESS.md`): rollback_events.restored_phase nullable (folded into the M10 versions migration per SPEC §5); TAG_CONFLICT cleanup; gates list unpaged — orchestrator

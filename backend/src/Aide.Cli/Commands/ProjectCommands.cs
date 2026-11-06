@@ -114,7 +114,7 @@ internal static class ProjectCommands
             llmProvider, llmModel, llmConnection, inferStack, importVersion, releasedTag, localPath,
         };
 
-        // FR-156: `tevrin project create` is the v4 name of the same command.
+        // FR-156: `tevrin project create` is the 0.4.0 name of the same command.
         command.Aliases.Add("create");
 
         factory.SetHandler(command, async (context, cancellationToken) =>

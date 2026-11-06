@@ -183,7 +183,7 @@ public static partial class ProjectSettingsRules
         provider == GitProvider.GithubPat && !string.IsNullOrWhiteSpace(repoUrl) ? repoUrl.Trim() : null;
 
     /// <summary>
-    /// FR-86: the wizard's Git mode. v2 clients send <c>mode</c>; v1 clients (and the v1 CLI) send <c>provider</c>, which
+    /// FR-86: the wizard's Git mode. 0.2.0 clients send <c>mode</c>; 0.1.0 clients (and the 0.1.0 CLI) send <c>provider</c>, which
     /// is kept as an alias. One of them is required; when both are sent they must agree.
     /// </summary>
     public static Result<GitProvider> ResolveGitMode(GitProvider? mode, GitProvider? provider, string prefix = "")

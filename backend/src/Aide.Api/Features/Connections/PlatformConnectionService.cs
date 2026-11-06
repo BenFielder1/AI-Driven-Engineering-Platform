@@ -32,7 +32,7 @@ public sealed partial class PlatformConnectionService(
     TimeProvider time,
     ILogger<PlatformConnectionService> logger)
 {
-    /// <summary>§8: tracker tokens have their own purpose; the other platforms share the v4 one.</summary>
+    /// <summary>§8: tracker tokens have their own purpose; the other platforms share the 0.4.0 one.</summary>
     private ISecretProtector ProtectorFor(PlatformProvider provider) =>
         protectors.ForPurpose(PlatformConnectionRules.IsTracker(provider) ? SecretPurposes.TrackerToken : SecretPurposes.PlatformToken);
 

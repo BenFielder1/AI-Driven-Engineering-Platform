@@ -12,7 +12,7 @@ namespace Aide.IntegrationTests.GitHub;
 
 /// <summary>
 /// FR-80–FR-83, FR-86 contract: the GitHub App, connection and repo picker routes with their auth, request validation and
-/// behaviour without an App; project creation and Git settings carry the v2 git mode. The App flows are in
+/// behaviour without an App; project creation and Git settings carry the 0.2.0 git mode. The App flows are in
 /// <see cref="GitHubAppTests"/>.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
@@ -146,7 +146,7 @@ public sealed class GitHubContractTests(AideApiFactory factory)
     // ---------------------------------------------------------------- FR-82, FR-86 project creation
 
     [Fact]
-    public async Task FR86_A_project_is_created_with_git_mode_and_the_v1_provider_alias_still_works()
+    public async Task FR86_A_project_is_created_with_git_mode_and_the_0_1_0_provider_alias_still_works()
     {
         using var owner = await ApiSession.RegisterAsync(factory);
 

@@ -16,7 +16,7 @@ public static class RepoToolNames
 /// </summary>
 public static class RepoToolErrors
 {
-    /// <summary>The path breaks the v1 §4.6 path rules or escapes the snapshot; nothing was read.</summary>
+    /// <summary>The path breaks the 0.1.0 §4.6 path rules or escapes the snapshot; nothing was read.</summary>
     public const string UnsafePath = "UNSAFE_PATH";
 
     /// <summary>The run used its 25 calls or 400 KB; the agent must answer with what it has.</summary>

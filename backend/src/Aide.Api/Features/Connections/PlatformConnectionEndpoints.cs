@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 namespace Aide.Api.Features.Connections;
 
 /// <summary>
-/// FR-142: the caller's platform connections (§6 <c>/api/me/connections/platforms</c>, replacing v2's
+/// FR-142: the caller's platform connections (§6 <c>/api/me/connections/platforms</c>, replacing 0.2.0's
 /// <c>/api/me/connections/vercel</c>, D-V4-4): Vercel, Netlify, Cloudflare, Render, Railway and Supabase tokens, plus picker
 /// data (accounts and resources). Connections are personal: every route sees only the caller's own (another user's id is
 /// <c>NOT_FOUND</c>), and nobody can read a token back. Mutations need a browser session: API tokens get <c>FORBIDDEN</c>

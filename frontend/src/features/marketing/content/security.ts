@@ -2,7 +2,7 @@ import { docsUrl, type NavLink } from './site-nav'
 
 /**
  * FR-217, FR-222: factual security statements only, each with the docs page that backs it. Sources: docs/guides
- * (connections, github-app, notifications), docs/reference (architecture, testing), v1 §4.3/§4.6, v2 FR-71, v3
+ * (connections, github-app, notifications), docs/reference (architecture, testing), 0.1.0 §4.3/§4.6, 0.2.0 FR-71, 0.3.0
  * security headers, SPEC §8.
  */
 export interface SecurityFact {
@@ -40,7 +40,7 @@ export const securityFacts: readonly SecurityFact[] = [
     title: 'Read-only repository tools, with secret redaction',
     body: 'Agents read code through list, read and search tools on a credential-free snapshot. They can’t run commands. Lines that look like secrets are redacted before they reach a model, and generated code is scanned for secrets before it is committed.',
     icon: 'eye',
-    link: { label: 'v2 notes (repository tools)', href: docsUrl('history/v2/'), external: true },
+    link: { label: '0.2.0 notes (repository tools)', href: docsUrl('history/0.2.0/'), external: true },
   },
   {
     id: 'artifacts',

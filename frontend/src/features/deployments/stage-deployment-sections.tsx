@@ -37,7 +37,7 @@ function NotConfigured({ owner, projectId, what }: { owner: boolean; projectId: 
  * FR-147 on the Review page: the persistent preview environment's current rollout, one row per step (the preview
  * migration run, then backend, then frontend) with state, host, URL, error, build-log tail and Redeploy for
  * Contributors and Owners; the notes for skipped hosts (GitHub Pages); and, when the preview database diverged
- * (FR-148), the reason with "Reset preview database" for Owners. Polls while the rollout runs. A v2 single-Vercel
+ * (FR-148), the reason with "Reset preview database" for Owners. Polls while the rollout runs. A 0.2.0 single-Vercel
  * project shows one frontend row.
  */
 export function PreviewDeploymentSection() {
@@ -153,7 +153,7 @@ function LiveOn({ version, live }: { version: string; live: readonly LiveTarget[
  * FR-91, FR-149 on the Release page: the release's production rollout as a timeline (migration run → backend →
  * frontend) with states and URLs, "Released 0.1.0 · live on Netlify and Render" once live, the migration run link and
  * the "Migrations applied, code not merged" warning. A failed deployment doesn't undo the release: it shows the error
- * and, for Owners, Redeploy. A release without a rollout (v2) shows its single production deployment.
+ * and, for Owners, Redeploy. A release without a rollout (0.2.0) shows its single production deployment.
  */
 export function ProductionDeploymentSection({ release }: { release: Release | null | undefined }) {
   const { project, can } = useProjectAccess()

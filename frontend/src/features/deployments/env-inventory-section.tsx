@@ -78,7 +78,7 @@ const serverFields: Record<string, keyof EnvValues> = {
   targets: 'preview',
 }
 
-/** §4.23: the v2 Supabase variables migrated projects keep as user variables. */
+/** §4.23: the 0.2.0 Supabase variables migrated projects keep as user variables. */
 const LEGACY_SUPABASE_VARIABLES: readonly string[] = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']
 
 /** §4.23: the legacy user variables to suggest deleting, once linking Supabase added the derived publishable key. */

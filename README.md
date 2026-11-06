@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="docs/v6/brand/tevrin-lockup-light.svg#gh-light-mode-only" alt="Tevrin" width="320">
-  <img src="docs/v6/brand/tevrin-lockup-dark.svg#gh-dark-mode-only" alt="Tevrin" width="320">
+  <img src="docs/0.6.0/brand/tevrin-lockup-light.svg#gh-light-mode-only" alt="Tevrin" width="320">
+  <img src="docs/0.6.0/brand/tevrin-lockup-dark.svg#gh-dark-mode-only" alt="Tevrin" width="320">
 </p>
 
 # Tevrin
@@ -61,7 +61,7 @@ frontend/   src/app, src/features, src/api/generated (generated) · server.ts ·
 deploy/     k8s/ (Kustomize) · scripts/ · railway/ (ops docs)
 .railway/   Railway infrastructure as code
 .github/    workflows: ci.yml, deploy.yml, docs.yml
-docs/       the docs site, and frozen specs in docs/v1 to docs/v5
+docs/       the docs site, and frozen specs in docs/0.1.0 to docs/0.5.0
 SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md
 ```
 

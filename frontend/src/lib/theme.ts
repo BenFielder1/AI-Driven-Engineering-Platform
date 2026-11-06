@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
 
 /**
- * FR-204 (amends SPEC v3 §7.1): Light, Dark and System; System is the default. The choice is stored in localStorage
- * `aide.theme` as `light` | `dark` | `system` (the key keeps its v5 name, so a saved theme carries over: FR-201).
+ * FR-204 (amends 0.3.0 SPEC §7.1): Light, Dark and System; System is the default. The choice is stored in localStorage
+ * `aide.theme` as `light` | `dark` | `system` (the key keeps its 0.5.0 name, so a saved theme carries over: FR-201).
  * src/lib/theme-init.ts applies the same rule before first paint and follows the OS while System is chosen: keep the
  * two in step.
  */

@@ -20,7 +20,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.IntegrationTests.Notifications;
 
 /// <summary>
-/// FR-92: the v2 notification types (recipients, channels, preference opt-out), the v2 events in the activity feed and the
+/// FR-92: the 0.2.0 notification types (recipients, channels, preference opt-out), the 0.2.0 events in the activity feed and the
 /// admin event log, and the "preview ready" criterion (live within 2 s, every member notified).
 /// </summary>
 [Collection(ApiTestGroup.Name)]

@@ -101,7 +101,7 @@ public class RollbackRulesTests
     [Fact]
     public void FR44_amended_by_FR63_A_released_version_is_closed_ROLLBACK_BLOCKED_version_released()
     {
-        // v1 allowed rolling a released project back to review; since v2 (D-V2-3) a released version is closed.
+        // 0.1.0 allowed rolling a released project back to review; since 0.2.0 (D-V2-3) a released version is closed.
         RecordedTransition[] history = [.. History, new(8, Phase.Release, T0.AddMinutes(9))];
         var request = Request(7) with { Current = new LifecycleState(Phase.Release, ProjectStatus.Released, 8), Transitions = history, VersionReleased = true };
 

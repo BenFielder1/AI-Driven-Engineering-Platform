@@ -10,7 +10,7 @@ public enum AgentRunStatus
     Cancelled = 4,
 }
 
-/// <summary>Git provider of a project (FR-35, FR-82, FR-136). Wire values: <c>github_pat</c> (v1 <c>github</c>), <c>local</c>,
+/// <summary>Git provider of a project (FR-35, FR-82, FR-136). Wire values: <c>github_pat</c> (0.1.0 <c>github</c>), <c>local</c>,
 /// <c>github_app</c>, <c>gitlab</c>, <c>bitbucket</c>.</summary>
 public enum GitProvider
 {

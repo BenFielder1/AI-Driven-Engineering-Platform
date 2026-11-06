@@ -1,7 +1,7 @@
 /**
- * FR-214, FR-212, FR-222: the walk-through from idea to release. Sources: v1 SPEC §4.1–§4.5 (phases, gates by approval
- * mode, artifacts, invalidation, review decision), v2 §3.2 (release versions and checkpoints), v4 (specialists),
- * v5 §3.4 (Analysis), docs/guides. Approval modes are the domain's `ApprovalMode` (strict, advisory, autonomous).
+ * FR-214, FR-212, FR-222: the walk-through from idea to release. Sources: 0.1.0 SPEC §4.1–§4.5 (phases, gates by approval
+ * mode, artifacts, invalidation, review decision), 0.2.0 §3.2 (release versions and checkpoints), 0.4.0 (specialists),
+ * 0.5.0 §3.4 (Analysis), docs/guides. Approval modes are the domain's `ApprovalMode` (strict, advisory, autonomous).
  */
 export interface PhaseDetail {
   id: string
@@ -101,7 +101,7 @@ export const approvalModes: readonly ApprovalMode[] = [
 export const approvalModesNote =
   'In every mode, the release waits for the pre-release gate and problems raise an escalation gate. Gate decisions are final and recorded.'
 
-/** Review cycles (v1 §4.5), in order. */
+/** Review cycles (0.1.0 §4.5), in order. */
 export const reviewRules: readonly string[] = [
   'A score below 0.75, or severe drift from the spec, escalates to a person.',
   'A score at or above the project’s threshold (0.90 by default) makes the version release-eligible.',

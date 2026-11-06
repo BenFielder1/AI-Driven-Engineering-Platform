@@ -128,7 +128,7 @@ public class DeploymentGroupingTests
     }
 
     [Fact]
-    public void FR187_A_v4_composition_keeps_its_exact_JSON_and_behaviour()
+    public void FR187_A_0_4_0_composition_keeps_its_exact_JSON_and_behaviour()
     {
         var composition = Valid(RailwayX3());
 
@@ -215,7 +215,7 @@ public class DeploymentGroupingTests
     }
 
     [Fact]
-    public void FR189_R8_Render_Postgres_keeps_its_v4_rule_when_separate()
+    public void FR189_R8_Render_Postgres_keeps_its_0_4_0_rule_when_separate()
     {
         var render = Sel("fe-react-vite", "be-fastapi", "data-sqlalchemy", "vcs-github", "deploy-render", "deploy-render", "render-postgres");
 

@@ -1,5 +1,5 @@
 /**
- * FR-99: the v2 nginx security headers, now set by the custom web server (server.ts). Pure, unit-tested.
+ * FR-99: the 0.2.0 nginx security headers, now set by the custom web server (server.ts). Pure, unit-tested.
  * Run by Node's type stripping: erasable TypeScript only, relative imports with `.ts`.
  */
 import { randomBytes } from 'node:crypto'

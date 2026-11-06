@@ -117,7 +117,7 @@ export function restoreBlockReason(input: {
 /** The stage name used in restore copy ("Specification is complete…"). */
 export const producingStageLabel = (type: ArtifactType) => phaseLabels[producingPhase[type]]
 
-/** The current version of a type: the highest locked one (FR-16, v1 §4.3). */
+/** The current version of a type: the highest locked one (FR-16, 0.1.0 §4.3). */
 export const currentLockedVersion = (history: readonly Pick<ArtifactSummary, 'version' | 'status'>[]) =>
   history.find((a) => a.status === 'locked')?.version ?? null
 

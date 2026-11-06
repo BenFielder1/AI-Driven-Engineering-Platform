@@ -1,7 +1,7 @@
 import { docsUrl, GITHUB_URL, type NavLink } from './site-nav'
 
 /**
- * FR-218, FR-212, FR-222: the FAQ. Every answer is true of v6 and comes from the specs (docs/v1–v5/SPEC.md, SPEC.md)
+ * FR-218, FR-212, FR-222: the FAQ. Every answer is true of 0.6.0 and comes from the specs (docs/0.1.0–0.5.0/SPEC.md, SPEC.md)
  * and the docs site. The licence wording follows SPEC D-V6-21 (PolyForm Shield; "source available", never "open source"). "Was it called AIDE?" is
  * the one marketing answer that names the old product (with the Changelog's "(as AIDE)").
  */

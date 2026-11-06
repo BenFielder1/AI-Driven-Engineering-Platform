@@ -6,7 +6,7 @@ import { expect, test as setup } from '@playwright/test'
 import { A11Y_FIXTURE, type A11yFixture } from './support/a11y-fixture.ts'
 import { api, apiJson, createProjectViaApi, driveProject, registerViaApi, waitForDraft } from './support/api.ts'
 import { NETLIFY_RENDER_STACK, setUpNetlifyRenderHosts } from './support/hosted-stack.ts'
-import { createLocalProject, createVercelConnection } from './support/v2.ts'
+import { createLocalProject, createVercelConnection } from './support/lifecycle.ts'
 import {
   approveProfileViaApi,
   createInferProjectViaApi,
@@ -15,7 +15,7 @@ import {
   saveRailwayProfileViaApi,
   UNKNOWN_BACKEND_MARKER,
   waitForProfileDraft,
-} from './support/v5.ts'
+} from './support/tracker-inference.ts'
 
 /**
  * NFR-A11Y fixture: one user with a Fake Vercel connection and a released strict-mode project (Fake + Local + Fake
@@ -45,12 +45,12 @@ setup('a11y fixture: a released project and a two-version project request', asyn
     )
     .toBe(2)
 
-  // SPEC §8 v4: Settings → Stack and Settings → Deployment with real target and database cards.
+  // SPEC §8 0.4.0: Settings → Stack and Settings → Deployment with real target and database cards.
   const stamp = String(Date.now())
   const stackProject = await createLocalProject(context, { name: `E2E Accessibility stack ${stamp}`, stack: NETLIFY_RENDER_STACK })
   await setUpNetlifyRenderHosts(context, stackProject.id, `a11y-${stamp}`)
 
-  // SPEC v5 §7 (axe on the Analysis page, the tracker dialog and the group windows): a Linear and a Railway connection,
+  // SPEC 0.5.0 §7 (axe on the Analysis page, the tracker dialog and the group windows): a Linear and a Railway connection,
   // one inferring import left with a blank, and one approved with a Railway group to set up.
   await createLinearConnection(context, 'A11y Fake Linear')
   await createRailwayConnection(context, 'A11y Fake Railway')

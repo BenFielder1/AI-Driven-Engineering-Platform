@@ -10,7 +10,7 @@ public sealed record LlmBoundProjectDto(Guid Id, string Name);
 /// <summary>
 /// One of the caller's LLM connections (FR-78). The key is never returned: only the provider, label, its last 4
 /// characters, the validation status (<c>valid</c>, <c>invalid</c>, <c>unchecked</c>) and when it was last checked, plus
-/// the projects it is bound to. <c>last4</c> is <c>????</c> for a key migrated from v1 until the start-up backfill reads it.
+/// the projects it is bound to. <c>last4</c> is <c>????</c> for a key migrated from 0.1.0 until the start-up backfill reads it.
 /// </summary>
 public sealed record LlmCredentialDto(
     Guid Id,

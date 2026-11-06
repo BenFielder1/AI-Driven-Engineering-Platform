@@ -13,11 +13,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.IntegrationTests.Performance;
 
 /// <summary>
-/// §8 v4 Performance, measured as NFR-PERF2 was: p95 over sequential requests through the API against the Testcontainers
+/// §8 0.4.0 Performance, measured as NFR-PERF2 was: p95 over sequential requests through the API against the Testcontainers
 /// database, after a warm-up. Each target is a test of its own, so a slow one names its endpoint.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class V4PerformanceTests(AideApiFactory factory)
+public sealed class Performance_0_4_0_Tests(AideApiFactory factory)
 {
     private const int Samples = 40;
     private const int WarmUp = 5;

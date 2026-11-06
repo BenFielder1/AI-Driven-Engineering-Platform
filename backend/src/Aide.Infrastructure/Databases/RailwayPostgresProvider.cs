@@ -153,7 +153,7 @@ public sealed class RailwayPostgresProvider(PlatformHttp http) : IDatabaseProvid
         return fresh;
     }
 
-    /// <summary>§4.21 v4: the app's Railway project, from its target.</summary>
+    /// <summary>§4.21 0.4.0: the app's Railway project, from its target.</summary>
     private static (string ProjectId, string EnvironmentId) TargetPlacement(DatabaseSetupRequest request)
     {
         var app = RailwayRules.ParseResourceId(request.Host.RailwayResourceId) ?? throw new DatabaseProviderException(

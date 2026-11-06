@@ -40,7 +40,7 @@ function getQueryClient(): QueryClient {
 }
 
 /**
- * Client providers for the app and auth pages (SPEC §7): TanStack Query (with the v2 global 401 handling), the theme,
+ * Client providers for the app and auth pages (SPEC §7): TanStack Query (with the 0.2.0 global 401 handling), the theme,
  * the toast region and navigation settling. Live updates use LiveConnectionContext's default (a real SignalR
  * connection). The `(app)` and `(public)` layouts render it; the root layout doesn't, so marketing routes don't load
  * any of this (SPEC §8 first-load JS budget for `/`). Tests supply their own (src/test/render.tsx).
@@ -49,7 +49,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const [queryClient] = useState(getQueryClient)
 
-  // Any 401 UNAUTHENTICATED (session ended): sign the UI out and go to /login?returnUrl=<here> (v2 main.tsx).
+  // Any 401 UNAUTHENTICATED (session ended): sign the UI out and go to /login?returnUrl=<here> (0.2.0 main.tsx).
   useEffect(() => {
     function onSessionEnded() {
       const { pathname, search } = window.location

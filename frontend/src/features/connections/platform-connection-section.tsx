@@ -184,7 +184,7 @@ function testResultCopy(c: PlatformConnection): { ok: boolean; text: string } {
 
 /**
  * /connections → Deployment platforms or Databases (FR-142): per provider, the caller's connections (never the tokens)
- * with Re-test, Rename and Delete (as the v2 Vercel connections), and Add connection with what to create on the provider.
+ * with Re-test, Rename and Delete (as the 0.2.0 Vercel connections), and Add connection with what to create on the provider.
  */
 export function PlatformConnectionSection({
   id,

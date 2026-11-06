@@ -11,7 +11,7 @@ using Npgsql;
 namespace Aide.IntegrationTests.Persistence;
 
 /// <summary>
-/// FR-79 / D-V2-5: the LlmCredentials migration applied to a database at ReleaseVersions holding v1 per-project keys
+/// FR-79 / D-V2-5: the LlmCredentials migration applied to a database at ReleaseVersions holding 0.1.0 per-project keys
 /// (encrypted with the app's protector): each key becomes a connection of the project's earliest Owner and stays bound.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
@@ -32,7 +32,7 @@ public sealed class LlmCredentialMigrationTests(AideApiFactory factory)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task FR79_v1_project_key_becomes_a_connection_of_the_earliest_owner_and_stays_bound()
+    public async Task FR79_0_1_0_project_key_becomes_a_connection_of_the_earliest_owner_and_stays_bound()
     {
         var protector = factory.Services.GetRequiredService<ISecretProtector>();
         var ciphertext = protector.Protect(ProjectKey);
@@ -98,7 +98,7 @@ public sealed class LlmCredentialMigrationTests(AideApiFactory factory)
         Assert.Null(await db.AgentRuns.Where(r => r.ProjectId == WithKey).Select(r => r.CredentialId).SingleAsync(Ct));
     }
 
-    /// <summary>A new database at ReleaseVersions, seeded with v1-style LLM settings, then migrated to the latest version.</summary>
+    /// <summary>A new database at ReleaseVersions, seeded with 0.1.0-style LLM settings, then migrated to the latest version.</summary>
     private async Task<AideDbContext> MigratedDatabaseAsync(string ciphertext)
     {
         var connectionString = await factory.CreateEmptyDatabaseAsync(Ct);

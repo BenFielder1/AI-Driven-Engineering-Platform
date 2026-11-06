@@ -34,7 +34,7 @@ const cases: { name: string; type: Schemas['NotificationType']; label: string; t
   },
 ]
 
-describe('FR-193: v5 notification types in the UI', () => {
+describe('FR-193: 0.5.0 notification types in the UI', () => {
   it('FR193_new_types_have_labels_and_are_in_the_preference_and_channel_lists', () => {
     for (const type of ['stack_profile_ready', 'tracker_import_failed'] as const) {
       expect(notificationTypeLabels[type]).toBeTruthy()

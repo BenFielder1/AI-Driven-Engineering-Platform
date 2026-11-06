@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- FR-200: the deprecated `aide` command, kept for v6 under the old package id (Aide.Cli) so existing installs keep
+  <!-- FR-200: the deprecated `aide` command, kept for 0.6.0 under the old package id (Aide.Cli) so existing installs keep
        working after `dotnet tool update`. It is built from the `tevrin` sources (src/Aide.Cli) and differs only in its
        entry point, which prints the deprecation notice to stderr first. -->
   <PropertyGroup>

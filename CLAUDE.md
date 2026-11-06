@@ -8,18 +8,18 @@ Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates speciali
 
 | Version | Spec | Build log | Status |
 | --- | --- | --- | --- |
-| 0.1.0 (v1) | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
-| 0.2.0 (v2) | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
-| 0.3.0 (v3) | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v3/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
-| 0.4.0 (v4) | [`docs/v4/SPEC.md`](docs/v4/SPEC.md) | [`docs/v4/PROGRESS.md`](docs/v4/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
-| 0.5.0 (v5) | [`docs/v5/SPEC.md`](docs/v5/SPEC.md) | [`docs/v5/PROGRESS.md`](docs/v5/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
-| 0.6.0 (v6) | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site on GitHub Pages |
+| 0.1.0 | [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) | [`docs/0.1.0/PROGRESS.md`](docs/0.1.0/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
+| 0.2.0 | [`docs/0.2.0/SPEC.md`](docs/0.2.0/SPEC.md) | [`docs/0.2.0/PROGRESS.md`](docs/0.2.0/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
+| 0.3.0 | [`docs/0.3.0/SPEC.md`](docs/0.3.0/SPEC.md) | [`docs/0.3.0/PROGRESS.md`](docs/0.3.0/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
+| 0.4.0 | [`docs/0.4.0/SPEC.md`](docs/0.4.0/SPEC.md) | [`docs/0.4.0/PROGRESS.md`](docs/0.4.0/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
+| 0.5.0 | [`docs/0.5.0/SPEC.md`](docs/0.5.0/SPEC.md) | [`docs/0.5.0/PROGRESS.md`](docs/0.5.0/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
+| 0.6.0 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site on GitHub Pages |
 
-- **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24): v1–v5 are 0.1.0–0.5.0, v6 is 0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. "vN" stays in paths (`docs/v<N>/`), IDs (`D-V6-n`) and code comments, and means 0.N.0. The version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
-- The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here. Then release it (see Releases).
-- **v6 is an increment on v5 (and v1–v4):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113, v5 at FR-163, v6 at FR-196), and the spec-verifier checks the requirements of v1–v6.
-- **Scaffolding:** v2, v4, v5 and v6 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
-- Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
+- **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.7.0 new decisions are `D-<x.y.z>-n` (e.g. `D-0.7.0-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
+- The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/<x.y.z>/` and add a row here. Then release it (see Releases).
+- **0.6.0 is an increment on 0.5.0 (and 0.1.0–0.4.0):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (0.2.0 starts at FR-53, 0.3.0 at FR-94, 0.4.0 at FR-113, 0.5.0 at FR-163, 0.6.0 at FR-196), and the spec-verifier checks the requirements of 0.1.0–0.6.0.
+- **Scaffolding:** 0.2.0, 0.4.0, 0.5.0 and 0.6.0 M0 were baseline checks, and 0.3.0 migrated the frontend in place. Never re-scaffold the repo.
+- Version assets (e.g. the logo in `docs/0.2.0/brand/`) live under `docs/<x.y.z>/`.
 
 ## Stack
 
@@ -73,13 +73,13 @@ scripts/ci/check-version.sh    CI + release deploy: the three version sources ag
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on a published release or dispatch)
 .github/workflows/docs.yml         docs site build + link check, deployed to GitHub Pages (FR-226)
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v6)
+SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (0.6.0)
 docs/                       Jekyll + just-the-docs site (index.md, _config.yml, Gemfile) and the version archive:
   index.md                  site home
   getting-started/ guides/ operations/ reference/ history/   site sections (front matter: title, nav_order, parent)
   brand.md                  logo files, colours, usage rules
-  v1 … v5/                  frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
-  v6/                       brand assets (and v6 SPEC/PROGRESS once done)
+  0.1.0 … 0.5.0/            frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
+  0.6.0/                    brand assets (and the 0.6.0 SPEC/PROGRESS once done)
 ```
 
 ## Commands
@@ -166,7 +166,7 @@ session.** Tag pushes and releases are outside the build-branch push permission 
 
 0. **Once:** the `production` GitHub environment is set up as in `docs/operations/releases.md` (required reviewer,
    secrets, deployment branches and tags `main` + `*.*.*`). If it isn't, stop and tell Ben: don't publish.
-1. **Ready:** the version's PR is merged into `main`, the root SPEC/PROGRESS are in `docs/v<N>/` with a row above, and
+1. **Ready:** the version's PR is merged into `main`, the root SPEC/PROGRESS are in `docs/<x.y.z>/` with a row above, and
    the changelog entry has its release date (`date`, not `null`).
 2. **Confirm with Ben:** the version `x.y.z` and the commit: the newest `main` commit with a green CI run
    (`gh run list --workflow ci.yml --branch main --status success --limit 1 --json headSha`). CI skips docs-only
@@ -176,7 +176,7 @@ session.** Tag pushes and releases are outside the build-branch push permission 
 4. **Tag:** `git tag -a x.y.z <sha> -m "Tevrin x.y.z"` then `git push origin x.y.z`. Never move, delete or re-push a
    tag a release uses; ship a fix as the next patch version.
 5. **Release:** `gh release create x.y.z --verify-tag --latest --title "Tevrin x.y.z" --notes-file <notes>`, the notes
-   built from `docs/history/v<N>.md` and the changelog entry, plus `--generate-notes` for the PR list if wanted.
+   built from `docs/history/<x.y.z>.md` and the changelog entry, plus `--generate-notes` for the PR list if wanted.
 6. **Watch the deploy:** `gh run list --workflow deploy.yml --event release --limit 1`, then `gh run watch <id>
    --exit-status`. It waits for Ben's approval on the `production` environment. Report the result and the smoke test.
    If it fails, follow the job summary's rollback steps; don't re-tag.
@@ -207,7 +207,7 @@ never deploy. Promoting a pre-release to a full release doesn't deploy either (G
 
 ## Workflow
 
-Use the `orchestrate-stack` skill for multi-phase work (v3 onwards). It loads the packs named in [`STACK.md`](STACK.md). v1 and v2 were built with `build-from-spec`. Either way, the commit gate above replaces the skill's local gate and local-run steps.
+Use the `orchestrate-stack` skill for multi-phase work (0.3.0 onwards). It loads the packs named in [`STACK.md`](STACK.md). 0.1.0 and 0.2.0 were built with `build-from-spec`. Either way, the commit gate above replaces the skill's local gate and local-run steps.
 
 ## Definition of done
 

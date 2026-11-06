@@ -284,7 +284,7 @@ function firstStepWithError(errors: Partial<Record<Field, unknown>>): number {
   return index === -1 ? LAST_STEP : index
 }
 
-/** FR-86: `git` per mode; `mode` only (the v1 `provider` alias is deprecated). */
+/** FR-86: `git` per mode; `mode` only (the 0.1.0 `provider` alias is deprecated). */
 function toGitRequest(v: WizardValues): Schemas['CreateProjectGitRequest'] {
   const defaultBranch = v.defaultBranch.trim()
   switch (v.gitMode) {

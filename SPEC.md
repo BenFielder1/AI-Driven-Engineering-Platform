@@ -1,15 +1,15 @@
 # Tevrin (formerly AIDE) — Specification (0.6.0)
 
-2026-11-04 · Ben Fielder · **0.6.0** (v6), built on the v5 codebase in this repo. Earlier versions: [`docs/v1/SPEC.md`](docs/v1/SPEC.md) … [`docs/v5/SPEC.md`](docs/v5/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's v6 brief (2026-11-04), the interview answers in §10, a codebase survey of the frontend and the name's footprint, and UX research on developer SaaS products (sources in §13).
+2026-11-04 · Ben Fielder · **0.6.0**, built on the 0.5.0 codebase in this repo. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) … [`docs/0.5.0/SPEC.md`](docs/0.5.0/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's 0.6.0 brief (2026-11-04), the interview answers in §10, a codebase survey of the frontend and the name's footprint, and UX research on developer SaaS products (sources in §13).
 
-> **How this spec relates to v1–v5.** v6 is an increment on the running v5 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends …)*. New requirements continue from **FR-196**, domain rules from **§4.29**, decisions use `D-V6-n`, and milestones continue from **M38**. **Version numbers are semver (FR-229):** v1–v5 are 0.1.0–0.5.0 and v6 is **0.6.0**. "vN" in requirement text, IDs (`D-V6-n`) and paths (`docs/v6/`) is kept as an identifier and means version 0.N.0 (D-V6-24). Earlier tests stay green unless an amendment changes what they assert; then update the test and name the amendment in it.
+> **How this spec relates to 0.1.0–0.5.0.** 0.6.0 is an increment on the running 0.5.0 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends …)*. New requirements continue from **FR-196**, domain rules from **§4.29**, decisions use `D-V6-n`, and milestones continue from **M38**. **Version numbers are semver (FR-229):** the versions first specified as v1–v6 are 0.1.0–0.6.0, and this spec is **0.6.0**. Requirement and decision IDs keep their original form (`D-V6-n` belongs to 0.6.0); from 0.7.0 decisions use `D-<x.y.z>-n` (D-V6-24, D-V6-26). Earlier tests stay green unless an amendment changes what they assert; then update the test and name the amendment in it.
 
 ## 1. Overview
 
-v6 renames the product to **Tevrin**, gives it a brand and design system that read as one SaaS product, adds a public marketing site, and reorganises the repo documentation into a published docs site. There are no schema changes and no new API endpoints.
+0.6.0 renames the product to **Tevrin**, gives it a brand and design system that read as one SaaS product, adds a public marketing site, and reorganises the repo documentation into a published docs site. There are no schema changes and no new API endpoints.
 
 - **Rename (product-facing).** Everything a user, reader or Git host sees says Tevrin: the web app, emails and chat notifications, agent prompts, API problem text, the OpenAPI title, the GitHub App name for new registrations, the CLI command and the docs. Internal identifiers that would break sessions, tokens, stored data or infrastructure keep the `aide` name (§4.29).
-- **Brand and design system.** A refined version of the hexagon mark in `docs/v6/`, an indigo→cyan brand gradient on neutral slate surfaces, Geist type, and light and dark themes that follow the OS by default.
+- **Brand and design system.** A refined version of the hexagon mark in `docs/0.6.0/`, an indigo→cyan brand gradient on neutral slate surfaces, Geist type, and light and dark themes that follow the OS by default.
 - **App refresh.** A tidier shell, a new **Home** dashboard with an onboarding checklist, and consistent page headers, states, badges and empty states.
 - **Marketing site.** Home, Product, How it works, Integrations, Self-host, Security, FAQ and Changelog, reachable signed out, with Get started and Sign in on every page. Redesigned sign-in and sign-up.
 - **Documentation.** A short README, and the rest moved into a structured `docs/` site published to GitHub Pages.
@@ -20,9 +20,9 @@ Success means:
 - No visible "AIDE" remains in the app, notifications or docs outside history, and every existing session, API token and webhook keeps working.
 - The README fits on two screens, and every topic it dropped is one link away on the docs site.
 
-**In scope (v6):** rename (§3.1) · brand and design system (§3.2) · app shell and Home (§3.3) · marketing site (§3.4) · auth pages (§3.5) · documentation (§3.6) · versioning and releases (§3.7).
+**In scope (0.6.0):** rename (§3.1) · brand and design system (§3.2) · app shell and Home (§3.3) · marketing site (§3.4) · auth pages (§3.5) · documentation (§3.6) · versioning and releases (§3.7).
 
-**Out of scope (v6):**
+**Out of scope (0.6.0):**
 - Renaming internal identifiers: C# projects and namespaces, database and user names, cookies, `aide_pat_` tokens, `X-AIDE-*` webhook headers, environment variables other than the CLI's, stored formats (`aide-plan`, `aide-stack-profile`, `aide_merges`, `aide/<slug>/v<ver>` branches, `.aide/`), Kubernetes, Docker and Railway resource names (§4.29).
 - Renaming the GitHub repo, the custom domain or an already-registered GitHub App (manual, Q1–Q2).
 - Billing, pricing tiers, a contact form, newsletter, analytics or any third-party script.
@@ -32,15 +32,15 @@ Success means:
 
 ## 2. Users and permissions
 
-The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
+The 0.1.0–0.5.0 roles are unchanged. 0.6.0 adds the anonymous visitor.
 
-| Role | Can (new in v6) | Cannot / behaviour |
+| Role | Can (new in 0.6.0) | Cannot / behaviour |
 | --- | --- | --- |
 | Visitor (signed out) | View every marketing page, `/login`, `/register`, `robots.txt`, `sitemap.xml` | Open any app route: redirected to `/login?returnUrl=…` (unchanged) |
 | User (any signed-in role) | Everything a visitor can. Open **Home** (`/home`). Dismiss or restore their onboarding checklist. Choose Light, Dark or System theme | `/` sends them to `/home` (FR-211). `/login` and `/register` send them to `returnUrl` or `/home` |
 | Admin | Unchanged | — |
 
-**Auth:** unchanged (email + password, GitHub/GitLab/Bitbucket sign-in when configured). Registration stays open and the first account becomes Admin (v1 FR-3).
+**Auth:** unchanged (email + password, GitHub/GitLab/Bitbucket sign-in when configured). Registration stays open and the first account becomes Admin (0.1.0 FR-3).
 
 ## 3. Functional requirements
 
@@ -48,24 +48,24 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 
 | Earlier | What changes | Where |
 | --- | --- | --- |
-| Product name everywhere (v1–v5 copy) | "AIDE" becomes "Tevrin" in everything user-facing. Stored history is not rewritten | FR-197–FR-199, §4.29 |
-| v2 brand (`docs/v2/brand/`) | Replaced by the Tevrin mark. `docs/v2/brand` stays frozen as history | FR-196 |
-| v2 §7.1/§7.2 design tokens and look | New palette, type and component styling. The WCAG AA token test stays and covers the new values | FR-202–FR-205 |
-| v2/v3 theme (dark default) | Default is **System**. Light and Dark are explicit choices | FR-204, D-V6-3 |
+| Product name everywhere (0.1.0–0.5.0 copy) | "AIDE" becomes "Tevrin" in everything user-facing. Stored history is not rewritten | FR-197–FR-199, §4.29 |
+| 0.2.0 brand (`docs/0.2.0/brand/`) | Replaced by the Tevrin mark. `docs/0.2.0/brand` stays frozen as history | FR-196 |
+| 0.2.0 §7.1/§7.2 design tokens and look | New palette, type and component styling. The WCAG AA token test stays and covers the new values | FR-202–FR-205 |
+| 0.2.0/0.3.0 theme (dark default) | Default is **System**. Light and Dark are explicit choices | FR-204, D-V6-3 |
 | `/` redirect to `/projects`; post-sign-in landing `/projects` | `/` is the marketing home for visitors. Signed-in users land on `/home` | FR-207, FR-211 |
-| v1 FR-52 CLI | Command is `tevrin`; `aide` stays as a deprecated alias | FR-200 |
-| v1 FR-24 prompts | Prompts name Tevrin; each changed template's version increases | FR-199 |
-| Login and register pages (v1, v4) | New layout and copy | FR-223 |
-| v1 FR-34 commit subject | Reads `[Tevrin][Phase:…][Step:N]`. Nothing parses it: step detection uses the kept `AIDE-Step-Id` trailer | D-V6-15 |
+| 0.1.0 FR-52 CLI | Command is `tevrin`; `aide` stays as a deprecated alias | FR-200 |
+| 0.1.0 FR-24 prompts | Prompts name Tevrin; each changed template's version increases | FR-199 |
+| Login and register pages (0.1.0, 0.4.0) | New layout and copy | FR-223 |
+| 0.1.0 FR-34 commit subject | Reads `[Tevrin][Phase:…][Step:N]`. Nothing parses it: step detection uses the kept `AIDE-Step-Id` trailer | D-V6-15 |
 | Stack catalog 1.2.0 | 1.2.1: agent text renamed, because it feeds the codegen prompt | D-V6-15 |
 | README | Condensed; detail moves to the docs site | FR-224–FR-226 |
-| Version labels v1–v6 (docs, changelog, CLI package 0.2.0) | Semver: v1–v5 are 0.1.0–0.5.0, v6 is 0.6.0, and the CLI packages carry the release version | FR-229 |
-| v3 FR-110 `production` by manual dispatch only | Publishing a GitHub release `x.y.z` also deploys `production` (manual dispatch stays) | FR-230, FR-231 |
+| Version labels and folders v1–v6 (docs, `docs/v<N>/`, changelog, CLI package 0.2.0) | Semver: 0.1.0–0.6.0 everywhere, folders `docs/<x.y.z>/`, and the CLI packages carry the release version | FR-229, D-V6-26 |
+| 0.3.0 FR-110 `production` by manual dispatch only | Publishing a GitHub release `x.y.z` also deploys `production` (manual dispatch stays) | FR-230, FR-231 |
 | FR-219 changelog entry labels | Labelled `0.N.0`. From 0.6.0 the version's final PR sets the entry's date (the day it merges and is released), because the tagged commit carries it | FR-229, FR-230 |
 
 ### 3.1 Rename to Tevrin
 
-- **FR-196** *(frontend + docs)* **Brand assets.** The final mark, lockup and icons live in `docs/v6/brand/` (source SVGs) and `frontend/public/` (served copies). They are built on the `docs/v6` concept: six stroked hexagon segments for the six phases, the gaps between them for the approval gates, and a `T` monogram (D-V6-6). Refinements:
+- **FR-196** *(frontend + docs)* **Brand assets.** The final mark, lockup and icons live in `docs/0.6.0/brand/` (source SVGs) and `frontend/public/` (served copies). They are built on the `docs/0.6.0` concept: six stroked hexagon segments for the six phases, the gaps between them for the approval gates, and a `T` monogram (D-V6-6). Refinements:
   - The `T` and wordmark use `currentColor` in the inline React component, so one asset works in both themes. Static files ship as light (`#0F172A` ink) and dark (`#F8FAFC` ink) variants.
   - A **favicon** variant (`favicon.svg`, plus `icon-32.png`, `apple-touch-icon.png` 180 px) uses heavier strokes and no gaps narrower than 2 px at 16 px. A **mono** variant (single colour, no gradient) exists for places that can't render gradients.
   - Gradient: `#4F46E5 → #06B6D4` on light, `#818CF8 → #22D3EE` on dark. Text is never placed on the gradient.
@@ -80,18 +80,18 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - ProblemDetails titles and details; email subjects (`[Tevrin] …`); "Open in Tevrin" in email, Slack and Teams messages; pull/merge request and release bodies Tevrin writes; the system actor's display name (`ActorResolver.SystemDisplayName = "Tevrin"`).
   - The GitHub App manifest's default name becomes `Tevrin ({host})` for **new** registrations. An existing App keeps its name (Q2).
   - The OpenAPI `info.title` becomes `Tevrin API`. The contract and client are regenerated.
-  - Stored data (events, artifacts, past PR bodies, notifications already sent) is not rewritten (v1 rule 9).
+  - Stored data (events, artifacts, past PR bodies, notifications already sent) is not rewritten (0.1.0 rule 9).
   - Given a problem response that used to say "The AIDE GitHub App isn't installed…", then it says "The Tevrin GitHub App isn't installed…" with the same `errorCode` and status.
   - Given an email notification, then its subject starts `[Tevrin]` (test `FR198_…`).
 - **FR-199** *(backend)* **Agent prompts.** The seven templates in `Agents/Prompts/` say "agent of Tevrin". Each changed template's version increases (FR-24), so runs record the new version. Built versions: idea 6, spec 7, plan 6, codegen 5, review 8, repo analyst 3, stack analyst 3. References to `.aide/` paths stay (§4.29).
   - Given a new run of any agent, then the rendered system prompt contains "Tevrin" and not "AIDE", and the run's prompt version is the new one.
 - **FR-200** *(backend)* **CLI.** The .NET tool's command is `tevrin`; help, errors and output say Tevrin.
-  - `aide` remains as a deprecated alias for v6: it prints `aide is now tevrin; this alias will be removed in a later version.` to stderr, then behaves identically. Built as two packages from the same sources: `Tevrin.Cli` (command `tevrin`, `src/Aide.Cli`) and the deprecated `Aide.Cli` (command `aide`, project `src/Aide.Cli.Alias`) (D-V6-14).
+  - `aide` remains as a deprecated alias for 0.6.0: it prints `aide is now tevrin; this alias will be removed in a later version.` to stderr, then behaves identically. Built as two packages from the same sources: `Tevrin.Cli` (command `tevrin`, `src/Aide.Cli`) and the deprecated `Aide.Cli` (command `aide`, project `src/Aide.Cli.Alias`) (D-V6-14).
   - Environment variables: `TEVRIN_TOKEN`, `TEVRIN_API_URL`, `TEVRIN_CONFIG` and `TEVRIN_GIT_TOKEN` are read first, then `AIDE_TOKEN`, `AIDE_API_URL`, `AIDE_CONFIG` and `AIDE_GIT_TOKEN` (§4.29 worked example). The config file location is unchanged. Tokens still start `aide_pat_`.
   - Given only `AIDE_TOKEN` is set, when `tevrin projects list` runs, then it authenticates. Given both are set, then `TEVRIN_TOKEN` wins.
 - **FR-201** *(backend + frontend)* **Compatibility.** Nothing a user already holds breaks.
-  - Given a browser signed in before the v6 deploy, then it stays signed in (cookie names unchanged).
-  - Given an `aide_pat_` token issued before v6, then it authenticates. Given a webhook consumer that verifies `X-AIDE-*` headers, then deliveries still verify.
+  - Given a browser signed in before the 0.6.0 deploy, then it stays signed in (cookie names unchanged).
+  - Given an `aide_pat_` token issued before 0.6.0, then it authenticates. Given a webhook consumer that verifies `X-AIDE-*` headers, then deliveries still verify.
   - Given a project mid-version on an `aide/<slug>/v<ver>` branch, then execution, review and release continue unchanged.
   - Given a user's saved theme in localStorage `aide.theme`, then it is honoured (FR-204).
 - **FR-228** *(backend)* **GitHub App rename.** Renaming the GitHub App (Q2) changes its slug, which install links, the App page and the bot commit identity (`<slug>[bot]`) are built from. Tevrin uses the App's current slug from GitHub (`GET /app` with the App JWT) when GitHub answers for the same App id with a usable slug (§4.34); otherwise it uses the stored or configured slug.
@@ -105,10 +105,10 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 
 - **FR-202** *(frontend)* **Tokens.** `lib/ui/tokens.ts` and `index.css` hold the new palette (§4.31). Neutral slate surfaces, an indigo primary, cyan as the secondary accent and focus colour, emerald, amber and rose for success, warning and danger. The brand gradient appears only on the mark, the marketing hero glow, the active lifecycle stage and decorative borders.
   - Given the token test, then every text pair (including tinted pairs) meets WCAG AA 4.5:1 and every UI pair 3:1, in both themes.
-  - Given the app, then the v2/v3 "ambient orbs" are gone from the app and auth shells.
+  - Given the app, then the 0.2.0/0.3.0 "ambient orbs" are gone from the app and auth shells.
 - **FR-203** *(frontend)* **Typography.** Geist Sans for UI and headings, Geist Mono for IDs, hashes, versions, code and eyebrow labels. Self-hosted through `@fontsource` (CSP stays `font-src 'self'` by default). DM Sans and Outfit are removed. A type scale (12/14/16/20/24/30/36/48/60 px) is defined once as tokens; `text-lg` is 20 px (there is no 18 px step).
   - Given any page, then no font loads from another origin.
-- **FR-204** *(frontend)* **Theme.** Light, Dark and System; **System is the default**. The inline nonce'd init script applies the resolved theme before first paint and follows OS changes live while System is chosen. The choice is stored in `aide.theme` (`light` | `dark` | `system`); `system` is stored explicitly (v5 deleted the key), and stored `light`/`dark` are still honoured.
+- **FR-204** *(frontend)* **Theme.** Light, Dark and System; **System is the default**. The inline nonce'd init script applies the resolved theme before first paint and follows OS changes live while System is chosen. The choice is stored in `aide.theme` (`light` | `dark` | `system`); `system` is stored explicitly (0.5.0 deleted the key), and stored `light`/`dark` are still honoured.
   - Given no stored value and an OS in light mode, then the page renders light with no flash of dark.
   - Given System and the OS switches to dark, then the page switches without reload.
   - The selector is in the user menu (app) and the footer (marketing).
@@ -122,7 +122,7 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 
 ### 3.3 App shell and Home
 
-- **FR-206** *(frontend)* **Shell.** The sidebar and header from v2/v3 stay (`nav-config.ts` remains the single source) and are refined:
+- **FR-206** *(frontend)* **Shell.** The sidebar and header from 0.2.0/0.3.0 stay (`nav-config.ts` remains the single source) and are refined:
   - Sidebar 240 px, collapsible to a 56 px icon rail with tooltips (native `title` attributes; sr-only labels name each item); project switcher at the top; Workspace items **Home**, Projects, Notifications, Connections; Admin and project sections unchanged in content.
   - User menu: name, email, Account, Connections, Theme (Light/Dark/System, as menu radio items built from `THEME_OPTIONS` and `useTheme()`), Docs ↗, Sign out.
   - Header: breadcrumbs, a primary-action slot filled by the page (e.g. "New project"), ⌘K search, notifications bell. Sticky with a 1 px border; `scroll-padding-top` keeps focused elements clear of it (WCAG 2.4.11).
@@ -159,13 +159,13 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 - **FR-215** *(frontend)* **Integrations (`/integrations`).** Grouped cards: Git hosts (including Local Git), issue trackers, LLM providers, deployment platforms, databases (including PostgreSQL), notification channels. Each card states what Tevrin does with it in one line. Names match the catalog; nothing unimplemented is listed.
 - **FR-216** *(frontend)* **Self-host (`/self-host`).** "Free while in preview. No billing." Requirements (Docker, PostgreSQL 18, an LLM provider key or Ollama); three paths — Railway, Docker Desktop Kubernetes, dev loop — each with its key commands and a docs link; what you configure (Git sign-in, GitHub App, providers, notifications); FAQ on upgrades and data. Commands match the docs site exactly (one shared source, FR-222).
 - **FR-217** *(frontend)* **Security (`/security`).** Factual statements only: secrets encrypted at rest and never shown again, personal connections, short-lived GitHub App tokens, read-only repo tools with secret redaction, immutable locked artifacts with content hashes, audit events, CSP and security headers, no third-party scripts on the site, agents faked in tests. Links to the relevant docs.
-- **FR-218** *(frontend)* **FAQ (`/faq`).** An accessible accordion (button + region, keyboard operable), with a "Still have questions?" link to the docs and GitHub issues. Questions at least: What is Tevrin? · Who is it for? · How do approval gates work? · Can I undo what an agent did? · Which AI models can I use, and where do my keys live? · Does my code leave my infrastructure? · Does it work with an existing repository? · Which Git hosts, trackers and platforms are supported? · Is it free? · How do I self-host it? · Is there a CLI or API? · Was it called AIDE? Answers come from the specs and must be true of v6.
-- **FR-219** *(frontend)* **Changelog (`/changelog`).** One entry per version v1–v6, newest first: version, date (the merge date of its PR; the v6 entry shows "In preview" until its PR merges), title, 3–6 highlights, link to that version's spec on the docs site. v1–v5 entries say "(as AIDE)".
+- **FR-218** *(frontend)* **FAQ (`/faq`).** An accessible accordion (button + region, keyboard operable), with a "Still have questions?" link to the docs and GitHub issues. Questions at least: What is Tevrin? · Who is it for? · How do approval gates work? · Can I undo what an agent did? · Which AI models can I use, and where do my keys live? · Does my code leave my infrastructure? · Does it work with an existing repository? · Which Git hosts, trackers and platforms are supported? · Is it free? · How do I self-host it? · Is there a CLI or API? · Was it called AIDE? Answers come from the specs and must be true of 0.6.0.
+- **FR-219** *(frontend)* **Changelog (`/changelog`).** One entry per version 0.1.0–0.6.0, newest first: version, date (the merge date of its PR; the 0.6.0 entry shows "In preview" until its PR merges), title, 3–6 highlights, link to that version's spec on the docs site. 0.1.0–0.5.0 entries say "(as AIDE)".
 - **FR-220** *(frontend)* **Product previews.** Static React components that reuse the real UI components with fixture data (no API calls), sized for the hero and Product sections, theme-aware, `aria-hidden` with a visible caption or an equivalent text alternative. No raster screenshots.
   - Given reduced motion, then previews are static.
 - **FR-221** *(frontend)* **SEO and metadata.** Each marketing route has a server `layout.tsx` exporting `metadata` (title, description, Open Graph and Twitter card with `og.png`), keeping pages as client components (D-V3-2). `robots.txt` allows marketing and auth routes and disallows app routes; `sitemap.xml` lists the marketing routes with absolute URLs built from the request host. Both are route handlers using the validated request Host (malformed → `http://localhost`). `X-Robots-Tag: noindex` is sent on `/home`, `/projects`, `/account`, `/connections`, `/notifications`, `/approvals` and `/admin`.
   - Given `GET /robots.txt` and `GET /sitemap.xml`, then both return 200 with the content above (tests in `src/server` or route tests).
-- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in v1–v6; no customer logos, testimonials, invented metrics or "open source" claims (Q3, D-V6-21). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name; OpenAI, Slack and Teams have no Simple Icons mark and use neutral icons. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
+- **FR-222** *(frontend)* **Content source and truthfulness.** All marketing copy lives in typed modules under `src/features/marketing/content/`. Copy describes only behaviour that exists in 0.1.0–0.6.0; no customer logos, testimonials, invented metrics or "open source" claims (Q3, D-V6-21). Integration marks use monochrome brand icons (Simple Icons, CC0) beside the name; OpenAI, Slack and Teams have no Simple Icons mark and use neutral icons. The Self-host commands come from one module also used to check the docs (a Vitest test compares them with `docs/` snippets).
 
 ### 3.5 Auth pages
 
@@ -180,23 +180,23 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
 - **FR-224** *(docs)* **README.** At most 150 lines: name and one-paragraph overview, a 6–8 bullet feature summary, stack table, architecture diagram (mermaid) with 4–6 bullets, repo layout, deployment (Railway and local Kubernetes, one short paragraph each), and a **Documentation** table linking each docs section. The Tevrin lockup at the top, light or dark to follow the reader's GitHub theme (`#gh-light-mode-only` / `#gh-dark-mode-only`, D-V6-20).
   - Given the README, then every section removed from it has a home on the docs site (the mapping in §4.33), and no link in it is broken.
 - **FR-225** *(docs)* **Docs site content.** `docs/` becomes the site source with this structure (front matter for navigation):
-  - `index.md` (overview, where to start) · `getting-started/` (prerequisites, dev loop, first project) · `guides/` (connections and sign-in, GitHub App, GitLab, Bitbucket, LLM providers, issue trackers, stacks and inference, deployments and databases, notifications, CLI) · `operations/` (local Kubernetes and troubleshooting, Railway, PostgreSQL 17→18 upgrade, CI and the commit gate) · `reference/` (configuration and environment variables, API and contract, architecture, testing, error codes, repo layout) · `history/` (one page per version linking the frozen `docs/v1`–`docs/v6` specs and build logs) · `brand.md` (logo files, colours, usage rules).
+  - `index.md` (overview, where to start) · `getting-started/` (prerequisites, dev loop, first project) · `guides/` (connections and sign-in, GitHub App, GitLab, Bitbucket, LLM providers, issue trackers, stacks and inference, deployments and databases, notifications, CLI) · `operations/` (local Kubernetes and troubleshooting, Railway, PostgreSQL 17→18 upgrade, CI and the commit gate) · `reference/` (configuration and environment variables, API and contract, architecture, testing, error codes, repo layout) · `history/` (one page per version linking the frozen `docs/0.1.0`–`docs/0.6.0` specs and build logs) · `brand.md` (logo files, colours, usage rules).
   - `deploy/railway/README.md` and `variables.md` move under `operations/railway/` only if every reference is updated; otherwise they stay and are linked.
-  - Frozen `docs/v1`–`docs/v5` files are not edited except to fix links. Adding front matter to them isn't allowed, so the site config includes them as plain pages (`jekyll-optional-front-matter`).
-  - Given any page, then its relative links resolve (link check in FR-226). The check skips frozen `docs/v1`–`v5` pages as link sources (their repo-root links break on the site), but checks links into them.
+  - Frozen `docs/0.1.0`–`docs/0.5.0` files are not edited except to fix links. Adding front matter to them isn't allowed, so the site config includes them as plain pages (`jekyll-optional-front-matter`).
+  - Given any page, then its relative links resolve (link check in FR-226). The check skips frozen `docs/0.1.0`–`docs/0.5.0` pages as link sources (their repo-root links break on the site), but checks links into them.
 - **FR-226** *(deploy)* **GitHub Pages.** `.github/workflows/docs.yml` builds the site with Jekyll and the `just-the-docs` theme (mermaid enabled, search on) from `docs/`:
   - On pull requests touching `docs/**`, `README.md` or the workflow: build plus an offline internal link check (html-proofer, external links skipped). On push to `main` touching the same: build, check, then deploy with `actions/deploy-pages`.
   - Site URL: `https://docs.tevrin.dev/` (custom domain, empty `baseurl`, D-V6-22). The frontend's docs links use a build-time constant `DOCS_URL` in `src/lib/site.ts`.
   - Given a PR that adds a broken relative link under `docs/`, then the docs job fails.
-- **FR-227** *(docs)* **Repo docs.** CLAUDE.md, STACK.md and `deploy/railway/README.md` name Tevrin (keeping the internal `aide` identifiers they document). CLAUDE.md gains the v6 Versions row, the docs-site layout and the `docs.yml` workflow.
+- **FR-227** *(docs)* **Repo docs.** CLAUDE.md, STACK.md and `deploy/railway/README.md` name Tevrin (keeping the internal `aide` identifiers they document). CLAUDE.md gains the 0.6.0 Versions row, the docs-site layout and the `docs.yml` workflow.
 
 ### 3.7 Versioning and releases
 
-- **FR-229** *(deploy + backend + frontend + docs)* **Semver version numbers.** Tevrin's versions are numbered `x.y.z` (semver, no `v` prefix). The versions built as v1–v5 are **0.1.0–0.5.0** and v6 is **0.6.0**; a later feature version raises the minor number (0.7.0), a fix-only release the patch number (0.6.1).
+- **FR-229** *(deploy + backend + frontend + docs)* **Semver version numbers.** Tevrin's versions are numbered `x.y.z` (semver, no `v` prefix). The versions first specified as v1–v5 are **0.1.0–0.5.0** and v6 is **0.6.0**; a later feature version raises the minor number (0.7.0), a fix-only release the patch number (0.6.1).
   - The release version is written in three places that must agree: `<Version>` in `backend/Directory.Build.props` (every assembly, and both CLI packages `Tevrin.Cli` and `Aide.Cli`, which were 0.2.0), `version` in `frontend/package.json` (and its lock file), and the newest entry of the marketing changelog (`changelog.ts`). `scripts/ci/check-version.sh` checks them in CI.
-  - Labels readers see use the semver number: the changelog (FR-219: `0.6.0` … `0.1.0`, "(as AIDE)" on 0.1.0–0.5.0), the FAQ, the README, the docs site's history pages and CLAUDE.md's Versions table. Paths, URLs and IDs keep `vN` (D-V6-24).
+  - Labels readers see use the semver number: the changelog (FR-219: `0.6.0` … `0.1.0`, "(as AIDE)" on 0.1.0–0.5.0), the FAQ, the README, the docs site's history pages and CLAUDE.md's Versions table. Internal mentions (comments, test names, file names, CI shard names) use semver too. Version folders are `docs/<x.y.z>/` and history pages `docs/history/<x.y.z>.md`; the old `vN` docs-site URLs redirect (D-V6-26). Requirement and decision IDs keep their form (D-V6-24).
   - Given the three version sources differ, or one is not `x.y.z`, then CI fails.
-- **FR-230** *(deploy + docs)* **Tags and GitHub releases.** When a version is finalised (its work merged into `main`, CI green on that merge commit, and SPEC/PROGRESS moved to `docs/v<N>/`), the merge commit on `main` gets an annotated tag `x.y.z` equal to the version in that commit, and a GitHub release is created from the tag with the title `Tevrin x.y.z` and notes from the version's history page and changelog entry. Ben tags and releases, or an agent does once Ben confirms the version and commit in the session (CLAUDE.md "Releases"). Tags are never moved or deleted once a release uses them; a fix ships as a new patch version.
+- **FR-230** *(deploy + docs)* **Tags and GitHub releases.** When a version is finalised (its work merged into `main`, CI green on that merge commit, and SPEC/PROGRESS moved to `docs/<x.y.z>/`), the merge commit on `main` gets an annotated tag `x.y.z` equal to the version in that commit, and a GitHub release is created from the tag with the title `Tevrin x.y.z` and notes from the version's history page and changelog entry. Ben tags and releases, or an agent does once Ben confirms the version and commit in the session (CLAUDE.md "Releases"). Tags are never moved or deleted once a release uses them; a fix ships as a new patch version.
   - Given an agent, then it creates or pushes a tag, or publishes a release, only after Ben confirms in the session.
 - **FR-231** *(deploy)* **A published release deploys production.** `.github/workflows/deploy.yml` also runs on `release: published` and deploys the tagged commit to Railway `production` through the existing production job (the `production` environment's required reviewer, drift check, api then web, FR-111 checks and smoke test). Before deploying, the workflow requires:
   - the tag is `x.y.z`, else it fails;
@@ -274,7 +274,7 @@ Rules: no text on the gradient; warning is never text; status badges pair colour
 
 | README section today | New home |
 | --- | --- |
-| Key features, "Added in v2…v5" | README summary + `history/` + `/changelog` |
+| Key features, "Added in 0.2.0…0.5.0" | README summary + `history/` + `/changelog` |
 | Stack, Architecture, Repo layout | README (short) + `reference/architecture.md`, `reference/repo-layout.md` |
 | Prerequisites, Dev loop | `getting-started/` |
 | Local Kubernetes, Troubleshooting | `operations/local-kubernetes.md` |
@@ -334,7 +334,7 @@ Devices: responsive from 360 px; marketing designed mobile-first, app desktop-fi
 
 ## 9. Environments
 
-Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as in v5. New: GitHub Pages for the docs site (public repo; Pages source "GitHub Actions" must be enabled in repo settings by Ben). No new secrets or services. The docs site is served at the custom domain `docs.tevrin.dev` (D-V6-22). The production app's custom domain stays `aide.benfielder.com` until the rest of Q1 is answered. `production` is deployed by publishing a GitHub release `x.y.z` (FR-231), or by manual dispatch.
+Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as in 0.5.0. New: GitHub Pages for the docs site (public repo; Pages source "GitHub Actions" must be enabled in repo settings by Ben). No new secrets or services. The docs site is served at the custom domain `docs.tevrin.dev` (D-V6-22). The production app's custom domain stays `aide.benfielder.com` until the rest of Q1 is answered. `production` is deployed by publishing a GitHub release `x.y.z` (FR-231), or by manual dispatch.
 
 ## 10. Decisions and assumptions
 
@@ -345,47 +345,48 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-3 | Theme follows the OS by default; light and dark both first-class | Interview | agreed |
 | D-V6-4 | Docs published as a GitHub Pages site (Jekyll, just-the-docs) from `docs/` | Interview | agreed |
 | D-V6-5 | No pricing page; a Self-host page with "Free while in preview" | Interview | agreed |
-| D-V6-6 | Keep the `docs/v6` hexagon concept (segments = phases, gaps = gates) with the refinements in FR-196, rather than a new mark. The research flagged hexagons as common; the gate gaps make it specific to Tevrin | Research + brief | assumed |
+| D-V6-6 | Keep the `docs/0.6.0` hexagon concept (segments = phases, gaps = gates) with the refinements in FR-196, rather than a new mark. The research flagged hexagons as common; the gate gaps make it specific to Tevrin | Research + brief | assumed |
 | D-V6-7 | Palette: slate neutrals, indigo primary, cyan accent, gradient used sparingly (Linear-style restraint) | Research | assumed |
 | D-V6-8 | Geist Sans + Geist Mono replace DM Sans, Outfit and the existing Geist Mono setup | Research | assumed |
 | D-V6-9 | Marketing pages live in the same Next.js app (route group `(marketing)`), remain client components per D-V3-2, with server layouts for metadata | Codebase | assumed |
 | D-V6-10 | Signed-in users land on a new `/home` dashboard; `/` redirects them there | Research | assumed |
 | D-V6-11 | No testimonials, customer logos or invented metrics; integration marks are "Works with" | Research | assumed |
 | D-V6-12 | Previews are React components with fixture data, not screenshots | Research + CSP | assumed |
-| D-V6-13 | Frozen docs stay at `docs/v1`–`docs/v5` and are linked from `docs/history/`, not moved | CLAUDE.md | agreed |
+| D-V6-13 | Frozen docs stay in their version folders and are linked from `docs/history/`, not moved into the site sections. (D-V6-26 later renamed the folders `docs/v1`–`docs/v5` to `docs/0.1.0`–`docs/0.5.0`.) | CLAUDE.md | agreed |
 | D-V6-14 | CLI ships as `Tevrin.Cli` (`tevrin`) plus deprecated `Aide.Cli` (`aide`, `src/Aide.Cli.Alias`); `TEVRIN_GIT_TOKEN` → `AIDE_GIT_TOKEN` added to the env fallback (FR-200) | Build | agreed |
 | D-V6-15 | Commit subjects read `[Tevrin][Phase:…][Step:N]` (step detection uses the kept `AIDE-Step-Id` trailer); stack catalog 1.2.0 → 1.2.1; prompt versions idea 6, spec 7, plan 6, codegen 5, review 8, repo analyst 3, stack analyst 3 | Build | agreed |
-| D-V6-16 | Checklist rules in §4.30: Git, AI provider and platform definitions; membership checked over the 6 most recently updated projects, no API change in v6 | Build | agreed |
+| D-V6-16 | Checklist rules in §4.30: Git, AI provider and platform definitions; membership checked over the 6 most recently updated projects, no API change in 0.6.0 | Build | agreed |
 | D-V6-17 | Palette values shifted to pass AA (§4.31); `text-lg` is 20 px; `aide.theme` stores `system` explicitly; `metadataBase` comes from the validated request Host | Build | agreed |
 | D-V6-18 | Providers move to group layouts, Zod jitless, `marketing-session.tsx`, JS budget in CI (§8), to meet the 200 KB first-load budget and the CSP | Build | agreed |
-| D-V6-19 | Shell and page details: native `title` rail tooltips, theme radio items, server-side search meets FR-208, `?source=import`, root 404 in the marketing shell, robots and sitemap handlers, neutral icons for OpenAI, Slack and Teams, link check skips frozen pages as sources, "In preview" for v6 | Build | agreed |
-| D-V6-20 | Post-v6 fixes: the README logo uses GitHub's `#gh-*-mode-only` fragments, which follow the GitHub theme setting (`<picture>` follows the OS); the docs site logo is the v6 light lockup; the How it works lifecycle diagram sits under the page intro, horizontal at `lg` and vertical below (FR-214, FR-224, FR-225) | Build | agreed |
+| D-V6-19 | Shell and page details: native `title` rail tooltips, theme radio items, server-side search meets FR-208, `?source=import`, root 404 in the marketing shell, robots and sitemap handlers, neutral icons for OpenAI, Slack and Teams, link check skips frozen pages as sources, "In preview" for 0.6.0 | Build | agreed |
+| D-V6-20 | Post-0.6.0 fixes: the README logo uses GitHub's `#gh-*-mode-only` fragments, which follow the GitHub theme setting (`<picture>` follows the OS); the docs site logo is the 0.6.0 light lockup; the How it works lifecycle diagram sits under the page intro, horizontal at `lg` and vertical below (FR-214, FR-224, FR-225) | Build | agreed |
 | D-V6-21 | Licence: PolyForm Shield License 1.0.0 (`LICENSE.md`, with `Required Notice` and `Licensor Line of Business` lines). Anyone may use, modify and self-host Tevrin, but not provide a competing product (selling it or offering it as a hosted service). Single author: outside pull requests are not accepted. The name and logo are not licensed (stated in `LICENSE.md`, the README and the brand page): a copy you run may keep them and say it's based on Tevrin, but they can't brand a product or service offered to others or suggest endorsement. The CLI packages ship `LICENSE.md` (`PackageLicenseFile`); copy stays "source available", never "open source" (FR-218, FR-222, FR-224, Q3) | Ben | agreed |
 | D-V6-22 | Docs site custom domain: GitHub Pages serves the docs at `https://docs.tevrin.dev/` (set in repo Settings → Pages, DNS `CNAME docs → benfielder1.github.io`). `docs/_config.yml` has `url: https://docs.tevrin.dev` and an empty `baseurl`; the link check no longer swaps a base path; `DOCS_URL` and the README point at the new URL. The old `benfielder1.github.io/AI-Driven-Engineering-Platform/` URL redirects there (GitHub Pages does this once a custom domain is set). Answers the docs-site part of Q1 (FR-224, FR-226) | Ben | agreed |
-| D-V6-23 | Post-v6 fix: the GitHub App's slug comes from GitHub (`GET /app`, 10-minute cache shared with the FR-80 details, 1-minute retry after a failure, 5-second timeout), so a rename is picked up without a redeploy. A registered App's row is updated; a configured App logs a warning to set `GitHub__App__Slug` (FR-228, Q2) | Ben | agreed |
-| D-V6-24 | Semver version numbers: v1–v5 are 0.1.0–0.5.0 and v6 is 0.6.0. Only labels change. Folder and URL paths (`docs/v1`–`docs/v6`, `docs/history/v<N>.md`, `history/v<N>/` on the docs site), requirement and decision IDs (`D-V6-n`), milestone names and code comments keep `vN`, which reads as version 0.N.0, so no frozen file or published link changes. One `<Version>` in `Directory.Build.props` replaces the CLI projects' own (FR-229) | Ben | agreed |
+| D-V6-23 | Post-0.6.0 fix: the GitHub App's slug comes from GitHub (`GET /app`, 10-minute cache shared with the FR-80 details, 1-minute retry after a failure, 5-second timeout), so a rename is picked up without a redeploy. A registered App's row is updated; a configured App logs a warning to set `GitHub__App__Slug` (FR-228, Q2) | Ben | agreed |
+| D-V6-24 | Semver version numbers: the versions first specified as v1–v5 are 0.1.0–0.5.0 and v6 is 0.6.0. Labels, prose, comments and names use semver (D-V6-26). Requirement and decision IDs keep their original form (`D-V2-11`, `D-V6-n`), because the frozen specs define them and commits cite them; from 0.7.0 new decision IDs are `D-<x.y.z>-n` (e.g. `D-0.7.0-1`). One `<Version>` in `Directory.Build.props` replaces the CLI projects' own (FR-229) | Ben | agreed |
 | D-V6-25 | Releases: annotated tag `x.y.z` (no `v` prefix) on the `main` merge commit, a GitHub release from it, and `release: published` deploys `production` (FR-230, FR-231). Only the repo's latest, non-pre-release release deploys; the `production` environment's required reviewer still approves. Agents tag and release only after Ben confirms. Releases for 0.1.0–0.5.0 are optional and, if made, must not be marked latest | Ben | agreed |
+| D-V6-26 | Version folders and internal mentions in semver: `docs/v1`–`docs/v6` became `docs/0.1.0`–`docs/0.6.0`, `docs/history/v<N>.md` became `docs/history/<x.y.z>.md` (docs-site URLs `history/<x.y.z>/`, `<x.y.z>/SPEC/`), and the old `vN` URLs redirect (`jekyll-redirect-from`). Frozen 0.1.0–0.5.0 docs changed only in link paths. Comments, test names, E2E file names and the CI E2E shards (`core`, `flows`, `a11y`) use semver or descriptive names. IDs unchanged (D-V6-24). A finished version's SPEC and PROGRESS move to `docs/<x.y.z>/` | Ben | agreed |
 
 ## 11. Open questions
 
 | # | Question | Who can answer | Blocks |
 | --- | --- | --- | --- |
 | Q1 | New domain (e.g. `tevrin.<tld>`) and repo rename? Both change URLs in the docs site, README and `DOCS_URL`. **Partly resolved (D-V6-22):** the docs site is at `docs.tevrin.dev`. Still open: the app's production domain and the repo rename | Ben | nothing |
-| Q2 | Rename the existing GitHub App and Railway-visible names to Tevrin? Manual in GitHub/Railway settings. The App was renamed after v6 shipped; Tevrin follows the new slug (FR-228, D-V6-23) | Ben | nothing (manual check) |
+| Q2 | Rename the existing GitHub App and Railway-visible names to Tevrin? Manual in GitHub/Railway settings. The App was renamed after 0.6.0 shipped; Tevrin follows the new slug (FR-228, D-V6-23) | Ben | nothing (manual check) |
 | Q3 | ~~Add a licence?~~ **Resolved (D-V6-21):** PolyForm Shield License 1.0.0 in `LICENSE.md`. Copy says "source available", never "open source" | Ben | nothing |
 | Q4 | Terms and Privacy text for the footer and sign-up? Omitted until supplied | Ben | nothing |
 
 ## 12. Milestones
 
-**M0 Baseline:** the repo, CI and v5 app exist. **Do not re-scaffold.** v5's SPEC and PROGRESS are already moved to `docs/v5/`. Add the v6 row to CLAUDE.md, create root `PROGRESS.md`, work on `build/tevrin-v6`, confirm CI is green on the baseline.
+**M0 Baseline:** the repo, CI and 0.5.0 app exist. **Do not re-scaffold.** 0.5.0's SPEC and PROGRESS are already moved to `docs/0.5.0/`. Add the 0.6.0 row to CLAUDE.md, create root `PROGRESS.md`, work on `build/tevrin-v6`, confirm CI is green on the baseline.
 
 1. **M38 Brand and design system** (first; everything after renders with it): assets, tokens, type, theme, components. FR-196, FR-202–FR-205.
 2. **M39 Rename** (independent of M38 except the brand component): frontend copy, backend text, prompts, OpenAPI, CLI, compatibility tests. FR-197–FR-201.
 3. **M40 App shell and Home** (depends on M38): shell, Home and checklist, page consistency, palette actions. FR-206–FR-209.
 4. **M41 Marketing site and auth** (depends on M38, M39): shell, routing, eight pages, previews, SEO, content modules, auth pages. FR-210–FR-223.
 5. **M42 Documentation** (depends on M39 for names; can run beside M40–M41): docs site, README, Pages workflow, repo docs. FR-224–FR-227.
-6. **M43 Integrate and harden:** E2E (marketing navigation, sign-up from Home, routing table §4.32, reduced motion, theme), axe in both themes, JS budget, spec verifier over **v1–v6**. Manual checks for Ben: enable GitHub Pages, favicon legibility at 16 px, Lighthouse on preview, Docker Desktop redeploy and smoke, an existing session and `aide_pat_` token still working after the preview deploy, GitHub App rename (Q2).
-7. **M44 Versioning and releases** (after M43): semver version sources and labels, the version check in CI, the release-triggered production deploy, CLAUDE.md "Releases" and the docs. FR-229–FR-231. Manual checks for Ben: tag protection, then tag and release 0.6.0 when v6 is done.
+6. **M43 Integrate and harden:** E2E (marketing navigation, sign-up from Home, routing table §4.32, reduced motion, theme), axe in both themes, JS budget, spec verifier over **0.1.0–0.6.0**. Manual checks for Ben: enable GitHub Pages, favicon legibility at 16 px, Lighthouse on preview, Docker Desktop redeploy and smoke, an existing session and `aide_pat_` token still working after the preview deploy, GitHub App rename (Q2).
+7. **M44 Versioning and releases** (after M43): semver version sources and labels, the version check in CI, the release-triggered production deploy, CLAUDE.md "Releases" and the docs. FR-229–FR-231. Manual checks for Ben: tag protection, then tag and release 0.6.0 when 0.6.0 is done.
 
 ## 13. Research sources
 
