@@ -1,9 +1,9 @@
 # Tevrin docs site (FR-225, FR-226, SPEC D-V6-4). Built from docs/ by .github/workflows/docs.yml and published to
-# GitHub Pages at https://benfielder1.github.io/AI-Driven-Engineering-Platform/ (a custom domain is open question Q1).
+# GitHub Pages at the custom domain https://docs.tevrin.dev/ (D-V6-22), served from the site root (empty baseurl).
 title: Tevrin docs
 description: Documentation for Tevrin, AI-driven software delivery with a governed lifecycle, approval gates and an audit trail.
-url: https://benfielder1.github.io
-baseurl: /AI-Driven-Engineering-Platform
+url: https://docs.tevrin.dev
+baseurl: ""
 
 theme: just-the-docs
 permalink: pretty
