@@ -31,7 +31,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` and `production`, deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
-- **VCS/CI**: Git, GitHub, GitHub Actions. `.github/workflows/docs.yml` builds the docs site (Jekyll, just-the-docs) from `docs/` and publishes it to GitHub Pages
+- **VCS/CI**: Git, GitHub, GitHub Actions. `.github/workflows/docs.yml` builds the docs site (Jekyll, just-the-docs) from `docs/` and publishes it to GitHub Pages at <https://docs.tevrin.dev/> (custom domain, empty `baseurl`)
 
 Router, auth and background-work choices come from SPEC.md; if SPEC.md changes them, update this file.
 
