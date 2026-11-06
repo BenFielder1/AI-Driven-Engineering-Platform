@@ -47,9 +47,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-226 | GitHub Pages workflow + link check | 3.6 | deploy (CI) | M42 | done | docs 41926888441 |
 | FR-227 | Repo docs name Tevrin | 3.6 | docs | M42 | done | CI 41855800502 |
 | FR-228 | GitHub App slug follows a rename on GitHub | 3.1, 4.34 | backend | post-0.6.0 fix | done | [CI 42210821139](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42210821139) |
-| FR-229 | Semver version numbers (0.1.0–0.6.0), one version in three sources, CI check | 3.7 | deploy + backend + frontend + docs | M44 | in review | |
-| FR-230 | Tag `x.y.z` + GitHub release on the `main` merge commit (CLAUDE.md "Releases") | 3.7 | deploy + docs | M44 | in review | |
-| FR-231 | `release: published` deploys `production` | 3.7 | deploy | M44 | in review | first real run: the 0.6.0 release |
+| FR-229 | Semver version numbers (0.1.0–0.6.0), one version in three sources, CI check | 3.7 | deploy + backend + frontend + docs | M44 | done | [CI 42289439086](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42289439086) |
+| FR-230 | Tag `x.y.z` + GitHub release on the `main` merge commit (CLAUDE.md "Releases") | 3.7 | deploy + docs | M44 | done | [CI 42289439086](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42289439086) |
+| FR-231 | `release: published` deploys `production` | 3.7 | deploy | M44 | done | [CI 42289439086](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42289439086); first real run: the 0.6.0 release |
 
 ## Phases
 - [x] M0 Baseline (base: b349c5b): CI green on `main` ([run 41828267279](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41828267279)); 0.5.0 docs moved to `docs/0.5.0/`; no re-scaffold
@@ -59,7 +59,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M41 Marketing site and auth: FR-210–FR-223 ([CI 41899659376](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41899659376), head bdebfdf)
 - [x] M42 Documentation: FR-224–FR-227 (content in 134f907; `docs.yml` runs first on the PR)
 - [x] M43 Integrate and harden: E2E (marketing routing §4.32, above-the-fold on every route, keyboard header/footer/FAQ/mobile menu, reduced motion, same-origin, LCP in HTML, Home), axe in both themes, JS budget 192.6/200 KB, acceptance audit over 0.1.0–0.6.0 (29 Done, 3 Partial → closed, docs.yml green on PR #29 [run 41926888441](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41926888441); 1 0.4.0 toast regression → safeguarded), SPEC synced (D-V6-14–19) ([CI 41905207049](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41905207049), head 08bc7b1)
-- [ ] M44 Versioning and releases: FR-229–FR-231 (branch `build/tevrin-v6-releases`)
+- [x] M44 Versioning and releases: FR-229–FR-231, semver folders and names (D-V6-26) ([CI 42289439086](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42289439086), head 43193a1). Docs workflow (redirect check) first runs on the PR
 
 ## Decisions
 - 2026-11-04 (M38): palette values shifted to pass AA (roles unchanged, §4.31 allows it): light danger rose-700 (rose-600 is 4.49:1 on card), dark primary indigo-300 (indigo-400 fails on its 15% tint), light sidebar-accent slate-100. `text-lg` is 20 px (the FR-203 scale has no 18 px step). `aide.theme` now stores `system` explicitly (0.5.0 deleted the key); stored `light`/`dark` still honoured. Brand assets come from one generator (`npm run brand:assets`, `src/components/brand-geometry.ts`); a test fails on drift. `metadataBase` comes from the validated request Host (switch to a configured public origin if a CDN is added).
