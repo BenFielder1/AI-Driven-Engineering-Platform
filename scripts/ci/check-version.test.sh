@@ -18,7 +18,8 @@ fixture() {
   printf '{\n  "name": "aide-frontend",\n  "version": "%s",\n  "private": true\n}\n' "$2" > "$dir/frontend/package.json"
   printf '{\n  "name": "aide-frontend",\n  "version": "%s",\n  "packages": {\n    "": {\n      "name": "aide-frontend",\n      "version": "%s",\n      "dependencies": {}\n    }\n  }\n}\n' \
     "$3" "$4" > "$dir/frontend/package-lock.json"
-  printf "export const changelog = [\n  {\n    version: '%s',\n    date: %s,\n  },\n  {\n    version: '0.1.0',\n    date: '2026-10-10',\n  },\n]\n" \
+  # The interface's `version: string` / `date: string | null` come first, as in the real file, and must not match.
+  printf "export interface ChangelogEntry {\n  version: string\n  date: string | null\n}\n\nexport const changelog = [\n  {\n    version: '%s',\n    date: %s,\n  },\n  {\n    version: '0.1.0',\n    date: '2026-10-10',\n  },\n]\n" \
     "$5" "$6" > "$dir/frontend/src/features/marketing/content/changelog.ts"
   echo "$dir"
 }

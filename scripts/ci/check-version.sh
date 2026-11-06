@@ -15,12 +15,15 @@ fail() { echo "::error::$1" >&2; exit 1; }
 
 props="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' backend/Directory.Build.props)"
 package="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' frontend/package.json)"
-lock="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' frontend/package-lock.json | head -n 1)"
+# First matches only, read with awk `exit` and no pipe: `sed | head` on the large lock file fails under pipefail on CI
+# (sed exits 4 on EPIPE once head has closed the pipe).
+lock="$(awk -F'"' '/^  "version": /{print $4; exit}' frontend/package-lock.json)"
 # packages[""] in the lock: the first 6-space-indented "version" (the root package is listed first).
-lock_root="$(sed -n 's/^      "version": "\(.*\)",$/\1/p' frontend/package-lock.json | head -n 1)"
+lock_root="$(awk -F'"' '/^      "version": /{print $4; exit}' frontend/package-lock.json)"
 changelog_file=frontend/src/features/marketing/content/changelog.ts
-changelog="$(sed -n "s/^ *version: '\(.*\)',$/\1/p" "$changelog_file" | head -n 1)"
-changelog_date="$(sed -n 's/^ *date: \(.*\),$/\1/p' "$changelog_file" | head -n 1)"
+# Entry values only (`version: '…',` / `date: null,` or `date: '…',`), not the interface's `version: string`.
+changelog="$(awk -F"'" "/^ *version: '.*',\$/{print \$2; exit}" "$changelog_file")"
+changelog_date="$(awk "/^ *date: (null|'.*'),\$/{sub(/^ *date: /, \"\"); sub(/,\$/, \"\"); print; exit}" "$changelog_file")"
 
 [ "$(printf '%s\n' "$props" | grep -c .)" = 1 ] || fail "backend/Directory.Build.props must have exactly one <Version> (found: '${props}')"
 [[ "$props" =~ $semver ]] || fail "backend/Directory.Build.props <Version> '$props' is not x.y.z"
