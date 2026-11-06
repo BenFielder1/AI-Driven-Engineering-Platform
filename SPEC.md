@@ -91,6 +91,12 @@ The v1–v5 roles are unchanged. v6 adds the anonymous visitor.
   - Given an `aide_pat_` token issued before v6, then it authenticates. Given a webhook consumer that verifies `X-AIDE-*` headers, then deliveries still verify.
   - Given a project mid-version on an `aide/<slug>/v<ver>` branch, then execution, review and release continue unchanged.
   - Given a user's saved theme in localStorage `aide.theme`, then it is honoured (FR-204).
+- **FR-228** *(backend)* **GitHub App rename.** Renaming the GitHub App (Q2) changes its slug, which install links, the App page and the bot commit identity (`<slug>[bot]`) are built from. Tevrin uses the App's current slug from GitHub (`GET /app` with the App JWT) when GitHub answers for the same App id with a usable slug (§4.34); otherwise it uses the stored or configured slug.
+  - The answer is cached in memory for 10 minutes and shared with the FR-80 App details. A failed lookup (unreachable, rate limited, refused, over 5 seconds, unreadable key) is remembered for 1 minute, so an unreachable GitHub isn't asked on every request.
+  - A registered App's row (`github_apps.slug`, `html_url`) is updated in place, with no migration. A configured App keeps its configuration, and the API logs a warning to set `GitHub__App__Slug`.
+  - Given a configured App renamed on GitHub, when an Admin opens Admin → Integrations → GitHub, then the slug, install URL and App page show the new slug, and so does the connection's install link (`FR228_` tests).
+  - Given a registered App renamed on GitHub, then the stored slug and page are updated.
+  - Given GitHub is unreachable, or answers for another App id, then the stored slug is used.
 
 ### 3.2 Brand and design system
 
@@ -259,6 +265,18 @@ Rules: no text on the gradient; warning is never text; status badges pair colour
 | Testing, CI | `reference/testing.md`, `operations/ci.md` |
 | CLI | `guides/cli.md` |
 
+### 4.34 Current GitHub App slug
+
+`CurrentSlug(appId, storedSlug, liveAppId, liveSlug)` = `liveSlug` when `liveAppId == appId` and `liveSlug` is usable (1–100 ASCII letters, digits, `-`, `_` or `.`), else `storedSlug` (FR-228).
+
+| GitHub's answer | Used |
+| --- | --- |
+| same App id, slug `tevrin` | `tevrin` |
+| same App id, slug unchanged | stored slug |
+| another App id | stored slug |
+| none (failed lookup) | stored slug |
+| same App id, slug empty or with `/`, space or non-ASCII | stored slug |
+
 ## 5. Data
 
 No schema change and no migration. Browser-only state: `aide.theme` (`light|dark|system`, `system` stored explicitly), `aide.home.checklist-dismissed` (`"1"` when dismissed). Marketing content and the changelog are code.
@@ -325,13 +343,14 @@ Local dev loop, Docker Desktop Kubernetes, Railway `preview` and `production` as
 | D-V6-20 | Post-v6 fixes: the README logo uses GitHub's `#gh-*-mode-only` fragments, which follow the GitHub theme setting (`<picture>` follows the OS); the docs site logo is the v6 light lockup; the How it works lifecycle diagram sits under the page intro, horizontal at `lg` and vertical below (FR-214, FR-224, FR-225) | Build | agreed |
 | D-V6-21 | Licence: PolyForm Shield License 1.0.0 (`LICENSE.md`, with `Required Notice` and `Licensor Line of Business` lines). Anyone may use, modify and self-host Tevrin, but not provide a competing product (selling it or offering it as a hosted service). Single author: outside pull requests are not accepted. The name and logo are not licensed (stated in `LICENSE.md`, the README and the brand page): a copy you run may keep them and say it's based on Tevrin, but they can't brand a product or service offered to others or suggest endorsement. The CLI packages ship `LICENSE.md` (`PackageLicenseFile`); copy stays "source available", never "open source" (FR-218, FR-222, FR-224, Q3) | Ben | agreed |
 | D-V6-22 | Docs site custom domain: GitHub Pages serves the docs at `https://docs.tevrin.dev/` (set in repo Settings → Pages, DNS `CNAME docs → benfielder1.github.io`). `docs/_config.yml` has `url: https://docs.tevrin.dev` and an empty `baseurl`; the link check no longer swaps a base path; `DOCS_URL` and the README point at the new URL. The old `benfielder1.github.io/AI-Driven-Engineering-Platform/` URL redirects there (GitHub Pages does this once a custom domain is set). Answers the docs-site part of Q1 (FR-224, FR-226) | Ben | agreed |
+| D-V6-23 | Post-v6 fix: the GitHub App's slug comes from GitHub (`GET /app`, 10-minute cache shared with the FR-80 details, 1-minute retry after a failure, 5-second timeout), so a rename is picked up without a redeploy. A registered App's row is updated; a configured App logs a warning to set `GitHub__App__Slug` (FR-228, Q2) | Ben | agreed |
 
 ## 11. Open questions
 
 | # | Question | Who can answer | Blocks |
 | --- | --- | --- | --- |
 | Q1 | New domain (e.g. `tevrin.<tld>`) and repo rename? Both change URLs in the docs site, README and `DOCS_URL`. **Partly resolved (D-V6-22):** the docs site is at `docs.tevrin.dev`. Still open: the app's production domain and the repo rename | Ben | nothing |
-| Q2 | Rename the existing GitHub App and Railway-visible names to Tevrin? Manual in GitHub/Railway settings | Ben | nothing (manual check) |
+| Q2 | Rename the existing GitHub App and Railway-visible names to Tevrin? Manual in GitHub/Railway settings. The App was renamed after v6 shipped; Tevrin follows the new slug (FR-228, D-V6-23) | Ben | nothing (manual check) |
 | Q3 | ~~Add a licence?~~ **Resolved (D-V6-21):** PolyForm Shield License 1.0.0 in `LICENSE.md`. Copy says "source available", never "open source" | Ben | nothing |
 | Q4 | Terms and Privacy text for the footer and sign-up? Omitted until supplied | Ben | nothing |
 

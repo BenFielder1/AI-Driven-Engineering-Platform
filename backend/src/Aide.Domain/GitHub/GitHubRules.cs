@@ -110,6 +110,18 @@ public static class GitHubRules
     public static string AppHtmlUrl(string slug) => $"https://github.com/apps/{Uri.EscapeDataString(slug)}";
 
     /// <summary>
+    /// FR-228: the slug to use for the App. Renaming a GitHub App changes its slug, so GitHub's current one
+    /// (<c>GET /app</c>) wins when it answered for the same App id with a usable slug; otherwise the stored or configured
+    /// slug stays.
+    /// </summary>
+    public static string CurrentSlug(long appId, string storedSlug, long? liveAppId, string? liveSlug) =>
+        liveAppId == appId && IsUsableSlug(liveSlug) ? liveSlug! : storedSlug;
+
+    /// <summary>FR-228: a slug GitHub could have issued: 1–100 ASCII letters, digits, <c>-</c>, <c>_</c> or <c>.</c>.</summary>
+    public static bool IsUsableSlug(string? slug) =>
+        slug is { Length: > 0 and <= 100 } && slug.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');
+
+    /// <summary>
     /// FR-81: where an installation's repositories are managed: the user's or the organisation's installation settings.
     /// </summary>
     public static string ManageInstallationUrl(long installationId, string accountLogin, GitHubOwnerType accountType) =>
