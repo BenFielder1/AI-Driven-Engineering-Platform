@@ -46,7 +46,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-225 | Docs site content | 3.6, 4.33 | docs | M42 | done | CI 41855800502, docs 41926888441 (155 internal links) |
 | FR-226 | GitHub Pages workflow + link check | 3.6 | deploy (CI) | M42 | done | docs 41926888441 |
 | FR-227 | Repo docs name Tevrin | 3.6 | docs | M42 | done | CI 41855800502 |
-| FR-228 | GitHub App slug follows a rename on GitHub | 3.1, 4.34 | backend | post-v6 fix | in progress | |
+| FR-228 | GitHub App slug follows a rename on GitHub | 3.1, 4.34 | backend | post-v6 fix | done | [CI 42210821139](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/42210821139) |
 
 ## Phases
 - [x] M0 Baseline (base: b349c5b): CI green on `main` ([run 41828267279](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/41828267279)); v5 docs moved to `docs/v5/`; no re-scaffold
