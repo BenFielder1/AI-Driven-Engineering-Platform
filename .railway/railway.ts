@@ -14,7 +14,7 @@
  * - `${{service.VAR}}` inside a plain string is Railway's own reference syntax, resolved by Railway at deploy time.
  *   Ordinary (non-template) string literals are used for those values so TypeScript doesn't interpolate them.
  * - Not expressible here (one-time dashboard/CLI steps in deploy/railway/README.md): the `web` domains (custom
- *   tevrin.dev in production, aide.benfielder.com in preview, D-V6-27) and `App__PublicBaseUrl`, Postgres and volume
+ *   www.tevrin.dev in production, aide.benfielder.com in preview, D-V6-27) and `App__PublicBaseUrl`, Postgres and volume
  *   backup schedules, and the GitHub repo connection (none: deploys come from
  *   GitHub Actions with `railway up`, SPEC D-V3-7).
  */
@@ -33,7 +33,7 @@ const catalogExtensionVariables = (
 )
 
 const operatorSetApiVariables = [
-  // Required: the environment's public URL (D-V6-27): https://tevrin.dev in production, https://aide.benfielder.com in
+  // Required: the environment's public URL (D-V6-27): https://www.tevrin.dev in production, https://aide.benfielder.com in
   // preview. Set per environment because the custom domains differ and IaC is one definition for both. It replaces the
   // reference https://${{web.RAILWAY_PUBLIC_DOMAIN}}, which depended on a generated domain (production has none).
   'App__PublicBaseUrl',
@@ -162,7 +162,7 @@ export default defineRailway(() => {
     build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile' },
     healthcheck: '/healthz',
     replicas: 1,
-    // Public domains are set per environment in Railway, not here (D-V6-27): custom domain tevrin.dev in production and
+    // Public domains are set per environment in Railway, not here (D-V6-27): custom domain www.tevrin.dev in production and
     // aide.benfielder.com in preview (target port 8080), plus preview's generated *.up.railway.app domain. IaC is one
     // definition for both environments, so a per-environment custom domain can't be declared in it.
     env: {

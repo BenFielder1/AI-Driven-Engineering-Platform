@@ -66,7 +66,7 @@ npm ci --prefix .railway && npm --prefix .railway run typecheck
 ## Deploy
 - **Targets (Railway, one project):**
   - `web`: the Next.js standalone container from `frontend/`, root dir `frontend`, public custom domain per environment
-    (D-V6-27): `tevrin.dev` in production (no generated domain), `aide.benfielder.com` in preview; `App__PublicBaseUrl`
+    (D-V6-27): `www.tevrin.dev` in production (no generated domain), `aide.benfielder.com` in preview; `App__PublicBaseUrl`
     on `api` is set to the same URL
   - `api`: the ASP.NET container from `backend/Dockerfile`, root dir `backend`, private only, a volume at `/data`
     (Data Protection keys, Git working copies), one replica, pre-deploy `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'` with a 600 s

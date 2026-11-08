@@ -3,7 +3,7 @@
 One Railway project, `aide`, with two environments: `preview` and `production`. Each environment has:
 
 - **`web`:** the Next.js server from `frontend/Dockerfile`, with healthcheck `/healthz` and a public custom domain
-  (D-V6-27): **`https://tevrin.dev`** in `production`, **`https://aide.benfielder.com`** in `preview` (which also keeps
+  (D-V6-27): **`https://www.tevrin.dev`** in `production`, **`https://aide.benfielder.com`** in `preview` (which also keeps
   its generated `*.up.railway.app` domain)
 - **`api`:** the ASP.NET API from `backend/Dockerfile`, private only, with a 500 MB volume at `/data` (5 GB after a plan upgrade), migrations as its
   pre-deploy command, and healthcheck `/api/health/ready`
@@ -139,8 +139,8 @@ Do these per environment, with that environment linked:
 
 | Step | How |
 | --- | --- |
-| **Web domain** (D-V6-27) | `web` → Settings → Networking → **Custom Domain**, target port 8080: `tevrin.dev` in `production`, `aide.benfielder.com` in `preview`. Add the DNS records Railway shows at the domain's DNS provider and wait until Railway shows the domain as verified. `tevrin.dev` is an apex domain, so its provider must support a CNAME at the apex (CNAME flattening or ALIAS/ANAME); otherwise move its DNS to one that does. Domains are not part of IaC |
-| **Public URL** | `railway variable set App__PublicBaseUrl=https://tevrin.dev --service api --environment production --skip-deploys` (`https://aide.benfielder.com` for `preview`). No trailing slash. It's in `operatorSetApiVariables`, so IaC leaves it alone |
+| **Web domain** (D-V6-27) | `web` → Settings → Networking → **Custom Domain**, target port 8080: `www.tevrin.dev` in `production`, `aide.benfielder.com` in `preview`. Add the DNS records Railway shows at the domain's DNS provider and wait until Railway shows the domain as verified. For production that's a `CNAME www → <target Railway shows>` at IONOS. The bare `tevrin.dev` can't take a CNAME at IONOS, so it isn't a Railway domain: an IONOS HTTP redirect ("Arbitrary URL", `www` not included) sends it to `https://www.tevrin.dev`, keeping the path (IONOS answers 302). Never set a redirect on `www` itself: it would replace the CNAME. Domains are not part of IaC |
+| **Public URL** | `railway variable set App__PublicBaseUrl=https://www.tevrin.dev --service api --environment production --skip-deploys` (`https://aide.benfielder.com` for `preview`). No trailing slash. It's in `operatorSetApiVariables`, so IaC leaves it alone |
 | **GitHub environment URL** | Set the variable `RAILWAY_WEB_URL` of the matching GitHub environment to the same URL. The smoke test runs against it |
 | **No api domain** | Check `api` → Settings → Networking shows no public domain and no TCP proxy. Never generate one. Every deploy fails if one exists (FR-111) |
 | **Signing key** | `openssl rand -hex 32 \| railway variable set Approvals__SigningKey --stdin --service api --environment <env> --skip-deploys` (64 characters, read from stdin so it never appears in argv or shell history). Use a new value for each environment. Don't echo it anywhere else |
@@ -215,7 +215,7 @@ URLs are per environment, so register a separate GitHub App (or OAuth App) for `
   - Set `GitHub__OAuth__ClientId` and the `GitHub__OAuth__ClientSecret` secret in Railway for that environment (both
     are in `operatorSetApiVariables` in `railway.ts`).
 - **Changing the domain:** re-register the App, or edit its URLs, after changing `App__PublicBaseUrl`. Production's
-  App is registered against `https://tevrin.dev`, preview's against `https://aide.benfielder.com`.
+  App is registered against `https://www.tevrin.dev`, preview's against `https://aide.benfielder.com`.
 
 ### 7a. GitLab against the Railway URL (FR-130)
 
