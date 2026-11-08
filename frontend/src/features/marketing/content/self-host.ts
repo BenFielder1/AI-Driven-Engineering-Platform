@@ -4,7 +4,7 @@ import { docsUrl, type NavLink } from './site-nav'
 /**
  * FR-216, FR-212, FR-222: Self-host page copy (D-V6-5: no pricing page). The commands themselves live in
  * self-host-commands.ts, the one source checked against the docs. Sources: docs/getting-started, docs/operations,
- * docs/guides, SPEC.md §1 and §9.
+ * docs/guides, docs/0.6.0/SPEC.md §1 and §9.
  */
 export const PREVIEW_NOTE = 'Free while in preview. No billing.'
 

@@ -8,7 +8,7 @@
 # The site is served from the root of its custom domain (https://docs.tevrin.dev/, empty baseurl), so root-relative
 # URLs resolve against the _site root as they are.
 #
-# Frozen docs/0.1.0-0.5.0 pages are not scanned as link *sources*: they predate the site and were written with repo-root
+# Frozen docs/0.1.0-0.6.0 pages are not scanned as link *sources*: they predate the site and were written with repo-root
 # paths (e.g. `docs/0.1.0/SPEC.md` from inside docs/0.2.0/), and frozen docs may only change to fix links. Links *to* them
 # from new pages (history/) are still checked. Once their links are fixed, drop FROZEN.
 require "html-proofer"
@@ -17,7 +17,7 @@ site = ARGV.fetch(0, "_site")
 abort("check-docs-links: #{site} not found; build the site first") unless Dir.exist?(site)
 
 # Anchored to the site root so history/<x.y.z>/ pages (which link into the frozen specs) are still checked.
-FROZEN = %r{\A#{Regexp.escape(site.chomp("/"))}/0\.[1-5]\.0/}
+FROZEN = %r{\A#{Regexp.escape(site.chomp("/"))}/0\.[1-6]\.0/}
 
 options = {
   disable_external: true,

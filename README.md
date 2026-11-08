@@ -61,8 +61,8 @@ frontend/   src/app, src/features, src/api/generated (generated) · server.ts ·
 deploy/     k8s/ (Kustomize) · scripts/ · railway/ (ops docs)
 .railway/   Railway infrastructure as code
 .github/    workflows: ci.yml, deploy.yml, docs.yml
-docs/       the docs site, and frozen specs in docs/0.1.0 to docs/0.5.0
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md
+docs/       the docs site, and the specs of each version in docs/0.1.0 to docs/0.6.0
+STACK.md · CLAUDE.md
 ```
 
 ## Deployment
@@ -83,7 +83,7 @@ SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md
 | [History](docs/history/index.md) | Specs and build logs for versions 0.1.0 to 0.6.0 |
 | [Brand](docs/brand.md) | Logo files, colours, usage rules |
 
-[`SPEC.md`](SPEC.md) is the source of truth for behaviour, [`CLAUDE.md`](CLAUDE.md) holds the conventions, and [`PROGRESS.md`](PROGRESS.md) logs build decisions.
+The spec is the source of truth for behaviour: the latest is [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md), with its build log in [`docs/0.6.0/PROGRESS.md`](docs/0.6.0/PROGRESS.md), and a version in development has a root `SPEC.md` and `PROGRESS.md`. [`CLAUDE.md`](CLAUDE.md) holds the conventions.
 
 ## Licence
 

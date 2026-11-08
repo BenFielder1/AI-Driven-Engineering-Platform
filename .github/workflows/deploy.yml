@@ -14,7 +14,7 @@
 #   secrets    RAILWAY_TOKEN (Railway project token scoped to that Railway environment), SMOKE_EMAIL, SMOKE_PASSWORD,
 #              RAILWAY_API_TOKEN (Railway workspace token: `railway config plan` (IaC) rejects project tokens with
 #              "Unauthorized", so only the read-only drift check uses it; deploys and queries use RAILWAY_TOKEN)
-#   variable   RAILWAY_WEB_URL (https://<generated web domain>). CI never runs `railway domain` (it creates domains).
+#   variable   RAILWAY_WEB_URL (the custom domain, D-V6-27: https://tevrin.dev / https://aide.benfielder.com). CI never runs `railway domain` (it creates domains).
 # Until RAILWAY_TOKEN exists in `preview`, the automatic preview deploy skips with a notice instead of failing.
 # CI never runs `railway config apply`: drift found by `railway config plan` fails the deploy, and Ben reviews it.
 # Each `railway up` is followed by a wait until that deployment is SUCCESS (pre-deploy migration + healthcheck), api

@@ -14,8 +14,8 @@ on:
       - ".claude/**"
       - "*.md"
   push:
-    # build/** too: the commit gate runs on CI, not locally (CLAUDE.md "Commit gate").
-    branches: [main, "build/**"]
+    # build/** and release/** too: the commit gate runs on CI, not locally (CLAUDE.md "Commit gate").
+    branches: [main, "build/**", "release/**"]
     paths-ignore:
       - "docs/**"
       - ".claude/**"

@@ -2,8 +2,9 @@
 
 One Railway project, `aide`, with two environments: `preview` and `production`. Each environment has:
 
-- **`web`:** the Next.js server from `frontend/Dockerfile`, with a public `*.up.railway.app` domain and healthcheck
-  `/healthz`
+- **`web`:** the Next.js server from `frontend/Dockerfile`, with healthcheck `/healthz` and a public custom domain
+  (D-V6-27): **`https://tevrin.dev`** in `production`, **`https://aide.benfielder.com`** in `preview` (which also keeps
+  its generated `*.up.railway.app` domain)
 - **`api`:** the ASP.NET API from `backend/Dockerfile`, private only, with a 500 MB volume at `/data` (5 GB after a plan upgrade), migrations as its
   pre-deploy command, and healthcheck `/api/health/ready`
 - **`postgres`:** Railway Postgres 18 (`postgres-ssl:18`, SPEC D-V3-13; local and CI run 18 too, D-V5-1)
@@ -104,9 +105,9 @@ where exit 2 means drift and stops the deploy.
 
 **Operator-set variables and `variables.ignore`.** IaC owns every variable on a service, so a variable that exists in
 Railway but not in `railway.ts` is planned for **deletion**, which would also make CI's drift check fail. To keep one
-file for both environments, `railway.ts` lists `Approvals__SigningKey` and the **full optional set** from
+file for both environments, `railway.ts` lists `App__PublicBaseUrl` (required, the environment's public URL, D-V6-27), `Approvals__SigningKey` and the **full optional set** from
 [variables.md](variables.md) (`Llm__*`, `GitHub__App__*`, `GitHub__OAuth__*`, `GitLab__Instances__0__*`, `GitLab__RequestTimeout`,
-`Bitbucket__OAuth__*`, `Notifications__DatabaseExpirySweepInterval`, `Smtp__*`, 40 names) in
+`Bitbucket__OAuth__*`, `Notifications__DatabaseExpirySweepInterval`, `Smtp__*`, 41 names) in
 `operatorSetApiVariables`, which is the project-level `variables.ignore`. IaC never touches an ignored name, whether it
 is set or not, so setting any of them in either environment needs no code change. An ignored name may be set or unset,
 which is why it is used instead of `preserve()`. `variables.ignore` is a CLI 5.71 feature that the `railway` 3.16 package doesn't type yet, hence a cast in `railway.ts`.
@@ -118,7 +119,7 @@ neither declared in `railway.ts` nor in the ignore list is still planned for del
 **First-plan checklist** (each environment, before the first apply):
 
 - [ ] The plan creates `postgres`, volume `api-data`, and services `api` and `web`, and destroys nothing.
-- [ ] The plan shows no add, change or error for the ignored `Approvals__SigningKey`, `Llm__*`, `GitHub__*`, `GitLab__Instances__0__*`,
+- [ ] The plan shows no add, change or error for the ignored `App__PublicBaseUrl`, `Approvals__SigningKey`, `Llm__*`, `GitHub__*`, `GitLab__Instances__0__*`,
       `GitLab__RequestTimeout`, `Bitbucket__OAuth__*` and `Smtp__*` names. Only the "matches no variable" warnings for names you haven't set are expected.
 - [ ] `api` shows the pre-deploy command, `preDeployTimeoutSeconds: 600`, healthcheck `/api/health/ready`, and no
       domain or TCP proxy.
@@ -138,7 +139,9 @@ Do these per environment, with that environment linked:
 
 | Step | How |
 | --- | --- |
-| **Generate the web domain** | `railway domain --service web --port 8080` (or `web` → Settings → Networking → Generate Domain, port 8080). Note the URL. Generated domains are not part of IaC |
+| **Web domain** (D-V6-27) | `web` → Settings → Networking → **Custom Domain**, target port 8080: `tevrin.dev` in `production`, `aide.benfielder.com` in `preview`. Add the DNS records Railway shows at the domain's DNS provider and wait until Railway shows the domain as verified. `tevrin.dev` is an apex domain, so its provider must support a CNAME at the apex (CNAME flattening or ALIAS/ANAME); otherwise move its DNS to one that does. Domains are not part of IaC |
+| **Public URL** | `railway variable set App__PublicBaseUrl=https://tevrin.dev --service api --environment production --skip-deploys` (`https://aide.benfielder.com` for `preview`). No trailing slash. It's in `operatorSetApiVariables`, so IaC leaves it alone |
+| **GitHub environment URL** | Set the variable `RAILWAY_WEB_URL` of the matching GitHub environment to the same URL. The smoke test runs against it |
 | **No api domain** | Check `api` → Settings → Networking shows no public domain and no TCP proxy. Never generate one. Every deploy fails if one exists (FR-111) |
 | **Signing key** | `openssl rand -hex 32 \| railway variable set Approvals__SigningKey --stdin --service api --environment <env> --skip-deploys` (64 characters, read from stdin so it never appears in argv or shell history). Use a new value for each environment. Don't echo it anywhere else |
 | **Optional secrets** | LLM, GitHub App/OAuth, GitLab instance, Bitbucket OAuth and SMTP values: see [variables.md](variables.md). Set them the same way (`--stdin` for secrets). Their names are already in `operatorSetApiVariables` (`variables.ignore`) in `railway.ts`. A name not in that list must be added there first, or the next plan deletes it |
@@ -147,9 +150,10 @@ Do these per environment, with that environment linked:
 | **Volume size** | 500 MB, the current plan's maximum. SPEC Q2 wants 5 GB: upgrade the plan, raise `sizeMB` in `railway.ts` and apply. Shrinking is destructive |
 | **Source** | Don't connect the GitHub repo to `web` or `api`. Deploys come from GitHub Actions with `railway up` (D-V3-7). `railway.ts` declares `source` with a root directory and no repo, so nothing is connected. The watch paths in `railway.ts` (`/frontend/**`, `/backend/**`) only matter if a repo is connected later |
 
-`App__PublicBaseUrl` is the reference `https://${{web.RAILWAY_PUBLIC_DOMAIN}}`, so it picks up the generated domain with
-no extra step. The API validates it at start-up, so generate the domain before the first deploy. If you add a custom
-domain later (SPEC Q3), put it in `domains` for `web` in `railway.ts`, and set `App__PublicBaseUrl` to it.
+`App__PublicBaseUrl` is set per environment (D-V6-27), because each environment has its own custom domain and IaC is
+one definition for both. The API validates it at start-up, so set it, and the domain, before the first deploy. To move
+an environment to another domain, add the new custom domain, change `App__PublicBaseUrl` and `RAILWAY_WEB_URL`, then
+update the GitHub App and OAuth URLs (step 7).
 
 ### 4. First deploy
 
@@ -210,7 +214,8 @@ URLs are per environment, so register a separate GitHub App (or OAuth App) for `
   - Callback URL: `https://<web-domain>/api/auth/github/callback`
   - Set `GitHub__OAuth__ClientId` and the `GitHub__OAuth__ClientSecret` secret in Railway for that environment (both
     are in `operatorSetApiVariables` in `railway.ts`).
-- **A custom domain later:** re-register the App, or edit its URLs, after changing `App__PublicBaseUrl`.
+- **Changing the domain:** re-register the App, or edit its URLs, after changing `App__PublicBaseUrl`. Production's
+  App is registered against `https://tevrin.dev`, preview's against `https://aide.benfielder.com`.
 
 ### 7a. GitLab against the Railway URL (FR-130)
 
@@ -323,7 +328,7 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 | `railway config plan` says "requires Railway CLI 5.42.1 or newer" on Windows | `railway/iac` can't execute the npm shim. Set `$env:_` to `railway.exe` in PowerShell (step 2) |
 | `api` deploy fails in pre-deploy | Deploy logs show the bundle error. `ConnectionStrings__Aide` should resolve: postgres running, and `PG*` references spelt with the service name `postgres` |
 | `api` healthcheck fails (503) | DB unreachable, or migrations pending. `railway logs --service api` |
-| `api` exits at start with an `App:PublicBaseUrl` validation error | `web` has no generated domain yet (step 3), so the reference resolved to `https://` |
+| `api` exits at start with an `App:PublicBaseUrl` validation error | `App__PublicBaseUrl` isn't set in this environment, or isn't an absolute `http(s)://` URL (step 3). It must be `https://` and the environment's custom domain: an `http://` value starts but breaks OAuth callbacks and links |
 | `/api/...` returns 502 `UPSTREAM_ERROR` | `web` can't reach `api.railway.internal:8080`: `api` down, or `BACKEND_URL` wrong. Kestrel listens on IPv4 and IPv6, so legacy IPv6-only private networks work |
 | Cookies not `Secure`, or the live WebSocket refused (403) | `TRUST_EDGE_FORWARDED=true` missing on `web`, or `ForwardedHeaders__ForwardLimit` not 2 on `api` |
 | Every user shares one login rate-limit bucket | `ForwardedHeaders__ForwardLimit` is not 2 |

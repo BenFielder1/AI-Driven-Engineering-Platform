@@ -24,7 +24,7 @@ export const IN_PREVIEW = 'In preview'
 export const changelog: readonly ChangelogEntry[] = [
   {
     version: '0.6.0',
-    date: null,
+    date: '2026-11-08',
     title: 'Tevrin',
     asAide: false,
     highlights: [
@@ -33,6 +33,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'A Home dashboard with a setup checklist, and a tidier app shell.',
       'This public site, and redesigned sign-in and sign-up pages.',
       'A documentation site published to GitHub Pages.',
+      'Semver version numbers, with each release tagged and published on GitHub.',
     ],
     specHref: docsUrl('history/0.6.0/'),
   },
