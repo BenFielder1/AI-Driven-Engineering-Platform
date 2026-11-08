@@ -22,7 +22,7 @@ public class SpecValidationTests
     // ---------- Required sections (§4.13) ----------
 
     [Fact]
-    public void S4_13_Required_sections_are_v1_eleven_plus_preset_sections_plus_changes_for_iterations()
+    public void S4_13_Required_sections_are_0_1_0_eleven_plus_preset_sections_plus_changes_for_iterations()
     {
         Assert.Equal(SpecSections.Required, SpecSections.RequiredFor(isIteration: false));
         Assert.Equal([.. SpecSections.Required, "Changes in this version"], SpecSections.RequiredFor(isIteration: true));

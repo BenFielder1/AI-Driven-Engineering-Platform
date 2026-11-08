@@ -7,10 +7,10 @@ using Microsoft.Extensions.Logging;
 namespace Aide.Infrastructure.GitHub;
 
 /// <summary>
-/// FR-82: the <c>github_app</c> provider. Git and GitHub work is exactly the v1 GitHub provider's (clone, fetch, push, the
+/// FR-82: the <c>github_app</c> provider. Git and GitHub work is exactly the 0.1.0 GitHub provider's (clone, fetch, push, the
 /// project PR, merge and tag; <see cref="GitHubGitProvider"/>), authenticated with an <b>installation token</b> minted per
 /// call (cached ≤ 55 min, scoped to the project's repository with <c>repository_ids</c>) instead of a stored token — never a
-/// user token. The token is passed to git only through the per-command <c>extraHeader</c> environment (v1 FR-35), never in
+/// user token. The token is passed to git only through the per-command <c>extraHeader</c> environment (0.1.0 FR-35), never in
 /// a remote URL, on disk, in logs or to an LLM. Commits, merges and tags in the working copy are attributed to the App bot.
 /// The <c>token</c> argument callers pass is ignored (they have none for an App project).
 /// </summary>

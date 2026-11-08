@@ -1,7 +1,7 @@
 namespace Aide.Domain.Lifecycle;
 
 /// <summary>
-/// The lifecycle phases, in order (§4.1; v5 §4.27 adds <see cref="Analysis"/> first). Stored as snake_case strings, so the
+/// The lifecycle phases, in order (§4.1; 0.5.0 §4.27 adds <see cref="Analysis"/> first). Stored as snake_case strings, so the
 /// numeric values only give the order (<see cref="PhaseOrder"/>) and may be renumbered.
 /// </summary>
 public enum Phase
@@ -51,7 +51,7 @@ public enum TransitionKind
     /// <summary><c>release → release</c>, no change.</summary>
     ReleaseNoop = 4,
 
-    /// <summary>The release job finished: status <c>released</c>. Since v2 the checkpoint is not incremented (§4.10, D-V2-2).</summary>
+    /// <summary>The release job finished: status <c>released</c>. Since 0.2.0 the checkpoint is not incremented (§4.10, D-V2-2).</summary>
     ReleaseCompleted = 5,
 
     /// <summary>

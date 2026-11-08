@@ -69,7 +69,7 @@ function AdvanceOutcome({ result }: { result: AdvanceResult }) {
 }
 
 /**
- * Overview → next-action card (FR-54, with v1 FR-11/FR-12): what the user can do next (from the next-action helper),
+ * Overview → next-action card (FR-54, with 0.1.0 FR-11/FR-12): what the user can do next (from the next-action helper),
  * status and version, and "Advance to <next phase>" for writers. An advance either moves the phase or creates the
  * gate the approval mode requires; precondition failures list the server's reasons. Results are also toasted.
  */

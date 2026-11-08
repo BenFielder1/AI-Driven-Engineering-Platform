@@ -1,10 +1,14 @@
 # FR-110 / D-V3-7: deploys AIDE to Railway with the Railway CLI, then runs the FR-111 smoke test against the web URL.
 #   preview     automatically after the "CI" workflow succeeds on a push to main (the exact commit CI tested), or by
 #               manual dispatch with environment=preview.
-#   production  manual dispatch only (environment=production, optional sha; default: the latest main commit with a
-#               green CI run). The GitHub environment `production` must have Ben as required reviewer (repo
+#   production  FR-231: when a GitHub release is published for a tag x.y.z (FR-230), the tagged commit. Also by manual
+#               dispatch (environment=production, optional sha; default: the latest main commit with a green CI run),
+#               e.g. to redeploy. The GitHub environment `production` must have Ben as required reviewer (repo
 #               Settings -> Environments -> production -> Required reviewers); this file can't enforce that.
-# Every dispatched commit must be on main and have a successful CI run, or the workflow fails before deploying.
+#               A release deploys only if its tag is x.y.z, equals the version in the tagged commit
+#               (scripts/ci/check-version.sh, FR-229), and it is the repo's latest release: pre-releases and releases
+#               published for older versions (e.g. backfilled history) are skipped with a notice, never deployed.
+# Every deployed commit must be on main and have a successful CI run, or the workflow fails before deploying.
 #
 # Per GitHub environment (`preview`, `production`), created by Ben (deploy/railway/README.md, variables.md):
 #   secrets    RAILWAY_TOKEN (Railway project token scoped to that Railway environment), SMOKE_EMAIL, SMOKE_PASSWORD,
@@ -23,6 +27,9 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  # FR-231: publishing a release (by Ben, or by an agent after Ben confirms; CLAUDE.md "Releases") deploys production.
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       environment:
@@ -54,6 +61,7 @@ jobs:
     # untrusted code must never reach a job that holds deploy secrets.
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'release' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main' &&
        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
@@ -64,6 +72,7 @@ jobs:
     outputs:
       environment: ${{ steps.resolve.outputs.environment }}
       sha: ${{ steps.resolve.outputs.sha }}
+      tag: ${{ steps.resolve.outputs.tag }}
     steps:
       - name: Resolve and verify the commit
         id: resolve
@@ -74,13 +83,43 @@ jobs:
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_SHA: ${{ inputs.sha }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           set -euo pipefail
           # "Latest green main" everywhere: the newest successful CI run on main from a push or a manual CI run in this
           # repository (never a fork PR whose branch is also called main). $repo is a jq variable, not a shell one.
           # shellcheck disable=SC2016
           newest='[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .head_repository.full_name == $repo)] | first | .head_sha // ""'
-          if [ "$EVENT" = workflow_run ]; then
+          tag=""
+          if [ "$EVENT" = release ]; then
+            # FR-231: a published release deploys its tag's commit to production.
+            environment=production
+            tag="$RELEASE_TAG"
+            skip() {
+              echo "::notice::$1"
+              echo "Skipped: $1" >> "$GITHUB_STEP_SUMMARY"
+              echo "environment=" >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+            semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+            [[ "$tag" =~ $semver ]] \
+              || { echo "::error::release tag '$tag' is not x.y.z (e.g. 0.6.0, no 'v' prefix, FR-230). Nothing was deployed."; exit 1; }
+            [ "$RELEASE_PRERELEASE" != true ] || skip "release $tag is a pre-release, so it is not deployed to production."
+            # Only the repo's latest release deploys, so publishing a release for an older version never rolls
+            # production back. (/releases/latest ignores drafts and pre-releases.)
+            latest_release="$(gh api "repos/$REPO/releases/latest" --jq .tag_name)"
+            [ "$latest_release" = "$tag" ] \
+              || skip "release $tag is not the latest release ($latest_release), so it is not deployed to production."
+            # The tag's commit (an annotated tag points at a tag object, which points at the commit).
+            ref="$(gh api "repos/$REPO/git/ref/tags/$tag")"
+            sha="$(jq -r .object.sha <<<"$ref")"
+            if [ "$(jq -r .object.type <<<"$ref")" = tag ]; then
+              sha="$(gh api "repos/$REPO/git/tags/$sha" --jq 'select(.object.type == "commit") | .object.sha')"
+            fi
+            [ -n "$sha" ] || { echo "::error::tag $tag does not point at a commit"; exit 1; }
+            echo "Release $tag is commit $sha"
+          elif [ "$EVENT" = workflow_run ]; then
             environment=preview
             sha="$RUN_SHA"
             # CI runs can finish out of order. Deploy only the newest green main commit, so a late finish for an older
@@ -125,9 +164,22 @@ jobs:
             exit 1
           fi
 
-          echo "Deploying $sha to $environment"
-          { echo "environment=$environment"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
-          echo "Target: \`$environment\` at \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploying $sha to $environment${tag:+ (release $tag)}"
+          { echo "environment=$environment"; echo "sha=$sha"; echo "tag=$tag"; } >> "$GITHUB_OUTPUT"
+          echo "Target: \`$environment\` at \`$sha\`${tag:+ (release \`$tag\`)}" >> "$GITHUB_STEP_SUMMARY"
+
+      # FR-229 / FR-231: a release tag must equal the version written in the commit it tags.
+      - uses: actions/checkout@v7
+        if: steps.resolve.outputs.tag != ''
+        with:
+          ref: ${{ steps.resolve.outputs.sha }}
+          persist-credentials: false
+
+      - name: Release tag matches the version in the tagged commit (FR-229)
+        if: steps.resolve.outputs.tag != ''
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: bash scripts/ci/check-version.sh "$TAG"
 
   deploy-preview:
     name: Deploy preview
@@ -362,12 +414,14 @@ jobs:
             echo "Logs: Railway dashboard, or \`railway logs --service <api|web>\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Same steps as deploy-preview against `production`. Dispatch only; the GitHub environment's required reviewer
-  # approves before any step (and before the production secrets are exposed).
+  # Same steps as deploy-preview against `production`. A published release (FR-231) or a dispatch; the GitHub
+  # environment's required reviewer approves before any step (and before the production secrets are exposed).
   deploy-production:
     name: Deploy production
     needs: resolve
-    if: github.event_name == 'workflow_dispatch' && needs.resolve.outputs.environment == 'production'
+    if: >-
+      (github.event_name == 'release' || github.event_name == 'workflow_dispatch') &&
+      needs.resolve.outputs.environment == 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 60  # two image builds + up to 25 min of deployment waits
     environment:
@@ -381,6 +435,7 @@ jobs:
     env:
       DEPLOY_ENV: production
       DEPLOY_SHA: ${{ needs.resolve.outputs.sha }}
+      DEPLOY_TAG: ${{ needs.resolve.outputs.tag }}
     steps:
       # A production deploy is always an explicit request, so missing configuration fails instead of skipping.
       - name: Check Railway is configured
@@ -552,7 +607,7 @@ jobs:
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
         run: |
           if bash deploy/scripts/smoke-remote.sh "$RAILWAY_WEB_URL"; then
-            echo "Deployed \`$DEPLOY_SHA\` to \`$DEPLOY_ENV\`: smoke test passed ($RAILWAY_WEB_URL)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Deployed \`$DEPLOY_SHA\`${DEPLOY_TAG:+ (release \`$DEPLOY_TAG\`)} to \`$DEPLOY_ENV\`: smoke test passed ($RAILWAY_WEB_URL)." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF

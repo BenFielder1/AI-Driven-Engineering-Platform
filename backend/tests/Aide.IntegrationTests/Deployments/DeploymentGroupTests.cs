@@ -275,7 +275,7 @@ public sealed class DeploymentGroupTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR191_A_v4_target_keeps_no_group_and_a_group_wont_take_it()
+    public async Task FR191_A_0_4_0_target_keeps_no_group_and_a_group_wont_take_it()
     {
         var (app, fixture, connection) = await ArrangeAsync(RailwayX3);
         using var _ = fixture;

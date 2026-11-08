@@ -4,7 +4,7 @@ using Aide.Domain.Releases;
 
 namespace Aide.UnitTests.GitHosts;
 
-/// <summary>FR-138, §4.19: GitLab and Bitbucket merge readiness mapped onto the v2 reason codes.</summary>
+/// <summary>FR-138, §4.19: GitLab and Bitbucket merge readiness mapped onto the 0.2.0 reason codes.</summary>
 public class GitHostMergeReadinessTests
 {
     private static readonly GitLabMergeFacts Mergeable = new()
@@ -75,7 +75,7 @@ public class GitHostMergeReadinessTests
     [InlineData("merge_request_blocked", MergeReadinessReasonCode.BranchProtected)]
     [InlineData("locked_paths", MergeReadinessReasonCode.BranchProtected)]
     [InlineData("not_open", MergeReadinessReasonCode.PrNotOpen)]
-    public void FR138_GitLab_detailed_merge_status_maps_to_a_v2_reason(string status, MergeReadinessReasonCode expected)
+    public void FR138_GitLab_detailed_merge_status_maps_to_a_0_2_0_reason(string status, MergeReadinessReasonCode expected)
     {
         var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = status }, MergeStrategy.AideMerges);
 
@@ -84,7 +84,7 @@ public class GitHostMergeReadinessTests
     }
 
     [Fact]
-    public void FR138_GitLab_facts_give_every_reason_in_v2_order_without_duplicates()
+    public void FR138_GitLab_facts_give_every_reason_in_0_2_0_order_without_duplicates()
     {
         var facts = Mergeable with
         {
@@ -178,7 +178,7 @@ public class GitHostMergeReadinessTests
     [InlineData("merge_conflicts", "FAILED", MergeReadinessReasonCode.MergeConflict)]
     [InlineData("restrict_merge_access", "FAILED", MergeReadinessReasonCode.NoPermission)]
     [InlineData("require_all_dependencies_merged", "FAILED", MergeReadinessReasonCode.BranchProtected)]
-    public void FR138_Bitbucket_blocking_checks_map_to_v2_reasons(string key, string status, MergeReadinessReasonCode expected)
+    public void FR138_Bitbucket_blocking_checks_map_to_0_2_0_reasons(string key, string status, MergeReadinessReasonCode expected)
     {
         var readiness = MergeabilityChecks.Map([new("standard_merge_check", key, status, true, true)], MergeStrategy.AideMerges);
 

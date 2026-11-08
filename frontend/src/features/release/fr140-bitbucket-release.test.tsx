@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import { http } from 'msw'
 import { describe, expect, it } from 'vitest'

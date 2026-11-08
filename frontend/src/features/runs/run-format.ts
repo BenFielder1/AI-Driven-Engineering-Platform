@@ -16,7 +16,7 @@ export function describeRunError(error: string): { title: string | null; message
   return { title: null, message: error }
 }
 
-/** Queued and running runs have no final counts yet (nothing streams in v1, SPEC §8). */
+/** Queued and running runs have no final counts yet (nothing streams in 0.1.0, SPEC §8). */
 export const isUnfinished = (run: Pick<AgentRun, 'status'>) => run.status === 'queued' || run.status === 'running'
 
 /** Prompt template versions are bare numbers in the template front matter: show them as "v1". */

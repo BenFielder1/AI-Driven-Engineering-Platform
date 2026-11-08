@@ -7,7 +7,7 @@ export function loginRedirectHref(returnUrl: string): string {
 }
 
 /**
- * FR-97 (v2 `_public` guard): where a signed-in user on /login or /register goes, or `null` to stay. A GitLab or
+ * FR-97 (0.2.0 `_public` guard): where a signed-in user on /login or /register goes, or `null` to stay. A GitLab or
  * Bitbucket sign-in waiting to be linked (`?link=gitlab|bitbucket`, FR-131, FR-134) stays: the signed-in owner of the
  * matching account confirms it there.
  */

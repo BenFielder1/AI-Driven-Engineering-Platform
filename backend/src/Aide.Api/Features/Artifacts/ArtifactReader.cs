@@ -137,7 +137,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     /// FR-124, §4.13: an implementation plan's warnings, computed on read (<see cref="CompositionPlanValidator.AllWarnings"/>):
     /// coverage (<c>UNCOVERED_REQUIREMENTS</c>, against the latest locked specification of its release version, so it follows
     /// the spec it is checked against) and, with the version's composition, <c>AGENT_SCOPE</c>, <c>PLAN_ORDER</c> and
-    /// <c>UNDECLARED_GENERATED_FILE</c>. §4.23: steps of a migrated v2 plan are checked against the frozen v2 globs.
+    /// <c>UNDECLARED_GENERATED_FILE</c>. §4.23: steps of a migrated 0.2.0 plan are checked against the frozen 0.2.0 globs.
     /// Without a composition only coverage applies.
     /// </summary>
     private async Task<IReadOnlyList<ArtifactWarningDto>> WarningsAsync(Artifact artifact, CancellationToken cancellationToken)

@@ -40,7 +40,7 @@ public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protect
 
     public ISecretProtector Values => protectors.ForPurpose(SecretPurposes.DeploymentEnvValue);
 
-    /// <summary>Vercel's client (the v2 Fake of it in Fake mode), for the wizard's Deployment step.</summary>
+    /// <summary>Vercel's client (the 0.2.0 Fake of it in Fake mode), for the wizard's Deployment step.</summary>
     public IVercelClient Vercel => providers.Vercel;
 
     public bool UsesFake => providers.UsesFake;
@@ -198,7 +198,7 @@ public sealed class DeploymentAccess(AideDbContext db, ISecretProtectors protect
             target.ProjectId, target.Provider, target.Component, target.ResourceId, target.PreviewResourceId, target.Name, target.RootDirectory, target.BuildConfig, repo);
     }
 
-    /// <summary>The project's <c>frontend</c> deployment target (v2's deployment settings), untracked; <c>null</c> when none.</summary>
+    /// <summary>The project's <c>frontend</c> deployment target (0.2.0's deployment settings), untracked; <c>null</c> when none.</summary>
     public static Task<DeploymentTarget?> FrontendTargetAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken) =>
         TargetAsync(db, projectId, DeploymentComponent.Frontend, cancellationToken);
 

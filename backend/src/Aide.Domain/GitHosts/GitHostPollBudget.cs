@@ -20,9 +20,9 @@ public sealed record TokenBucketState(double Tokens, DateTimeOffset UpdatedAt);
 public sealed record TokenBucketDecision(bool Allowed, TokenBucketState State, DateTimeOffset? RetryAt);
 
 /// <summary>
-/// §4.19 polling budget (no webhooks, v2 D-V2-8), as pure functions over (now, last poll, headers, bucket state).
+/// §4.19 polling budget (no webhooks, 0.2.0 D-V2-8), as pure functions over (now, last poll, headers, bucket state).
 /// <list type="bullet">
-/// <item><b>GitLab:</b> merge polls every 2 minutes for an hour, then every 10 (v2 <see cref="MergePollRules"/>); status
+/// <item><b>GitLab:</b> merge polls every 2 minutes for an hour, then every 10 (0.2.0 <see cref="MergePollRules"/>); status
 /// polls every 30 seconds, backing off until <c>RateLimit-Reset</c> when <c>RateLimit-Remaining</c> is below 10 % of
 /// <c>RateLimit-Limit</c>, and on 429 until <c>Retry-After</c>.</item>
 /// <item><b>Bitbucket:</b> 1,000 requests per hour per user and no remaining-count headers, so each connection has a token
@@ -32,7 +32,7 @@ public sealed record TokenBucketDecision(bool Allowed, TokenBucketState State, D
 /// </summary>
 public static class GitHostPollBudget
 {
-    /// <summary>§4.19: GitLab status polls while waiting (v2 <see cref="Review.ExternalCheckRules.RecheckInterval"/>).</summary>
+    /// <summary>§4.19: GitLab status polls while waiting (0.2.0 <see cref="Review.ExternalCheckRules.RecheckInterval"/>).</summary>
     public static readonly TimeSpan StatusPollInterval = TimeSpan.FromSeconds(30);
 
     /// <summary>§4.19: back off when fewer than this share of the GitLab rate limit remains.</summary>
@@ -56,7 +56,7 @@ public static class GitHostPollBudget
     /// <summary>The longest wait honoured from a header (a day).</summary>
     private static readonly TimeSpan MaxWait = TimeSpan.FromDays(1);
 
-    /// <summary>§4.19: the GitLab merge poll keeps v2's cadence (2 minutes for an hour, then 10, up to 14 days).</summary>
+    /// <summary>§4.19: the GitLab merge poll keeps 0.2.0's cadence (2 minutes for an hour, then 10, up to 14 days).</summary>
     public static DateTimeOffset NextGitLabMergePollAt(DateTimeOffset since, DateTimeOffset now) => MergePollRules.NextPollAt(since, now);
 
     /// <summary>

@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace Aide.Infrastructure.Persistence;
 
 /// <summary>
-/// FR-78/FR-79: the <c>LlmCredentials</c> migration moves v1 project keys into <c>llm_credentials</c> as ciphertext, so
+/// FR-78/FR-79: the <c>LlmCredentials</c> migration moves 0.1.0 project keys into <c>llm_credentials</c> as ciphertext, so
 /// their <c>last4</c> can't be computed in SQL and is stored as <see cref="LlmCredential.UnknownLast4"/>. On start-up this
 /// decrypts those keys once and fills <c>last4</c>. Idempotent: only <c>????</c> rows are read, and a key that can't be
 /// decrypted (lost key ring) is left as it is. Failures are logged and never stop the API.

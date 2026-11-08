@@ -72,7 +72,7 @@ const setUp = (row: { resourceId: string | null; binding: unknown }) => row.reso
 /**
  * FR-191: which cards go where. A set-up group holds the rows tied to it by `groupId`, and any of its parts that left it
  * and aren't set up (which can rejoin). A part set up on its own stays outside. A group with no row yet whose parts were
- * set up alone in v4 isn't shown at all: those rows look as they did, since Tevrin never moves platform resources (D-V5-9).
+ * set up alone in 0.4.0 isn't shown at all: those rows look as they did, since Tevrin never moves platform resources (D-V5-9).
  */
 export function layoutOf(s: DeploymentSettings) {
   const inGroup = (group: DeploymentGroup) => ({
@@ -95,7 +95,7 @@ export function layoutOf(s: DeploymentSettings) {
 }
 
 /**
- * Settings → Deployment (FR-143–FR-146; replaces v2 FR-88's single Vercel setting). Every member reads it: the
+ * Settings → Deployment (FR-143–FR-146; replaces 0.2.0 FR-88's single Vercel setting). Every member reads it: the
  * origin model, one target card per component (whose connection it uses, resource, URLs, status, readiness), database
  * cards per environment and the environment inventory. FR-191: group cards come first and hold their parts' cards. Owners
  * (`canManage`) set targets up, verify, unbind and edit user variables.

@@ -187,11 +187,11 @@ export type StoredRefinementRound = Schemas['RefinementRoundDto'] & {
 export type StoredExecutionStep = Schemas['ExecutionStepDto'] & {
   planArtifactId: string
   agentKey?: string | null
-  /** FR-121, FR-129: the retired v2 preset agent the step was planned for (it ran as `agentKey`). */
+  /** FR-121, FR-129: the retired 0.2.0 preset agent the step was planned for (it ran as `agentKey`). */
   legacyAgentKey?: string | null
 }
 
-/** A compliance report plus the v2 detail fields (FR-56) that the v1 DTO lacks. */
+/** A compliance report plus the 0.2.0 detail fields (FR-56) that the 0.1.0 DTO lacks. */
 export type StoredComplianceReport = Schemas['ComplianceReportDto'] & {
   regressions?: Schemas['RegressionDto'][]
   externalChecks?: Schemas['ExternalChecksDto'] | null
@@ -204,7 +204,7 @@ export interface RecordedRequest {
   body: unknown
 }
 
-/** v2 default (FR-79): system keys aren't allowed, so keyed providers are configured only by a bound connection. */
+/** 0.2.0 default (FR-79): system keys aren't allowed, so keyed providers are configured only by a bound connection. */
 const defaultProviders = (): ProviderStatus[] => [
   { provider: 'anthropic', configured: false, defaultModel: 'claude-opus-5-5' },
   { provider: 'openai', configured: false, defaultModel: 'gpt-6-astra' },

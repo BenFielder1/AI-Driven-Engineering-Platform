@@ -4,7 +4,7 @@ import type { ComponentProps } from 'react'
 import { cn } from '../../lib/utils'
 
 /*
- * shadcn/ui "new-york" Tabs on radix-ui (SPEC §7.1). Named radix-tabs.tsx while the v1 `tabs.tsx` is still in use; the
+ * shadcn/ui "new-york" Tabs on radix-ui (SPEC §7.1). Named radix-tabs.tsx while the 0.1.0 `tabs.tsx` is still in use; the
  * restyle pass moves its callers here.
  */
 

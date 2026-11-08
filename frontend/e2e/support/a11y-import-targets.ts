@@ -1,9 +1,9 @@
 import { expect, type Page } from '@playwright/test'
 
 import type { A11yFixture } from './a11y-fixture.ts'
-import { stepHeading, wizardTo, type A11yTarget } from './a11y-v2-targets.ts'
+import { stepHeading, wizardTo, type A11yTarget } from './a11y-lifecycle-targets.ts'
 import { COMPOSITION } from './composition.ts'
-import { browseFakeTracker, fakeItemCheckbox } from './v5.ts'
+import { browseFakeTracker, fakeItemCheckbox } from './tracker-inference.ts'
 
 /**
  * The wizard composed with React + Vite, ASP.NET Core and EF Core, and Railway for all three parts, up to the Deployment
@@ -36,12 +36,12 @@ async function railwayGroupWindow(page: Page) {
 }
 
 /**
- * SPEC v5 §7 UI rule "Axe covers the Analysis page, the tracker dialog and the group windows": the Analysis page with a
+ * SPEC 0.5.0 §7 UI rule "Axe covers the Analysis page, the tracker dialog and the group windows": the Analysis page with a
  * blank to answer (Needs your input) and after approval (Deployment setup with the Railway group window), the "Import from
  * tracker" dialog with results and a tick, and the wizard's Deployment step with a Railway group window, open with
  * "Create a new project", and with the database separated (two windows and the caveat).
  */
-export function v5Targets(fixture: () => A11yFixture): A11yTarget[] {
+export function importTargets(fixture: () => A11yFixture): A11yTarget[] {
   return [
     {
       name: 'analysis (needs your input)',

@@ -3,7 +3,7 @@ using Aide.Domain.Notifications;
 
 namespace Aide.UnitTests.Notifications;
 
-/// <summary>FR-92: the v2 notification types — which events raise them, who gets them, through which channels, and their wording.</summary>
+/// <summary>FR-92: the 0.2.0 notification types — which events raise them, who gets them, through which channels, and their wording.</summary>
 public class Fr92NotificationTypesTests
 {
     private static readonly Guid Project = Guid.Parse("0199a000-0000-7000-8000-000000000001");

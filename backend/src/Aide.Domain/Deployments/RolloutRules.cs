@@ -69,7 +69,7 @@ public static class RolloutRules
     /// <summary>How often a rollout looks at its running step.</summary>
     public static readonly TimeSpan RecheckInterval = TimeSpan.FromSeconds(10);
 
-    /// <summary>FR-147: how long review waits for the whole preview rollout (the v2 ceiling).</summary>
+    /// <summary>FR-147: how long review waits for the whole preview rollout (the 0.2.0 ceiling).</summary>
     public static readonly TimeSpan ReviewWaitLimit = TimeSpan.FromMinutes(30);
 
     /// <summary>A rollout that hasn't finished after this long fails (each deployment has its own 30-minute ceiling).</summary>

@@ -5,7 +5,7 @@ namespace Aide.Domain.Specs;
 
 /// <summary>
 /// What a spec is validated against (§4.13, FR-75). <see cref="FirstVersion"/>: a project's first version from scratch
-/// (v1's eleven sections, requirement IDs and criteria). <see cref="NewVersion"/>: an iteration with the previous
+/// (0.1.0's eleven sections, requirement IDs and criteria). <see cref="NewVersion"/>: an iteration with the previous
 /// released version's locked spec as baseline. <see cref="ImportFirstVersion"/>: an import's first version (an
 /// iteration without a baseline spec). <see cref="StackSections"/> holds the composition's (FR-123)
 /// required extra sections; empty without a stack.
@@ -137,7 +137,7 @@ public sealed record SpecValidationResult(
 /// <c>[changed]</c>/<c>[removed]</c> ID is in the baseline spec, except on an import's first version →
 /// <c>INVALID_REQUIREMENT_TAGS</c>.</item>
 /// </list>
-/// Each failure gets the same one corrective re-run as v1's <c>MISSING_SECTIONS</c> (<see cref="CorrectiveFeedback"/>).
+/// Each failure gets the same one corrective re-run as 0.1.0's <c>MISSING_SECTIONS</c> (<see cref="CorrectiveFeedback"/>).
 /// </summary>
 public static class SpecValidator
 {

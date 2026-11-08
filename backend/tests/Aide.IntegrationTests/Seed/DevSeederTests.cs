@@ -65,7 +65,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var release = await db.Releases.SingleAsync(r => r.ProjectId == project.Id, Ct);
             Assert.Equal((ReleaseStatus.Succeeded, "v0.1.0", version.Id), (release.Status, release.Tag, release.ReleaseVersionId));
 
-            // §9 (v4): the released demo shows a composition.
+            // §9 (0.4.0): the released demo shows a composition.
             Assert.Equal("be-aspnet", Domain.Stack.StackCompositionJson.Deserialize(version.StackComposition)!.Backend!.Pack);
             Assert.Equal(["fe-react-vite", "be-aspnet", "data-efcore-postgres", "vcs-github"], project.StackPacks.Take(4));
 
@@ -77,7 +77,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task DEPV2_An_untouched_v1_demo_in_refinement_is_upgraded_once_to_released_0_1_0()
+    public async Task DEPV2_An_untouched_0_1_0_demo_in_refinement_is_upgraded_once_to_released_0_1_0()
     {
         await using var app = await AppAsync();
         var projectId = await SeedV1DemoAsync(app);
@@ -106,7 +106,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task DEPV2_A_v1_demo_someone_used_is_left_in_refinement_and_the_upgrade_does_not_run_again()
+    public async Task DEPV2_A_0_1_0_demo_someone_used_is_left_in_refinement_and_the_upgrade_does_not_run_again()
     {
         await using var app = await AppAsync();
         var projectId = await SeedV1DemoAsync(app);
@@ -154,7 +154,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         return doc.RootElement.GetProperty("outcome").GetString();
     }
 
-    /// <summary>A database as the v1 seed left it: the seed Admin and the demo project in refinement, with its marker.</summary>
+    /// <summary>A database as the 0.1.0 seed left it: the seed Admin and the demo project in refinement, with its marker.</summary>
     private static async Task<Guid> SeedV1DemoAsync(WebApplicationFactory<Program> app)
     {
         await using var scope = app.Services.CreateAsyncScope();

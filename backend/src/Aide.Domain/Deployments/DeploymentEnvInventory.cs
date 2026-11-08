@@ -499,7 +499,7 @@ public static partial class EnvInventoryRules
     }
 
     /// <summary>
-    /// FR-145: a user variable: the v2 checks (<see cref="DeploymentEnvRules.Validate"/>), components applied to (at least one,
+    /// FR-145: a user variable: the 0.2.0 checks (<see cref="DeploymentEnvRules.Validate"/>), components applied to (at least one,
     /// each once), not a derived key, and not public while looking secret. <paramref name="isPublic"/> is the effective flag
     /// (<see cref="IsPublic"/>).
     /// </summary>

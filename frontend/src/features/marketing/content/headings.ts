@@ -69,7 +69,7 @@ export const faqHeadings = {
   },
 } as const satisfies Record<string, SectionHeading>
 
-export const changelogNote = 'Versions 1 to 5 shipped under the name AIDE.'
+export const changelogNote = 'Versions 0.1.0 to 0.5.0 shipped under the name AIDE.'
 
 /** The marketing 404 (SPEC §7). */
 export const notFoundCopy = {

@@ -1,4 +1,4 @@
-/** v6 FR-210, FR-211: the marketing routes (route group `(marketing)`); `/` is the marketing Home for visitors. */
+/** 0.6.0 FR-210, FR-211: the marketing routes (route group `(marketing)`); `/` is the marketing Home for visitors. */
 export const marketingPaths = [
   '/',
   '/product',
@@ -14,18 +14,18 @@ export const marketingPaths = [
 export const publicPaths = [...marketingPaths, '/login', '/register'] as const
 
 /**
- * Every v2 route pattern (SPEC v2 §7.2 + the v2 TanStack route tree), in TanStack `$param` form as used by `Link to`
+ * Every 0.2.0 route pattern (0.2.0 SPEC §7.2 + the 0.2.0 TanStack route tree), in TanStack `$param` form as used by `Link to`
  * and nav-config. FR-95: each must have a matching `src/app` page (src/test/route-parity.test.ts).
  */
 export const appPaths = [
   ...publicPaths,
-  // v6 FR-207: Home, the signed-in landing page.
+  // 0.6.0 FR-207: Home, the signed-in landing page.
   '/home',
   '/projects',
   '/projects/new',
   '/projects/$projectId',
   '/projects/$projectId/activity',
-  // v5 FR-182: the Analysis page.
+  // 0.5.0 FR-182: the Analysis page.
   '/projects/$projectId/analysis',
   '/projects/$projectId/artifacts',
   '/projects/$projectId/artifacts/$type',

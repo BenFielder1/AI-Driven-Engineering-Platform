@@ -2,7 +2,7 @@ namespace Aide.Domain.Entities;
 
 /// <summary>
 /// A project's deployment target for one component (FR-144, §5); table <c>deployment_targets</c>, unique per
-/// <c>(project_id, component)</c>. Replaces v2's <c>project_deployment_settings</c>: v2 rows became <c>frontend</c> targets
+/// <c>(project_id, component)</c>. Replaces 0.2.0's <c>project_deployment_settings</c>: 0.2.0 rows became <c>frontend</c> targets
 /// with provider <c>vercel</c>. Owners can edit them concurrently, so the row carries an <c>xmin</c> concurrency token.
 /// </summary>
 public sealed class DeploymentTarget
@@ -57,7 +57,7 @@ public sealed class DeploymentTarget
     /// </summary>
     public string? PlatformProjectId { get; set; }
 
-    /// <summary>§4.28: the deployment group the target is part of; <c>null</c> for standalone and v4 rows.</summary>
+    /// <summary>§4.28: the deployment group the target is part of; <c>null</c> for standalone and 0.4.0 rows.</summary>
     public Guid? GroupId { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
@@ -127,7 +127,7 @@ public sealed class DeploymentEnvVar
     public bool Sensitive { get; set; }
 
     /// <summary>Wire values of <see cref="DeploymentComponent"/> the variable applies to (FR-145); at least one (a check
-    /// constraint enforces both). v2 variables apply to <c>frontend</c>.</summary>
+    /// constraint enforces both). 0.2.0 variables apply to <c>frontend</c>.</summary>
     public IReadOnlyList<string> AppliesTo { get; set; } = ["frontend"];
 
     /// <summary>Whether the variable is exposed to the browser (FR-145: a public prefix such as <c>NEXT_PUBLIC_</c>).</summary>
@@ -171,12 +171,12 @@ public sealed class Deployment
     public DeploymentProvider Provider { get; set; }
 
     /// <summary>The deployment target it deployed (FR-151); <c>null</c> when the target was removed (ON DELETE SET NULL) or
-    /// for v2 rows of a project without settings.</summary>
+    /// for 0.2.0 rows of a project without settings.</summary>
     public Guid? TargetId { get; set; }
 
     public DeploymentComponent Component { get; set; } = DeploymentComponent.Frontend;
 
-    /// <summary>Preview or production (column <c>environment</c>; v2 called it the target).</summary>
+    /// <summary>Preview or production (column <c>environment</c>; 0.2.0 called it the target).</summary>
     public DeploymentEnvironment Environment { get; set; }
 
     public DeploymentKind Kind { get; set; } = DeploymentKind.Deploy;
@@ -231,7 +231,7 @@ public sealed class Deployment
 
 /// <summary>
 /// Deployment provider (§4.15, §4.20): a target's platform, from the composition's host (<c>deploy-vercel</c> → <c>vercel</c>).
-/// Wire values: <c>vercel</c>, <c>fake</c> (v2's explicit Fake provider; deployments made under
+/// Wire values: <c>vercel</c>, <c>fake</c> (0.2.0's explicit Fake provider; deployments made under
 /// <c>Deployments:Provider=Fake</c> are recorded as <c>fake</c>), <c>netlify</c>, <c>cloudflare</c>, <c>render</c>,
 /// <c>railway</c>, <c>github_pages</c>.
 /// </summary>

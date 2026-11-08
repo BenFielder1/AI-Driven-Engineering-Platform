@@ -452,7 +452,7 @@ export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
   stack_analyst: 'Stack Analyst',
 }
 
-/** FR-23, FR-25: agent run statuses. Running runs stream nothing in v1 (SPEC §8, §11 Q3). */
+/** FR-23, FR-25: agent run statuses. Running runs stream nothing in 0.1.0 (SPEC §8, §11 Q3). */
 export const runStatusLabels: Record<Schemas['AgentRunStatus'], string> = {
   queued: 'Queued',
   running: 'Running…',

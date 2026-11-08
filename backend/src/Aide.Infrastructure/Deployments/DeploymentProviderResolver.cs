@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace Aide.Infrastructure.Deployments;
 
 /// <summary>
-/// §9, §4.20: the provider for a platform id. In Fake mode (<c>Deployments:Provider=Fake</c>), and for v2's explicit
+/// §9, §4.20: the provider for a platform id. In Fake mode (<c>Deployments:Provider=Fake</c>), and for 0.2.0's explicit
 /// <c>fake</c> provider, every platform is its <see cref="FakeDeploymentProvider"/>. Otherwise Vercel and GitHub Pages are
 /// real (Netlify and Cloudflare since M29 slice 3, Render and Railway since M30).
 /// </summary>

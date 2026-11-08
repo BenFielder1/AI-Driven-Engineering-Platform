@@ -77,7 +77,7 @@ describe('FR-197 no AIDE in the rendered app', () => {
 
   /**
    * FR-218 and FR-219 name the old product on purpose: the FAQ's "Was it called AIDE?" and the Changelog's "(as AIDE)"
-   * on v1–v5 (also on Home's Latest changes, FR-212 §7). Only those phrases are allowed; any other "AIDE" fails.
+   * on 0.1.0–0.5.0 (also on Home's Latest changes, FR-212 §7). Only those phrases are allowed; any other "AIDE" fails.
    */
   it.each([
     ['/faq', [/Was it called AIDE\?/g, /shipped as AIDE \(AI-Driven Engineering\)/g]],

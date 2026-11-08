@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.Api.Features.Stack;
 
 /// <summary>
-/// FR-129: the retired v2 preset a project row or release version shows as history (§7.2): its id, name (from the frozen
+/// FR-129: the retired 0.2.0 preset a project row or release version shows as history (§7.2): its id, name (from the frozen
 /// legacy data, else the id) and version. All <c>null</c> when the version was never pinned to a preset.
 /// </summary>
 public sealed record ProjectPresetRef(string? PresetId, string? PresetName, string? PresetVersion)

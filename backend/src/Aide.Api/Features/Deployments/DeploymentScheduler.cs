@@ -109,7 +109,7 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
     public async Task<Deployment> AddAsync(NewDeployment spec, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(spec);
-        // FR-151: the row names the target (v2 flow: the project's frontend target), its component and provider (fake in
+        // FR-151: the row names the target (0.2.0 flow: the project's frontend target), its component and provider (fake in
         // Fake mode).
         var target = await db.DeploymentTargets.AsNoTracking()
             .Where(t => t.ProjectId == spec.ProjectId && t.Component == spec.Component)

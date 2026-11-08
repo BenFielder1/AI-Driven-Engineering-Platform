@@ -46,13 +46,13 @@ public sealed class SeedOptions
 /// DEP-2, DEP-V2 (§9): when <c>Seed:Enabled</c>, after the migrations have been applied (skipped while any are pending),
 /// idempotently creates the Admin <c>admin@aide.local</c> with a generated password, logged once at Warning (the
 /// only secret ever logged, so the operator can sign in), and a demo project using the Fake LLM provider and Local Git,
-/// on the stack <c>fe-react-vite</c> + <c>be-aspnet</c> + <c>data-efcore-postgres</c> + <c>vcs-github</c> (§9 v4), owned by
+/// on the stack <c>fe-react-vite</c> + <c>be-aspnet</c> + <c>data-efcore-postgres</c> + <c>vcs-github</c> (§9 0.4.0), owned by
 /// that Admin and <b>released at <see cref="DemoReleasedVersion"/></b> (its Local repository tagged
 /// <c>v0.1.0</c>), so "Start new version" (FR-60) can be tried at once. An existing account with the seed email is left untouched (its
 /// password is never reset); other Admins don't matter. The demo project is created once per database: a
 /// <see cref="EventTypes.DemoProjectSeeded"/> marker event records it, so deleting the demo doesn't bring it back.
 /// <para>
-/// §9 (v2, migrated in v4): a second demo project, <see cref="DemoPresetProjectName"/>, seeded as the RetirePresets migration
+/// §9 (0.2.0, migrated in 0.4.0): a second demo project, <see cref="DemoPresetProjectName"/>, seeded as the RetirePresets migration
 /// converts a <see cref="DemoPresetId"/> project (FR-129, §4.23): <c>fe-nextjs</c> at <c>.</c> + <c>vcs-github</c>, with the
 /// retired preset kept as history (the "retired, migrated" note). It starts in <b>planning</b>: its project request and
 /// specification (with the composition's sections) are seeded locked, and the plan generation job is queued, so the Fake's
@@ -60,22 +60,22 @@ public sealed class SeedOptions
 /// databases seeded before it get it on the next start (and a database that had it is converted by the migration).
 /// </para>
 /// <para>
-/// §9 (v4): a third demo project, <see cref="DemoBaasProjectName"/>, on <c>fe-vue</c> + <c>data-supabase</c> (BaaS), starts in
+/// §9 (0.4.0): a third demo project, <see cref="DemoBaasProjectName"/>, on <c>fe-vue</c> + <c>data-supabase</c> (BaaS), starts in
 /// <b>specification</b>: its project request is locked and the spec generation job is queued. Marker:
 /// <see cref="EventTypes.DemoStackProjectSeeded"/>.
 /// </para>
 /// <para>
-/// §9 (v5): a fourth demo project, <see cref="DemoAnalysisProjectName"/>, infers its stack: it is in <b>analysis</b> with a
+/// §9 (0.5.0): a fourth demo project, <see cref="DemoAnalysisProjectName"/>, infers its stack: it is in <b>analysis</b> with a
 /// <c>stack_profile</c> draft holding one <c>unknown</c> layer, and a completed Fake tracker import (the version's
 /// <c>source_items</c> v1). Marker: <see cref="EventTypes.DemoAnalysisProjectSeeded"/>.
 /// </para>
 /// <para>
-/// §9 (v4), only where deployments and databases are both Fake (<see cref="SeedFakeHostsAsync"/>): the released demo is
+/// §9 (0.4.0), only where deployments and databases are both Fake (<see cref="SeedFakeHostsAsync"/>): the released demo is
 /// hosted (Netlify, Render, Render Postgres) and the BaaS demo gets its Fake Supabase database, each set up through the same
 /// services as Settings → Deployment with the seed Admin's own Fake connections. With real providers they stay hostless.
 /// </para>
 /// <para>
-/// DEP-V2: on a database seeded under v1, the demo project (still in refinement) is upgraded once to released 0.1.0 when
+/// DEP-V2: on a database seeded under 0.1.0, the demo project (still in refinement) is upgraded once to released 0.1.0 when
 /// it is untouched (<see cref="UpgradeV1DemoAsync"/>), with its own marker (<see cref="EventTypes.DemoProjectReleaseUpgraded"/>).
 /// </para>
 /// </summary>
@@ -89,7 +89,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     /// <summary>DEP-V2: the version the demo project is seeded as released at.</summary>
     public const string DemoReleasedVersion = "0.1.0";
 
-    /// <summary>The <see cref="EventTypes.DemoProjectReleaseUpgraded"/> outcome when the v1 demo was moved to released 0.1.0.</summary>
+    /// <summary>The <see cref="EventTypes.DemoProjectReleaseUpgraded"/> outcome when the 0.1.0 demo was moved to released 0.1.0.</summary>
     public const string UpgradeReleased = "released";
 
     /// <summary>The upgrade outcome when the demo project no longer exists.</summary>
@@ -113,19 +113,19 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     /// <summary>The reason recorded on the preset demo's seeded transition into planning.</summary>
     public const string DemoPresetReason = "Demo project seeded in planning, migrated from the retired nextjs-frontend preset";
 
-    /// <summary>§9 (v4): the third demo project, Vue with Supabase as a backend-as-a-service, in specification.</summary>
+    /// <summary>§9 (0.4.0): the third demo project, Vue with Supabase as a backend-as-a-service, in specification.</summary>
     public const string DemoBaasProjectName = "Demo: Vue Notes";
 
     /// <summary>The reason recorded on the BaaS demo's seeded transition into specification.</summary>
     public const string DemoBaasReason = "Demo project seeded in specification on fe-vue + data-supabase (BaaS)";
 
-    /// <summary>§9 (v5): the fourth demo project, inferring its stack, in analysis with a draft profile and a Fake tracker import.</summary>
+    /// <summary>§9 (0.5.0): the fourth demo project, inferring its stack, in analysis with a draft profile and a Fake tracker import.</summary>
     public const string DemoAnalysisProjectName = "Demo: Weather Board";
 
     public const string DemoAnalysisIdea =
         "A small weather dashboard: people save a few cities and see the current conditions and a five-day forecast for each, from a public weather API. Units switch between metric and imperial.";
 
-    /// <summary>§9 (v5): the Fake Jira items the analysis demo's import holds (an epic and four stories).</summary>
+    /// <summary>§9 (0.5.0): the Fake Jira items the analysis demo's import holds (an epic and four stories).</summary>
     public static IReadOnlyList<string> DemoImportKeys { get; } = ["FAKE-1", "FAKE-2", "FAKE-3", "FAKE-4", "FAKE-5"];
 
     public const string DemoBaasIdea =
@@ -267,10 +267,10 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
 
     /// <summary>
     /// DEP-V2 (§9), once per database (its <see cref="EventTypes.DemoProjectReleaseUpgraded"/> marker is written whatever
-    /// the outcome): a demo project seeded under v1 sits in refinement; when it is <b>untouched</b> (<see cref="IsUntouchedAsync"/>)
+    /// the outcome): a demo project seeded under 0.1.0 sits in refinement; when it is <b>untouched</b> (<see cref="IsUntouchedAsync"/>)
     /// it is moved to released 0.1.0 exactly as a fresh seed does (<see cref="MarkDemoReleasedAsync"/>: Local repository
     /// tagged <c>v0.1.0</c>, the release version released, a succeeded release, the project released). A demo anyone used
-    /// (or one already released by a v2 seed) is left as it is. Returns the upgraded project, or <c>null</c>.
+    /// (or one already released by a 0.2.0 seed) is left as it is. Returns the upgraded project, or <c>null</c>.
     /// </summary>
     private static async Task<Guid?> UpgradeV1DemoAsync(IServiceProvider services, AideDbContext db, AppUser admin, CancellationToken cancellationToken)
     {
@@ -330,7 +330,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>
-    /// DEP-V2: "untouched" is conservative: the demo still looks exactly as the v1 seed created it.
+    /// DEP-V2: "untouched" is conservative: the demo still looks exactly as the 0.1.0 seed created it.
     /// <list type="bullet">
     /// <item>Named <see cref="DemoProjectName"/>, in refinement / active at the initial checkpoint, never released, with the
     /// seed Admin as its only member (an Owner).</item>
@@ -419,7 +419,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
                 ApprovalMode = ApprovalMode.Advisory,
                 Git = new CreateProjectGitRequest { Provider = GitProvider.Local },
 
-                // §9 (v4): the released demo shows a composition.
+                // §9 (0.4.0): the released demo shows a composition.
                 Stack = new StackCompositionRequest
                 {
                     Frontend = new StackComponentSelection { Pack = "fe-react-vite" },
@@ -592,7 +592,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>
-    /// §9 (v4): the BaaS demo, created once: <c>fe-vue</c> + <c>data-supabase</c> (BaaS) on Local Git, the project request
+    /// §9 (0.4.0): the BaaS demo, created once: <c>fe-vue</c> + <c>data-supabase</c> (BaaS) on Local Git, the project request
     /// locked (checkpoint 1), the project put in specification at checkpoint 2 with one seeded transition and the spec
     /// generation job queued (a seed shortcut). The marker is written even when the catalog didn't load.
     /// </summary>
@@ -648,7 +648,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>
-    /// §9 (v5): the stack inference demo, created once on Local Git with the Fake LLM: its version infers its stack
+    /// §9 (0.5.0): the stack inference demo, created once on Local Git with the Fake LLM: its version infers its stack
     /// (<c>stack_source = infer</c>) from a small Vite + React skeleton committed to the Local repository, and is in <b>analysis</b>
     /// at checkpoint 1 with only its creation transition (into analysis), as a project created with "Infer" is. A
     /// <c>stack_profile</c> v1 draft holds one <c>unknown</c> layer (the backend, with the agent's question), so the Analysis page shows "Needs your input" and Approve is refused until it is answered. A completed Fake
@@ -733,7 +733,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     /// <summary>The fixed id in the skeleton commit's <c>AIDE-Step-Id</c> trailer, so a second seed run finds the commit instead of adding one.</summary>
     private static readonly Guid DemoSkeletonCommitId = Guid.Parse("0199a5ee-d000-7000-8000-00000000c0de");
 
-    /// <summary>§9 (v5): the analysis demo's code: a minimal Vite + React app at the root, matching the draft profile.</summary>
+    /// <summary>§9 (0.5.0): the analysis demo's code: a minimal Vite + React app at the root, matching the draft profile.</summary>
     internal static IReadOnlyList<ProducedFile> DemoSkeletonFiles { get; } =
     [
         new("package.json", """
@@ -779,7 +779,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             """),
     ];
 
-    /// <summary>§9 (v5): the analysis demo's profile: React with Vite at the root, the backend <c>unknown</c> with a question, no data layer, GitHub VCS.</summary>
+    /// <summary>§9 (0.5.0): the analysis demo's profile: React with Vite at the root, the backend <c>unknown</c> with a question, no data layer, GitHub VCS.</summary>
     internal static StackProfileDocument AnalysisDemoProfile(string? baseCommitSha) => new()
     {
         BaseCommitSha = baseCommitSha,
@@ -799,7 +799,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     };
 
     /// <summary>
-    /// §9 (v5): a completed Fake Jira import of <see cref="DemoImportKeys"/> and the locked <c>source_items</c> version it wrote, as the
+    /// §9 (0.5.0): a completed Fake Jira import of <see cref="DemoImportKeys"/> and the locked <c>source_items</c> version it wrote, as the
     /// import job would (normalised, children linked, rendered), but read from the Fake in-process, with no connection.
     /// </summary>
     private static async Task<Guid> AddDemoImportAsync(IServiceProvider services, AideDbContext db, Project project, Guid versionId, Guid adminId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -832,7 +832,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>
-    /// §9 (v5): commits <see cref="DemoSkeletonFiles"/> on the version's branch of the Local repository (both created now if absent,
+    /// §9 (0.5.0): commits <see cref="DemoSkeletonFiles"/> on the version's branch of the Local repository (both created now if absent,
     /// so the work of the version builds on it) and returns
     /// that commit, the version's base: the Stack Analyst (Retry, Reject) then analyses real code. Idempotent: the commit carries a
     /// fixed step trailer, so a repeated run returns it. <c>null</c> when the repository can't be created (no git CLI).
@@ -1054,7 +1054,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     [LoggerMessage(Level = LogLevel.Warning, Message = "Seeded admin {Email} with password {Password} (shown once; change it after signing in)")]
     private static partial void LogAdminSeeded(ILogger logger, string email, string password);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Upgraded the untouched v1 demo project {ProjectId} to released {Version}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Upgraded the untouched 0.1.0 demo project {ProjectId} to released {Version}")]
     private static partial void LogDemoUpgraded(ILogger logger, Guid projectId, string version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Seeded demo project {ProjectId}")]

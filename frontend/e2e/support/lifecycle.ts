@@ -3,7 +3,7 @@ import { expect, type BrowserContext, type Locator, type Page } from '@playwrigh
 import { api, apiJson, projectState, waitForDraft, waitForPendingGate } from './api.ts'
 
 /**
- * v2 E2E helpers (NFR-TEST2): Fake LLM + Local Git + the Fake deployment provider (§4.15: READY after 2 polls at
+ * 0.2.0 E2E helpers (NFR-TEST2): Fake LLM + Local Git + the Fake deployment provider (§4.15: READY after 2 polls at
  * https://fake-<sha8>-<component>.<provider>.test, §4.20). Everything here talks to the real API or the real UI; no fixed waits.
  */
 

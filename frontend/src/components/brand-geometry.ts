@@ -1,9 +1,9 @@
 /**
  * FR-196: the Tevrin mark, wordmark and static brand files, as pure data and string builders. One source for the inline
- * React component (components/brand.tsx), the files in docs/v6/brand and public/ (scripts/brand-assets.ts writes them)
+ * React component (components/brand.tsx), the files in docs/0.6.0/brand and public/ (scripts/brand-assets.ts writes them)
  * and the tests. No imports: scripts/brand-assets.ts runs it with Node's type stripping.
  *
- * The mark is the docs/v6 concept (D-V6-6): six stroked hexagon segments for the six lifecycle phases, the gaps between
+ * The mark is the docs/0.6.0 concept (D-V6-6): six stroked hexagon segments for the six lifecycle phases, the gaps between
  * them for the approval gates, and a `T` monogram. Coordinates are in a 64 × 64 box.
  */
 
@@ -74,7 +74,7 @@ export const FAVICON_MARK: MarkGeometry = {
 }
 
 /**
- * The wordmark "tevrin" as stroked letterforms (no font dependency), from the docs/v6 concept. Coordinates are in the
+ * The wordmark "tevrin" as stroked letterforms (no font dependency), from the docs/0.6.0 concept. Coordinates are in the
  * lockup's 64-high box: the wordmark starts at x ≈ 78 and the letters sit on the mark's vertical centre.
  */
 export const WORDMARK = {

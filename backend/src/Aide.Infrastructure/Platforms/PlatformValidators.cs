@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 namespace Aide.Infrastructure.Platforms;
 
 /// <summary>
-/// FR-142, §4.20 Vercel: the v2 check (<c>GET /v2/user</c>, the token's scope and team) through the deployment provider in
+/// FR-142, §4.20 Vercel: the 0.2.0 check (<c>GET /v2/user</c>, the token's scope and team) through the deployment provider in
 /// use (the Fake under <c>Deployments:Provider=Fake</c>); teams (<c>GET /v2/teams</c>) and projects (<c>GET /v9/projects</c>)
 /// for the picker. The token's team goes into the metadata (sent as <c>teamId</c> on every Vercel request).
 /// </summary>

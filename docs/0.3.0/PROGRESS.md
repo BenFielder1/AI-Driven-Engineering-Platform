@@ -105,7 +105,7 @@ Setup steps are in `deploy/railway/README.md`. Things only a real run can prove 
 - **Done on CI:** FR-94–FR-103, FR-105, FR-106, FR-112, plus all v1/v2 tests (backend 3646, Vitest 72 files, E2E v1/v2/a11y).
 - **Done on CI, manual check pending (Ben):** FR-104 (Docker Desktop deploy + 3-browser E2E), FR-106 (start on a root-owned volume).
 - **Written and reviewed, pending the first Railway deploy (Ben's setup, then `preview`):** FR-107–FR-111. See "First Railway deploy".
-- **v3 completion:** `deploy.yml` only deploys commits on `main`, so the first preview deploy follows the merge of `build/aide-v3`. Order: set up Railway and the GitHub environments, merge (CI on `main` → preview deploy + smoke), verify the First Railway deploy checklist, then move SPEC.md and PROGRESS.md to `docs/v3/` and add the CLAUDE.md row.
+- **v3 completion:** `deploy.yml` only deploys commits on `main`, so the first preview deploy follows the merge of `build/aide-v3`. Order: set up Railway and the GitHub environments, merge (CI on `main` → preview deploy + smoke), verify the First Railway deploy checklist, then move SPEC.md and PROGRESS.md to `docs/0.3.0/` and add the CLAUDE.md row.
 
 - 2026-10-24 — Railway IaC on Windows: `railway/iac` 3.16 runs `process.env._ || "railway"` with `execFileSync` to check the CLI version. That can't run the npm shims, so plan reports "requires CLI 5.42.1" on 5.71. Workaround: PowerShell `$env:_ = <path to railway.exe>` (documented in deploy/railway/README.md). Linux CI is unaffected — SPEC updated: no
 

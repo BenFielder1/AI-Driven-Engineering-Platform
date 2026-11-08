@@ -11,7 +11,7 @@ export type DeploymentTarget = Schemas['DeploymentEnvironment']
 export type DeploymentSettings = Schemas['DeploymentSettingsDto']
 export type DeploymentEnvVar = Schemas['DeploymentEnvVarDto']
 export type PreviewCheck = Schemas['PreviewCheckDto']
-/** FR-144: one target card of Settings → Deployment (`DeploymentTarget` is the environment, a v2 name). */
+/** FR-144: one target card of Settings → Deployment (`DeploymentTarget` is the environment, a 0.2.0 name). */
 export type TargetCard = Schemas['DeploymentTargetDto']
 export type TargetBinding = Schemas['DeploymentTargetBindingDto']
 export type TargetStatus = Schemas['DeploymentTargetStatus']
@@ -45,7 +45,7 @@ export interface DeploymentListParams {
   /** FR-151 filters. */
   component?: DeploymentComponent | undefined
   environment?: DeploymentTarget | undefined
-  /** The v2 name of `environment`, still accepted by the API. */
+  /** The 0.2.0 name of `environment`, still accepted by the API. */
   target?: DeploymentTarget | undefined
   releaseVersionId?: string | undefined
 }

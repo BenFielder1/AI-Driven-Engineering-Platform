@@ -4,7 +4,7 @@ import { buttonClasses } from '../components/ui/button-classes'
 import { Link } from '../lib/navigation'
 
 /**
- * The v2 root error state ("Something went wrong" with Try again), for errors outside the `(app)` and `(public)` groups
+ * The 0.2.0 root error state ("Something went wrong" with Try again), for errors outside the `(app)` and `(public)` groups
  * (marketing pages, the site-wide 404) and in those groups' layouts. Next loads this file on every route, `/` included,
  * so it stays plain markup: no error copy table or shared states (SPEC §8 first-load JS budget). Errors here are render
  * failures, not API errors (the app's error boundaries map those to copy through src/lib/errors.ts).

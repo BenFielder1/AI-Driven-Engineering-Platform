@@ -13,7 +13,7 @@ public sealed record ReadFileArguments(string Path, int StartLine, int? EndLine)
 public sealed record SearchCodeArguments(string Query, string? PathGlob, bool Regex);
 
 /// <summary>
-/// Parses and validates the JSON arguments a model sends with a tool call (FR-71). A path that breaks the v1 §4.6 rules is
+/// Parses and validates the JSON arguments a model sends with a tool call (FR-71). A path that breaks the 0.1.0 §4.6 rules is
 /// <see cref="RepoToolErrors.UnsafePath"/>; anything else malformed is <see cref="RepoToolErrors.InvalidArgument"/>. Both
 /// camelCase and snake_case names are accepted (<c>startLine</c> / <c>start_line</c>).
 /// </summary>

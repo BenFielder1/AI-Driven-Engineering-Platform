@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -359,7 +359,7 @@ describe('FR-53: app shell', () => {
     await renderRoute('/projects')
     const user = userEvent.setup()
     await screen.findByRole('heading', { level: 1, name: 'Projects' })
-    // FR-206: the v3 theme menu button is gone from the sidebar.
+    // FR-206: the 0.3.0 theme menu button is gone from the sidebar.
     expect(within(sidebar()).queryByRole('button', { name: /^Theme/ })).not.toBeInTheDocument()
 
     let menu = await openUserMenu(user)

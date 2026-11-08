@@ -54,7 +54,7 @@ public static class ErrorCodes
 
     /// <summary>
     /// FR-61 (409 on <c>POST /versions</c>) and FR-64 (recorded on a failed release): the tag <c>&lt;tagPrefix&gt;&lt;version&gt;</c>
-    /// already exists in the repository on a commit that doesn't hold the release; tags are never moved (replaces v1's
+    /// already exists in the repository on a commit that doesn't hold the release; tags are never moved (replaces 0.1.0's
     /// <c>TAG_CONFLICT</c> and the <c>v&lt;N&gt;-aide.&lt;k&gt;</c> suffixes).
     /// </summary>
     public const string TagExists = "TAG_EXISTS";

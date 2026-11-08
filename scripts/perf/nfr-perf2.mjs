@@ -14,7 +14,7 @@
 // 3. Measures p50/p95/max over REQUESTS (default 50, ≥ 30) sequential requests, plus CONCURRENCY parallel clients, of
 //    GET /api/projects (page 1, 50 rows), GET …/execution/runs and GET …/compliance/reports.
 //
-// Usage (Node 24, from the repo root):  node scripts/perf/v2-perf.mjs          # http://localhost:8080
+// Usage (Node 24, from the repo root):  node scripts/perf/nfr-perf2.mjs          # http://localhost:8080
 // Env: BASE_URL, REQUESTS=50, CONCURRENCY=4, CYCLES=10, PERF_EMAIL=nfr-perf2@perf.aide.local, PERF_PASSWORD=…
 // NOTE: creates data in the target database (the perf user and its projects). Re-runs reuse them. The per-run API
 // token is revoked when the run ends.
@@ -120,7 +120,7 @@ async function until(what, probe, timeoutMs = 180_000) {
 
 const projectBody = (name, extra = {}) => ({
   name,
-  idea: `${name}: seeded by scripts/perf/v2-perf.mjs to measure read latency. Safe to delete.`,
+  idea: `${name}: seeded by scripts/perf/nfr-perf2.mjs to measure read latency. Safe to delete.`,
   approvalMode: 'advisory',
   complianceThreshold: 0.9,
   maxFilesPerStep: 20,

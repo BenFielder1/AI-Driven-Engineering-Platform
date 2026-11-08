@@ -1175,7 +1175,7 @@ export interface paths {
         /** The caller's projects (every project for Admins), paged, with search by name, phase, status, has-a-version-in-development and pack (FR-117: the current version's stack composition uses that pack id, e.g. be-aspnet or deploy-vercel) filters and sorting. Rows carry the released and in-development version badges (FR-62) and, as history, the retired preset a migrated version was pinned to (FR-129). */
         get: operations["ListProjects"];
         put?: never;
-        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; v1 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. sourceImports (FR-171, optional) queues a tracker_import job per entry with the project; a failed import never blocks creation. stackSource infer (FR-178) starts the version in the analysis phase with no stack: the Stack Analyst writes a stack_profile after the Repository Analyst (400 STACK_INFER_NO_CODE when the repository has no code; stack or deployment alongside: 400 VALIDATION). */
+        /** Create a project from the wizard; the caller becomes its Owner. Omitted settings take the FR-5 defaults. source (FR-73) is scratch (default: initialVersion, FR-66, default 0.1.0, is the first release version, in development) or import (import {releasedTag (null: never released), developmentVersion}; idea is the version's request; git.localSourcePath for a local import where Git:Local:ImportRoot is set). git.mode (FR-82, FR-86; 0.1.0 alias git.provider) is github_app (installationId + repoFullName), github_pat (repoUrl + token) or local. 400 VERSION_INVALID, TAG_NOT_FOUND; 409 VERSION_NOT_GREATER, TAG_EXISTS, GITHUB_APP_NOT_INSTALLED when the App can't access the picked repo. An import creates an imported release version for the released tag (unless never released) and the version to develop, based on that tag's commit (or the default branch head); a version with existing code (an import, or a scratch project on a repository with code, FR-86) queues the Repository Analyst (FR-70). stack (FR-114–FR-117, optional; omitted: No stack (general)) is the stack composition, validated like POST /api/stack/validate (400 STACK_INCOMPATIBLE with violations) plus R5 (the VCS layer is the repository's host, set from it when omitted: 400 VCS_MISMATCH), and pinned with the catalog version and hash. deployment (FR-88, optional) sets up Vercel with one of the caller's own Vercel connections (403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND) and an existing (vercelProjectId) or new (create) Vercel project; 409 PLATFORM_GIT_NOT_CONNECTED, PLATFORM_PLAN_LIMIT. llm (FR-159, optional) sets the LLM provider, model(s) and connection (one of the caller's own: 403 CREDENTIAL_NOT_OWNER, 404 NOT_FOUND); a provider that is disabled on this server or not usable by the caller, or no usable provider when llm is omitted: 400 LLM_PROVIDER_UNAVAILABLE. sourceImports (FR-171, optional) queues a tracker_import job per entry with the project; a failed import never blocks creation. stackSource infer (FR-178) starts the version in the analysis phase with no stack: the Stack Analyst writes a stack_profile after the Repository Analyst (400 STACK_INFER_NO_CODE when the repository has no code; stack or deployment alongside: 400 VALIDATION). */
         post: operations["CreateProject"];
         delete?: never;
         options?: never;
@@ -1504,7 +1504,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the v2 name) and releaseVersionId. */
+        /** The project's deployments, newest first (members, FR-151): component, environment, provider, version, SHA, state, URL, time, who triggered it, and whether each can be rolled back to. Filter by component (frontend, backend), environment (preview, production; `target` is the 0.2.0 name) and releaseVersionId. */
         get: operations["ListDeployments"];
         put?: never;
         post?: never;
@@ -1558,7 +1558,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** v2 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback. */
+        /** 0.2.0 name of rollback, kept as an alias for Vercel (FR-91, FR-150): the same action as POST …/rollback. */
         post: operations["PromoteDeployment"];
         delete?: never;
         options?: never;
@@ -2375,7 +2375,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The lifecycle checkpoints of a release version (default: the version in development, else the latest released), newest first (members, FR-44, FR-63): the phase recorded at each, when it was entered, and whether it is a rollback target now. Replaces v1's GET /versions (D-V2-11). */
+        /** The lifecycle checkpoints of a release version (default: the version in development, else the latest released), newest first (members, FR-44, FR-63): the phase recorded at each, when it was entered, and whether it is a rollback target now. Replaces 0.1.0's GET /versions (D-V2-11). */
         get: operations["ListCheckpoints"];
         put?: never;
         post?: never;
@@ -2460,7 +2460,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired v2 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs). */
+        /** Settings → Stack (FR-117, any member): the stack composition pinned on the current release version with its derived fields, the catalog version and hash it was pinned against (and the current ones), whether it is locked and why (plan_locked, not_in_development), the stack change against the version's base code (layersChanged, isStackChange), the retired 0.2.0 preset of a migrated version (legacyPreset, history: Preset <id>@<version> (retired, migrated)), and the VCS option fixed by the repository host (repoVcs). */
         get: operations["GetProjectStack"];
         /** Change the stack of the version in development (Owner, FR-117): validates the composition like POST /api/stack/validate plus R5 (the VCS layer is the repository's host; omitted, it is set from it), pins it with the current catalog version and hash (a migrated version keeps its retired preset as history), updates the project's stack packs and records STACK_CHANGED {from, to, layersChanged}. The pinned composition again changes nothing. Allowed until the version's first implementation plan is locked. */
         put: operations["UpdateProjectStack"];
@@ -2715,7 +2715,7 @@ export interface components {
          *     `https://github.com/apps/{slug}/installations/new`; `permissions` are the App's granted permissions
          *     (e.g. `contents: write`); `canCreateRepositories` is true when `administration: write` is granted (§4.14).
          *     `pagesPermission` (FR-143) is `granted` when the App has `pages: write`, `missing` for an App registered
-         *     before v4 ("Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"),
+         *     before 0.4.0 ("Pages permission missing: update the App's permissions in GitHub, then accept them on each installation"),
          *     and `unknown` when the App isn't configured or GitHub couldn't be asked.
          */
         AdminGitHubAppDto: {
@@ -2867,12 +2867,12 @@ export interface components {
         };
         /**
          * @description An agent run with the provider's output text (FR-23). `output` is `null` until the run succeeds and is cut
-         *     to the first 200,000 characters (`outputTruncated`). The v2 fields are as on AgentRunDto.
+         *     to the first 200,000 characters (`outputTruncated`). The 0.2.0 fields are as on AgentRunDto.
          *     `toolCalls` is the run's repo tool log (FR-71: tool, arguments, bytes, truncated, error code) and `warnings`
          *     what was recorded on it (FR-70, FR-71): `tools_unsupported`, `snapshot_unavailable`,
          *     `summary_wait_timeout`, `summary_unavailable`, and `output_truncated` (FR-162). `continuations` is how
          *     many continuations the answer took (0–5, FR-162) and `maxOutputTokens` the output token limit its calls used
-         *     (FR-160); both are `null` for runs stored before v4 and for runs that haven't succeeded.
+         *     (FR-160); both are `null` for runs stored before 0.4.0 and for runs that haven't succeeded.
          */
         AgentRunDetailDto: {
             /** Format: uuid */
@@ -2929,7 +2929,7 @@ export interface components {
          *     release version it ran for (§4.10). `checkpoint` is the checkpoint it ran at (null until recorded). `agentKey`
          *     is the specialist that ran a plan step (FR-121; `generalist` for a generalist step of a composed project; null for
          *     base agents); `presetId`/`presetVersion` are history (FR-129: the retired preset of runs before the upgrade).
-         *     `legacyAgentKey` (§4.23) is the v2 agent key the run's step was planned with when it ran as its mapped v4
+         *     `legacyAgentKey` (§4.23) is the 0.2.0 agent key the run's step was planned with when it ran as its mapped 0.4.0
          *     specialist (e.g. `db-engineer` for `data-engineer`); null otherwise. `toolCallCount` is
          *     the number of repo tool calls (FR-71). `credentialLabel` names the LLM connection that paid for the run,
          *     `Label (••••a1b2)` (FR-79, D-V2-5; null for a system key, a provider without a key, or a deleted connection).
@@ -3190,7 +3190,7 @@ export interface components {
         /**
          * @description Which sign-in providers are available (the frontend hides "Continue with GitHub" when `github` is false).
          *     `githubMode` (D-V2-7) says how GitHub sign-in works: `app` (the Tevrin GitHub App's user authorization flow
-         *     with PKCE), `oauth` (the v1 OAuth App, only while no App is registered) or `none`; `github` is
+         *     with PKCE), `oauth` (the 0.1.0 OAuth App, only while no App is registered) or `none`; `github` is
          *     `githubMode != none`. `gitlab` (FR-131) lists the enabled GitLab instances with an OAuth application: one
          *     "Continue with GitLab" button each (`GET /api/auth/gitlab/start` with `instanceId` and `mode=signin`).
          *     `bitbucket` (FR-134) is true when a Bitbucket OAuth consumer is configured: "Continue with Bitbucket"
@@ -3687,8 +3687,8 @@ export interface components {
          * @description Repository step of the new-project wizard (FR-5, FR-35, FR-82, FR-86). `mode` picks the Git provider.
          *     `github_app`: a repo picked or created through the Tevrin GitHub App; send `installationId` and
          *     `repoFullName` (`owner/name`), no `repoUrl` or `token` (409 `GITHUB_APP_NOT_INSTALLED` when the
-         *     App can't access the repo). `github_pat`: `repoUrl` plus an optional `token` (FR-83, the v1 behaviour).
-         *     `local`: no remote. `provider` is the v1 name of `mode`, kept so v1 clients work: send one of the two;
+         *     App can't access the repo). `github_pat`: `repoUrl` plus an optional `token` (FR-83, the 0.1.0 behaviour).
+         *     `local`: no remote. `provider` is the 0.1.0 name of `mode`, kept so 0.1.0 clients work: send one of the two;
          *     when both are sent they must be equal (else 400 `VALIDATION` on `git.mode`).
          */
         CreateProjectGitRequest: {
@@ -3697,7 +3697,7 @@ export interface components {
              *         `local`.
              */
             mode?: components["schemas"]["GitProvider"];
-            /** @description v1 alias of `mode` (deprecated; send `mode`). */
+            /** @description 0.1.0 alias of `mode` (deprecated; send `mode`). */
             provider?: components["schemas"]["GitProvider"];
             /**
              * Format: int64
@@ -4121,14 +4121,14 @@ export interface components {
         DeploymentPart: "frontend" | "backend" | "database";
         /**
          * @description Deployment provider (§4.15, §4.20): a target's platform, from the composition's host (`deploy-vercel` → `vercel`).
-         *     Wire values: `vercel`, `fake` (v2's explicit Fake provider; deployments made under
+         *     Wire values: `vercel`, `fake` (0.2.0's explicit Fake provider; deployments made under
          *     `Deployments:Provider=Fake` are recorded as `fake`), `netlify`, `cloudflare`, `render`,
          *     `railway`, `github_pages`.
          * @enum {unknown}
          */
         DeploymentProvider: "vercel" | "fake" | "netlify" | "cloudflare" | "render" | "railway" | "github_pages";
         /**
-         * @description Settings → Deployment (FR-144, any member; D-V4-4 replaced v2's single Vercel shape): `targets`, `databases`,
+         * @description Settings → Deployment (FR-144, any member; D-V4-4 replaced 0.2.0's single Vercel shape): `targets`, `databases`,
          *     the environment inventory (`env`; keys only) and the `originModel`. `canManage`: the caller is an Owner.
          *     `fakeMode`: `Deployments:Provider=Fake`. FR-191: `groups`: the group cards; parts' full cards stay in
          *     `targets` and `databases`, tied to a group by their `groupId`.
@@ -4425,7 +4425,7 @@ export interface components {
         /**
          * @description One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the
          *     base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
-         *     (`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the v2 agent key a plan locked before
+         *     (`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the 0.2.0 agent key a plan locked before
          *     the upgrade named, which now runs as `agentKey`; null otherwise.
          */
         ExecutionStepSummaryDto: {
@@ -4743,7 +4743,7 @@ export interface components {
         GitHubRepositorySelection: "all" | "selected";
         /**
          * @description How "Continue with GitHub" signs in (D-V2-7). Wire values: `app` (the App's user authorization flow with
-         *                 PKCE), `oauth` (the v1 OAuth App, only while no App is registered), `none` (GitHub sign-in unavailable).
+         *                 PKCE), `oauth` (the 0.1.0 OAuth App, only while no App is registered), `none` (GitHub sign-in unavailable).
          * @enum {unknown}
          */
         GitHubSignInMode: "none" | "oauth" | "app";
@@ -4886,14 +4886,14 @@ export interface components {
          */
         GitLabVersionVerdict: "supported" | "old" | "unknown";
         /**
-         * @description Git provider of a project (FR-35, FR-82, FR-136). Wire values: `github_pat` (v1 `github`), `local`,
+         * @description Git provider of a project (FR-35, FR-82, FR-136). Wire values: `github_pat` (0.1.0 `github`), `local`,
          *                 `github_app`, `gitlab`, `bitbucket`.
          * @enum {unknown}
          */
         GitProvider: "github_pat" | "local" | "github_app" | "gitlab" | "bitbucket";
         /**
          * @description Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the
-         *     project branch, once the working copy has been prepared. `mode` is the v2 name of `provider` (always equal).
+         *     project branch, once the working copy has been prepared. `mode` is the 0.2.0 name of `provider` (always equal).
          *     For `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else
          *     `null`). `appInstalledOnRepo` says whether the Tevrin GitHub App can access a `github_pat` project's repo
          *     (`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an
@@ -5007,7 +5007,7 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * @description FR-129: the retired v2 preset a migrated version was pinned to, kept as history: its id, name (the id when unknown),
+         * @description FR-129: the retired 0.2.0 preset a migrated version was pinned to, kept as history: its id, name (the id when unknown),
          *     version and `label`, "Preset nextjs-supabase@1.0.1 (retired, migrated)".
          */
         LegacyPresetDto: {
@@ -5072,7 +5072,7 @@ export interface components {
         /**
          * @description One of the caller's LLM connections (FR-78). The key is never returned: only the provider, label, its last 4
          *     characters, the validation status (`valid`, `invalid`, `unchecked`) and when it was last checked, plus
-         *     the projects it is bound to. `last4` is `????` for a key migrated from v1 until the start-up backfill reads it.
+         *     the projects it is bound to. `last4` is `????` for a key migrated from 0.1.0 until the start-up backfill reads it.
          */
         LlmCredentialDto: {
             /** Format: uuid */
@@ -5148,7 +5148,7 @@ export interface components {
         };
         /**
          * @description LLM settings (FR-9, FR-22, FR-79). Keys are never returned. `hasApiKey` is true while a connection is bound
-         *     (kept from v1); `binding` describes it (`null` when nothing is bound). `canBind` is true when the caller
+         *     (kept from 0.1.0); `binding` describes it (`null` when nothing is bound). `canBind` is true when the caller
          *     is a project Owner and so may bind one of their own connections or unbind. `providers` lists every provider with
          *     whether it's usable and its system default model; only providers enabled on this deployment are listed (FR-157).
          */
@@ -5428,7 +5428,7 @@ export interface components {
             total: number;
         };
         /**
-         * @description The lifecycle phases, in order (§4.1; v5 §4.27 adds Phase.Analysis first). Stored as snake_case strings, so the
+         * @description The lifecycle phases, in order (§4.1; 0.5.0 §4.27 adds Phase.Analysis first). Stored as snake_case strings, so the
          *     numeric values only give the order (PhaseOrder) and may be renumbered.
          * @enum {unknown}
          */
@@ -5537,7 +5537,7 @@ export interface components {
          *     backend) preview deployment's id (the rollout id when nothing deployed, e.g. a blocked rollout), its final (or last
          *     seen) `status`, `url` and `buildLogTail`, how long review waited (`waitedSeconds`, up to 30 minutes;
          *     `null` when it didn't wait) and whether it gave up waiting (`timedOut`). FR-147: `rollout` is the whole
-         *     preview rollout review waited for (every component and the migration run; `null` for v2 reports).
+         *     preview rollout review waited for (every component and the migration run; `null` for 0.2.0 reports).
          */
         PreviewCheckDto: {
             /** Format: uuid */
@@ -5615,7 +5615,7 @@ export interface components {
          *     checkpoint within the current release version `releaseVersionId` (§4.10, D-V2-11: was `projectVersion`);
          *     `releasedVersion` is the highest released version (`null`: not released) and `developmentVersion` the
          *     version in development (`null`: none) (FR-62). `idea` is the request of the version in development.
-         *     `presetId`, `presetName` and `presetVersion` are history (FR-129): the retired v2 preset the current release
+         *     `presetId`, `presetName` and `presetVersion` are history (FR-129): the retired 0.2.0 preset the current release
          *     version was pinned to before it was migrated to a composition (all `null`: never pinned to a preset). `deploymentsEnabled`: the project has deployment settings (FR-88), so
          *     the Deployments page is in its navigation (§7.2). `stackPacks` are the pack ids of the current release version's
          *     stack composition (FR-117, §5; empty: no stack), e.g. `["fe-react-vite", "be-aspnet", "vcs-github"]`.
@@ -5727,7 +5727,7 @@ export interface components {
         /**
          * @description Settings → Stack (FR-117, FR-119): the stack of the project's current release version.
          *         * composition: the pinned normalised composition with its derived fields (§4.18), null for "No stack
-         *         (general)" and, for a version migrated from a retired v2 preset, that preset as history (legacyPreset). catalogVersion/catalogHash are
+         *         (general)" and, for a version migrated from a retired 0.2.0 preset, that preset as history (legacyPreset). catalogVersion/catalogHash are
          *         what it was pinned against; currentCatalogVersion/currentCatalogHash the catalog shipped now (a new
          *         version re-pins to it).
          *     * locked with lockedReason (plan_locked, not_in_development): PUT is
@@ -6076,7 +6076,7 @@ export interface components {
          *     `conflictingFiles` lists the files (empty otherwise). `pullRequestUrl` is the merged GitHub PR (`null`
          *     for Local). `attempt` counts the release attempts at this checkpoint (1 for the first, +1 per retry).
          *     `completedAt` is `null` while in progress. `tag` is the version's tag `&lt;tagPrefix&gt;&lt;version&gt;`
-         *     (e.g. `v1.2.0`; v1 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails
+         *     (e.g. `v1.2.0`; 0.1.0 releases keep their `v&lt;N&gt;-aide` tag). A tag that already exists on another commit fails
          *     the release with `TAG_EXISTS`. `mergeCommitSha` is set as soon as the merge exists, before tagging.
          *     Failure codes include `MERGE_CONFLICT`, `TAG_EXISTS`, `GIT_ERROR`, `RELEASE_CANCELLED`,
          *     `GITHUB_RATE_LIMITED`, and while awaiting the merge `PR_CLOSED` (closed without merging) and
@@ -6177,11 +6177,11 @@ export interface components {
         };
         /**
          * @description A release version of a project (§4.10, FR-60–FR-62). `version` is the normalised semver (no leading `v`);
-         *     `tag` is the release tag once released (or the imported/migrated tag, e.g. v1's `v7-aide`); `baseTag` and
+         *     `tag` is the release tag once released (or the imported/migrated tag, e.g. 0.1.0's `v7-aide`); `baseTag` and
          *     `baseCommitSha` are the released tag and merge commit the version started from (null for a first version);
          *     `branchName` and `pullRequestUrl` are the version's working branch and PR once they exist; `request` is
          *     what the version was started with (the project idea for a first version); `startedBy` is null for versions created
-         *     by migration or import. `presetId`/`presetVersion`/`presetName` are history (FR-129): the retired v2 preset
+         *     by migration or import. `presetId`/`presetVersion`/`presetName` are history (FR-129): the retired 0.2.0 preset
          *     the version was pinned to before its migration to a composition, shown as "Preset &lt;id&gt;@&lt;version&gt; (retired,
          *     migrated)"; all `null` for versions never pinned to a preset.
          */
@@ -6879,7 +6879,7 @@ export interface components {
          *     version. `stack` (FR-117,
          *     "Change stack") is the new version's stack composition, validated like project create (`STACK_INCOMPATIBLE`,
          *     `VCS_MISMATCH`, `VALIDATION` on `stack.*`); omitted or `null`, the base version's composition is kept,
-         *     re-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). FR-129: the v2
+         *     re-pinned to the current catalog (`STACK_INCOMPATIBLE` if the catalog no longer allows it). FR-129: the 0.2.0
          *     `presetId` was removed (D-V4-4).
          */
         StartReleaseVersionRequest: {
@@ -7116,7 +7116,7 @@ export interface components {
         /**
          * @description Partial update of the LLM settings (Owner). Omitted fields are unchanged; `modelsByAgent`, when sent, replaces the
          *     map. FR-79: `credentialId` binds one of the caller's own connections for the (new) provider; `null` unbinds.
-         *     Changing the provider without sending `credentialId` drops a binding of the old provider. v1's per-project
+         *     Changing the provider without sending `credentialId` drops a binding of the old provider. 0.1.0's per-project
          *     `apiKey`/`clearApiKey` are gone: keys are added under Account → Connections (FR-78).
          */
         UpdateLlmSettingsRequest: {

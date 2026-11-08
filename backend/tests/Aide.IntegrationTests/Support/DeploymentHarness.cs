@@ -113,7 +113,7 @@ public static class DeploymentHarness
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
             .FirstAsync(Ct));
 
-    /// <summary>A frontend deployment target (v2 settings) bound to <paramref name="connectionId"/> and linked to the Vercel project.</summary>
+    /// <summary>A frontend deployment target (0.2.0 settings) bound to <paramref name="connectionId"/> and linked to the Vercel project.</summary>
     public static Task BindAsync(
         WebApplicationFactory<Program> app, Guid projectId, Guid connectionId, Guid ownerId, string? vercelProjectId = VercelProjectId, DeploymentProvider provider = DeploymentProvider.Vercel) =>
         ProjectApi.WithDbAsync(app, async db =>
@@ -122,7 +122,7 @@ public static class DeploymentHarness
             await db.SaveChangesAsync(Ct);
         });
 
-    /// <summary>A frontend target as v2's Vercel flow leaves it (status from <see cref="DeploymentTargetRules"/>).</summary>
+    /// <summary>A frontend target as 0.2.0's Vercel flow leaves it (status from <see cref="DeploymentTargetRules"/>).</summary>
     public static DeploymentTarget Target(Guid projectId, Guid? connectionId, Guid? ownerId, string? vercelProjectId, DeploymentProvider provider = DeploymentProvider.Vercel, string rootDirectory = ".")
     {
         var target = new DeploymentTarget
@@ -142,7 +142,7 @@ public static class DeploymentHarness
         return target;
     }
 
-    /// <summary>The project's frontend target (v2's deployment settings).</summary>
+    /// <summary>The project's frontend target (0.2.0's deployment settings).</summary>
     public static Task<DeploymentTarget> FrontendTargetAsync(WebApplicationFactory<Program> app, Guid projectId) =>
         ProjectApi.WithDbAsync(app, db => db.DeploymentTargets.AsNoTracking()
             .SingleAsync(t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend, Ct));

@@ -7,7 +7,7 @@
  * - `await renderRoute(path)`: the whole app at `path`: the src/app tree (group layouts with their guards, nested layouts,
  *   loading/error/not-found files and the page), resolved from the file system like Next.js. Returns `router` (the
  *   in-memory router: `router.state.location.pathname/search/href`, `router.history.back()`, `router.calls`),
- *   `queryClient` and `live`, like the v2 TanStack helper. The root layout (html/body, fonts, nonce) is not rendered.
+ *   `queryClient` and `live`, like the 0.2.0 TanStack helper. The root layout (html/body, fonts, nonce) is not rendered.
  * - `currentHref(router)`: path + search + hash, e.g. `/login?returnUrl=%2Faccount`.
  *
  * `next/navigation` and `next/link` are mocked for every test in src/test/setup.ts; the router resets after each test.

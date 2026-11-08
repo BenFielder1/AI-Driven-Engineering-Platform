@@ -1,5 +1,5 @@
 /**
- * /login search params (v2 route validateSearch). FR-131: GitLab sign-in failures add `provider=gitlab` to
+ * /login search params (0.2.0 route validateSearch). FR-131: GitLab sign-in failures add `provider=gitlab` to
  * `error=GIT_AUTH_FAILED&reason=…`, and a GitLab sign-in waiting to be linked to an existing account comes back with
  * `link=gitlab` (FR-134: `provider=bitbucket` and `link=bitbucket` for Bitbucket).
  */

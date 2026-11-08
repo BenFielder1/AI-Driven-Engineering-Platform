@@ -2,7 +2,7 @@
  * FR-196: writes the Tevrin brand files from one source (src/components/brand-geometry.ts and the brand colours in
  * src/lib/ui/tokens.ts). Reproducible: `npm run brand:assets`, then commit the output.
  *
- * - docs/v6/brand/  source SVGs: mark and lockup in light (#0F172A ink) and dark (#F8FAFC ink), each also mono, and the
+ * - docs/0.6.0/brand/  source SVGs: mark and lockup in light (#0F172A ink) and dark (#F8FAFC ink), each also mono, and the
  *                   favicon mark
  * - public/         served copies: favicon.svg, icon-32.png, apple-touch-icon.png (180 px), og.png (1200 × 630), and
  *                   the mark and lockup SVGs under public/brand/
@@ -20,7 +20,7 @@ import { faviconSvg, lockupSvg, markSvg, ogSvg, tileIconSvg } from '../src/compo
 import { BRAND_COLORS } from '../src/lib/ui/tokens.ts'
 
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const docsBrand = path.resolve(frontend, '../docs/v6/brand')
+const docsBrand = path.resolve(frontend, '../docs/0.6.0/brand')
 const publicDir = path.join(frontend, 'public')
 const publicBrand = path.join(publicDir, 'brand')
 const geistMedium = path.join(frontend, 'node_modules/geist/dist/fonts/geist-sans/Geist-Medium.ttf')

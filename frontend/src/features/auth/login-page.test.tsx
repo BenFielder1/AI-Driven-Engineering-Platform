@@ -26,7 +26,7 @@ describe('LoginPage', () => {
     expect(currentHref(router)).toBe('/account')
   })
 
-  it('FR-1 / FR-207: without a returnUrl, signing in lands on Home (/home; it was /projects before v6)', async () => {
+  it('FR-1 / FR-207: without a returnUrl, signing in lands on Home (/home; it was /projects before 0.6.0)', async () => {
     seedUser({ email: 'ada@example.com', password: 'password1' })
     const { router } = await renderRoute('/login')
 

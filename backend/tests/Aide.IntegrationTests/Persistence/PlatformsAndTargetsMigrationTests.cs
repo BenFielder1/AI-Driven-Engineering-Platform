@@ -10,7 +10,7 @@ namespace Aide.IntegrationTests.Persistence;
 
 /// <summary>
 /// FR-142, FR-144, FR-145, FR-151 (§5): the PlatformsAndTargets migration applied to a database at ReleaseMergeSubmittedAt
-/// holding v2 Vercel connections, deployment settings, env vars and deployments.
+/// holding 0.2.0 Vercel connections, deployment settings, env vars and deployments.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class PlatformsAndTargetsMigrationTests(AideApiFactory factory)
@@ -35,7 +35,7 @@ public sealed class PlatformsAndTargetsMigrationTests(AideApiFactory factory)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task FR142_v2_Vercel_connections_are_copied_with_the_same_id_and_ciphertext()
+    public async Task FR142_0_2_0_Vercel_connections_are_copied_with_the_same_id_and_ciphertext()
     {
         await using var db = await MigratedDatabaseAsync();
 
@@ -53,7 +53,7 @@ public sealed class PlatformsAndTargetsMigrationTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR144_v2_settings_become_frontend_targets_with_status_from_binding_and_project()
+    public async Task FR144_0_2_0_settings_become_frontend_targets_with_status_from_binding_and_project()
     {
         await using var db = await MigratedDatabaseAsync();
         var targets = await db.DeploymentTargets.AsNoTracking().ToDictionaryAsync(t => t.ProjectId, Ct);
@@ -75,7 +75,7 @@ public sealed class PlatformsAndTargetsMigrationTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR145_v2_env_vars_apply_to_the_frontend_are_user_variables_and_NEXT_PUBLIC_ones_are_public()
+    public async Task FR145_0_2_0_env_vars_apply_to_the_frontend_are_user_variables_and_NEXT_PUBLIC_ones_are_public()
     {
         await using var db = await MigratedDatabaseAsync();
         var vars = await db.DeploymentEnvVars.AsNoTracking().Where(v => v.ProjectId == Bound).ToDictionaryAsync(v => v.Key, Ct);
@@ -91,7 +91,7 @@ public sealed class PlatformsAndTargetsMigrationTests(AideApiFactory factory)
     }
 
     [Fact]
-    public async Task FR151_v2_deployments_get_their_target_component_environment_and_kind()
+    public async Task FR151_0_2_0_deployments_get_their_target_component_environment_and_kind()
     {
         await using var db = await MigratedDatabaseAsync();
         var target = await db.DeploymentTargets.AsNoTracking().SingleAsync(t => t.ProjectId == Bound, Ct);
@@ -116,7 +116,7 @@ public sealed class PlatformsAndTargetsMigrationTests(AideApiFactory factory)
     private static Task<int> CountAsync(AideDbContext db, string sql) =>
         db.Database.SqlQueryRaw<int>(sql).SingleAsync(Ct);
 
-    /// <summary>A new database at ReleaseMergeSubmittedAt, seeded with v2 deployment data, then migrated to the latest version.</summary>
+    /// <summary>A new database at ReleaseMergeSubmittedAt, seeded with 0.2.0 deployment data, then migrated to the latest version.</summary>
     private async Task<AideDbContext> MigratedDatabaseAsync()
     {
         var connectionString = await factory.CreateEmptyDatabaseAsync(Ct);

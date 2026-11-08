@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { describe, expect, it } from 'vitest'
 
 import { describeActivity } from './activity-summary'
@@ -7,7 +7,7 @@ const d = (type: string, payload: Record<string, unknown>) => describeActivity({
 
 const dateOf = (iso: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(iso))
 
-describe('FR-155: activity summaries of the v4 events', () => {
+describe('FR-155: activity summaries of the 0.4.0 events', () => {
   it('FR155_STACK_CHANGED names the changed layers', () => {
     expect(d('STACK_CHANGED', { version: '1.3.0', layersChanged: ['backend', 'data'] })).toBe('Stack changed: Backend, Data')
   })

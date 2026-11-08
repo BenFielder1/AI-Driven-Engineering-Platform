@@ -385,7 +385,7 @@ public class SharedProjectProviderTests
     }
 
     [Fact]
-    public async Task FR152_A_v4_Railway_database_next_to_its_target_stays_on_the_private_reference()
+    public async Task FR152_A_0_4_0_Railway_database_next_to_its_target_stays_on_the_private_reference()
     {
         var stub = Graphql(("deployments(", """{"data":{"deployments":{"edges":[{"node":{"id":"d1","status":"SUCCESS"}}]}}}"""));
 

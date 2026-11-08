@@ -1,8 +1,8 @@
 namespace Aide.Domain.Entities;
 
 /// <summary>
-/// A user's pasted platform token (FR-142, §4.20, §4.21); table <c>platform_connections</c>, replacing v2's
-/// <c>vercel_connections</c> (v2 rows were copied with the same id). Deployment targets bind one through
+/// A user's pasted platform token (FR-142, §4.20, §4.21); table <c>platform_connections</c>, replacing 0.2.0's
+/// <c>vercel_connections</c> (0.2.0 rows were copied with the same id). Deployment targets bind one through
 /// <see cref="DeploymentTarget.ConnectionId"/>. The token is Data Protection ciphertext (<c>SecretPurposes.PlatformToken</c>)
 /// and is never returned or logged.
 /// </summary>

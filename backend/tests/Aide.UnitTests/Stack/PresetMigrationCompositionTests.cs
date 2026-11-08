@@ -5,7 +5,7 @@ using static Aide.UnitTests.Stack.StackTestCatalog;
 namespace Aide.UnitTests.Stack;
 
 /// <summary>
-/// FR-129, §4.23: the compositions the <c>RetirePresets</c> migration writes for the retired v2 presets are exactly what
+/// FR-129, §4.23: the compositions the <c>RetirePresets</c> migration writes for the retired 0.2.0 presets are exactly what
 /// <see cref="StackCompositionJson"/> stores for the equivalent choices validated against the shipped catalog (with the
 /// catalog hash left NULL for the app to re-pin), and the packs it writes are <see cref="StackPinning.PackIds"/>.
 /// </summary>

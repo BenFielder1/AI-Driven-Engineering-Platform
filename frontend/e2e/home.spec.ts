@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { password, registerViaApi, registerViaUi } from './support/api.ts'
 
 /**
- * v6 M40: Home (`/home`) is the signed-in landing page (FR-207, §4.32 routing table), and the shell gained a Home item,
+ * 0.6.0 M40: Home (`/home`) is the signed-in landing page (FR-207, §4.32 routing table), and the shell gained a Home item,
  * the theme and Docs in the user menu (FR-206, FR-204) and palette actions (FR-209). Register is rate limited: every
  * registration goes through support/api.ts's register lock.
  */

@@ -8,17 +8,18 @@ Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates speciali
 
 | Version | Spec | Build log | Status |
 | --- | --- | --- | --- |
-| v1 | [`docs/v1/SPEC.md`](docs/v1/SPEC.md) | [`docs/v1/PROGRESS.md`](docs/v1/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
-| v2 | [`docs/v2/SPEC.md`](docs/v2/SPEC.md) | [`docs/v2/PROGRESS.md`](docs/v2/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
-| v3 | [`docs/v3/SPEC.md`](docs/v3/SPEC.md) | [`docs/v3/PROGRESS.md`](docs/v3/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
-| v4 | [`docs/v4/SPEC.md`](docs/v4/SPEC.md) | [`docs/v4/PROGRESS.md`](docs/v4/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
-| v5 | [`docs/v5/SPEC.md`](docs/v5/SPEC.md) | [`docs/v5/PROGRESS.md`](docs/v5/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
-| v6 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site on GitHub Pages |
+| 0.1.0 | [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) | [`docs/0.1.0/PROGRESS.md`](docs/0.1.0/PROGRESS.md) | Built and merged (PR #1). Frozen; never edit except to fix links |
+| 0.2.0 | [`docs/0.2.0/SPEC.md`](docs/0.2.0/SPEC.md) | [`docs/0.2.0/PROGRESS.md`](docs/0.2.0/PROGRESS.md) | Built and merged (PR #13). Frozen; never edit except to fix links |
+| 0.3.0 | [`docs/0.3.0/SPEC.md`](docs/0.3.0/SPEC.md) | [`docs/0.3.0/PROGRESS.md`](docs/0.3.0/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
+| 0.4.0 | [`docs/0.4.0/SPEC.md`](docs/0.4.0/SPEC.md) | [`docs/0.4.0/PROGRESS.md`](docs/0.4.0/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
+| 0.5.0 | [`docs/0.5.0/SPEC.md`](docs/0.5.0/SPEC.md) | [`docs/0.5.0/PROGRESS.md`](docs/0.5.0/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
+| 0.6.0 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site on GitHub Pages |
 
-- The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/v<N>/` and add a row here.
-- **v6 is an increment on v5 (and v1–v4):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (v2 starts at FR-53, v3 at FR-94, v4 at FR-113, v5 at FR-163, v6 at FR-196), and the spec-verifier checks the requirements of v1–v6.
-- **Scaffolding:** v2, v4, v5 and v6 M0 were baseline checks, and v3 migrated the frontend in place. Never re-scaffold the repo.
-- Version assets (e.g. the logo in `docs/v2/brand/`) live under `docs/v<N>/`.
+- **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.7.0 new decisions are `D-<x.y.z>-n` (e.g. `D-0.7.0-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
+- The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/<x.y.z>/` and add a row here. Then release it (see Releases).
+- **0.6.0 is an increment on 0.5.0 (and 0.1.0–0.4.0):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (0.2.0 starts at FR-53, 0.3.0 at FR-94, 0.4.0 at FR-113, 0.5.0 at FR-163, 0.6.0 at FR-196), and the spec-verifier checks the requirements of 0.1.0–0.6.0.
+- **Scaffolding:** 0.2.0, 0.4.0, 0.5.0 and 0.6.0 M0 were baseline checks, and 0.3.0 migrated the frontend in place. Never re-scaffold the repo.
+- Version assets (e.g. the logo in `docs/0.2.0/brand/`) live under `docs/<x.y.z>/`.
 
 ## Stack
 
@@ -30,7 +31,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 18 via Npgsql (SPEC D-V5-1) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
-- **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` and `production`, deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
+- **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` (after green CI on `main`) and `production` (when a GitHub release `x.y.z` is published, or by dispatch), deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
 - **VCS/CI**: Git, GitHub, GitHub Actions. `.github/workflows/docs.yml` builds the docs site (Jekyll, just-the-docs) from `docs/` and publishes it to GitHub Pages at <https://docs.tevrin.dev/> (custom domain, empty `baseurl`)
 
 Router, auth and background-work choices come from SPEC.md; if SPEC.md changes them, update this file.
@@ -68,16 +69,17 @@ deploy/
   railway/                  Railway ops docs (README.md) and variable inventory (variables.md)
 .railway/                   Railway IaC (railway.ts), applied with `railway config plan|apply`
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
+scripts/ci/check-version.sh    CI + release deploy: the three version sources agree (and equal the release tag)
 docker-compose.yml          dev-loop database only
-.github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on dispatch)
+.github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on a published release or dispatch)
 .github/workflows/docs.yml         docs site build + link check, deployed to GitHub Pages (FR-226)
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (v6)
+SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (0.6.0)
 docs/                       Jekyll + just-the-docs site (index.md, _config.yml, Gemfile) and the version archive:
   index.md                  site home
   getting-started/ guides/ operations/ reference/ history/   site sections (front matter: title, nav_order, parent)
   brand.md                  logo files, colours, usage rules
-  v1 … v5/                  frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
-  v6/                       brand assets (and v6 SPEC/PROGRESS once done)
+  0.1.0 … 0.5.0/            frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
+  0.6.0/                    brand assets (and the 0.6.0 SPEC/PROGRESS once done)
 ```
 
 ## Commands
@@ -109,7 +111,7 @@ railway config plan                                       # read-only diff of Ra
 bash deploy/scripts/smoke-remote.sh <web-url>             # smoke test a deployed environment
 ```
 
-Agents follow STACK.md autonomy `preview`: they may deploy `preview`, and touch production only when Ben asks explicitly in the session.
+Agents follow STACK.md autonomy `preview`: they may deploy `preview`, and touch production only when Ben asks explicitly in the session. Publishing a release deploys production, so it follows the same rule (see Releases).
 
 **Gate** (what GitHub Actions CI runs, in `.github/workflows/ci.yml`. **Don't run it locally:** see Commit gate below):
 ```bash
@@ -155,6 +157,34 @@ For every phase or fix:
 
 If CI can't run (no `gh` auth, Actions outage), stop and tell Ben. Don't fall back to running the gate locally.
 
+## Releases
+
+A release is a semver tag `x.y.z` (no `v` prefix) on a `main` merge commit plus a GitHub release from it (SPEC FR-230,
+FR-231, D-V6-25). **Publishing the release deploys `production`** (`deploy.yml`, after the `production` environment's
+reviewer approves). Ben tags and releases, or an agent does, **only after Ben confirms the version and commit in the
+session.** Tag pushes and releases are outside the build-branch push permission in the Commit gate.
+
+0. **Once:** the `production` GitHub environment is set up as in `docs/operations/releases.md` (required reviewer,
+   secrets, deployment branches and tags `main` + `*.*.*`). If it isn't, stop and tell Ben: don't publish.
+1. **Ready:** the version's PR is merged into `main`, the root SPEC/PROGRESS are in `docs/<x.y.z>/` with a row above, and
+   the changelog entry has its release date (`date`, not `null`).
+2. **Confirm with Ben:** the version `x.y.z` and the commit: the newest `main` commit with a green CI run
+   (`gh run list --workflow ci.yml --branch main --status success --limit 1 --json headSha`). CI skips docs-only
+   commits, so that may not be `origin/main`'s head.
+3. **Check:** `git checkout --detach <sha> && bash scripts/ci/check-version.sh x.y.z` passes (it also requires the
+   changelog date).
+4. **Tag:** `git tag -a x.y.z <sha> -m "Tevrin x.y.z"` then `git push origin x.y.z`. Never move, delete or re-push a
+   tag a release uses; ship a fix as the next patch version.
+5. **Release:** `gh release create x.y.z --verify-tag --latest --title "Tevrin x.y.z" --notes-file <notes>`, the notes
+   built from `docs/history/<x.y.z>.md` and the changelog entry, plus `--generate-notes` for the PR list if wanted.
+6. **Watch the deploy:** `gh run list --workflow deploy.yml --event release --limit 1`, then `gh run watch <id>
+   --exit-status`. It waits for Ben's approval on the `production` environment. Report the result and the smoke test.
+   If it fails, follow the job summary's rollback steps; don't re-tag.
+
+Pre-releases, and releases that aren't the repo's latest (e.g. backfilled 0.1.0–0.5.0, created with `--latest=false`),
+never deploy. Promoting a pre-release to a full release doesn't deploy either (GitHub sends `released`, not
+`published`): publish a new patch version instead.
+
 ## Rules that must not be broken
 
 1. `openapi/api.json` and `frontend/src/api/generated/` are generated. Regenerate them, and never hand-edit them. API changes are additive unless SPEC.md records a breaking-change decision.
@@ -177,7 +207,7 @@ If CI can't run (no `gh` auth, Actions outage), stop and tell Ben. Don't fall ba
 
 ## Workflow
 
-Use the `orchestrate-stack` skill for multi-phase work (v3 onwards). It loads the packs named in [`STACK.md`](STACK.md). v1 and v2 were built with `build-from-spec`. Either way, the commit gate above replaces the skill's local gate and local-run steps.
+Use the `orchestrate-stack` skill for multi-phase work (0.3.0 onwards). It loads the packs named in [`STACK.md`](STACK.md). 0.1.0 and 0.2.0 were built with `build-from-spec`. Either way, the commit gate above replaces the skill's local gate and local-run steps.
 
 ## Definition of done
 

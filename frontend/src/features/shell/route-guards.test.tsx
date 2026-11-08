@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -14,7 +14,7 @@ describe('Route guards (FR-1)', () => {
     expect(currentHref(router)).toBe('/login?returnUrl=%2Faccount')
   })
 
-  it('FR-211: a signed-out visitor to / gets the marketing Home, not the sign-in page (it redirected before v6)', async () => {
+  it('FR-211: a signed-out visitor to / gets the marketing Home, not the sign-in page (it redirected before 0.6.0)', async () => {
     const { router } = await renderRoute('/')
 
     expect(
@@ -23,7 +23,7 @@ describe('Route guards (FR-1)', () => {
     expect(currentHref(router)).toBe('/')
   })
 
-  it('FR-207 / FR-211: a signed-in user visiting / lands on Home (/home; it was /projects before v6)', async () => {
+  it('FR-207 / FR-211: a signed-in user visiting / lands on Home (/home; it was /projects before 0.6.0)', async () => {
     signInAs({ name: 'Ada' })
     const { router } = await renderRoute('/')
 
@@ -31,7 +31,7 @@ describe('Route guards (FR-1)', () => {
     expect(router.state.location.pathname).toBe('/home')
   })
 
-  it('FR-1 / FR-207: a signed-in user visiting /login goes to Home (/home; it was /projects before v6)', async () => {
+  it('FR-1 / FR-207: a signed-in user visiting /login goes to Home (/home; it was /projects before 0.6.0)', async () => {
     signInAs({ name: 'Ada' })
     const { router } = await renderRoute('/login')
 

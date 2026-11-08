@@ -6,7 +6,7 @@ using Aide.Domain.Trackers;
 namespace Aide.UnitTests.Notifications;
 
 /// <summary>
-/// FR-193: the v5 notification types (<c>stack_profile_ready</c>, <c>tracker_import_failed</c>): which events raise them, who gets
+/// FR-193: the 0.5.0 notification types (<c>stack_profile_ready</c>, <c>tracker_import_failed</c>): which events raise them, who gets
 /// them, their links and wording; and FR-165: the 14-day expiry warning of Jira and Linear connections.
 /// </summary>
 public class Fr193NotificationTypesTests

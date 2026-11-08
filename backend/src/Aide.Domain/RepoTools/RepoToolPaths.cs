@@ -6,7 +6,7 @@ using Aide.Domain.Execution;
 namespace Aide.Domain.RepoTools;
 
 /// <summary>
-/// Path rules of the repo tools (FR-71): the v1 §4.6 rules (<see cref="PathRules.IsUnsafe"/>: no <c>..</c>, absolute or
+/// Path rules of the repo tools (FR-71): the 0.1.0 §4.6 rules (<see cref="PathRules.IsUnsafe"/>: no <c>..</c>, absolute or
 /// drive paths, <c>.git</c> under any alias, control characters, reserved device names, …) refuse a path with
 /// <see cref="RepoToolErrors.UnsafePath"/> before anything is read. <c>.git/</c> and <c>.aide/</c> are hidden: never listed,
 /// searched or read (a <c>.aide/</c> path looks missing). Symbolic links are refused by the infrastructure when it resolves

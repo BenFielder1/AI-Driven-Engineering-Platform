@@ -2,7 +2,7 @@
  * FR-100 / NFR-SEC: one-click approval links carry a bearer token in the path (`/approvals/<token>` page,
  * `/api/approvals/<token>` API). The web server's log lines show that segment as `[redacted]`.
  *
- * Broader than the v2 nginx maps (which only matched at the start of the path, and before the query in a Referer): the
+ * Broader than the 0.2.0 nginx maps (which only matched at the start of the path, and before the query in a Referer): the
  * token also travels in query strings, e.g. a signed-out visit is sent to `/login?returnUrl=%2Fapprovals%2F<token>`, and
  * the login page's RSC fetches and /api calls then carry that URL in their path or Referer. So every `approvals/<token>`
  * after a `/` separator is redacted, wherever it appears (path, query, fragment), with the separator raw (`/`),

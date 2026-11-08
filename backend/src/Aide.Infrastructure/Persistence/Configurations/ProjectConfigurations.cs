@@ -296,7 +296,7 @@ internal sealed class ReleaseConfiguration : IEntityTypeConfiguration<Release>
         builder.HasIndex(r => r.MigrationRunId);
 
         // One row per attempt, numbered per (release version, checkpoint): checkpoints restart in every release version,
-        // and v1 data may hold several succeeded attempts of one checkpoint (re-release after a rollback).
+        // and 0.1.0 data may hold several succeeded attempts of one checkpoint (re-release after a rollback).
         builder.HasIndex(r => new { r.ReleaseVersionId, r.Checkpoint, r.Attempt })
             .IsUnique()
             .HasDatabaseName("ux_releases_release_version_id_checkpoint_attempt");

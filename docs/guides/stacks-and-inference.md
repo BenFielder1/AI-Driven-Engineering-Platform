@@ -14,7 +14,7 @@ Pick one option per layer in the wizard's Stack step, or run `tevrin stack catal
 - The backend owns the compatibility rules. `POST /api/stack/options` and `/validate` serve the wizard, Settings, the API and the CLI.
 - Each release version pins the composition and the catalog version it was built with. Each run records the packs used.
 - Generic specialist agents load the skills of the chosen packs. Spec sections, plan rules, protected paths and the review checklist come from the composition.
-- Projects that used the v2 presets were converted to equivalent compositions.
+- Projects that used the 0.2.0 presets were converted to equivalent compositions.
 
 This catalog describes the stacks of the projects Tevrin builds. It is separate from [Tevrin's own stack](../reference/architecture.md).
 

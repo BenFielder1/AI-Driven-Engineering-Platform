@@ -123,7 +123,7 @@ public static partial class StackCatalogLoader
             agentPrompts[key] = Text(text);
         }
 
-        // §4.23: the frozen v2 preset data (optional; validated when present).
+        // §4.23: the frozen 0.2.0 preset data (optional; validated when present).
         var legacy = ReadLegacy(normalised, Error);
 
         // catalog.json.
@@ -184,7 +184,7 @@ public static partial class StackCatalogLoader
     }
 
     /// <summary>
-    /// §4.16 (the v2 preset hash algorithm, D-V2-12): SHA-256 (lowercase hex) over the files sorted by path (ordinal), each contributing
+    /// §4.16 (the 0.2.0 preset hash algorithm, D-V2-12): SHA-256 (lowercase hex) over the files sorted by path (ordinal), each contributing
     /// <c>path \0 content \0</c> as UTF-8 with <c>\n</c> line endings and any BOM stripped.
     /// </summary>
     public static string ContentHash(IReadOnlyDictionary<string, string> files)
@@ -1107,7 +1107,7 @@ public static partial class StackCatalogLoader
 
     /// <summary>
     /// <c>legacy/presets.json</c>: <c>{agentKeys: [{from, to, byFiles?: [{glob, to}]}], presets: [{id, name, version, owns: {v2Key: [globs]}}]}</c>.
-    /// Every <c>to</c> is a v4 specialist key; every v2 key a preset's <c>owns</c> names has an <c>agentKeys</c> row.
+    /// Every <c>to</c> is a 0.4.0 specialist key; every 0.2.0 key a preset's <c>owns</c> names has an <c>agentKeys</c> row.
     /// </summary>
     private static LegacyPresets ReadLegacy(Dictionary<string, string> files, Action<string> error)
     {
@@ -1146,7 +1146,7 @@ public static partial class StackCatalogLoader
             var from = row.From?.Trim();
             if (from is null || !KebabId().IsMatch(from))
             {
-                reasons.Add($"{field}.from: '{row.From}' must be a lowercase kebab-case v2 agent key.");
+                reasons.Add($"{field}.from: '{row.From}' must be a lowercase kebab-case 0.2.0 agent key.");
                 continue;
             }
 

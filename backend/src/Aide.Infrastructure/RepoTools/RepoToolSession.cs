@@ -21,7 +21,7 @@ public sealed record RepoToolCallRecord(string Tool, JsonNode? Arguments, int By
 /// The repo tools of one agent run (FR-71, NFR-SEC2), over a credential-free snapshot directory
 /// (<see cref="IRepoSnapshotProvider"/>): <c>list_files</c>, <c>read_file</c> and <c>search_code</c>.
 /// <list type="bullet">
-/// <item>Arguments are validated by <see cref="RepoToolArguments"/>; a path breaking the v1 §4.6 rules, resolving outside the
+/// <item>Arguments are validated by <see cref="RepoToolArguments"/>; a path breaking the 0.1.0 §4.6 rules, resolving outside the
 /// snapshot or through a symbolic link is <c>UNSAFE_PATH</c> and nothing is read.</item>
 /// <item><c>.git/</c> and <c>.aide/</c> are hidden from every tool (<see cref="RepoToolPaths.IsHidden"/>).</item>
 /// <item>File content passes through the secret scanner (<see cref="SecretScanner.Redact"/>) before it is returned or searched

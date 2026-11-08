@@ -11,7 +11,7 @@ namespace Aide.Api.Features.Deployments;
 /// FR-145, §4.20 env sync: pushes the inventory to each target through <see cref="IDeploymentProvider.SyncEnvAsync"/>, one
 /// platform variable per (key, environment): a variable reaches the targets of the components it applies to. User values
 /// are the same in every environment; derived ones carry a value per environment (<see cref="DerivedEnvValues"/>). Platform
-/// ids are kept per target in <c>vercel_env_ids</c> (frontend: <c>preview</c>/<c>production</c> as in v2; backend:
+/// ids are kept per target in <c>vercel_env_ids</c> (frontend: <c>preview</c>/<c>production</c> as in 0.2.0; backend:
 /// <c>backend:preview</c>/<c>backend:production</c>). Values are decrypted only to send them and are never logged or
 /// returned. Changes are made on tracked entities; the caller saves.
 /// </summary>

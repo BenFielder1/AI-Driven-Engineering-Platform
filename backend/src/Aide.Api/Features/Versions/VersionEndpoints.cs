@@ -10,7 +10,7 @@ namespace Aide.Api.Features.Versions;
 
 /// <summary>
 /// §4.10, FR-60–FR-63, D-V2-11: release versions (<c>/api/projects/:id/versions</c>) and lifecycle checkpoints
-/// (<c>/api/projects/:id/checkpoints</c>, v1's <c>/versions</c> list).
+/// (<c>/api/projects/:id/checkpoints</c>, 0.1.0's <c>/versions</c> list).
 /// </summary>
 public static class VersionEndpoints
 {
@@ -47,7 +47,7 @@ public static class VersionEndpoints
 
         group.MapGet("/checkpoints", ListCheckpoints)
             .WithName("ListCheckpoints")
-            .WithSummary("The lifecycle checkpoints of a release version (default: the version in development, else the latest released), newest first (members, FR-44, FR-63): the phase recorded at each, when it was entered, and whether it is a rollback target now. Replaces v1's GET /versions (D-V2-11).")
+            .WithSummary("The lifecycle checkpoints of a release version (default: the version in development, else the latest released), newest first (members, FR-44, FR-63): the phase recorded at each, when it was entered, and whether it is a rollback target now. Replaces 0.1.0's GET /versions (D-V2-11).")
             .Produces<IReadOnlyList<CheckpointDto>>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithResponseDescriptions((StatusCodes.Status404NotFound, "NOT_FOUND: the project, or a releaseVersionId of another project."));

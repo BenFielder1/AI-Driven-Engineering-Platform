@@ -13,7 +13,7 @@ public sealed record ChecksWaitDecision(bool Wait, DateTimeOffset? RecheckAt, Da
 /// FR-85, §4.14: GitHub check runs and commit statuses on the PR head as a deterministic review input. Pending checks are
 /// waited for (the job re-queues itself every 30 seconds; waiting is never a failed attempt) for up to 15 minutes, then
 /// review proceeds with a warning (<c>checksTimedOut</c>). A failed required check is a major <c>testing</c> finding
-/// (−0.10, v1 §4.7) with the check name and details URL as evidence. Pure.
+/// (−0.10, 0.1.0 §4.7) with the check name and details URL as evidence. Pure.
 /// </summary>
 public static class ExternalCheckRules
 {

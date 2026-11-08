@@ -74,7 +74,7 @@ const allTypes: Schemas['NotificationType'][] = [
   'tracker_import_failed',
 ]
 
-describe('FR-92: v2 notification types in the UI', () => {
+describe('FR-92: 0.2.0 notification types in the UI', () => {
   it('FR92_every_type_has_a_label_and_the_preference_and_channel_lists_cover_them', () => {
     expect([...notificationTypes].sort()).toEqual([...allTypes].sort())
     for (const t of allTypes) {

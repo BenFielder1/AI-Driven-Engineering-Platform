@@ -6,7 +6,7 @@ namespace Aide.Domain.Lifecycle;
 
 /// <summary>
 /// The only way a project's phase, status and checkpoint change (§4.1, §4.10, FR-11, CLAUDE.md rule 9).
-/// The checkpoint increments on every forward transition; never on release completion (v2, D-V2-2), a review cycle,
+/// The checkpoint increments on every forward transition; never on release completion (0.2.0, D-V2-2), a review cycle,
 /// a fallback or a no-op; a rollback sets it to the target; starting a new release version resets it to 1.
 /// </summary>
 public static class LifecycleStateMachine

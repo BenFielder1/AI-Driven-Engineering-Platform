@@ -16,7 +16,7 @@ public class GitHubRulesTests
     [InlineData(true, false, GitHubSignInMode.App)]
     [InlineData(false, true, GitHubSignInMode.Oauth)]
     [InlineData(false, false, GitHubSignInMode.None)]
-    public void FR80_Sign_in_uses_the_App_once_registered_and_the_v1_OAuth_App_only_without_one(bool app, bool oauth, GitHubSignInMode expected) =>
+    public void FR80_Sign_in_uses_the_App_once_registered_and_the_0_1_0_OAuth_App_only_without_one(bool app, bool oauth, GitHubSignInMode expected) =>
         Assert.Equal(expected, GitHubRules.SignInMode(app, oauth));
 
     [Fact]
@@ -58,7 +58,7 @@ public class GitHubRulesTests
     [InlineData(GitProvider.GithubApp, null, GitProvider.GithubApp)]
     [InlineData(null, GitProvider.GithubPat, GitProvider.GithubPat)]
     [InlineData(GitProvider.Local, GitProvider.Local, GitProvider.Local)]
-    public void FR86_Mode_is_resolved_from_mode_or_the_v1_provider_alias(GitProvider? mode, GitProvider? provider, GitProvider expected) =>
+    public void FR86_Mode_is_resolved_from_mode_or_the_0_1_0_provider_alias(GitProvider? mode, GitProvider? provider, GitProvider expected) =>
         Assert.Equal(expected, ProjectSettingsRules.ResolveGitMode(mode, provider).Value);
 
     [Theory]

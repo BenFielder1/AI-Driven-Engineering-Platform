@@ -64,7 +64,7 @@ public sealed record ComponentProductionUrlDto(DeploymentComponent Component, De
 /// backend) preview deployment's id (the rollout id when nothing deployed, e.g. a blocked rollout), its final (or last
 /// seen) <c>status</c>, <c>url</c> and <c>buildLogTail</c>, how long review waited (<c>waitedSeconds</c>, up to 30 minutes;
 /// <c>null</c> when it didn't wait) and whether it gave up waiting (<c>timedOut</c>). FR-147: <c>rollout</c> is the whole
-/// preview rollout review waited for (every component and the migration run; <c>null</c> for v2 reports).
+/// preview rollout review waited for (every component and the migration run; <c>null</c> for 0.2.0 reports).
 /// </summary>
 public sealed record PreviewCheckDto(
     Guid DeploymentId,

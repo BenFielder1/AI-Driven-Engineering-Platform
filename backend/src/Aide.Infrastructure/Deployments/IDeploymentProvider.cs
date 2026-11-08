@@ -150,7 +150,7 @@ public sealed class DeploymentProviderException : Exception
 }
 
 /// <summary>
-/// §4.15, FR-142: Vercel's REST API (on the fixed host <c>api.vercel.com</c>, §8) or the v2 Fake of it: connection checks,
+/// §4.15, FR-142: Vercel's REST API (on the fixed host <c>api.vercel.com</c>, §8) or the 0.2.0 Fake of it: connection checks,
 /// pickers, projects, env vars and deployments. Wrapped by <see cref="VercelDeploymentProvider"/> (the §4.20 interface) and
 /// used directly for connection validation and the wizard's Deployment step. Failures throw
 /// <see cref="DeploymentProviderException"/>.

@@ -2,7 +2,7 @@ Required Notice: Copyright 2026 Ben Fielder (https://benfielder.com)
 
 Licensor Line of Business: Tevrin, AI-driven software delivery platform, self-hosted and hosted (https://github.com/BenFielder1/AI-Driven-Engineering-Platform)
 
-Trademarks: The Tevrin name and logo, including the files in docs/v6/brand, aren't covered by these terms. You may keep them in a copy you run yourself, modified or not, and say your work is based on Tevrin. Don't use them to name or brand a product or service you offer to others, or in a way that suggests it's Tevrin or endorsed by Ben Fielder.
+Trademarks: The Tevrin name and logo, including the files in docs/0.6.0/brand, aren't covered by these terms. You may keep them in a copy you run yourself, modified or not, and say your work is based on Tevrin. Don't use them to name or brand a product or service you offer to others, or in a way that suggests it's Tevrin or endorsed by Ben Fielder.
 
 # PolyForm Shield License 1.0.0
 

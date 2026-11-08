@@ -3,10 +3,10 @@ import { expect, test } from '@playwright/test'
 
 import { api, apiJson, projectState } from './support/api.ts'
 import { agentRuns, planAgents, projectStack, waitForGateOrEscalation } from './support/composition.ts'
-import { AGENT_TIMEOUT, approveDraftViaApi, approveStageGate, openStage, waitForPhase } from './support/v2.ts'
+import { AGENT_TIMEOUT, approveDraftViaApi, approveStageGate, openStage, waitForPhase } from './support/lifecycle.ts'
 
 /**
- * SPEC §8 v4 E2E, "a migrated v2 preset project releasing a version" (FR-129, §4.23, §9 seed).
+ * SPEC §8 0.4.0 E2E, "a migrated 0.2.0 preset project releasing a version" (FR-129, §4.23, §9 seed).
  *
  * A preset can't be chosen any more, so a preset project only exists through the RetirePresets migration or the dev seed.
  * This takes the seed's "Demo: Recipe Finder": migrated from nextjs-frontend@1.0.0, advisory, in Planning with its plan

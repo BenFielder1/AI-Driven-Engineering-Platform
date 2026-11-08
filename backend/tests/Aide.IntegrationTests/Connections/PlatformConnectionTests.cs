@@ -15,7 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Aide.IntegrationTests.Connections;
 
 /// <summary>
-/// FR-142 (and v2 FR-87 for Vercel): platform connections against stub platform APIs (never a real host): validation per
+/// FR-142 (and 0.2.0 FR-87 for Vercel): platform connections against stub platform APIs (never a real host): validation per
 /// provider (§4.20, §4.21), encryption, rejection, missing permissions, rate limits, re-testing (invalid + owner
 /// notification), renaming, deletion (FR-144 bindings cleared), and picker data.
 /// </summary>
@@ -41,7 +41,7 @@ public sealed class PlatformConnectionTests(AideApiFactory factory)
         ProjectApi.WithDbAsync(app, async db => (await db.Events.AsNoTracking().Where(e => e.Type == EventTypes.ConnectionInvalid).ToListAsync(Ct))
             .Where(e => e.Payload.Contains(connectionId.ToString(), StringComparison.Ordinal)).ToList());
 
-    // ---------------------------------------------------------------- Vercel (v2 logic kept)
+    // ---------------------------------------------------------------- Vercel (0.2.0 logic kept)
 
     private static FakeGitHubApi TeamVercel() => new FakeGitHubApi()
         .On(HttpMethod.Get, "/v2/user", HttpStatusCode.OK, """{"user":{"id":"usr_ana","username":"ana-dev","email":"ana@example.com"}}""")

@@ -27,10 +27,10 @@ public sealed class ExecutionStep
 
     public string? UserInstructions { get; set; }
 
-    /// <summary>The specialist assigned to the step (FR-121; <c>generalist</c> without a stack); null for v1 plans.</summary>
+    /// <summary>The specialist assigned to the step (FR-121; <c>generalist</c> without a stack); null for 0.1.0 plans.</summary>
     public string? AgentKey { get; set; }
 
-    /// <summary>The v2 preset key the step was planned with, kept for history display when <see cref="AgentKey"/> was mapped to a v4 specialist (§4.23); null otherwise.</summary>
+    /// <summary>The 0.2.0 preset key the step was planned with, kept for history display when <see cref="AgentKey"/> was mapped to a 0.4.0 specialist (§4.23); null otherwise.</summary>
     public string? LegacyAgentKey { get; set; }
 
     /// <summary>Requirement IDs the step covers (FR-76).</summary>

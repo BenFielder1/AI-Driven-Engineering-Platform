@@ -78,7 +78,7 @@ public sealed record StackVcs(string Pack, Guid? InstanceId, bool SelfManaged);
 /// <summary>Host option ids (<c>null</c> = None) and the local dev loop (<c>compose</c> or <c>none</c>).</summary>
 public sealed record StackDeploy(string? FrontendHost, string? BackendHost, string? DatabaseHost, string Local)
 {
-    /// <summary>§4.28: the parts deployed to their own projects, normalised by R13; absent (never written as <c>null</c>) when none, so v4 compositions keep their exact JSON.</summary>
+    /// <summary>§4.28: the parts deployed to their own projects, normalised by R13; absent (never written as <c>null</c>) when none, so 0.4.0 compositions keep their exact JSON.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? SeparateParts { get; init; }
 }

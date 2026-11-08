@@ -69,7 +69,7 @@ public sealed partial class ProjectCreator(
         ArgumentNullException.ThrowIfNull(request);
         var git = request.Git;
 
-        // FR-82: github_app is the default mode once an App exists (the wizard sends a mode; v1 clients a provider).
+        // FR-82: github_app is the default mode once an App exists (the wizard sends a mode; 0.1.0 clients a provider).
         GitProvider? sentMode = git.ModeSent ? git.Mode : null;
         GitProvider? sentProvider = git.ProviderSent ? git.Provider : null;
         if (sentMode is null && sentProvider is null && await apps.GetAsync(cancellationToken) is not null)

@@ -60,7 +60,7 @@ describe('Settings → LLM (FR-9, FR-22, FR-79)', () => {
     expect(requestsTo('PATCH', '/settings/llm').at(-1)?.body).toMatchObject({ credentialId: project.llm.binding?.credentialId })
     expect(screen.getByTestId('llm-binding')).toHaveTextContent('Anthropic · connected by Ada Lovelace (••••a1b2)')
     expect(screen.queryByText(/PROVIDER_NOT_CONFIGURED/)).not.toBeInTheDocument()
-    // No v1 per-project key field any more.
+    // No 0.1.0 per-project key field any more.
     expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument()
   })
 

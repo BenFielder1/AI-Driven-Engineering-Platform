@@ -16,7 +16,7 @@ public sealed record ArtifactStatusChange(ArtifactStatus NewStatus, bool Changed
 /// <summary>Artifact lifecycle rules (§4.3, FR-16–FR-18, FR-20).</summary>
 public static class ArtifactRules
 {
-    /// <summary>The types that go through drafts and approval (v1 §4.3); <c>codebase_summary</c> (auto-locked, FR-70) is not one.</summary>
+    /// <summary>The types that go through drafts and approval (0.1.0 §4.3); <c>codebase_summary</c> (auto-locked, FR-70) is not one.</summary>
     public static IReadOnlyList<ArtifactType> All { get; } =
         [ArtifactType.ProjectRequest, ArtifactType.TechnicalSpecification, ArtifactType.ImplementationPlan, ArtifactType.OptimizationPlan];
 

@@ -36,8 +36,8 @@ public class EnumStringsTests
     [Fact]
     public void S5_Artifact_values()
     {
-        // v2 SPEC §5 amends the type list: + codebase_summary (FR-70).
-        // v5 §5: + source_items (FR-170) and stack_profile (FR-180).
+        // 0.2.0 SPEC §5 amends the type list: + codebase_summary (FR-70).
+        // 0.5.0 §5: + source_items (FR-170) and stack_profile (FR-180).
         Assert.Equal(["project_request", "technical_specification", "implementation_plan", "optimization_plan", "codebase_summary", "source_items", "stack_profile"], EnumStrings.Values<ArtifactType>());
         Assert.Equal(["draft", "locked", "rejected", "superseded", "invalidated", "corrupted"], EnumStrings.Values<ArtifactStatus>());
     }

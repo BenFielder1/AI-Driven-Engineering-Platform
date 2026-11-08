@@ -43,10 +43,10 @@ public sealed record ManagedDatabaseConnection
 
     public string? DatabaseName { get; init; }
 
-    /// <summary>Supabase <c>sb_publishable_…</c> (or a migrated v2 project's legacy <c>anon</c> key).</summary>
+    /// <summary>Supabase <c>sb_publishable_…</c> (or a migrated 0.2.0 project's legacy <c>anon</c> key).</summary>
     public string? PublishableKey { get; init; }
 
-    /// <summary>Supabase <c>sb_secret_…</c> (or a migrated v2 project's legacy <c>service_role</c> key).</summary>
+    /// <summary>Supabase <c>sb_secret_…</c> (or a migrated 0.2.0 project's legacy <c>service_role</c> key).</summary>
     public string? SecretKey { get; init; }
 
     /// <summary>The Auth <c>site_url</c> Tevrin last applied (re-applied when the frontend URLs change).</summary>

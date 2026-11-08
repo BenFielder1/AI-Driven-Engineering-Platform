@@ -94,7 +94,7 @@ public static class DeploymentRollbackRules
         };
     }
 
-    /// <summary>FR-150: the trigger of the recorded row: <c>promote</c> on Vercel (v2 wording), else <c>rollback</c>.</summary>
+    /// <summary>FR-150: the trigger of the recorded row: <c>promote</c> on Vercel (0.2.0 wording), else <c>rollback</c>.</summary>
     public static DeploymentTrigger TriggerFor(DeploymentProvider platform) =>
         platform is DeploymentProvider.Vercel or DeploymentProvider.Fake ? DeploymentTrigger.Promote : DeploymentTrigger.Rollback;
 
@@ -129,7 +129,7 @@ public static class DeploymentRollbackRules
 
     /// <summary>
     /// FR-150 (409): <c>DEPLOYMENT_ACTION_UNSUPPORTED</c> when the platform has no rollback, else <c>INVALID_DEPLOYMENT</c>
-    /// for a deployment that isn't a valid target. Promoting the current deployment again is allowed on Vercel (v2).
+    /// for a deployment that isn't a valid target. Promoting the current deployment again is allowed on Vercel (0.2.0).
     /// </summary>
     public static Result CanRollback(DeploymentProvider platform, DeploymentEnvironment environment, DeploymentStatus status, string? providerDeploymentId, bool isCurrent)
     {

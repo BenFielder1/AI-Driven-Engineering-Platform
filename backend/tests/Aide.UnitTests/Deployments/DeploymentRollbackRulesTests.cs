@@ -62,7 +62,7 @@ public class DeploymentRollbackRulesTests
     }
 
     [Fact]
-    public void FR150_Vercel_may_promote_the_current_deployment_again_as_in_v2()
+    public void FR150_Vercel_may_promote_the_current_deployment_again_as_in_0_2_0()
     {
         Assert.True(DeploymentRollbackRules.CanRollback(DeploymentProvider.Vercel, DeploymentEnvironment.Production, DeploymentStatus.Ready, "dpl_1", true).IsSuccess);
         Assert.Equal(

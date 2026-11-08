@@ -9,7 +9,7 @@ namespace Aide.Cli.Commands;
 internal static class VersionCommands
 {
     /// <summary>FR-156, FR-129: what <c>tevrin version start --preset</c> prints before exiting 2 (usage).</summary>
-    internal const string PresetRemoved = "presets were removed in v4; use --frontend, --backend, --data, --vcs and the host options to choose a stack (omit them to keep the current one).";
+    internal const string PresetRemoved = "presets were removed in 0.4.0; use --frontend, --backend, --data, --vcs and the host options to choose a stack (omit them to keep the current one).";
 
     public static Command BuildVersion(CommandFactory factory)
     {
@@ -30,7 +30,7 @@ internal static class VersionCommands
         // FR-156: kept only to explain its removal (hidden from help); any use exits 2.
         var preset = new Option<string?>("--preset")
         {
-            Description = "Removed in v4 (presets were replaced by stack compositions).",
+            Description = "Removed in 0.4.0 (presets were replaced by stack compositions).",
             HelpName = "id",
             Hidden = true,
         };
@@ -137,7 +137,7 @@ internal static class VersionCommands
     public static Command BuildDeployments(CommandFactory factory)
     {
         var id = ProjectCommands.ProjectIdArgument();
-        var target = new Option<string?>("--target", "-t") { Description = "Only preview or production deployments (the v2 name of --env)." };
+        var target = new Option<string?>("--target", "-t") { Description = "Only preview or production deployments (the 0.2.0 name of --env)." };
         target.AcceptOnlyFromAmong("preview", "production");
         var environment = new Option<string?>("--env") { Description = "Only preview or production deployments." };
         environment.AcceptOnlyFromAmong("preview", "production");

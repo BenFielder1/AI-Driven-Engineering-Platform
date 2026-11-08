@@ -8,16 +8,16 @@
 # The site is served from the root of its custom domain (https://docs.tevrin.dev/, empty baseurl), so root-relative
 # URLs resolve against the _site root as they are.
 #
-# Frozen docs/v1-v5 pages are not scanned as link *sources*: they predate the site and were written with repo-root
-# paths (e.g. `docs/v1/SPEC.md` from inside docs/v2/), and frozen docs may only change to fix links. Links *to* them
+# Frozen docs/0.1.0-0.5.0 pages are not scanned as link *sources*: they predate the site and were written with repo-root
+# paths (e.g. `docs/0.1.0/SPEC.md` from inside docs/0.2.0/), and frozen docs may only change to fix links. Links *to* them
 # from new pages (history/) are still checked. Once their links are fixed, drop FROZEN.
 require "html-proofer"
 
 site = ARGV.fetch(0, "_site")
 abort("check-docs-links: #{site} not found; build the site first") unless Dir.exist?(site)
 
-# Anchored to the site root so history/vN/ pages (which link into the frozen specs) are still checked.
-FROZEN = %r{\A#{Regexp.escape(site.chomp("/"))}/v[1-5]/}
+# Anchored to the site root so history/<x.y.z>/ pages (which link into the frozen specs) are still checked.
+FROZEN = %r{\A#{Regexp.escape(site.chomp("/"))}/0\.[1-5]\.0/}
 
 options = {
   disable_external: true,
@@ -29,5 +29,11 @@ options = {
   ignore_files: [FROZEN],
   log_level: :info,
 }
+
+# D-V6-26: the old vN URLs must still resolve, as redirect pages written by jekyll-redirect-from. The frozen pages get
+# redirect_from only through _config.yml defaults, so a missing page here means the redirects silently stopped working.
+redirects = (1..6).map { |n| "history/v#{n}/index.html" } + (1..5).map { |n| "v#{n}/SPEC/index.html" }
+missing = redirects.reject { |path| File.exist?(File.join(site, path)) }
+abort("check-docs-links: missing redirect pages for old URLs: #{missing.join(", ")}") unless missing.empty?
 
 HTMLProofer.check_directory(site, options).run

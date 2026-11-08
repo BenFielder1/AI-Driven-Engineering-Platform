@@ -61,7 +61,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
         var now = time.GetUtcNow();
 
         // §4.28: one Postgres service holds both Railway environments, in one project: the preview waits for production's
-        // to exist, so the two jobs don't create it twice. v4 rows set up one at a time, as before.
+        // to exist, so the two jobs don't create it twice. 0.4.0 rows set up one at a time, as before.
         if (payload.Phase == DatabaseProvisioningPayload.SetupPhase && row.Environment == DeploymentEnvironment.Preview && row.Provider == ManagedDatabaseProvider.Railway
             && (host.SharedProjectId is not null || host.RailwayStandsAlone)
             && await db.ManagedDatabases.AsNoTracking().AnyAsync(d => d.ProjectId == row.ProjectId && d.Environment == DeploymentEnvironment.Production && d.Status == ManagedDatabaseStatus.Provisioning && d.ResourceId == null, cancellationToken))

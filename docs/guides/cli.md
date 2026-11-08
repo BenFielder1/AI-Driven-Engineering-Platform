@@ -23,7 +23,7 @@ Create the token on the Account page of the app (shown once). Tokens still start
 | `tevrin projects list` | List your projects (`--search`, `--phase`, `--status`, paging) |
 | `tevrin project init` (alias `create`) | Create a project (like the wizard). A GitHub token is read from `TEVRIN_GIT_TOKEN` (or `AIDE_GIT_TOKEN`) or prompted. LLM flags: `--llm-provider <p> --llm-model <id> [--llm-connection <id>]`; omit them for the server's default |
 | `tevrin status <id>` | Phase, status, released and in-development versions, checkpoint, stack composition, production URLs, latest deployment, latest migration run, artifacts, execution, review, gates. `--json` adds `stack` and `latestMigrationRun` |
-| `tevrin version start <id> <semver> --request <text\|@file> [stack flags]` | Start a new version of a released project (Owner). `@-` reads stdin. Stack flags are those of `tevrin stack set`, also as `--stack-frontend` etc. `--preset` exits 2: presets were removed in v4 |
+| `tevrin version start <id> <semver> --request <text\|@file> [stack flags]` | Start a new version of a released project (Owner). `@-` reads stdin. Stack flags are those of `tevrin stack set`, also as `--stack-frontend` etc. `--preset` exits 2: presets were removed in 0.4.0 |
 | `tevrin versions <id>` | List release versions |
 | `tevrin project create --infer-stack`, `tevrin version start --infer-stack` | Start in the Analysis phase and infer the stack from the repository. `project create` also takes `--import-version`, `--released-tag` and `--local-path` for an imported repo |
 | `tevrin analysis show\|approve\|reject\|retry <id>` | Work with the inferred stack profile. `approve` and `reject` take `--comment`. An unresolved layer exits 4 |

@@ -7,7 +7,7 @@ namespace Aide.Domain.Stack;
 
 /// <summary>
 /// FR-126: the composition's deterministic review findings as the review job records them: every check the packs register
-/// (<see cref="StackReviewChecks.Run"/>), without the <c>no_committed_secrets</c> findings v1's secret scan
+/// (<see cref="StackReviewChecks.Run"/>), without the <c>no_committed_secrets</c> findings 0.1.0's secret scan
 /// (<see cref="DeterministicChecks.SecretScan"/>) already reported for the same file and line, so one secret is penalised once.
 /// </summary>
 public static partial class StackReviewFindings
@@ -26,7 +26,7 @@ public static partial class StackReviewFindings
 
     /// <summary>
     /// <paramref name="stackFindings"/> without each <c>no_committed_secrets</c> finding whose file and line already have a
-    /// critical security finding in <paramref name="v1Findings"/> (v1's secret scan: "Possible … at line n.").
+    /// critical security finding in <paramref name="v1Findings"/> (0.1.0's secret scan: "Possible … at line n.").
     /// </summary>
     public static IReadOnlyList<ReviewFinding> WithoutDuplicateSecrets(IReadOnlyList<ReviewFinding> stackFindings, IReadOnlyList<ReviewFinding> v1Findings)
     {

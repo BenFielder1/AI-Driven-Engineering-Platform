@@ -1,12 +1,12 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test'
 
 import { apiJson, waitForDraft } from './api.ts'
-import { AGENT_TIMEOUT, approveGateViaApi } from './v2.ts'
+import { AGENT_TIMEOUT, approveGateViaApi } from './lifecycle.ts'
 
 /**
  * Stack composition E2E helpers (FR-114, FR-120–FR-129; SPEC §8 composition E2E) on the E2E deployment: Fake LLM with
  * FakeStackScripts (the plan and files of each composed specialist), Local Git and the Fake deployment provider
- * (§4.15). The v2 presets are retired (FR-129); this replaces their E2E path.
+ * (§4.15). The 0.2.0 presets are retired (FR-129); this replaces their E2E path.
  */
 
 /**

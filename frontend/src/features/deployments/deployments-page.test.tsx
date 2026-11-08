@@ -1,4 +1,4 @@
-// FR-197: copy that names the product says Tevrin (it said AIDE before v6); the assertions below use the new copy.
+// FR-197: copy that names the product says Tevrin (it said AIDE before 0.6.0); the assertions below use the new copy.
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -94,7 +94,7 @@ describe('/projects/:id/deployments (FR-91)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Promote to production' }))
 
     expect(await screen.findByText('Promoting 1.1.0 (1111111) to production.')).toBeInTheDocument()
-    // FR-150: the UI uses /rollback (`/promote` is the API's v2 alias).
+    // FR-150: the UI uses /rollback (`/promote` is the API's 0.2.0 alias).
     expect(requestsTo('POST', '/rollback')).toHaveLength(1)
     expect(requestsTo('POST', '/promote')).toHaveLength(0)
     await waitFor(async () => {
