@@ -30,10 +30,10 @@ deploy/
 .railway/                   Railway infrastructure as code (railway.ts)
 .github/workflows/          ci.yml, deploy.yml, docs.yml (GitHub Pages)
 docs/                       this site: index, getting-started, guides, operations, reference, history, brand;
-                            plus the frozen docs/0.1.0 ... docs/0.5.0 specs and build logs
+                            plus the frozen docs/0.1.0 ... docs/0.6.0 specs and build logs
 scripts/ci, scripts/perf    generated-file check, E2E seed for CI, perf scripts
 docker-compose.yml          dev-loop database only
-SPEC.md, PROGRESS.md        the current version's spec and build log
+SPEC.md, PROGRESS.md        the spec and build log of the version in development (none between versions)
 STACK.md, CLAUDE.md         stack packs and conventions
 ```
 

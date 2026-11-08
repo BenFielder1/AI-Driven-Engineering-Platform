@@ -2,7 +2,7 @@
 
 Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
-**`SPEC.md` is the source of truth.** Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
+**`SPEC.md` is the source of truth.** Between versions there is no root `SPEC.md`: the latest released spec is [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md), and the next version (0.7.0) starts with a new root `SPEC.md` and `PROGRESS.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
 ## Versions
 
@@ -13,7 +13,7 @@ Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates speciali
 | 0.3.0 | [`docs/0.3.0/SPEC.md`](docs/0.3.0/SPEC.md) | [`docs/0.3.0/PROGRESS.md`](docs/0.3.0/PROGRESS.md) | Built and merged (PR #16, #20, #21, #22, #23). Frozen; never edit except to fix links |
 | 0.4.0 | [`docs/0.4.0/SPEC.md`](docs/0.4.0/SPEC.md) | [`docs/0.4.0/PROGRESS.md`](docs/0.4.0/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
 | 0.5.0 | [`docs/0.5.0/SPEC.md`](docs/0.5.0/SPEC.md) | [`docs/0.5.0/PROGRESS.md`](docs/0.5.0/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
-| 0.6.0 | [`SPEC.md`](SPEC.md) | [`PROGRESS.md`](PROGRESS.md) | Current: rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site on GitHub Pages |
+| 0.6.0 | [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md) | [`docs/0.6.0/PROGRESS.md`](docs/0.6.0/PROGRESS.md) | Built and merged (PR #29, #31, #32, #33, #34 and #37); released as tag `0.6.0`. Rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site, semver releases. Frozen; never edit except to fix links |
 
 - **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.7.0 new decisions are `D-<x.y.z>-n` (e.g. `D-0.7.0-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/<x.y.z>/` and add a row here. Then release it (see Releases).
@@ -73,13 +73,14 @@ scripts/ci/check-version.sh    CI + release deploy: the three version sources ag
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on a published release or dispatch)
 .github/workflows/docs.yml         docs site build + link check, deployed to GitHub Pages (FR-226)
-SPEC.md · PROGRESS.md · STACK.md · CLAUDE.md   current version (0.6.0)
+SPEC.md · PROGRESS.md                          the version being built (none between versions; 0.7.0 adds them)
+STACK.md · CLAUDE.md                           stack packs and conventions
 docs/                       Jekyll + just-the-docs site (index.md, _config.yml, Gemfile) and the version archive:
   index.md                  site home
   getting-started/ guides/ operations/ reference/ history/   site sections (front matter: title, nav_order, parent)
   brand.md                  logo files, colours, usage rules
-  0.1.0 … 0.5.0/            frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
-  0.6.0/                    brand assets (and the 0.6.0 SPEC/PROGRESS once done)
+  0.1.0 … 0.6.0/            frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
+  0.6.0/brand/               brand assets (used by the frontend generator and the docs site logo)
 ```
 
 ## Commands

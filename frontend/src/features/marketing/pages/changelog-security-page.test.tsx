@@ -21,10 +21,10 @@ afterEach(() => {
 })
 
 describe('FR-219 Changelog', () => {
-  it('FR219_FR229_order_and_count: 0.1.0–0.6.0 (semver), newest first, with the PR merge dates and 0.6.0 in preview', () => {
+  it('FR219_FR229_FR230_order_and_count: 0.1.0–0.6.0 (semver), newest first, with the PR merge and release dates', () => {
     expect(changelog.map((e) => e.version)).toEqual(['0.6.0', '0.5.0', '0.4.0', '0.3.0', '0.2.0', '0.1.0'])
-    // Merge dates of PRs #28, #27, #23, #13 and #1 (gh pr view <n> --json mergedAt).
-    expect(changelog.map((e) => e.date)).toEqual([null, '2026-11-04', '2026-11-01', '2026-10-24', '2026-10-22', '2026-10-10'])
+    // 0.6.0: its release day (FR-230). Then the merge dates of PRs #28, #27, #23, #13 and #1 (gh pr view <n> --json mergedAt).
+    expect(changelog.map((e) => e.date)).toEqual(['2026-11-08', '2026-11-04', '2026-11-01', '2026-10-24', '2026-10-22', '2026-10-10'])
     for (const entry of changelog) {
       expect(entry.version, 'FR-229: x.y.z').toMatch(/^\d+\.\d+\.\d+$/)
       expect(entry.highlights.length, entry.version).toBeGreaterThanOrEqual(3)
@@ -41,7 +41,8 @@ describe('FR-219 Changelog', () => {
     const entries = screen.getAllByTestId('changelog-entry')
 
     expect(entries).toHaveLength(6)
-    expect(within(nth(entries, 0)).getByText('In preview')).toBeInTheDocument()
+    expect(within(nth(entries, 0)).getByText('8 Nov 2026')).toHaveAttribute('datetime', '2026-11-08')
+    expect(screen.queryByText('In preview')).not.toBeInTheDocument()
     expect(within(nth(entries, 0)).getByRole('heading', { level: 2 })).toHaveTextContent(/^Tevrin$/)
     expect(within(nth(entries, 1)).getByRole('heading', { level: 2 })).toHaveTextContent('(as AIDE)')
     expect(within(nth(entries, 1)).getByText('4 Nov 2026')).toHaveAttribute('datetime', '2026-11-04')

@@ -6,7 +6,7 @@ nav_order: 2
 
 # Deploy to Railway
 
-Tevrin runs on Railway as one project with two environments, `preview` and `production`. Each has a public `web`, a private `api` with a `/data` volume, and its own Postgres 18. The project is defined as code in [`.railway/railway.ts`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/.railway/railway.ts). The Railway project and service names keep the internal name `aide`.
+Tevrin runs on Railway as one project with two environments: `production` at **https://www.tevrin.dev** (the bare `tevrin.dev` redirects there) and `preview` at **https://aide.benfielder.com**. Each has a public `web`, a private `api` with a `/data` volume, and its own Postgres 18. The project is defined as code in [`.railway/railway.ts`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/.railway/railway.ts). The Railway project and service names keep the internal name `aide`.
 
 ## How deploys happen
 
@@ -28,8 +28,9 @@ bash deploy/scripts/smoke-remote.sh <web-url>             # smoke test a deploye
 2. Create the project and the `preview` environment, then link the folder.
 3. Create one project token per environment. Store each as the `RAILWAY_TOKEN` secret of the matching GitHub environment (`preview`, `production`).
 4. Create a workspace token and store it as `RAILWAY_API_TOKEN` in both GitHub environments. It is used only by the drift check.
-5. Set the secrets and optional variables per environment in Railway. Literals and references come from the IaC.
-6. After an environment's first deploy, register the first user straight away. The first registered user becomes Admin.
+5. Add the custom domain to `web` in each environment (`www.tevrin.dev` for production, `aide.benfielder.com` for preview) and its DNS records. Set `App__PublicBaseUrl` on `api` to that URL, and set `RAILWAY_WEB_URL` in the matching GitHub environment to the same URL.
+6. Set the secrets and optional variables per environment in Railway. Literals and references come from the IaC.
+7. After an environment's first deploy, register the first user straight away. The first registered user becomes Admin.
 
 The full procedure, with every command, is in the Railway ops guide below.
 

@@ -18,6 +18,6 @@ Versions are numbered semver, `x.y.z`. The versions specified as v1 to v6 are 0.
 | [0.3.0](0.3.0.md) | Next.js frontend and Railway | [SPEC](../0.3.0/SPEC.md), [PROGRESS](../0.3.0/PROGRESS.md) |
 | [0.4.0](0.4.0.md) | Stack composition, GitLab, Bitbucket, platforms, databases | [SPEC](../0.4.0/SPEC.md), [PROGRESS](../0.4.0/PROGRESS.md) |
 | [0.5.0](0.5.0.md) | Issue trackers, co-authorship, stack inference, PostgreSQL 18 | [SPEC](../0.5.0/SPEC.md), [PROGRESS](../0.5.0/PROGRESS.md) |
-| [0.6.0](0.6.0.md) | Tevrin: rename, brand, marketing site, docs site | Root [SPEC](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/SPEC.md), [PROGRESS](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/PROGRESS.md) |
+| [0.6.0](0.6.0.md) | Tevrin: rename, brand, marketing site, docs site | [SPEC](../0.6.0/SPEC.md), [PROGRESS](../0.6.0/PROGRESS.md) |
 
-The specs of 0.1.0 to 0.5.0 are frozen. They are never edited, except to fix links.
+The specs of 0.1.0 to 0.6.0 are frozen. They are never edited, except to fix links.

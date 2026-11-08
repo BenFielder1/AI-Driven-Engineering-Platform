@@ -13,8 +13,9 @@
  *   `railway` 3.16 package, hence the cast.
  * - `${{service.VAR}}` inside a plain string is Railway's own reference syntax, resolved by Railway at deploy time.
  *   Ordinary (non-template) string literals are used for those values so TypeScript doesn't interpolate them.
- * - Not expressible here (one-time dashboard/CLI steps in deploy/railway/README.md): the generated `*.up.railway.app`
- *   domain for `web`, Postgres and volume backup schedules, and the GitHub repo connection (none: deploys come from
+ * - Not expressible here (one-time dashboard/CLI steps in deploy/railway/README.md): the `web` domains (custom
+ *   www.tevrin.dev in production, aide.benfielder.com in preview, D-V6-27) and `App__PublicBaseUrl`, Postgres and volume
+ *   backup schedules, and the GitHub repo connection (none: deploys come from
  *   GitHub Actions with `railway up`, SPEC D-V3-7).
  */
 import { database, defineRailway, project, service, volume } from 'railway/iac'
@@ -32,6 +33,10 @@ const catalogExtensionVariables = (
 )
 
 const operatorSetApiVariables = [
+  // Required: the environment's public URL (D-V6-27): https://www.tevrin.dev in production, https://aide.benfielder.com in
+  // preview. Set per environment because the custom domains differ and IaC is one definition for both. It replaces the
+  // reference https://${{web.RAILWAY_PUBLIC_DOMAIN}}, which depended on a generated domain (production has none).
+  'App__PublicBaseUrl',
   // Required secret: one-click approval links (FR-48), 64 random characters, different per environment.
   'Approvals__SigningKey',
   // Optional: system LLM keys (FR-79). No Ollama base URL: Ollama is disabled on Railway (FR-157, env below).
@@ -141,7 +146,6 @@ export default defineRailway(() => {
       ConnectionStrings__Aide:
         'Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};' +
         'Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}',
-      App__PublicBaseUrl: 'https://${{web.RAILWAY_PUBLIC_DOMAIN}}',
       // FR-157: only Anthropic and OpenAI on Railway. Ollama has no reachable default here (host.docker.internal
       // doesn't resolve) and Fake must never serve real users. Startup validation requires the default provider
       // (appsettings) to be enabled.
@@ -158,8 +162,9 @@ export default defineRailway(() => {
     build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile' },
     healthcheck: '/healthz',
     replicas: 1,
-    // The public *.up.railway.app domain is generated once per environment (`railway domain --service web`, target
-    // port 8080). Generated domains are not part of IaC; a custom domain would go in `domains` (SPEC Q3).
+    // Public domains are set per environment in Railway, not here (D-V6-27): custom domain www.tevrin.dev in production and
+    // aide.benfielder.com in preview (target port 8080), plus preview's generated *.up.railway.app domain. IaC is one
+    // definition for both environments, so a per-environment custom domain can't be declared in it.
     env: {
       BACKEND_URL: 'http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080',
       PORT: '8080',

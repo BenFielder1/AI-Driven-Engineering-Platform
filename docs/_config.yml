@@ -76,7 +76,7 @@ defaults:
       path: ""
     values:
       layout: default
-  # Frozen version docs docs/0.1.0-0.5.0 (CLAUDE.md, SPEC D-V6-13): never edited, so no front matter. Built as plain pages
+  # Frozen version docs docs/0.1.0-0.6.0 (CLAUDE.md, SPEC D-V6-13): never edited, so no front matter. Built as plain pages
   # (jekyll-optional-front-matter), kept out of the nav and search (linked from history/), and not run through Liquid
   # because they contain literal `{{ ... }}` (prompt placeholders, Railway `${{ ... }}` references).
   - scope:
@@ -105,6 +105,12 @@ defaults:
       render_with_liquid: false
   - scope:
       path: "0.5.0"
+    values:
+      nav_exclude: true
+      search_exclude: true
+      render_with_liquid: false
+  - scope:
+      path: "0.6.0"
     values:
       nav_exclude: true
       search_exclude: true
