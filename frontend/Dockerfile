@@ -4,19 +4,19 @@
 # redacted JSON request logs. Non-root, PORT=8080, works with a read-only root filesystem (/tmp writable).
 # Build context: frontend/   (docker build -f frontend/Dockerfile frontend)
 
-FROM node:24-slim AS deps
+FROM node:25-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-FROM node:24-slim AS build
+FROM node:25-slim AS build
 WORKDIR /app
 ENV CI=true NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:24-slim AS runtime
+FROM node:25-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8080 \
