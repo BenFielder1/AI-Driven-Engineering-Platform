@@ -137,10 +137,12 @@ public sealed partial class AgentRepoContext(
             return false;
         }
 
-        var recorded = project.CurrentReleaseVersionId is { } versionId
+        // The same release version and branch choice as WorkingCopyPreparer (§4.10, §4.35).
+        var currentVersionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        var recorded = currentVersionId is { } versionId
             ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == versionId).Select(v => v.BranchName).FirstOrDefaultAsync(cancellationToken)
             : null;
-        var branch = WorkingCopyPreparer.BranchFor(recorded, project.Slug, projectId, project.DevelopmentVersion);
+        var branch = await WorkingCopyPreparer.BranchForAsync(db, currentVersionId is not null, recorded, project.Slug, projectId, project.DevelopmentVersion, cancellationToken);
         var prepared = await providers.Resolve(settings.Provider)
             .PrepareWorkingCopyAsync(GitConnectionSettings.From(settings), branch, token, cancellationToken);
         return prepared.Ok;

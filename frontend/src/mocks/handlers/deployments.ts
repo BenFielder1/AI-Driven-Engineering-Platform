@@ -915,7 +915,7 @@ function readinessOf(p: StoredProject, t: Target): Schemas['ReadinessItemDto'][]
     missing.length > 0
       ? item('required_env', 'warning', `Missing: ${missing.map((m) => m.key).join(', ')}.`)
       : item('required_env', 'ok', 'Every required variable has a value.'),
-    item('branch_control', 'ok', 'Auto-deploys for aide/** are off.'),
+    item('branch_control', 'ok', 'Automatic deploys of tevrin/** are disabled (vercel.json).'),
     t.capabilities.previews
       ? item('preview_environment', 'ok', 'The preview environment is ready.')
       : item('preview_environment', 'na', `${name} has no previews.`),

@@ -214,40 +214,4 @@ public static class NetlifyRules
         return lower.Contains("upgrade", StringComparison.Ordinal) || lower.Contains(" plan", StringComparison.Ordinal)
             || (lower.Contains("private repositor", StringComparison.Ordinal) && lower.Contains("org", StringComparison.Ordinal));
     }
-
-    /// <summary>
-    /// §4.20 branch control: whether <c>netlify.toml</c> has a <c>[build]</c> <c>ignore</c> command that names Tevrin's
-    /// branches (<c>aide/</c>), so Netlify skips builds of <c>aide/*</c> it starts by itself.
-    /// </summary>
-    public static bool IgnoresAideBranches(string? toml)
-    {
-        if (string.IsNullOrEmpty(toml))
-        {
-            return false;
-        }
-
-        var inBuild = false;
-        foreach (var raw in toml.Split('\n'))
-        {
-            var line = raw.Trim();
-            if (line.StartsWith('['))
-            {
-                inBuild = line.Replace(" ", string.Empty, StringComparison.Ordinal) == "[build]";
-                continue;
-            }
-
-            if (!inBuild || !line.StartsWith("ignore", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var eq = line.IndexOf('=', StringComparison.Ordinal);
-            if (eq > 0 && line[..eq].Trim() == "ignore" && line[(eq + 1)..].Contains("aide/", StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

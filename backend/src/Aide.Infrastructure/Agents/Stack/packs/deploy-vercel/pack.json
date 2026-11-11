@@ -130,7 +130,7 @@
   "review": {
     "checklist": [
       {
-        "item": "Every folder deployed to Vercel has vercel.json with git.deploymentEnabled {\"aide/**\": false} and no other true rule matching aide/**",
+        "item": "Every folder deployed to Vercel has vercel.json with git.deploymentEnabled {\"tevrin/**\": false, \"aide/**\": false} and no other true rule matching tevrin/** or aide/**",
         "category": "architecture",
         "severity": "major"
       },

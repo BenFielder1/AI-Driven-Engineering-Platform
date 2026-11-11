@@ -149,7 +149,7 @@
   "review": {
     "checklist": [
       {
-        "item": "netlify.toml has [build] ignore that exits 0 for aide/* branches",
+        "item": "netlify.toml has [build] ignore that exits 0 for tevrin/* and aide/* branches",
         "category": "architecture",
         "severity": "major"
       },

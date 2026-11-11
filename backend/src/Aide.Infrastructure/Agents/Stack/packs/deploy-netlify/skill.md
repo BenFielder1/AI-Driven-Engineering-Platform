@@ -19,7 +19,7 @@ Write `netlify.toml` in the frontend folder (`{fe}/netlify.toml`; root when the 
 [build]
   command = '''npm run build && if [ -n "$API_ORIGIN" ]; then printf '/api/*  %s/api/:splat  200!\n' "$API_ORIGIN" >> dist/_redirects; fi'''
   publish = "dist"            # Angular: "dist/<project>/browser"
-  ignore = 'case "$BRANCH" in aide/*) exit 0 ;; *) exit 1 ;; esac'
+  ignore = 'case "$BRANCH" in tevrin/*|aide/*) exit 0 ;; *) exit 1 ;; esac'
 
 # SPA fallback (static SPAs only, last)
 [[redirects]]
@@ -27,7 +27,7 @@ Write `netlify.toml` in the frontend folder (`{fe}/netlify.toml`; root when the 
   to = "/index.html"
   status = 200
 ```
-- **Branch control:** `[build] ignore` must exit 0 (skip) for `aide/*` branches and 1 otherwise. Tevrin triggers the version branch's builds itself. A missing rule is a major review finding.
+- **Branch control:** `[build] ignore` must exit 0 (skip) for `tevrin/*` and `aide/*` branches (new projects use `tevrin/`, projects started before Tevrin 0.6.1 `aide/`) and 1 otherwise. Tevrin triggers the version branch's builds itself. A missing rule is a major review finding.
 - **Proxy origin model:** `_redirects` is generated at build time from `API_ORIGIN` into the publish directory, so preview and production point at different backends. `_redirects` rules are applied before `netlify.toml` redirects, so `/api/*` wins over the SPA fallback. The `200!` forces the proxy even if a file matches. Don't hard-code a backend host in `netlify.toml` or a committed `_redirects`. The command appends (`>>`), so a committed `{fe}/public/_redirects` is kept, but it must not contain a catch-all rule (it would shadow the appended `/api/*` line); keep the SPA fallback in `netlify.toml`.
 - **Next.js:** no SPA rule and no generated `_redirects`; the adapter routes, and the proxy is Next's `rewrites()` (frontend pack). Pin Node with `.nvmrc` or `[build.environment] NODE_VERSION`.
 - **Migrations** (Next.js full-stack with an ORM data pack): prefix the build with `if [ "$AIDE_RUN_MIGRATIONS" = "true" ]; then <migrate command>; fi && `.
@@ -55,14 +55,14 @@ Tevrin's own rules apply; not loaded by any agent.
 ## Troubleshooting
 | Symptom | Check |
 | --- | --- |
-| `aide/*` pushes build on their own | `[build] ignore` missing or exits non-zero for `aide/*` |
+| `tevrin/*` or `aide/*` pushes build on their own | `[build] ignore` missing, or exits non-zero for `tevrin/*` or `aide/*` |
 | 404 on refresh | SPA fallback missing, or not last |
 | `/api` 404 or returns `index.html` | `API_ORIGIN` unset in that context, `_redirects` not written to the publish dir, or missing `!` |
 | Next.js feature broken | Adapter and Next.js compatibility in Netlify's docs |
 | Env missing | Wrong context (`branch-deploy` vs `deploy-preview`), or a build-time value that needs a rebuild |
 
 ## Checklist
-- [ ] `netlify.toml` has the right command and publish dir, and an `ignore` that skips `aide/*`.
+- [ ] `netlify.toml` has the right command and publish dir, and an `ignore` that skips `tevrin/*` and `aide/*`.
 - [ ] Proxy model: `_redirects` generated from `API_ORIGIN` at build; no hard-coded backend host; SPA fallback last.
 - [ ] Migrations only in the build gated by `AIDE_RUN_MIGRATIONS`.
 - [ ] `.env.example` lists every variable; no tokens or `.netlify/` in the repo; no CLI deploy scripts.

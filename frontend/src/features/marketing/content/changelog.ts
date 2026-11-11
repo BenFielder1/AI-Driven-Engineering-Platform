@@ -23,6 +23,19 @@ export const IN_PREVIEW = 'In preview'
 
 export const changelog: readonly ChangelogEntry[] = [
   {
+    version: '0.6.1',
+    date: null,
+    title: 'Branch names, scrollbars and failure-aware review',
+    asAide: false,
+    highlights: [
+      'New project and release branches start with tevrin/. Projects that already have an aide/ branch keep it, and their branch-control config still passes.',
+      'A thin, themed scrollbar in the app and on this site, in light and dark.',
+      'When a build, deploy or CI check fails, review sees the log excerpt and writes a specific fix step with it.',
+      'Plans add the deployment config files each platform needs, such as vercel.json, when the plan leaves them out.',
+    ],
+    specHref: docsUrl('history/0.6.1/'),
+  },
+  {
     version: '0.6.0',
     date: '2026-11-08',
     title: 'Tevrin',

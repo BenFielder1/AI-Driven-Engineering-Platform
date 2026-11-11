@@ -102,15 +102,21 @@ public class NetlifyRulesTests
         Assert.Equal(planLimit, NetlifyRules.IsPlanLimit(status, message));
 
     [Fact]
-    public void FR144_Branch_control_needs_a_build_ignore_rule_naming_aide_branches()
+    public void FR144_FR233_Branch_control_needs_a_build_ignore_rule_naming_each_required_prefix()
     {
-        const string Good = "[build]\n  command = \"npm run build\"\n  ignore = \"[ \\\"${BRANCH#aide/}\\\" != \\\"$BRANCH\\\" ]\"\n";
-        const string OtherSection = "[context.production]\n  ignore = \"echo aide/\"\n";
+        // FR-233 amends §4.20: the rule must name every prefix the project uses (tevrin/, plus aide/ for older projects).
+        var tevrin = BranchControlRules.RequiredPrefixes(usesLegacyBranch: false);
+        var both = BranchControlRules.RequiredPrefixes(usesLegacyBranch: true);
+        const string Aide = "[build]\n  command = \"npm run build\"\n  ignore = \"[ \\\"${BRANCH#aide/}\\\" != \\\"$BRANCH\\\" ]\"\n";
+        const string Tevrin = "[build]\n  command = \"npm run build\"\n  ignore = \"[ \\\"${BRANCH#tevrin/}\\\" != \\\"$BRANCH\\\" ]\"\n";
+        const string OtherSection = "[context.production]\n  ignore = \"echo tevrin/ aide/\"\n";
 
-        Assert.True(NetlifyRules.IgnoresAideBranches(Good));
-        Assert.False(NetlifyRules.IgnoresAideBranches(OtherSection));
-        Assert.False(NetlifyRules.IgnoresAideBranches("[build]\n  ignore = \"git diff --quiet\"\n"));
-        Assert.False(NetlifyRules.IgnoresAideBranches(null));
+        Assert.Empty(BranchControlRules.NetlifyMissing(Tevrin, tevrin));
+        Assert.Equal(["tevrin/*"], BranchControlRules.NetlifyMissing(Aide, tevrin));
+        Assert.Equal(["aide/*"], BranchControlRules.NetlifyMissing(Tevrin, both));
+        Assert.Equal(["tevrin/*", "aide/*"], BranchControlRules.NetlifyMissing(OtherSection, both));
+        Assert.Equal(["tevrin/*"], BranchControlRules.NetlifyMissing("[build]\n  ignore = \"git diff --quiet\"\n", tevrin));
+        Assert.Equal(["tevrin/*"], BranchControlRules.NetlifyMissing(null, tevrin));
     }
 
     [Theory]

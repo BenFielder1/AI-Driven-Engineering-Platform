@@ -39,9 +39,13 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 See SPEC §10 (D-0.6.1-1 … D-0.6.1-8). Build-time decisions are added below.
 
 ## Known issues
+- Cloudflare: a transient failure reading Workers triggers reports all patterns missing (Error) rather than Unknown (review Minor, M46).
+- Cloudflare Pages: verify now writes preview excludes (sets previews to `custom` if a user switched back to `all`); link already did (D-0.6.1-9).
+- Changelog 0.6.1 `specHref` → `docs/history/0.6.1.md`, added in M50.
 
 ## Manual checks (Ben)
 - Approve `actions: read` on the existing GitHub App registrations (SPEC Q1).
 - A real Vercel project end to end: a missing `vercel.json` gets an added step, and a broken build produces a specific fix step with the log excerpt.
 - Scrollbar in Chrome, Firefox and Safari, light and dark.
+- Cloudflare Workers Builds `PATCH /builds/triggers/{uuid}` with only `branch_excludes` against a real account (stubbed in tests).
 - Docker Desktop redeploy and smoke test.

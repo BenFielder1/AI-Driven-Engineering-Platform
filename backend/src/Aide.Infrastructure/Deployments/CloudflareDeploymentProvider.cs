@@ -19,7 +19,7 @@ namespace Aide.Infrastructure.Deployments;
 /// <c>POST /builds/tokens</c> (reused per API token) and the two triggers of <see cref="CloudflareRules"/>. Link: an
 /// existing Worker whose Workers Builds production trigger exists; the preview trigger is created when missing.</item>
 /// <item>Pages link: the project must build this repository; previews are set to <c>custom</c> excluding
-/// <c>aide/*</c>. Creating a Pages project is refused (<c>VALIDATION</c>).</item>
+/// <c>tevrin/*</c> and <c>aide/*</c> (FR-234). Creating a Pages project is refused (<c>VALIDATION</c>).</item>
 /// </list>
 /// </summary>
 public sealed partial class CloudflareDeploymentProvider(PlatformHttp http) : IDeploymentProvider
@@ -89,10 +89,12 @@ public sealed partial class CloudflareDeploymentProvider(PlatformHttp http) : ID
         {
             try
             {
-                using var json = await SendAsync(auth, HttpMethod.Get, $"accounts/{Account(auth)}/pages/projects/{Uri.EscapeDataString(project)}", null, cancellationToken);
+                var path = $"accounts/{Account(auth)}/pages/projects/{Uri.EscapeDataString(project)}";
+                using var json = await SendAsync(auth, HttpMethod.Get, path, null, cancellationToken);
                 var linked = PagesRepo(Result(json));
                 return linked is null ? new ProviderTargetCheck(false, "The Pages project isn't connected to a Git repository.", null)
-                    : DeploymentSettingsRules.LinkMatches(linked, target.Repo.FullName) ? new ProviderTargetCheck(true, null, true)
+                    : DeploymentSettingsRules.LinkMatches(linked, target.Repo.FullName)
+                        ? new ProviderTargetCheck(true, null, true, await PagesBranchControlAsync(auth, path, Result(json), cancellationToken))
                     : new ProviderTargetCheck(false, $"The Pages project builds {linked}, not {target.Repo.FullName}.", null);
             }
             catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.NotFound)
@@ -101,15 +103,16 @@ public sealed partial class CloudflareDeploymentProvider(PlatformHttp http) : ID
             }
         }
 
-        if (await ScriptTagAsync(auth, target.ResourceId!, cancellationToken) is null)
+        if (await ScriptTagAsync(auth, target.ResourceId!, cancellationToken) is not { } tag)
         {
             return new ProviderTargetCheck(false, "The Worker no longer exists; set the target up again.", null);
         }
 
         var (preview, production) = CloudflareRules.ParseTriggerIds(target.PreviewResourceId);
+        var branchControl = await WorkerBranchControlAsync(auth, tag, preview, cancellationToken); // FR-233, FR-234
         return production is null
-            ? new ProviderTargetCheck(false, "The Worker has no Workers Builds production trigger. Connect it to the repository in Cloudflare, then set the target up again.", preview is not null)
-            : new ProviderTargetCheck(true, null, preview is not null);
+            ? new ProviderTargetCheck(false, "The Worker has no Workers Builds production trigger. Connect it to the repository in Cloudflare, then set the target up again.", preview is not null, branchControl)
+            : new ProviderTargetCheck(true, null, preview is not null, branchControl);
     }
 
     /// <summary>Uploads the placeholder module when the Worker doesn't exist yet (§11 first-Worker bootstrap).</summary>

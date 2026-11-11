@@ -57,7 +57,8 @@ Unchanged from 0.6.0. No new actions or roles. Failure log excerpts are shown on
 | FR-234 | Config that Tevrin writes or suggests (deploy-engineer agent text, deploy pack skills and checklists, Cloudflare preview-trigger exclusions, fake stack scripts) blocks both `tevrin/**` and `aide/**` | backend (infrastructure, packs) |
 
 **FR-232 acceptance**
-- Given a new project `shop-app` with id `0192f3a4…` and no recorded branch, when execution prepares the working copy, then the branch is `tevrin/shop-app-0192f3a4`.
+- Given a new project `shop-app` (id `0192f3a4…`), which has development version 0.1.0 (FR-66), when execution prepares the working copy, then the branch is `tevrin/shop-app/v0.1.0` and is recorded on the version.
+- Given a project with no development version and no recorded step branch (0.1.0-style), then the branch is `tevrin/shop-app-0192f3a4`.
 - Given a release version 1.1.0 with no recorded branch, when it starts, then its branch is `tevrin/shop-app/v1.1.0` and that name is recorded on the version.
 - Given a release version with recorded branch `aide/shop-app/v1.0.0`, when execution resumes, then it uses `aide/shop-app/v1.0.0`.
 - Given a project with no release version whose earlier steps ran on `aide/shop-app-0192f3a4`, when execution resumes, then it uses `aide/shop-app-0192f3a4`.
@@ -243,6 +244,7 @@ Unchanged from 0.6.0. The GitHub App manifest for new registrations adds `action
 | D-0.6.1-6 | Failure ids and fingerprints use the §4.37 heuristic. Repeats change the prompt only, not the review decision | Claude | assumed |
 | D-0.6.1-7 | Excerpt caps: 6,000 characters per failure and 18,000 per prompt | Claude | assumed |
 | D-0.6.1-8 | Failing non-required GitHub checks stay dropped (unchanged), so log fetches are only for required checks | Claude | assumed |
+| D-0.6.1-9 | Build (M46 review): Cloudflare preview triggers and Pages exclusions that exist before 0.6.1 are patched to add `tevrin/*` (keeping other excludes) on link and verify; if the patch fails, readiness `branch_control` is Missing. A Vercel key `*` doesn't match `tevrin/…` (it can't cross `/`) | Claude | assumed |
 
 ## 11. Open questions
 

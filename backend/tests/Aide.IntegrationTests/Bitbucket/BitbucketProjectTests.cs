@@ -166,7 +166,7 @@ public sealed class BitbucketProjectTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(project.Slug, id, Aide.Domain.Releases.SemVer.Parse(project.DevelopmentVersion!));
-        Assert.StartsWith($"aide/{project.Slug}/v0.1.0", branch, StringComparison.Ordinal);
+        Assert.StartsWith($"tevrin/{project.Slug}/v0.1.0", branch, StringComparison.Ordinal); // FR-232: new branches use tevrin/
         var workingCopy = Path.Combine(factory.WorkspacesRoot, id.ToString("D"));
         Assert.Equal(await TestGit.RunAsync(workingCopy, Ct, "rev-parse", branch), await TestGit.RunAsync(remote.BarePath, Ct, "rev-parse", $"refs/heads/{branch}"));
 

@@ -29,7 +29,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
 
         var catalog = await ProjectApi.ReadAsync<StackCatalogDto>(await user.Client.GetAsync(Route("/api/stack/catalog"), Ct));
 
-        Assert.Equal("1.2.1", catalog.Version); // FR-199
+        Assert.Equal("1.2.2", catalog.Version); // FR-199; FR-234: 1.2.2 adds the tevrin/** branch rules
         Assert.Matches("^[0-9a-f]{64}$", catalog.ContentHash);
         Assert.Equal(["frontend", "backend", "data", "vcs", "deploy"], catalog.Layers.Select(l => l.Id));
         Assert.Equal(StackChoices.Order, catalog.Choices.Select(c => c.Id));
@@ -131,7 +131,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
             deploy = new { frontendHost = "deploy-netlify", backendHost = "deploy-render", databaseHost = "render-postgres" },
         }, Ct));
 
-        Assert.Equal("1.2.1", composition.CatalogVersion); // FR-199
+        Assert.Equal("1.2.2", composition.CatalogVersion); // FR-199, FR-234
         Assert.Equal(new StackComponentDto("fe-react-vite", "frontend"), composition.Frontend);
         Assert.Equal(new StackComponentDto("be-aspnet", "backend"), composition.Backend);
         Assert.Equal(("deploy-netlify", "deploy-render", "render-postgres", "compose"), (composition.Deploy.FrontendHost, composition.Deploy.BackendHost, composition.Deploy.DatabaseHost, composition.Deploy.Local));
@@ -172,7 +172,7 @@ public sealed class StackEndpointsTests(AideApiFactory factory)
 
         var catalog = await ProjectApi.ReadAsync<AdminStackCatalogDto>(await admin.Client.GetAsync(Route("/api/admin/stack"), Ct));
 
-        Assert.Equal(("1.2.1", "loaded"), (catalog.Version, catalog.Status)); // FR-199
+        Assert.Equal(("1.2.2", "loaded"), (catalog.Version, catalog.Status)); // FR-199, FR-234
         Assert.Empty(catalog.Errors);
         Assert.Equal(27, catalog.Packs.Count);
         var aspnet = catalog.Packs.Single(p => p.Id == "be-aspnet");

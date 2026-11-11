@@ -7,6 +7,7 @@ using Aide.Api.Features.Versions;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Aide.Domain.Execution;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
@@ -96,16 +97,17 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
     // ---------- FR-82: one branch per release version ----------
 
     [Fact]
-    public async Task FR82_FR66_Every_new_version_works_on_aide_slug_v_version_including_the_first_one()
+    public async Task FR82_FR66_FR232_Every_new_version_works_on_tevrin_slug_v_version_including_the_first_one()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, initialVersion: "1.0.0");
         var id = fixture.Project.Id;
         var slug = fixture.Project.Slug;
 
         // The first version (FR-66): its branch is stored when the working copy is prepared, and checked out.
-        Assert.Equal($"aide/{slug}/v1.0.0", await PrepareAsync(id));
-        Assert.Equal($"aide/{slug}/v1.0.0", (await ListAsync(fixture.Viewer.Client, id)).Single().BranchName);
-        Assert.Equal($"aide/{slug}/v1.0.0", await TestGit.RunAsync(Path.Combine(factory.WorkspacesRoot, id.ToString("D")), Ct, "symbolic-ref", "--short", "HEAD"));
+        // FR-232 amends FR-60: new version branches use the tevrin/ prefix.
+        Assert.Equal($"tevrin/{slug}/v1.0.0", await PrepareAsync(id));
+        Assert.Equal($"tevrin/{slug}/v1.0.0", (await ListAsync(fixture.Viewer.Client, id)).Single().BranchName);
+        Assert.Equal($"tevrin/{slug}/v1.0.0", await TestGit.RunAsync(Path.Combine(factory.WorkspacesRoot, id.ToString("D")), Ct, "symbolic-ref", "--short", "HEAD"));
 
         // A started version gets its own branch; the released version keeps its own.
         await ProjectApi.WithDbAsync(factory, async db =>
@@ -118,9 +120,9 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         });
         await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(await StartAsync(fixture.Owner.Client, id, "1.1.0"), HttpStatusCode.Created);
 
-        Assert.Equal($"aide/{slug}/v1.1.0", await PrepareAsync(id));
+        Assert.Equal($"tevrin/{slug}/v1.1.0", await PrepareAsync(id));
         var versions = await ListAsync(fixture.Viewer.Client, id);
-        Assert.Equal([($"aide/{slug}/v1.1.0", "1.1.0"), ($"aide/{slug}/v1.0.0", "1.0.0")], versions.Select(v => (v.BranchName, v.Version)));
+        Assert.Equal([($"tevrin/{slug}/v1.1.0", "1.1.0"), ($"tevrin/{slug}/v1.0.0", "1.0.0")], versions.Select(v => (v.BranchName, v.Version)));
     }
 
     [Fact]
@@ -133,6 +135,65 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
             .ExecuteUpdateAsync(s => s.SetProperty(v => v.BranchName, v1Branch), Ct));
 
         Assert.Equal(v1Branch, await PrepareAsync(id));
+    }
+
+    [Fact]
+    public async Task FR232_A_recorded_aide_version_branch_is_kept_when_execution_resumes()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory, initialVersion: "1.0.0");
+        var id = fixture.Project.Id;
+        var recorded = $"aide/{fixture.Project.Slug}/v1.0.0";
+        await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.BranchName, recorded), Ct));
+
+        Assert.Equal(recorded, await PrepareAsync(id));
+        Assert.Equal(recorded, (await ListAsync(fixture.Viewer.Client, id)).Single().BranchName);
+    }
+
+    [Fact]
+    public async Task FR232_A_project_without_release_versions_keeps_its_latest_step_branch()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan);
+        await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 2, StepStatus.Completed);
+        var stepBranch = $"aide/{fixture.Project.Slug}-0192f3a4";
+        await ProjectApi.WithDbAsync(factory, db => db.ExecutionSteps.Where(s => s.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BranchName, stepBranch).SetProperty(x => x.StartedAt, DateTimeOffset.UtcNow), Ct));
+
+        var chosen = await ProjectApi.WithDbAsync(factory, db => Aide.Api.Features.Execution.WorkingCopyPreparer.BranchForAsync(
+            db, hasReleaseVersion: false, recordedBranch: null, fixture.Project.Slug, id, developmentVersion: null, Ct));
+        var withVersion = await ProjectApi.WithDbAsync(factory, db => Aide.Api.Features.Execution.WorkingCopyPreparer.BranchForAsync(
+            db, hasReleaseVersion: true, recordedBranch: null, fixture.Project.Slug, id, "0.1.0", Ct));
+
+        Assert.Equal(stepBranch, chosen);
+        Assert.Equal($"tevrin/{fixture.Project.Slug}/v0.1.0", withVersion);
+    }
+
+    [Fact]
+    public async Task FR233_Branch_control_requires_aide_only_for_a_project_with_an_aide_version_or_step_branch()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        Task<IReadOnlyList<string>> PrefixesAsync() =>
+            ProjectApi.WithDbAsync(factory, db => Aide.Api.Features.Execution.ExecutionQueries.BranchControlPrefixesAsync(db, id, Ct));
+
+        Assert.Equal(["tevrin/"], await PrefixesAsync());
+
+        await PrepareAsync(id); // records tevrin/<slug>/v0.1.0
+        Assert.Equal(["tevrin/"], await PrefixesAsync());
+
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan);
+        await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 1, StepStatus.Completed);
+        await ProjectApi.WithDbAsync(factory, db => db.ExecutionSteps.Where(s => s.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BranchName, "aide/old-0192f3a4"), Ct));
+        Assert.Equal(["tevrin/", "aide/"], await PrefixesAsync());
+
+        await ProjectApi.WithDbAsync(factory, db => db.ExecutionSteps.Where(s => s.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BranchName, (string?)null), Ct));
+        await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.BranchName, "aide/old/v0.1.0"), Ct));
+        Assert.Equal(["tevrin/", "aide/"], await PrefixesAsync());
     }
 
     // ---------- FR-61: validation ----------

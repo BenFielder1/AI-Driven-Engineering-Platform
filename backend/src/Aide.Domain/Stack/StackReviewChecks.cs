@@ -11,9 +11,14 @@ namespace Aide.Domain.Stack;
 /// What the deterministic stack checks read: the reviewed files (path and content), and optionally the files on the base
 /// commit (<see cref="BaseFiles"/>: a migration is new when it isn't there; unknown → every migration given is new) and the
 /// branch's full file list (<see cref="Tree"/>: a platform config file missing from it is reported; unknown → only the
-/// config files given are checked).
+/// config files given are checked). <see cref="BranchPrefixes"/> (FR-233, §4.36): the branch prefixes branch control must block
+/// (<see cref="BranchControlRules.RequiredPrefixes(bool)"/>; unknown → <c>tevrin/</c> only).
 /// </summary>
-public sealed record StackReviewInput(IReadOnlyList<SourceFile> Files, IReadOnlySet<string>? BaseFiles = null, IReadOnlyCollection<string>? Tree = null);
+public sealed record StackReviewInput(
+    IReadOnlyList<SourceFile> Files,
+    IReadOnlySet<string>? BaseFiles = null,
+    IReadOnlyCollection<string>? Tree = null,
+    IReadOnlyList<string>? BranchPrefixes = null);
 
 /// <summary>
 /// FR-126, §4.18 "Review checks": the deterministic, language-independent text checks the selected packs register
@@ -64,7 +69,7 @@ public static partial class StackReviewChecks
                 NoSchemaPush => SchemaPush(files),
                 MigrationBackwardCompatible => BackwardCompatible(files, resolution.IsMigration, p => input.BaseFiles is null || !input.BaseFiles.Contains(p)),
                 ContainerNonRoot when resolution.Paths.Backend is { } be => NonRootContainer(files, be),
-                DeployBranchControl => BranchControl(files, BranchControlTargets(resolution), input.Tree),
+                DeployBranchControl => BranchControl(files, BranchControlTargets(resolution), input.Tree, input.BranchPrefixes),
                 HealthEndpoints when composition.Backend is { } backend => Health(files, backend.Pack, backend.Path),
                 _ => [],
             });
@@ -459,16 +464,23 @@ public static partial class StackReviewChecks
     }
 
     /// <summary>
-    /// <c>deploy_branch_control</c> (major architecture, generalises 0.2.0 FR-89): each target's config file must stop the platform
-    /// building Tevrin branches on its own: <c>vercel.json</c> sets <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c>
-    /// (<see cref="VercelConfigRules"/>); <c>netlify.toml</c> has a <c>[build] ignore</c> that skips <c>aide/*</c>. Cloudflare's
-    /// branch control is the Workers preview trigger Tevrin configures, so it has no file to check. A config file missing
-    /// from <paramref name="tree"/> is reported; without a tree only the files given are checked.
+    /// <c>deploy_branch_control</c> (major architecture, generalises 0.2.0 FR-89; amended by FR-233): each target's config file
+    /// must stop the platform building Tevrin branches on its own, for every prefix in <paramref name="requiredPrefixes"/>
+    /// (§4.36; <c>null</c>: <c>tevrin/</c> only): <c>vercel.json</c> sets <c>git.deploymentEnabled["&lt;prefix&gt;**"]</c> to
+    /// <c>false</c> with no other true rule matching; <c>netlify.toml</c> has a <c>[build] ignore</c> naming each prefix
+    /// (<see cref="BranchControlRules"/>). Cloudflare's branch control is the Workers preview trigger Tevrin configures, so it has
+    /// no file to check. A config file missing from <paramref name="tree"/> is reported; without a tree only the files given are
+    /// checked. Messages name the missing patterns and show the config Tevrin suggests (both prefixes, FR-234).
     /// </summary>
-    public static IReadOnlyList<ReviewFinding> BranchControl(IEnumerable<SourceFile> files, IEnumerable<(string Provider, string ConfigPath)> targets, IReadOnlyCollection<string>? tree)
+    public static IReadOnlyList<ReviewFinding> BranchControl(
+        IEnumerable<SourceFile> files,
+        IEnumerable<(string Provider, string ConfigPath)> targets,
+        IReadOnlyCollection<string>? tree,
+        IReadOnlyList<string>? requiredPrefixes = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(targets);
+        var required = requiredPrefixes ?? BranchControlRules.TevrinOnly;
         var byPath = files.GroupBy(f => PathRules.Normalize(f.Path), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Content, StringComparer.Ordinal);
         var findings = new List<ReviewFinding>();
         foreach (var (provider, path) in targets.Distinct())
@@ -483,23 +495,14 @@ public static partial class StackReviewChecks
                 continue;
             }
 
-            var ok = provider == "netlify" ? NetlifyIgnoresAide(content) : VercelConfigRules.DisablesAideBranches(content);
-            if (!ok)
+            var missing = provider == "netlify" ? BranchControlRules.NetlifyMissing(content, required) : BranchControlRules.VercelMissing(content, required);
+            if (missing.Count > 0)
             {
-                findings.Add(BranchFinding(path, $"{path} doesn't stop {provider} building Tevrin branches on its own: {BranchRule(provider)}. Tevrin deploys them explicitly."));
+                findings.Add(BranchFinding(path, $"{path} doesn't stop {provider} building {BranchControlRules.Names(missing)} on its own: {BranchRule(provider)}. Tevrin deploys them explicitly."));
             }
         }
 
         return findings;
-    }
-
-    /// <summary>Whether a <c>netlify.toml</c> has an <c>ignore</c> command that skips <c>aide/*</c> branches.</summary>
-    public static bool NetlifyIgnoresAide(string content)
-    {
-        ArgumentNullException.ThrowIfNull(content);
-        return content.ReplaceLineEndings("\n").Split('\n')
-            .Select(l => l.Trim())
-            .Any(l => !l.StartsWith('#') && NetlifyIgnorePattern().IsMatch(l) && l.Contains("aide/", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -572,8 +575,8 @@ public static partial class StackReviewChecks
     }
 
     private static string BranchRule(string provider) => provider == "netlify"
-        ? "add `[build] ignore = 'case \"$BRANCH\" in aide/*) exit 0 ;; *) exit 1 ;; esac'`"
-        : $"set git.deploymentEnabled {{ \"{VercelConfigRules.AideBranches}\": false }}";
+        ? $"add `[build] ignore = '{BranchControlRules.NetlifyIgnoreCommand()}'`"
+        : $"set git.deploymentEnabled {BranchControlRules.VercelSuggestion()}";
 
     private static ReviewFinding BranchFinding(string path, string message) => new(ReviewCategory.Architecture, Severity.Major, message, path);
 
@@ -843,9 +846,6 @@ public static partial class StackReviewChecks
 
     [GeneratedRegex(@"^USER\s+(?<user>\S+)", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
     private static partial Regex UserPattern();
-
-    [GeneratedRegex(@"^\s*ignore\s*=", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex NetlifyIgnorePattern();
 
     [GeneratedRegex(@"probes\.enabled\s*[=:]\s*true|probes:\s*\n\s+enabled:\s*true", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex ActuatorProbesPattern();

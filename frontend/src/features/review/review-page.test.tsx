@@ -266,7 +266,7 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
 
   it('FR89_a_missing_vercel_json_is_a_deterministic_finding_with_its_file', async () => {
     const message =
-      `vercel.json is missing: add it with git.deploymentEnabled { "aide/**": false } so Vercel doesn't deploy Tevrin branches on its own (FR-89).`
+      `vercel.json is missing: add it with git.deploymentEnabled { "tevrin/**": false, "aide/**": false } so Vercel doesn't deploy Tevrin branches on its own (FR-89).`
     const project = seedReview('owner', (p) => {
       seedComplianceReport(p, {
         categoryScores: categoryScores(0.85),

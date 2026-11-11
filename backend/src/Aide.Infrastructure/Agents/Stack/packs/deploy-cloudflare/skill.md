@@ -2,7 +2,7 @@
 
 # Cloudflare (Workers static assets / Pages)
 
-Tevrin connects the repo to Workers Builds through the API and creates two triggers: production (the default branch, `npx wrangler deploy`) and preview (excluding `aide/*`, `npx wrangler versions upload`). It syncs build variables and runtime secrets and starts SHA-pinned builds. You only write the repo files Wrangler reads during the build.
+Tevrin connects the repo to Workers Builds through the API and creates two triggers: production (the default branch, `npx wrangler deploy`) and preview (excluding `tevrin/*` and `aide/*`, `npx wrangler versions upload`). It syncs build variables and runtime secrets and starts SHA-pinned builds. You only write the repo files Wrangler reads during the build.
 
 ## Supports
 - Static SPAs (`fe-react-vite`, `fe-vue`, `fe-angular`, `fe-vanilla`) on **Workers with static assets**.
@@ -28,7 +28,7 @@ Write `{fe}/wrangler.jsonc` (add `wrangler` as a frontend dev dependency only th
 }
 ```
 - **Proxy origin model:** add `"main": "./worker/index.ts"` and set `"assets": { …, "binding": "ASSETS", "run_worker_first": ["/api/*"] }`. Write `{fe}/worker/index.ts`, a minimal Worker that forwards `/api/*` requests (method, headers, body, query) to `env.API_ORIGIN` + the same path, and serves everything else with `env.ASSETS.fetch(request)`. Type `Env` with `ASSETS: Fetcher` and `API_ORIGIN: string`. No hard-coded backend URL.
-- **Branch control** lives on the preview trigger (`aide/*` excluded), which Tevrin configures; nothing in `wrangler.jsonc` deploys branches.
+- **Branch control** lives on the preview trigger (`tevrin/*` and `aide/*` excluded), which Tevrin configures; nothing in `wrangler.jsonc` deploys branches.
 - **Next.js:** follow the adapter's setup (`nodejs_compat` in `compatibility_flags`, its config files and build script). The proxy is Next's `rewrites()` (frontend pack), not a Worker.
 - **Migrations** (Next.js full-stack with an ORM data pack): the build runs the migrate command only when `AIDE_RUN_MIGRATIONS=true` (a build variable); put the gate in the build command, never in Worker code.
 - Don't add `routes`, custom domains, `env.*` blocks for other accounts, D1, KV or Hyperdrive bindings unless the spec asks.
@@ -45,7 +45,7 @@ None hosted by this pack. Use Supabase (BaaS from the frontend, or host mode for
 None in files. The triggers run `wrangler deploy` (production) and `wrangler versions upload` (preview); Tevrin starts builds and rolls back by version. Don't add CI jobs or scripts that call Wrangler to deploy.
 
 ## Previews and promotion
-- One persistent preview: Tevrin starts the preview trigger with the PR head's commit hash and reads the version's preview URL. Automatic builds of `aide/*` are excluded.
+- One persistent preview: Tevrin starts the preview trigger with the PR head's commit hash and reads the version's preview URL. Automatic builds of `tevrin/*` and `aide/*` are excluded.
 - Promotion is merging to the default branch; the production trigger deploys it.
 
 ## Agent autonomy

@@ -44,11 +44,11 @@ public class CloudflareRulesTests
     }
 
     [Fact]
-    public void FR144_The_preview_trigger_excludes_aide_branches_and_uploads_versions()
+    public void FR144_FR234_The_preview_trigger_excludes_tevrin_and_aide_branches_and_uploads_versions()
     {
         var trigger = CloudflareRules.PreviewTrigger(".", null);
 
-        Assert.Equal(["aide/*"], trigger.BranchExcludes);
+        Assert.Equal(["tevrin/*", "aide/*"], trigger.BranchExcludes); // FR-234: both prefixes
         Assert.Equal("npx wrangler versions upload", trigger.DeployCommand);
         Assert.Equal("/", trigger.RootDirectory);
     }

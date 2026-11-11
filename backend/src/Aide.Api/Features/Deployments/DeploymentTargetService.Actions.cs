@@ -1,3 +1,4 @@
+using Aide.Api.Features.Execution;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
@@ -243,6 +244,7 @@ public sealed partial class DeploymentTargetService
         string? gitMessage = null;
         var gitFix = DeploymentPlatforms.GitConnectUrl(target.Provider, vcsHost);
         bool? previewReady = PreviewReady(target);
+        IReadOnlyList<string>? providerBranchMissing = null;
         var context = await access.ResolveAsync(target, cancellationToken);
         if (context.IsFailure)
         {
@@ -255,6 +257,7 @@ public sealed partial class DeploymentTargetService
                 var check = await context.Value.Provider.VerifyTargetAsync(context.Value.Auth, context.Value.TargetRef, cancellationToken);
                 (gitAccess, gitMessage) = (check.GitAccess, check.GitMessage);
                 previewReady = check.PreviewReady ?? previewReady;
+                providerBranchMissing = check.BranchControlMissing;
             }
             catch (DeploymentProviderException ex)
             {
@@ -283,7 +286,7 @@ public sealed partial class DeploymentTargetService
             (gitAccess, gitMessage, gitFix) = (false, variables.Message, variables.Reason);
         }
 
-        var branch = await BranchControlAsync(projectId, target, cancellationToken);
+        var (branch, branchPatterns) = await BranchControlAsync(projectId, target, providerBranchMissing, cancellationToken);
         var items = ReadinessRules.Checklist(new ReadinessInput(
             target.Provider,
             Checked: true,
@@ -295,7 +298,8 @@ public sealed partial class DeploymentTargetService
             EnvInventoryRules.MissingRequired(rows, component),
             branch,
             BranchControlPath(target.Provider, target.RootDirectory),
-            previewReady));
+            previewReady,
+            branchPatterns));
         var statusBefore = target.Status;
         (target.Status, target.StatusReason) = ReadinessRules.StatusAfterVerify(target.Status, target.StatusReason, items);
         target.UpdatedAt = now;
@@ -368,17 +372,34 @@ public sealed partial class DeploymentTargetService
             : null;
     }
 
-    /// <summary>§4.18 <c>deploy_branch_control</c> as readiness: Vercel's <c>vercel.json</c>, Netlify's <c>netlify.toml</c> on the default branch.</summary>
-    private async Task<BranchControlState> BranchControlAsync(Guid projectId, DeploymentTarget target, CancellationToken cancellationToken)
+    /// <summary>
+    /// §4.18 <c>deploy_branch_control</c> as readiness: Vercel's <c>vercel.json</c>, Netlify's <c>netlify.toml</c> on the default
+    /// branch, which must block every prefix the project uses (FR-233, §4.36). Also returns the patterns the message names: the
+    /// missing ones when the config doesn't block them all, else the required ones. A platform whose branch control Tevrin
+    /// configures (Cloudflare's preview exclusions, FR-234) reports it in <paramref name="providerMissing"/> from its verify:
+    /// empty is Ok, otherwise Missing with those patterns.
+    /// </summary>
+    private async Task<(BranchControlState State, IReadOnlyList<string>? Patterns)> BranchControlAsync(
+        Guid projectId, DeploymentTarget target, IReadOnlyList<string>? providerMissing, CancellationToken cancellationToken)
     {
         if (target.Provider == DeploymentProvider.GithubPages)
         {
-            return BranchControlState.NotApplicable;
+            return (BranchControlState.NotApplicable, null);
+        }
+
+        var prefixes = await ExecutionQueries.BranchControlPrefixesAsync(db, projectId, cancellationToken);
+        // Vercel's git.deploymentEnabled keys use tevrin/**; Netlify's ignore and Cloudflare's exclusions use tevrin/*.
+        IReadOnlyList<string> Required() => target.Provider is DeploymentProvider.Vercel or DeploymentProvider.Fake
+            ? [.. prefixes.Select(BranchControlRules.VercelPattern)]
+            : [.. prefixes.Select(BranchControlRules.BranchGlob)];
+        if (!access.UsesFake && providerMissing is not null)
+        {
+            return providerMissing.Count == 0 ? (BranchControlState.Ok, Required()) : (BranchControlState.Missing, providerMissing);
         }
 
         if (access.UsesFake || BranchControlPath(target.Provider, target.RootDirectory) is not { } path)
         {
-            return BranchControlState.PlatformManaged;
+            return (BranchControlState.PlatformManaged, Required());
         }
 
         var branch = await db.ProjectGitSettings.AsNoTracking().Where(s => s.ProjectId == projectId).Select(s => s.DefaultBranch).FirstOrDefaultAsync(cancellationToken) ?? "main";
@@ -387,17 +408,18 @@ public sealed partial class DeploymentTargetService
             var files = await workingCopies.ReadCommittedAsync(projectId, branch, [path], cancellationToken);
             if (files.Count == 0)
             {
-                return BranchControlState.Missing;
+                return (BranchControlState.Missing, Required());
             }
 
             var content = files[0].Content;
-            return target.Provider == DeploymentProvider.Netlify
-                ? NetlifyRules.IgnoresAideBranches(content) ? BranchControlState.Ok : BranchControlState.Missing
-                : VercelConfigRules.DisablesAideBranches(content) ? BranchControlState.Ok : BranchControlState.Missing;
+            var missing = target.Provider == DeploymentProvider.Netlify
+                ? BranchControlRules.NetlifyMissing(content, prefixes)
+                : BranchControlRules.VercelMissing(content, prefixes);
+            return missing.Count == 0 ? (BranchControlState.Ok, Required()) : (BranchControlState.Missing, missing);
         }
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
         {
-            return BranchControlState.Unknown;
+            return (BranchControlState.Unknown, Required());
         }
     }
 

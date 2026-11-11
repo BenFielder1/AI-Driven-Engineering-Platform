@@ -1,5 +1,6 @@
 using Aide.Api.Features.Projects;
 using Aide.Domain.Artifacts;
+using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Jobs;
@@ -85,5 +86,34 @@ public static class ExecutionQueries
         }
 
         return $"https://github.com/{Uri.EscapeDataString(repo.Owner)}/{Uri.EscapeDataString(repo.Name)}/commit/{Uri.EscapeDataString(sha)}";
+    }
+
+    /// <summary>
+    /// FR-232, §4.35 rule 2: the branch of the project's most recent execution step with a recorded branch (by completion,
+    /// else start time, steps with neither last; then id), or <c>null</c>.
+    /// </summary>
+    public static Task<string?> LatestStepBranchAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.ExecutionSteps.AsNoTracking()
+            .Where(s => s.ProjectId == projectId && s.BranchName != null)
+            .OrderBy(s => (s.CompletedAt ?? s.StartedAt) == null)
+            .ThenByDescending(s => s.CompletedAt ?? s.StartedAt)
+            .ThenByDescending(s => s.Id)
+            .Select(s => s.BranchName)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// FR-233, §4.36: the branch prefixes the project's branch control must block: <c>tevrin/</c>, plus <c>aide/</c> when any
+    /// recorded release-version or execution-step branch of the project starts with <c>aide/</c>.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> BranchControlPrefixesAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var legacy = BranchNaming.LegacyPrefix;
+        var usesLegacy = await db.ReleaseVersions.AsNoTracking().AnyAsync(v => v.ProjectId == projectId && v.BranchName != null && v.BranchName.StartsWith(legacy), cancellationToken)
+            || await db.ExecutionSteps.AsNoTracking().AnyAsync(s => s.ProjectId == projectId && s.BranchName != null && s.BranchName.StartsWith(legacy), cancellationToken);
+        return BranchControlRules.RequiredPrefixes(usesLegacy);
     }
 }

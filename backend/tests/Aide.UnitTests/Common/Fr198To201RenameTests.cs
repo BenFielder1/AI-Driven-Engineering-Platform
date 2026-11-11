@@ -138,7 +138,9 @@ public sealed partial class Fr198To201RenameTests
     [Fact]
     public void FR201_Stored_formats_branches_and_paths_keep_their_aide_names()
     {
-        Assert.Equal("aide/todo-api/v1.2.0", ReleaseVersionRules.BranchName("todo-api", Guid.NewGuid(), SemVer.Parse("1.2.0")));
+        // FR-232 (D-0.6.1-2) withdraws the aide/ prefix for new branches only: recorded aide/ branches are kept (§4.35).
+        Assert.Equal("tevrin/todo-api/v1.2.0", ReleaseVersionRules.BranchName("todo-api", Guid.NewGuid(), SemVer.Parse("1.2.0")));
+        Assert.Equal("aide/todo-api/v1.2.0", BranchNaming.Choose("aide/todo-api/v1.2.0", true, null, "todo-api", Guid.NewGuid(), SemVer.Parse("1.2.0")));
         Assert.Equal(".aide/", PathRules.AideDirectory);
         Assert.Equal("aide-plan", PlanDocument.BlockLanguage);
         Assert.Equal("aide-stack-profile", StackProfile.FenceTag);

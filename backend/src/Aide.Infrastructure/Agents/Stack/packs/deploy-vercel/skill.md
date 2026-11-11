@@ -18,10 +18,10 @@ Write `vercel.json` at the root of **every** deployable folder on Vercel (`{fe}/
 ```json
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "git": { "deploymentEnabled": { "aide/**": false } }
+  "git": { "deploymentEnabled": { "tevrin/**": false, "aide/**": false } }
 }
 ```
-- **Branch control:** `git.deploymentEnabled` must contain `"aide/**": false`, and no other key that matches `aide/**` may be `true`. Tevrin deploys its version branches explicitly. A missing rule is a major review finding.
+- **Branch control:** Tevrin's branches start with `tevrin/` (new projects) or `aide/` (projects started before Tevrin 0.6.1). `git.deploymentEnabled` must contain `"tevrin/**": false` and `"aide/**": false`, and no other key that matches either may be `true`. Tevrin deploys its version branches explicitly. A missing rule is a major review finding.
 - **SPA fallback** (static SPAs without a framework preset that handles it): `"rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]`. Framework presets detect Vite, Angular and Next.js; set `outputDirectory` only when it differs (`dist`, `dist/<project>/browser`).
 - **Migrations on serverless** (host-mode database with an ORM data pack): the production build runs the data pack's one-off migrate command only when `AIDE_RUN_MIGRATIONS=true`:
   `"buildCommand": "if [ \"$AIDE_RUN_MIGRATIONS\" = \"true\" ]; then <migrate command>; fi && npm run build"`.
@@ -42,7 +42,7 @@ Vercel hosts no database here. Use Supabase (host mode) or an external Postgres.
 None in files. Tevrin deploys previews with an explicit Git-source deployment of the version branch, adopts the production deploy of the merge commit, and rolls back by promotion. Don't add CI jobs or scripts that call the Vercel CLI.
 
 ## Previews and promotion
-- One persistent preview: Tevrin deploys the version branch's PR head. Automatic branch deploys of `aide/**` are off (branch control above); the default branch still deploys production automatically.
+- One persistent preview: Tevrin deploys the version branch's PR head. Automatic branch deploys of `tevrin/**` and `aide/**` are off (branch control above); the default branch still deploys production automatically.
 - Promotion is merging to the default branch. Preview builds skip migrations unless a preview database exists (`AIDE_RUN_MIGRATIONS` is then `true` in Preview too).
 
 ## Agent autonomy
@@ -51,14 +51,14 @@ Tevrin's own rules apply; not loaded by any agent.
 ## Troubleshooting
 | Symptom | Check |
 | --- | --- |
-| `aide/**` branches deploy automatically | `git.deploymentEnabled` missing, misspelt, or a broader `true` rule matches |
+| `tevrin/**` or `aide/**` branches deploy automatically | `git.deploymentEnabled` missing, misspelt, or a broader `true` rule matches |
 | 404 on refresh in a SPA | Missing SPA rewrite or wrong output directory |
 | Function times out | `maxDuration`, DB without a pooler, cold start |
 | `too many connections` | Use the pooled URL and a pool size of 1–2 per function |
 | Env var undefined | Wrong environment scope, or a build-time variable that needs a rebuild |
 
 ## Checklist
-- [ ] Every Vercel-deployed folder has `vercel.json` with `git.deploymentEnabled {"aide/**": false}`.
+- [ ] Every Vercel-deployed folder has `vercel.json` with `git.deploymentEnabled {"tevrin/**": false, "aide/**": false}`.
 - [ ] Framework preset/output dir correct; SPA fallback where needed; no `/api` rewrite to a fixed backend.
 - [ ] Migrations only in the build gated by `AIDE_RUN_MIGRATIONS`, using `DIRECT_URL`; the app uses the pooled URL.
 - [ ] `.env.example` lists every variable; no secrets or `.vercel/` in the repo; no CLI deploy scripts.

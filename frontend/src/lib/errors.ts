@@ -131,7 +131,7 @@ export const errorMessages = {
   PLAN_ORDER:
     "Some plan steps break the stack's recommended order. This is a warning: the plan can still be approved.",
   MISSING_VERCEL_CONFIG:
-    "This plan doesn't create vercel.json, so Vercel would deploy Tevrin branches automatically, on top of the deployments Tevrin makes. Add vercel.json to a step with git.deploymentEnabled set to { \"aide/**\": false }. This is a warning: the plan can still be approved.",
+    "This plan doesn't create vercel.json, so Vercel would deploy Tevrin branches automatically, on top of the deployments Tevrin makes. Add vercel.json to a step with git.deploymentEnabled set to { \"tevrin/**\": false, \"aide/**\": false }. This is a warning: the plan can still be approved.",
   TOOL_LIMIT:
     "The agent reached its repository tool limit (25 calls or 400 KB read per run) and answered with what it had read.",
   PROVIDER_NOT_CONFIGURED:

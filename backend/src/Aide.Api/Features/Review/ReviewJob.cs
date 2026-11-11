@@ -262,10 +262,16 @@ public sealed partial class ReviewJobHandler(
         var endpoints = SpecReading.EndpointPaths(specText);
         var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
         var secrets = DeterministicChecks.SecretScan(contents);
+        // FR-233, §4.36: branch control must block every prefix the project uses (aide/ too for projects with an aide/ branch).
+        var branchPrefixes = await ExecutionQueries.BranchControlPrefixesAsync(db, project.Id, cancellationToken);
         var stackFindings = version.Stack is { } stack
             ? StackReviewFindings.Run(
                 stack,
-                new StackReviewInput([.. contents, .. await BackendSourceAsync(project.Id, working.Branch, stack, tree, contents, cancellationToken)], version.BaseFiles, [.. tree.Select(f => f.Path)]),
+                new StackReviewInput(
+                    [.. contents, .. await BackendSourceAsync(project.Id, working.Branch, stack, tree, contents, cancellationToken)],
+                    version.BaseFiles,
+                    [.. tree.Select(f => f.Path)],
+                    branchPrefixes),
                 secrets)
             : [];
         var vercelChecked = version.Stack?.ReviewChecks.Contains(StackReviewChecks.DeployBranchControl, StringComparer.Ordinal) ?? false;
@@ -273,7 +279,7 @@ public sealed partial class ReviewJobHandler(
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
             .Concat(stackFindings)
-            .Concat(vercelChecked ? [] : await VercelConfigFindingsAsync(project.Id, working.Branch, contents, cancellationToken))
+            .Concat(vercelChecked ? [] : await VercelConfigFindingsAsync(project.Id, working.Branch, contents, branchPrefixes, cancellationToken))
             .Concat(externalFindings ?? [])
             .ToList();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
@@ -594,12 +600,13 @@ public sealed partial class ReviewJobHandler(
 
     /// <summary>
     /// FR-89: for a project deploying with Vercel, the branch's <c>vercel.json</c> (in the Vercel root directory) must stop
-    /// Vercel's automatic deploys of <c>aide/**</c> (<see cref="Domain.Deployments.VercelConfigRules.ReviewFindings"/>). The
+    /// Vercel's automatic deploys of every Tevrin prefix the project uses (FR-233, §4.36: <c>tevrin/**</c>, and <c>aide/**</c> for
+    /// a project with an <c>aide/</c> branch; <see cref="Domain.Deployments.VercelConfigRules.ReviewFindings"/>). The
     /// file is read even when the review's file selection or listed tree left it out. No real Vercel deployment (no settings,
     /// Fake settings, or the Fake provider in use): no finding.
     /// </summary>
     private async Task<IReadOnlyList<ReviewFinding>> VercelConfigFindingsAsync(
-        Guid projectId, string branch, IReadOnlyList<SourceFile> contents, CancellationToken cancellationToken)
+        Guid projectId, string branch, IReadOnlyList<SourceFile> contents, IReadOnlyList<string> branchPrefixes, CancellationToken cancellationToken)
     {
         // Only real Vercel deploys on its own: the Fake provider (Deployments:Provider=Fake) and Fake settings never do.
         if (deploymentProviders.UsesFake)
@@ -625,7 +632,7 @@ public sealed partial class ReviewJobHandler(
             file = read.Count > 0 ? read[0] : null;
         }
 
-        return Domain.Deployments.VercelConfigRules.ReviewFindings(path, file?.Content);
+        return Domain.Deployments.VercelConfigRules.ReviewFindings(path, file?.Content, branchPrefixes);
     }
 
     /// <summary>Git and working-copy failures retry the job; an unsafe working copy fails it.</summary>

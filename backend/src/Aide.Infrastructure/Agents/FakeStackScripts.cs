@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Aide.Domain.Deployments;
 using Aide.Domain.Stack;
 
 namespace Aide.Infrastructure.Agents;
@@ -252,10 +253,11 @@ public static class FakeStackScripts
         {
             case "compose.yaml":
                 return $"# {header}\nservices:\n  db:\n    image: postgres:18\n    env_file: .env\n    volumes: [db-data:/var/lib/postgresql]\nvolumes:\n  db-data: {{}}\n";
+            // FR-234: the config Tevrin writes blocks both branch prefixes (tevrin/ and the pre-0.6.1 aide/).
             case "vercel.json":
-                return "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"aide/**\": false\n    }\n  }\n}\n";
+                return "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"tevrin/**\": false,\n      \"aide/**\": false\n    }\n  }\n}\n";
             case "netlify.toml":
-                return $"# {header}\n[build]\n  ignore = 'case \"$BRANCH\" in aide/*) exit 0 ;; *) exit 1 ;; esac'\n";
+                return $"# {header}\n[build]\n  ignore = '{BranchControlRules.NetlifyIgnoreCommand()}'\n";
             case ".env.example":
                 return "# Environment variable inventory (no values are ever committed).\nDATABASE_URL=\n";
             case "api.json" when path.EndsWith("openapi/api.json", StringComparison.Ordinal):

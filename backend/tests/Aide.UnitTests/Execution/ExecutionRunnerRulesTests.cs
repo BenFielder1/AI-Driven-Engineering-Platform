@@ -204,11 +204,12 @@ public class ExecutionRunnerRulesTests
     // ---------- FR-34 / FR-35: branch, commit, manifest ----------
 
     [Fact]
-    public void FR34_The_project_branch_is_aide_slug_short_id()
+    public void FR34_FR232_The_project_branch_is_tevrin_slug_short_id()
     {
-        Assert.Equal("aide/todo-api-4a5b0c-0199a1b2", ExecutionRules.BranchName("todo-api-4a5b0c", ProjectId));
-        Assert.Equal("aide/project-0199a1b2", ExecutionRules.BranchName("bad..slug", ProjectId));
-        Assert.Equal("aide/project-0199a1b2", ExecutionRules.BranchName("  ", ProjectId));
+        // FR-232 amends FR-34: new project branches use the tevrin/ prefix.
+        Assert.Equal("tevrin/todo-api-4a5b0c-0199a1b2", ExecutionRules.BranchName("todo-api-4a5b0c", ProjectId));
+        Assert.Equal("tevrin/project-0199a1b2", ExecutionRules.BranchName("bad..slug", ProjectId));
+        Assert.Equal("tevrin/project-0199a1b2", ExecutionRules.BranchName("  ", ProjectId));
     }
 
     [Fact]

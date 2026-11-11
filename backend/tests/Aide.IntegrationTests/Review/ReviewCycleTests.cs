@@ -602,7 +602,8 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
 
     // ---------- FR-89: vercel.json on the branch ----------
 
-    private const string GoodVercelJson = "{\n  \"git\": { \"deploymentEnabled\": { \"aide/**\": false } }\n}\n";
+    // FR-233/FR-234: blocks both prefixes, so it passes whether or not the project has an aide/ branch.
+    private const string GoodVercelJson = "{\n  \"git\": { \"deploymentEnabled\": { \"tevrin/**\": false, \"aide/**\": false } }\n}\n";
 
     private static Task SeedDeploymentSettingsAsync(WebApplicationFactory<Program> app, Guid projectId, DeploymentProvider provider, string rootDirectory = ".") =>
         ProjectApi.WithDbAsync(app, async db =>

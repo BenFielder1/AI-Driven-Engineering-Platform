@@ -78,12 +78,14 @@ describe('FR-197 no AIDE in the rendered app', () => {
   /**
    * FR-218 and FR-219 name the old product on purpose: the FAQ's "Was it called AIDE?" and the Changelog's "(as AIDE)"
    * on 0.1.0–0.5.0 (also on Home's Latest changes, FR-212 §7). Only those phrases are allowed; any other "AIDE" fails.
+   * `required`: the page must show the first phrase. Home shows the two newest entries, which from 0.6.1 (FR-245) are both
+   * Tevrin releases, so "(as AIDE)" is still allowed on `/` but no longer required.
    */
   it.each([
-    ['/faq', [/Was it called AIDE\?/g, /shipped as AIDE \(AI-Driven Engineering\)/g]],
-    ['/changelog', [/\(as AIDE\)/g, /shipped under the name AIDE\./g]],
-    ['/', [/\(as AIDE\)/g]],
-  ] as const)('FR197_FR218_FR219 %s names AIDE only in its history copy', async (path, allowed) => {
+    ['/faq', [/Was it called AIDE\?/g, /shipped as AIDE \(AI-Driven Engineering\)/g], true],
+    ['/changelog', [/\(as AIDE\)/g, /shipped under the name AIDE\./g], true],
+    ['/', [/\(as AIDE\)/g], false],
+  ] as const)('FR197_FR218_FR219_FR245 %s names AIDE only in its history copy', async (path, allowed, required) => {
     await renderRoute(path)
     await settle()
 
@@ -91,7 +93,9 @@ describe('FR-197 no AIDE in the rendered app', () => {
       .map((text) => allowed.reduce((t, pattern) => t.replace(pattern, ''), text))
       .filter((text) => text.includes('AIDE'))
     expect(offending).toEqual([])
-    expect(document.body.textContent).toMatch(allowed[0])
+    if (required) {
+      expect(document.body.textContent).toMatch(allowed[0])
+    }
   })
 
   it.each([
