@@ -84,7 +84,8 @@ test('NFR-TEST2, FR-55–FR-66, FR-90, FR-91: 0.1.0 is released live on Vercel, 
   // FR-90: the Review page shows the READY preview of the version branch head at the Fake URL.
   const preview = await waitForDeployment(context, projectId, 'preview', 'ready', { version: '0.1.0' })
   expect(preview.url).toBe(fakeUrl(preview.gitSha))
-  expect(preview.gitRef).toMatch(/^aide\/.+\/v0\.1\.0$/)
+  // FR-232: new version branches use the tevrin/ prefix.
+  expect(preview.gitRef).toMatch(/^tevrin\/.+\/v0\.1\.0$/)
   await page.reload()
   await openStage(page, 'Review')
   // The stage's Preview deployment panel (its deep-link anchor), and the same preview as a review input in the report.
