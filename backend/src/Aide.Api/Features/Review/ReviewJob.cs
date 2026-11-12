@@ -42,6 +42,12 @@ internal sealed record ReviewMaterial(
 
     /// <summary>FR-126: the version's stack (checklist, deterministic checks, optimisation plan agents).</summary>
     public VersionStackContext Stack { get; init; } = VersionStackContext.None;
+
+    /// <summary>
+    /// FR-243: the files on the reviewed branch, for the optimisation plan's missing deployment files; <c>null</c> when the
+    /// listing failed or was cut off (then no step is added).
+    /// </summary>
+    public IReadOnlySet<string>? BranchFiles { get; init; }
 }
 
 /// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
@@ -296,6 +302,7 @@ public sealed partial class ReviewJobHandler(
             Requirements = RequirementParser.Parse(specText).Requirements,
             CodebaseSummary = iteration.CodebaseSummary,
             Stack = version,
+            BranchFiles = tree.Count is > 0 and < MaxTreeEntries ? tree.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase) : null,
         };
     }
 
@@ -316,6 +323,11 @@ public sealed partial class ReviewJobHandler(
         var maxFiles = project.MaxFilesPerStep;
         var stack = material.Stack.Stack;
         var agents = material.Stack.PlanAgents(ArtifactType.OptimizationPlan);
+
+        // FR-243: an optimisation plan that leaves out a required deployment file the branch lacks gets that step first.
+        var deployFiles = stack is null
+            ? null
+            : new Domain.Execution.DeployFileCheck(StackRequiredFiles.For(stack), material.BranchFiles, Optimisation: true);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
             : material.ImplementationPlan?.Content;
@@ -345,7 +357,7 @@ public sealed partial class ReviewJobHandler(
         // FR-126: checklist violations take their item's category and severity (still agent violations: no penalty).
         Result<CodeReviewResult> Parse(string text)
         {
-            var read = CodeReviewOutput.Parse(text, maxFiles, agents);
+            var read = CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles);
             return read.IsSuccess
                 ? Result.Success(read.Value with
                 {
@@ -367,7 +379,7 @@ public sealed partial class ReviewJobHandler(
             Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))) with
             {
                 RunKey = AgentOutput.CorrectiveRunKey,
-                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
             },
             cancellationToken);
         var reparsed = Parse(second.Text);

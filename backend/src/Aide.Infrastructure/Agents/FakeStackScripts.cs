@@ -9,7 +9,7 @@ namespace Aide.Infrastructure.Agents;
 /// FR-120–FR-128 (D13, §8 composition E2E): what the Fake responders read from a composed prompt. Every composed block
 /// starts with the composition summary (<see cref="StackGuidance.Heading"/>): its Packs table gives the packs and layer
 /// paths, its Specialists list the agents in play; the plan guidance says whether the repository is empty and which
-/// layers a stack change changed, and lists the contract files.
+/// layers a stack change changed, and lists the contract files and (FR-242) the deployment files the repository lacks.
 /// </summary>
 public sealed partial record FakeComposition(
     string? FrontendPack,
@@ -78,12 +78,37 @@ public sealed partial record FakeComposition(
             }
         }
 
+        // FR-242: the deployment files the guidance asks for (those already in the repository say so instead of listing content).
+        var deployFiles = new List<(string Path, string Owner)>();
+        index = system.IndexOf(StackGuidance.DeploymentFilesHeading, StringComparison.Ordinal);
+        if (index >= 0)
+        {
+            foreach (var line in system[index..].ReplaceLineEndings("\n").Split('\n').Skip(1))
+            {
+                if (line.StartsWith('#'))
+                {
+                    break;
+                }
+
+                if (DeploymentFilePattern().Match(line) is { Success: true } d)
+                {
+                    deployFiles.Add((d.Groups["path"].Value, d.Groups["owner"].Value));
+                }
+            }
+        }
+
         return new FakeComposition(
             fe.Pack, fe.Pack is null ? null : fe.Path ?? "frontend",
             be.Pack, be.Pack is null ? null : be.Path ?? "backend",
             data.Pack, vcs.Pack ?? "vcs-github", feHost.Pack, beHost.Pack, local.Pack is not null,
-            agents, changed, contracts);
+            agents, changed, contracts)
+        {
+            DeploymentFiles = deployFiles,
+        };
     }
+
+    /// <summary>FR-242: the deployment files the plan guidance lists as missing (path, owner).</summary>
+    public IReadOnlyList<(string Path, string Owner)> DeploymentFiles { get; init; } = [];
 
     public bool Has(string agent) => Agents.Contains(agent, StringComparer.Ordinal);
 
@@ -98,6 +123,9 @@ public sealed partial record FakeComposition(
 
     [GeneratedRegex(@"^- `(?<path>[^`]+)`\s*$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex ContractPattern();
+
+    [GeneratedRegex(@"^- `(?<path>[^`]+)` for .+?, owner `(?<owner>[a-z-]+)`.*\. Required content:$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DeploymentFilePattern();
 }
 
 /// <summary>
@@ -209,6 +237,15 @@ public static class FakeStackScripts
                 if (config is not null && !files.Any(f => f.Item1 == config))
                 {
                     files.Add((config, action));
+                }
+            }
+
+            // FR-242: every deployment file the guidance lists as missing (wrangler.jsonc, railway.json, pages.yml, …).
+            foreach (var (path, owner) in c.DeploymentFiles.Where(f => f.Owner == StackAgents.DeployEngineer))
+            {
+                if (!files.Any(f => string.Equals(f.Item1, path, StringComparison.OrdinalIgnoreCase)))
+                {
+                    files.Add((path, "create"));
                 }
             }
 

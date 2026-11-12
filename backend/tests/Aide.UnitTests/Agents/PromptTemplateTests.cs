@@ -93,7 +93,7 @@ public class PromptTemplateTests
     [Theory]
     [InlineData(AgentKind.IdeaRefinement, "6", new[] { "PROJECT_NAME", "IDEA" })]
     [InlineData(AgentKind.SpecGenerator, "7", new[] { "PROJECT_REQUEST" })]
-    [InlineData(AgentKind.PlanGenerator, "6", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })]
+    [InlineData(AgentKind.PlanGenerator, "7", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })] // FR-242: v7 (deployment files)
     [InlineData(AgentKind.CodeGenerator, "5", new[] { "MAX_FILES_PER_STEP", "STEP_NUMBER", "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "STEP_TITLE", "STEP_TASK", "DECLARED_FILES" })]
     [InlineData(AgentKind.CodeReview, "8", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })]
     [InlineData(AgentKind.RepositoryAnalyst, "3", new[] { "PROJECT_NAME" })]

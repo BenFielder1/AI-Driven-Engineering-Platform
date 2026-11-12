@@ -211,5 +211,19 @@
         "runtimes": []
       }
     ]
-  }
+  },
+  "requiredFiles": [
+    {
+      "path": "render.yaml",
+      "alternatives": [],
+      "owner": "deploy-engineer",
+      "folder": "root",
+      "content": [
+        "One service under \"services\" per app deployed to Render, with its \"rootDir\"",
+        "\"buildCommand\" and \"startCommand\" (or \"staticPublishPath\" for a static site)",
+        "\"healthCheckPath\" for web services (the backend's ready endpoint)",
+        "\"envVars\" listing every variable key, with \"sync: false\" for secrets (never a value)"
+      ]
+    }
+  ]
 }

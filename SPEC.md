@@ -200,7 +200,7 @@ New tokens `--scrollbar-track`, `--scrollbar-thumb` and `--scrollbar-thumb-hover
 | deploy-cloudflare | `wrangler.jsonc` (`wrangler.toml`, `wrangler.json`) | deploy-engineer | each Worker/Pages folder | `name`, `compatibility_date`, `main` or `assets`, env bindings declared without values |
 | deploy-render | `render.yaml` | deploy-engineer | repo root | one service per deployed app, build/start commands, health check path, env var keys with `sync: false` for secrets |
 | deploy-railway | `railway.json` (`railway.toml`) | deploy-engineer | each service folder | builder, start command, health check path, pre-deploy migrate command when a data pack has migrations |
-| deploy-github-pages | `.github/workflows/pages.yml` (any workflow using `actions/deploy-pages`) | ci-engineer | repo root | build, upload-pages-artifact, deploy-pages, with `pages: write` and `id-token: write` |
+| deploy-github-pages | `.github/workflows/pages.yml` | deploy-engineer (D-0.6.1-10) | repo root | build, upload-pages-artifact, deploy-pages, with `pages: write` and `id-token: write` |
 
 The agent that owns a fix step for a failure follows the failure source: a preview or deploy failure goes to deploy-engineer, a CI check to the agent owning the failing layer (by the annotation paths, else ci-engineer).
 
@@ -211,10 +211,10 @@ The agent that owns a fix step for a failure follows the failure source: a previ
 4. Re-run `PlanValidator`. If the added step breaks a limit, raise the existing `INVALID_PLAN` retry path. Never store an invalid plan.
 
 ## 5. Data
-No schema changes and no migrations. Failure excerpts live in the existing `compliance_reports.external_checks` jsonb. `addedBy` and `addedReason` are new optional fields in the stored plan document (jsonb/markdown front matter). Older plans without them read as agent-written.
+No schema changes and no migrations. Failure excerpts live in the existing `compliance_reports.external_checks` jsonb. `addedBy` and `addedReason` are new optional fields on steps in the stored `aide-plan` block. Older plans without them read as agent-written.
 
 ## 6. API
-No new endpoints. The plan step schema gains optional `addedBy` (`"tevrin"` | null) and `addedReason` (string | null). This change is additive: regenerate `openapi/api.json` and the client.
+No new endpoints and no contract change. The plan is read from the artifact's `aide-plan` JSON block, so the optional step fields `addedBy` (`"tevrin"` or absent) and `addedReason` (string or absent) live there (D-0.6.1-10). Only Tevrin sets them; values from an agent reply are ignored.
 
 ### Error codes
 None new. Log-fetch failures are logged warnings, not errors (FR-236). Plans that fail validation after a step is added use `INVALID_PLAN` (422, unchanged).
@@ -245,6 +245,7 @@ Unchanged from 0.6.0. The GitHub App manifest for new registrations adds `action
 | D-0.6.1-7 | Excerpt caps: 6,000 characters per failure and 18,000 per prompt | Claude | assumed |
 | D-0.6.1-8 | Failing non-required GitHub checks stay dropped (unchanged), so log fetches are only for required checks | Claude | assumed |
 | D-0.6.1-9 | Build (M46 review): Cloudflare preview triggers and Pages exclusions that exist before 0.6.1 are patched to add `tevrin/*` (keeping other excludes) on link and verify; if the patch fails, readiness `branch_control` is Missing. A Vercel key `*` doesn't match `tevrin/…` (it can't cross `/`) | Claude | assumed |
+| D-0.6.1-10 | Build (M48): the GitHub Pages workflow is owned by deploy-engineer (the VCS packs exclude `pages.yml` from ci-engineer, so a ci-engineer step would be `INVALID_PLAN`), and only `.github/workflows/pages.yml` counts as present. Deploy-engineer also owns `railway.json`/`railway.toml` and `wrangler.toml`/`wrangler.json`. The added-step fields live in the `aide-plan` block, not the API contract. No step is added when the repo file list is unknown or truncated, or the optimisation plan is empty. Steps are added only after the agent's own plan validates, so retry reasons use the agent's numbering. `addedBy` survives human edits only on steps Tevrin added; a step an agent keeps when regenerating a plan becomes agent-written | Claude | assumed |
 
 ## 11. Open questions
 

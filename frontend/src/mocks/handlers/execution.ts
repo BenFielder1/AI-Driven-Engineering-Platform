@@ -29,6 +29,9 @@ export interface MockPlanStep {
   files: { path: string; action: FileAction }[];
   dependencies: number[];
   userInstructions?: string | null;
+  /** FR-244, D-0.6.1-10: set by Tevrin on a step it added; any other value is ignored by the UI. */
+  addedBy?: string;
+  addedReason?: string;
 }
 
 /** A plan document as the backend renders it (PlanDocument.Render): a readable list, then the aide-plan block. */

@@ -42,7 +42,7 @@ describe('Plan steps (FR-29, FR-30)', () => {
   it('FR29_reads_the_structured_steps_from_the_aide_plan_block', () => {
     expect(readPlanBlock(planMarkdown(steps))).toEqual([
       // FR-76: `agent` and `covers` are absent from this 0.1.0-style block.
-      { number: 1, title: 'Set up the schema', files: [{ path: 'db/schema.sql', action: 'create' }], dependencies: [], agent: null, covers: [] },
+      { number: 1, title: 'Set up the schema', files: [{ path: 'db/schema.sql', action: 'create' }], dependencies: [], agent: null, covers: [], addedBy: null, addedReason: null },
       {
         number: 2,
         title: 'Items API',
@@ -53,6 +53,8 @@ describe('Plan steps (FR-29, FR-30)', () => {
         dependencies: [1],
         agent: null,
         covers: [],
+        addedBy: null,
+        addedReason: null,
       },
     ])
     expect(readPlanBlock('# Plan\n\nNo block here.')).toBeNull()
@@ -178,5 +180,67 @@ describe('Plan steps (FR-29, FR-30)', () => {
     expect(ci).toHaveTextContent('.github/workflows/ci.yml (create) Protected')
     expect(within(app).queryByText('Protected')).not.toBeInTheDocument()
     expect(screen.getByText(/may be changed only by the step that declares them/)).toBeInTheDocument()
+  })
+
+  describe('Added by Tevrin (FR-244)', () => {
+    const withAdded: MockPlanStep[] = [
+      { number: 1, title: 'Scaffold', task: 'Scaffold it.', files: [{ path: 'frontend/package.json', action: 'create' }], dependencies: [] },
+      {
+        number: 2,
+        title: 'Vercel config',
+        task: 'Add vercel.json.',
+        files: [{ path: 'frontend/vercel.json', action: 'create' }],
+        dependencies: [1],
+        addedBy: 'tevrin',
+        addedReason: 'frontend/vercel.json was missing from the plan',
+      },
+      { number: 3, title: 'Other provenance', task: 'Ignore it.', files: [{ path: 'b.ts', action: 'create' }], dependencies: [1], addedBy: 'other', addedReason: 'not ours' },
+    ]
+
+    it('FR244_reads_addedBy_tevrin_and_ignores_other_values', () => {
+      const read = readPlanBlock(planMarkdown(withAdded))
+      expect(read?.map((s) => [s.addedBy, s.addedReason])).toEqual([
+        [null, null],
+        ['tevrin', 'frontend/vercel.json was missing from the plan'],
+        [null, null],
+      ])
+    })
+
+    it('FR244_an_added_step_shows_the_badge_and_reason_in_the_draft_preview', async () => {
+      const project = seedPlanning('viewer', (p) => {
+        seedArtifact(p, { type: PLAN, content: planMarkdown(withAdded) })
+      })
+      await openArtifact(project, PLAN)
+
+      const [agentStep, added, other] = stepRows(/^Preview of the 3 steps in draft v1/)
+      if (!agentStep || !added || !other) {
+        throw new Error('missing step rows')
+      }
+      expect(within(added).getByText('Added by Tevrin')).toBeVisible()
+      expect(within(added).getByText('frontend/vercel.json was missing from the plan')).toBeVisible()
+      // Badge and reason are one readable unit: a visually hidden ": " joins them.
+      expect(within(added).getByTestId('plan-step-added-by-tevrin')).toHaveTextContent('Added by Tevrin: frontend/vercel.json was missing from the plan')
+      expect(within(agentStep).queryByText('Added by Tevrin')).not.toBeInTheDocument()
+      expect(within(other).queryByText('Added by Tevrin')).not.toBeInTheDocument()
+      expect(other).not.toHaveTextContent('not ours')
+    })
+
+    it('FR244_an_approved_plan_shows_the_badge_on_its_execution_steps', async () => {
+      const project = seedPlanning('viewer', (p) => {
+        const plan = seedArtifact(p, { type: PLAN, content: planMarkdown(withAdded), status: 'locked' })
+        createExecutionSteps(p, plan, withAdded)
+      })
+      await openArtifact(project, PLAN)
+
+      await screen.findByRole('table', { name: '3 execution steps of v1' })
+      const [agentStep, added, other] = stepRows(/^3 execution steps of v1$/)
+      if (!agentStep || !added || !other) {
+        throw new Error('missing step rows')
+      }
+      expect(added).toHaveTextContent('Added by Tevrin')
+      expect(added).toHaveTextContent('frontend/vercel.json was missing from the plan')
+      expect(within(agentStep).queryByText('Added by Tevrin')).not.toBeInTheDocument()
+      expect(within(other).queryByText('Added by Tevrin')).not.toBeInTheDocument()
+    })
   })
 })

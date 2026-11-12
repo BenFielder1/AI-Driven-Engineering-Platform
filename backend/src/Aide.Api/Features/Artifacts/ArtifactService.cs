@@ -63,7 +63,17 @@ public sealed partial class ArtifactService(
         {
             var agents = (await stacks.CurrentAsync(projectId, cancellationToken)).PlanAgents(type);
             var plan = PlanDocument.ParseMarkdown(content, project.MaxFilesPerStep, agents);
-            var rendered = plan.IsSuccess ? PlanDocument.RenderChecked(type, plan.Value, project.MaxFilesPerStep, agents) : Result.Failure<string>(plan.Error!);
+
+            // FR-244: an edit keeps "added by Tevrin" only on steps Tevrin added in the latest version (same agent and files).
+            var latest = plan.IsSuccess
+                ? await db.Artifacts.AsNoTracking()
+                    .Where(a => a.ProjectId == projectId && a.Type == type)
+                    .OrderByDescending(a => a.Version)
+                    .Select(a => a.Content)
+                    .FirstOrDefaultAsync(cancellationToken)
+                : null;
+            var steps = plan.IsSuccess ? DeployFileSteps.KeepProvenance(plan.Value, latest is null ? [] : PlanDocument.ReadSteps(latest)) : null;
+            var rendered = steps is not null ? PlanDocument.RenderChecked(type, steps, project.MaxFilesPerStep, agents) : Result.Failure<string>(plan.Error!);
             if (rendered.IsFailure)
             {
                 return Result.Failure<Artifact>(rendered.Error!);

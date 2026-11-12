@@ -80,7 +80,7 @@ public sealed partial class Fr198To201RenameTests
     [Theory]
     [InlineData(AgentKind.IdeaRefinement, "6")]
     [InlineData(AgentKind.SpecGenerator, "7")]
-    [InlineData(AgentKind.PlanGenerator, "6")]
+    [InlineData(AgentKind.PlanGenerator, "7")] // FR-242: v7 (deployment files)
     [InlineData(AgentKind.CodeGenerator, "5")]
     [InlineData(AgentKind.CodeReview, "8")]
     [InlineData(AgentKind.RepositoryAnalyst, "3")]

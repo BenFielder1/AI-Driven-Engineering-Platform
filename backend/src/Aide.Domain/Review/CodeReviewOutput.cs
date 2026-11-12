@@ -40,7 +40,8 @@ public sealed record CodeReviewResult(
 /// §4.6; with a composition, the <c>agents</c> of <see cref="PlanAgents.ForStackOptimization"/>, FR-124) and must render to a
 /// document that reads back to the same steps. An unreadable reply is <c>INVALID_OUTPUT</c>; a
 /// readable reply with an invalid plan is <c>INVALID_PLAN</c>. Either way every reason is in <see cref="DomainError.Details"/>
-/// so the one corrective re-run can fix them all.
+/// so the one corrective re-run can fix them all. FR-243: with <c>deployFiles</c>, a step for each missing deployment file
+/// is added only after the agent's own steps validate, then the plan is validated again (<see cref="DeployFileSteps.AddValidated"/>).
 /// </summary>
 public static class CodeReviewOutput
 {
@@ -49,7 +50,7 @@ public static class CodeReviewOutput
 
     public const int MaxTextLength = 2000;
 
-    public static Result<CodeReviewResult> Parse(string text, int maxFilesPerStep, PlanAgents? agents = null)
+    public static Result<CodeReviewResult> Parse(string text, int maxFilesPerStep, PlanAgents? agents = null, DeployFileCheck? deployFiles = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         var json = AgentOutput.ExtractJsonObject(text);
@@ -88,7 +89,7 @@ public static class CodeReviewOutput
                 return Invalid(reasons);
             }
 
-            var plan = ReadPlan(root, maxFilesPerStep, agents);
+            var plan = ReadPlan(root, maxFilesPerStep, agents, deployFiles);
             if (plan.IsFailure)
             {
                 return Result.Failure<CodeReviewResult>(plan.Error!);
@@ -345,7 +346,7 @@ public static class CodeReviewOutput
         return result;
     }
 
-    private static Result<(IReadOnlyList<PlanStep> Steps, string? Markdown)> ReadPlan(JsonElement root, int maxFilesPerStep, PlanAgents? agents)
+    private static Result<(IReadOnlyList<PlanStep> Steps, string? Markdown)> ReadPlan(JsonElement root, int maxFilesPerStep, PlanAgents? agents, DeployFileCheck? deployFiles)
     {
         if (!root.TryGetProperty("optimizationPlan", out var plan) || plan.ValueKind == JsonValueKind.Null)
         {
@@ -364,7 +365,13 @@ public static class CodeReviewOutput
         }
 
         var parsed = PlanDocument.ParseJson(plan.GetRawText());
+        // FR-243: the agent's own steps are validated first (a retry names its step numbers); then an optimisation plan that
+        // leaves out a required deployment file gets the step first and is validated again.
         var validated = parsed.IsSuccess ? PlanValidator.Validate(parsed.Value, maxFilesPerStep, allowProtectedPaths: false, agents) : parsed;
+        if (validated.IsSuccess && deployFiles is not null)
+        {
+            validated = DeployFileSteps.AddValidated(validated.Value, deployFiles, steps => PlanValidator.Validate(steps, maxFilesPerStep, allowProtectedPaths: false, agents));
+        }
         if (validated.IsFailure)
         {
             return Result.Failure<(IReadOnlyList<PlanStep>, string?)>(validated.Error!);

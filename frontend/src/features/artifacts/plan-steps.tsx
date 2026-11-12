@@ -3,6 +3,7 @@ import { ErrorState, LoadingState } from '../../components/ui/states'
 import { useExecutionSteps, type StepStatus } from '../execution/execution-api'
 import { stepStatusLabels } from '../projects/labels'
 import type { Artifact } from './artifacts-api'
+import { AddedByTevrin } from './added-by-tevrin'
 import { PLAN_BLOCK_LANGUAGE, readPlanBlock, type PlanPreviewStep } from './plan-block'
 import { panelClass } from '../../components/shared/panel-class'
 import { cn } from '../../lib/utils'
@@ -16,10 +17,13 @@ const stepTones: Record<StepStatus, BadgeTone> = {
   invalidated: 'warning',
 }
 
-interface Row extends Omit<PlanPreviewStep, 'files' | 'agent' | 'covers'> {
+interface Row extends Omit<PlanPreviewStep, 'files' | 'agent' | 'covers' | 'addedBy' | 'addedReason'> {
   /** `protected` comes from the server (FR-30, §4.6); a draft preview can't tell, so it leaves it unset. */
   files: { path: string; action: string; protected?: boolean }[]
   status?: StepStatus
+  /** FR-244: from the plan version's aide-plan block (execution steps don't carry it). */
+  addedBy?: PlanPreviewStep['addedBy']
+  addedReason?: PlanPreviewStep['addedReason']
 }
 
 function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[]; withStatus: boolean }) {
@@ -55,7 +59,10 @@ function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[
               <th scope="row" className="px-3 py-2 text-left font-medium">
                 {step.number}
               </th>
-              <td className="px-3 py-2 break-words">{step.title}</td>
+              <td className="px-3 py-2 break-words">
+                {step.title}
+                <AddedByTevrin addedBy={step.addedBy} addedReason={step.addedReason} />
+              </td>
               <td className="px-3 py-2">
                 <ul className="flex flex-col gap-0.5">
                   {step.files.map((f) => (
@@ -119,6 +126,8 @@ function VersionSteps({ projectId, artifact }: { projectId: string; artifact: Ar
     return <ErrorState error={query.error} title="The plan's steps couldn't load" onRetry={() => void query.refetch()} />
   }
   const { steps } = query.data
+  // FR-244: the execution step DTO has no provenance, so match the version's plan block by step number.
+  const planned = new Map((readPlanBlock(artifact.content) ?? []).map((p) => [p.number, p]))
   if (steps.length === 0) {
     return <p className="text-sm text-muted-foreground">v{artifact.version} has no execution steps: steps are created only when a plan version is approved.</p>
   }
@@ -131,6 +140,8 @@ function VersionSteps({ projectId, artifact }: { projectId: string; artifact: Ar
         files: s.declaredFiles,
         dependencies: s.dependencies,
         status: s.status,
+        addedBy: planned.get(s.number)?.addedBy ?? null,
+        addedReason: planned.get(s.number)?.addedReason ?? null,
       }))}
       withStatus
     />

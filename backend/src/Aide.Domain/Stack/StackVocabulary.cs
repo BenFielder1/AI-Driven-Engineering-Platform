@@ -169,6 +169,15 @@ public static class PackVocabulary
 
     public static IReadOnlyList<string> Components { get; } = ["frontend", "backend", "database"];
 
+    /// <summary>FR-241, §4.40: where a required file lives: each folder the pack deploys, or the repository root.</summary>
+    public static IReadOnlyList<string> RequiredFileFolders { get; } = [RequiredFileAppFolder, RequiredFileRootFolder];
+
+    /// <summary>A required file in each folder the deploy pack deploys (the frontend and/or backend path).</summary>
+    public const string RequiredFileAppFolder = "app";
+
+    /// <summary>A required file at the repository root, once.</summary>
+    public const string RequiredFileRootFolder = "root";
+
     /// <summary>§4.18 deterministic review rule ids that packs may register.</summary>
     public static IReadOnlyList<string> DeterministicRules { get; } =
     [

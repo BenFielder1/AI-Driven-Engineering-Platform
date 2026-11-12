@@ -17,6 +17,10 @@ export interface PlanPreviewStep {
   agent: string | null
   /** FR-76: the requirement ids the step covers. */
   covers: string[]
+  /** FR-244, D-0.6.1-10: `'tevrin'` on a step Tevrin added to the plan (§4.41); null on agent-written steps. */
+  addedBy: 'tevrin' | null
+  /** FR-244: why Tevrin added the step (e.g. "frontend/vercel.json was missing from the plan"); null when absent. */
+  addedReason: string | null
 }
 
 /** Same shape as the backend's BlockPattern: a line ```aide-plan, the JSON, then a closing ``` line. */
@@ -26,6 +30,18 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+/**
+ * FR-244, D-0.6.1-10: a step's provenance. Only `addedBy: "tevrin"` counts (any other value is ignored, like the
+ * backend's PlanDocument), and the reason is read only for such a step.
+ */
+function readProvenance(step: Record<string, unknown>): Pick<PlanPreviewStep, 'addedBy' | 'addedReason'> {
+  if (typeof step.addedBy !== 'string' || step.addedBy.trim() !== 'tevrin') {
+    return { addedBy: null, addedReason: null }
+  }
+  const reason = typeof step.addedReason === 'string' ? step.addedReason.trim() : ''
+  return { addedBy: 'tevrin', addedReason: reason || null }
+}
 
 /**
  * A read-only preview of a plan draft's steps, read from its single ```aide-plan block (FR-29, D6). Display only:
@@ -73,6 +89,7 @@ export function readPlanDocument(markdown: string): { steps: PlanPreviewStep[]; 
       dependencies: Array.isArray(step.dependencies) ? step.dependencies.filter((d): d is number => typeof d === 'number') : [],
       agent: typeof step.agent === 'string' && step.agent ? step.agent : null,
       covers: Array.isArray(step.covers) ? step.covers.filter((c): c is string => typeof c === 'string') : [],
+      ...readProvenance(step),
     })
   }
   return { steps: out, coverageWarnings }

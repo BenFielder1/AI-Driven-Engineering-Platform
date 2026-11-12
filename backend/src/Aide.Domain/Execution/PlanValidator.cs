@@ -27,6 +27,18 @@ public sealed record PlanStep(
 
     /// <summary>§4.23: the 0.2.0 preset agent key the step was planned with (mapped to <see cref="Agent"/>), or <c>null</c>.</summary>
     public string? LegacyAgent { get; init; }
+
+    /// <summary>
+    /// FR-243, FR-244: <see cref="AddedByTevrin"/> when Tevrin added the step (§4.41), else <c>null</c> (agent- or Owner-written;
+    /// plans stored before 0.6.1 read as <c>null</c>).
+    /// </summary>
+    public string? AddedBy { get; init; }
+
+    /// <summary>FR-244: why Tevrin added the step (e.g. "frontend/vercel.json was missing from the plan"), or <c>null</c>.</summary>
+    public string? AddedReason { get; init; }
+
+    /// <summary>The <see cref="AddedBy"/> value of a step Tevrin added.</summary>
+    public const string AddedByTevrin = "tevrin";
 }
 
 /// <summary>

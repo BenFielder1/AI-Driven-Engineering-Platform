@@ -191,6 +191,8 @@ public sealed class SpecGenerationJobHandler(
 /// FR-124: with a stack composition the prompt gets its specialists and plan rules (<see cref="StackGuidance.Plan"/>), and
 /// the plan is validated with them (<see cref="PlanAgents.ForStack"/>: specialist keys, ordering/exclusive/file-limit rules,
 /// scaffold first on an empty repository, the protected-path ownership exception); its warnings are shown with the draft.
+/// FR-242, FR-243: the guidance lists the deploy targets' required files, and a step is added for each one the plan and the
+/// base commit both lack (<see cref="DeployFileSteps"/>) before the plan is validated and stored.
 /// </summary>
 public sealed class PlanGenerationJobHandler(
     ArtifactAgentJob agentJob,
@@ -219,7 +221,10 @@ public sealed class PlanGenerationJobHandler(
         var agents = version.PlanAgents(ArtifactType.ImplementationPlan);
 
         // FR-124: the composition's specialists and composed rules, else none (generalist).
-        var guidance = version.Stack is { } stack ? StackGuidance.Plan(stack, version.RepoEmpty) : null;
+        var guidance = version.Stack is { } stack ? StackGuidance.Plan(stack, version.RepoEmpty, version.BaseFiles) : null;
+        var deployFiles = version.Stack is { } composed
+            ? new DeployFileCheck(StackRequiredFiles.For(composed), version.BaseFiles, Optimisation: false)
+            : null;
         AgentRunRequest Request(string? previousPlan, string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -246,7 +251,7 @@ public sealed class PlanGenerationJobHandler(
                 ArtifactType.ImplementationPlan,
                 text =>
                 {
-                    var plan = PlanDocument.ParseAgentOutput(text, maxFiles, agents);
+                    var plan = PlanDocument.ParseAgentOutput(text, maxFiles, agents, deployFiles);
                     return plan.IsSuccess
                         ? PlanDocument.RenderChecked(ArtifactType.ImplementationPlan, plan.Value, maxFiles, agents)
                         : Result.Failure<string>(plan.Error!);
@@ -257,11 +262,16 @@ public sealed class PlanGenerationJobHandler(
             cancellationToken);
     }
 
-    /// <summary>A stored plan as the agent's JSON (the canonical block), or the Markdown when it has no valid block.</summary>
+    /// <summary>
+    /// A stored plan as the agent's JSON (the canonical block), or the Markdown when it has no valid block. FR-244: without
+    /// <c>addedBy</c>/<c>addedReason</c>, so a step the agent keeps on regeneration is agent-written.
+    /// </summary>
     private static string PreviousPlanJson(string markdown, PlanAgents agents)
     {
         var parsed = PlanDocument.ParseMarkdown(markdown, maxFilesPerStep: null, agents);
-        return parsed.IsSuccess ? PlanDocument.ToJson(parsed.Value) : markdown;
+        return parsed.IsSuccess
+            ? PlanDocument.ToJson([.. parsed.Value.Select(s => s with { AddedBy = null, AddedReason = null })])
+            : markdown;
     }
 }
 

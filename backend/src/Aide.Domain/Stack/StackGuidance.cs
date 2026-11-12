@@ -29,6 +29,16 @@ public static class StackGuidance
     /// <summary>The subheading of the contract files a step changing the API must declare (one <c>- `path`</c> line each).</summary>
     public const string ContractFilesHeading = "### Contract files";
 
+    /// <summary>
+    /// FR-242: the subheading of the deployment files the deploy targets need (one line per file:
+    /// <c>- `path` for Platform, owner `agent`. Required content:</c> with the content as sub-items, or
+    /// <c>- `path` for Platform, owner `agent`: already in the repository.</c>).
+    /// </summary>
+    public const string DeploymentFilesHeading = "### Deployment files";
+
+    /// <summary>The marker of a required deployment file the repository already has.</summary>
+    public const string AlreadyInRepositoryText = "already in the repository";
+
     /// <summary>The sentence the plan guidance has when the scaffold-first rule applies (the repository is empty).</summary>
     public const string RepoEmptyText = "**This repository is empty, so step 1 of this plan is assigned to the scaffolder.**";
 
@@ -84,9 +94,11 @@ public static class StackGuidance
 
     /// <summary>
     /// FR-124: the composition summary, the specialist catalogue (key, name, description, owned paths) and the composed plan
-    /// rules. <paramref name="repoEmpty"/> says whether the scaffold-first rule applies to this plan.
+    /// rules. <paramref name="repoEmpty"/> says whether the scaffold-first rule applies to this plan. FR-242: the required
+    /// deployment files of the deploy targets (<see cref="StackRequiredFiles.For"/>) with their owner and required content;
+    /// those in <paramref name="baseFiles"/> (the base commit's files, when known) are marked as already in the repository.
     /// </summary>
-    public static string Plan(StackResolution resolution, bool repoEmpty)
+    public static string Plan(StackResolution resolution, bool repoEmpty, IReadOnlySet<string>? baseFiles = null)
     {
         ArgumentNullException.ThrowIfNull(resolution);
         var sb = new StringBuilder(resolution.Summary.TrimEnd());
@@ -159,7 +171,41 @@ public static class StackGuidance
             }
         }
 
+        DeploymentFiles(sb, StackRequiredFiles.For(resolution), baseFiles);
         return sb.ToString();
+    }
+
+    private static void DeploymentFiles(StringBuilder sb, IReadOnlyList<StackRequiredFile> files, IReadOnlySet<string>? baseFiles)
+    {
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        sb.Append("\n\n").Append(DeploymentFilesHeading).Append("\n\n")
+            .Append("The deploy targets need these files. For each one the repository doesn't have, plan a step assigned to its owner ")
+            .Append("that creates it with the required content (right after the scaffold step; no other agent declares it). ")
+            .Append("If the plan leaves one out, Tevrin adds that step itself.\n");
+        foreach (var file in files)
+        {
+            sb.Append("\n- `").Append(file.Path).Append("` for ").Append(file.Platform).Append(", owner `").Append(file.Owner).Append('`');
+            if (file.Alternatives.Count > 0)
+            {
+                sb.Append(" (also accepted: ").Append(Globs(file.Alternatives)).Append(')');
+            }
+
+            if (baseFiles is not null && file.AcceptedPaths.Any(baseFiles.Contains))
+            {
+                sb.Append(": ").Append(AlreadyInRepositoryText).Append('.');
+                continue;
+            }
+
+            sb.Append(". Required content:");
+            foreach (var line in file.Content)
+            {
+                sb.Append("\n  - ").Append(line);
+            }
+        }
     }
 
     /// <summary>

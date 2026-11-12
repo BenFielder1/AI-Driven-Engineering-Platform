@@ -36,7 +36,9 @@
       ".github/workflows/pages.yml",
       "render.yaml",
       ".railway/**",
-      ".env.example"
+      ".env.example",
+      "railway.json",
+      "railway.toml"
     ]
   },
   "agentSections": {
@@ -226,5 +228,21 @@
         "runtimes": []
       }
     ]
-  }
+  },
+  "requiredFiles": [
+    {
+      "path": "railway.json",
+      "alternatives": [
+        "railway.toml"
+      ],
+      "owner": "deploy-engineer",
+      "folder": "app",
+      "content": [
+        "\"$schema\": \"https://railway.com/railway.schema.json\"",
+        "\"build\": {\"builder\": …} (DOCKERFILE with \"dockerfilePath\" for a container, else RAILPACK)",
+        "\"deploy\": {\"startCommand\": …, \"healthcheckPath\": …} (the backend's ready endpoint for a service with one)",
+        "\"deploy\": {\"preDeployCommand\": …} running the data pack's migrate command when a data pack has migrations"
+      ]
+    }
+  ]
 }

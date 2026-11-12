@@ -197,5 +197,20 @@
         ]
       }
     ]
-  }
+  },
+  "requiredFiles": [
+    {
+      "path": "vercel.json",
+      "alternatives": [],
+      "owner": "deploy-engineer",
+      "folder": "app",
+      "content": [
+        "\"$schema\": \"https://openapi.vercel.sh/vercel.json\"",
+        "\"framework\" set to the app's Vercel framework preset (nextjs, vite, angular, …)",
+        "\"buildCommand\", \"outputDirectory\" and \"installCommand\" only where they differ from the framework defaults",
+        "\"git\": {\"deploymentEnabled\": {\"tevrin/**\": false, \"aide/**\": false}}, with no other true rule matching tevrin/** or aide/**",
+        "For a client-routed SPA: \"rewrites\": [{\"source\": \"/(.*)\", \"destination\": \"/index.html\"}]"
+      ]
+    }
+  ]
 }
