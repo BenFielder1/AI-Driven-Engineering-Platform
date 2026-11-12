@@ -364,6 +364,44 @@ describe('Review decision copy (FR-39, FR-40, FR-14)', () => {
     ).toBe('Review cycle 2 completed: score 84%, escalated to an Owner (another cycle was needed but the review proposed no optimisation steps)')
   })
 
+  it('FR237_multi_line_evidence_renders_in_a_scrolling_pre_and_keeps_its_lines', async () => {
+    const log = ['Run npm test', 'FAIL src/cart.test.ts', '  ● total › adds tax', '    Expected: 110', '    Received: 100'].join('\n')
+    const project = seedReview('viewer', (p) => {
+      seedComplianceReport(p, {
+        decision: 'review_required',
+        violations: [
+          { category: 'testing', severity: 'major', source: 'deterministic', message: 'Required check "test" failed', file: null, evidence: log },
+        ],
+      })
+    })
+    await openReview(project)
+
+    const violations = region('Violations (1)')
+    const block = within(violations).getByLabelText('Evidence for Required check "test" failed')
+    expect(block.tagName).toBe('PRE')
+    expect(block.textContent).toBe(log)
+    expect(block.textContent.split('\n')).toHaveLength(5)
+    expect(block).toHaveAttribute('tabindex', '0')
+    expect(block).toHaveClass('whitespace-pre', 'overflow-auto', 'max-h-64', 'font-mono')
+  })
+
+  it('FR237_single_line_evidence_stays_inline', async () => {
+    const project = seedReview('viewer', (p) => {
+      seedComplianceReport(p, {
+        decision: 'review_required',
+        violations: [
+          { category: 'security', severity: 'critical', source: 'deterministic', message: 'Secret in source', file: 'src/config.ts', evidence: 'sk-…' },
+        ],
+      })
+    })
+    await openReview(project)
+
+    const violations = region('Violations (1)')
+    const evidence = within(violations).getByText('Evidence: sk-…')
+    expect(evidence.tagName).toBe('SPAN')
+    expect(violations.querySelector('pre')).toBeNull()
+  })
+
   it('NFR-A11Y: review sections are labelled regions and the chart is a described image', async () => {
     const project = seedReview('owner', (p) => seedComplianceReport(p))
     await openReview(project)

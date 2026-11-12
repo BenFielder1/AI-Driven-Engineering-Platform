@@ -147,6 +147,63 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         Assert.Equal((DeploymentTrigger.Manual, (Guid?)fixture.Contributor.User!.Id, (Guid?)manualJob.Id, DeploymentStatus.Ready), (redeployed.Trigger, redeployed.TriggeredBy, redeployed.RolloutId, redeployed.Status));
     }
 
+    /// <summary>Records the prompts the inner responder answers.</summary>
+    private sealed class RecordingResponder(IFakeAgentResponder inner) : IFakeAgentResponder
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
+
+        public Aide.Domain.Agents.AgentKind Agent => inner.Agent;
+
+        public IReadOnlyList<string> Prompts => [.. _prompts];
+
+        public string Respond(LlmRequest request)
+        {
+            _prompts.Enqueue(string.Join("\n", request.Messages.Select(m => m.Content)));
+            return inner.Respond(request);
+        }
+    }
+
+    [Fact]
+    public async Task FR237_FR238_FR239_A_failed_Vercel_preview_log_reaches_the_review_prompt_and_the_stored_fix_steps_evidence_block()
+    {
+        const string ModuleNotFound = "Module not found: Can't resolve '@/lib/db'";
+        var review = new RecordingResponder(new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.80m], OptimizationStepsByCycle = [1] }));
+        var app = AgentJobs.WithResponders(DeploymentHarness.Fake(factory), review);
+        using var fixture = await ExecutingAsync(app, extraFile: FakeDeploymentRules.FailBuildMarker);
+        var id = fixture.Project.Id;
+        await AgentJobs.RunQueuedAsync(app, id);
+        var preview = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id));
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id)).Id);
+
+        // The stored (already redacted) build log tail of a Next.js build that can't resolve a module.
+        var log = "Running \"npm run build\"\n> next build\nCreating an optimized production build ...\nFailed to compile.\n\n./src/app/page.tsx\n"
+            + ModuleNotFound + "\n\nhttps://nextjs.org/docs/messages/module-not-found\nError: Command \"npm run build\" exited with 1";
+        await ProjectApi.WithDbAsync(app, db => db.Deployments.Where(d => d.Id == preview.Id).ExecuteUpdateAsync(s => s.SetProperty(d => d.BuildLogTail, log), Ct));
+
+        await DeploymentHarness.SettleAsync(app, (await ReviewJobAsync(app, id)).Id);
+
+        // FR-237: the prompt's deterministic findings list the failure id with the log line in its excerpt.
+        var prompt = Assert.Single(review.Prompts);
+        var findings = prompt[prompt.IndexOf("<deterministic_findings>", StringComparison.Ordinal)..prompt.IndexOf("</deterministic_findings>", StringComparison.Ordinal)];
+        Assert.Contains("failure id failure:preview:vercel (preview deployment): Vercel preview build failed", findings, StringComparison.Ordinal);
+        Assert.Contains(ModuleNotFound, findings, StringComparison.Ordinal);
+
+        // The finding and external_checks.failures carry the id and the excerpt.
+        var report = await ReportAsync(app, id);
+        var finding = Assert.Single(report.Violations, v => v.Message == "Vercel preview build failed");
+        Assert.Equal("failure:preview:vercel", finding.FailureId);
+        Assert.Contains(ModuleNotFound, finding.Evidence, StringComparison.Ordinal);
+        var failure = Assert.Single(JsonDocument.Parse(report.ExternalChecks!).RootElement.GetProperty("failures").EnumerateArray());
+        Assert.Equal(("failure:preview:vercel", "preview", 1), (failure.GetProperty("id").GetString(), failure.GetProperty("source").GetString(), failure.GetProperty("cycles").GetInt32()));
+
+        // FR-238, FR-239: the fix step naming the failure id is stored with the evidence block (and reads back with it).
+        var plan = await ProjectApi.WithDbAsync(app, db => db.Artifacts.AsNoTracking().SingleAsync(a => a.Id == report.OptimizationPlanArtifactId, Ct));
+        var step = Assert.Single(PlanDocument.ParseMarkdown(plan.Content, 10).Value);
+        Assert.Contains("failure:preview:vercel", step.Title + step.Task, StringComparison.Ordinal);
+        Assert.Contains("**Failure evidence** (added by Tevrin)\nFailure id: failure:preview:vercel\nSource: preview deployment", step.Task, StringComparison.Ordinal);
+        Assert.Contains("    " + ModuleNotFound, step.Task, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task FR90_FR91_A_Fake_build_with_aide_fake_fail_build_is_a_critical_finding_and_a_failed_production_deployment_keeps_the_release()
     {

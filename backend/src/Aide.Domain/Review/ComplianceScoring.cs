@@ -8,7 +8,23 @@ public sealed record ReviewFinding(
     string Message,
     string? Path = null,
     FindingSource Source = FindingSource.Deterministic,
-    string? Evidence = null);
+    string? Evidence = null)
+{
+    /// <summary>
+    /// FR-237, §4.37: the stable failure id of a failure finding (a failed preview or deploy, a failed CI check), e.g.
+    /// <c>failure:preview:vercel</c>; <c>null</c> for every other finding (and for reports written before 0.6.1). Not written
+    /// when <c>null</c>, so other findings are stored as before.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? FailureId { get; init; }
+
+    /// <summary>
+    /// §4.37: the first error line of a failure's annotation and log lines (never the check title or summary), for its
+    /// fingerprint; <c>null</c> when it has none or isn't a failure. Not written when <c>null</c>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? FailureErrorLine { get; init; }
+}
 
 /// <summary>Category scores after penalties, and the weighted overall score.</summary>
 public sealed record ComplianceScore(IReadOnlyDictionary<ReviewCategory, decimal> CategoryScores, decimal Overall);

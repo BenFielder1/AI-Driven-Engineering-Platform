@@ -165,6 +165,29 @@ export function DriftSection({ report }: { report: Report }) {
   )
 }
 
+/**
+ * FR-41: a violation's evidence. FR-236/FR-237: failure findings carry multi-line build or CI log excerpts (up to 6,000
+ * characters), shown in a scrolling monospace block that keeps their lines; single-line evidence stays inline.
+ */
+function ViolationEvidence({ evidence, message }: { evidence: string; message: string }) {
+  if (!evidence.includes('\n')) {
+    return <span className="text-xs">Evidence: {evidence}</span>
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs">Evidence:</span>
+      <pre
+        data-testid="violation-evidence"
+        tabIndex={0}
+        aria-label={`Evidence for ${message}`}
+        className="max-h-64 max-w-full overflow-auto rounded-lg border border-border/60 bg-background px-3 py-2 font-mono text-xs whitespace-pre"
+      >
+        {evidence}
+      </pre>
+    </div>
+  )
+}
+
 /** FR-41: violations grouped by severity, each with its category, source, file and evidence. */
 export function ViolationsSection({ report }: { report: Report }) {
   const groups = findingSeverities
@@ -193,7 +216,7 @@ export function ViolationsSection({ report }: { report: Report }) {
                       </span>
                     )}
                   </span>
-                  {v.evidence && <span className="text-xs">Evidence: {v.evidence}</span>}
+                  {v.evidence && <ViolationEvidence evidence={v.evidence} message={v.message} />}
                 </li>
               ))}
             </ul>

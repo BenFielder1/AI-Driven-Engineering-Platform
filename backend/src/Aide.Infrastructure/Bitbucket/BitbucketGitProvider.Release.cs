@@ -93,6 +93,54 @@ internal sealed partial class BitbucketGitProvider
     }
 
     /// <summary>
+    /// FR-236: the failed Pipelines builds' first failed step logs (the build number read from a Pipelines status URL of this
+    /// repository, the last 5 MB). The binding connection's token is read once (the only database work); the logs are then
+    /// fetched in parallel. A status that isn't a Pipelines build of this repository has no excerpt.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<CheckFailureOutcome>>> GetCheckFailuresAsync(
+        GitConnectionSettings settings,
+        IReadOnlyList<CheckObservation> failed,
+        Func<CheckObservation, Domain.Review.CheckFailureDetail, Domain.Review.FailureExcerptResult?> excerpt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(failed);
+        var access = await AccessAsync(settings, cancellationToken);
+        if (access.Failure is { } failure)
+        {
+            return Result.Failure<IReadOnlyList<CheckFailureOutcome>>(ToError(failure));
+        }
+
+        var token = access.Token!;
+        var client = clients.Create(token.ConnectionId);
+        var auth = AuthOf(token);
+        var fullName = settings.RepoFullName!;
+        var outcomes = await CheckFailureLogs.FanOutAsync(
+            failed,
+            async (check, ct) =>
+            {
+                if (BitbucketClient.PipelineBuildNumber(check.DetailsUrl, fullName) is not { } build)
+                {
+                    return (Domain.Review.CheckFailureDetail.Empty, []);
+                }
+
+                try
+                {
+                    var log = await client.GetFailedStepLogAsync(auth, fullName, build, CheckFailureLogs.MaxBytes, ct);
+                    return (log is null ? Domain.Review.CheckFailureDetail.Empty : new Domain.Review.CheckFailureDetail(null, null, [], log), []);
+                }
+                catch (BitbucketApiException ex)
+                {
+                    return (Domain.Review.CheckFailureDetail.Empty, [$"Bitbucket didn't give the step log: {Describe(ex)}"]);
+                }
+            },
+            excerpt,
+            CheckFailureLogs.Timeout,
+            cancellationToken);
+        return Result.Success(outcomes);
+    }
+
+    /// <summary>
     /// FR-65, §4.19: the pull request's state for the merge poll (at most once a minute: the next poll is never sooner). A 404
     /// first checks the connection still sees the repository (else <c>GIT_NOT_CONNECTED</c>).
     /// </summary>

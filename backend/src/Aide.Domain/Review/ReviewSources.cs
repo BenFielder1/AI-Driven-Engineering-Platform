@@ -431,8 +431,14 @@ public static class ReviewCode
         return sb.ToString();
     }
 
-    /// <summary>The <c>{{DETERMINISTIC_FINDINGS?}}</c> input: one line per finding, or a note that there are none.</summary>
-    public static string RenderFindings(IReadOnlyList<ReviewFinding> findings, bool allowlistChecked, int endpointCount)
+    /// <summary>
+    /// The <c>{{DETERMINISTIC_FINDINGS?}}</c> input: one line per finding, or a note that there are none. FR-237: a failure
+    /// finding (<see cref="ReviewFinding.FailureId"/>) also shows its failure id and its evidence excerpt in a fenced block;
+    /// FR-240: a failure in <paramref name="repeats"/> is marked <c>repeated (n cycles)</c> with the previous cycle's fix step
+    /// text. Other findings render as in 0.6.0.
+    /// </summary>
+    public static string RenderFindings(
+        IReadOnlyList<ReviewFinding> findings, bool allowlistChecked, int endpointCount, IReadOnlyDictionary<string, FailureRepeat>? repeats = null)
     {
         ArgumentNullException.ThrowIfNull(findings);
         var sb = new StringBuilder();
@@ -442,12 +448,49 @@ public static class ReviewCode
             sb.Append("No findings.");
         }
 
-        foreach (var f in findings.Take(100))
+        // Failure findings first, so the 100-finding cap never drops one (other findings keep their order).
+        foreach (var f in findings.Where(f => f.FailureId is not null).Concat(findings.Where(f => f.FailureId is null)).Take(100))
         {
+            if (f.FailureId is { } id)
+            {
+                RenderFailure(sb, f, id, repeats is not null && repeats.TryGetValue(id, out var repeat) ? repeat : null);
+                continue;
+            }
+
             sb.Append(CultureInfo.InvariantCulture, $"- [{f.Category.ToWire()}/{f.Severity.ToWire()}] {f.Message}{(f.Path is null ? string.Empty : $" ({f.Path})")}\n");
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private static void RenderFailure(StringBuilder sb, ReviewFinding f, string id, FailureRepeat? repeat)
+    {
+        sb.Append(CultureInfo.InvariantCulture, $"- [{f.Category.ToWire()}/{f.Severity.ToWire()}] failure id {id} ({FailureIds.SourceLabel(id)}): {f.Message}");
+        if (f.Path is not null)
+        {
+            sb.Append(" (").Append(f.Path).Append(')');
+        }
+
+        if (repeat is not null)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $" — repeated ({repeat.Cycles} cycles)\n");
+            sb.Append("  The same error failed the previous cycle too, so its fix did not work: plan a different approach and say in the step what was tried.\n");
+            if (repeat.PreviousStepText is { } previous)
+            {
+                var previousFence = Fence(previous);
+                sb.Append("  Previous fix step:\n").Append(previousFence).Append('\n').Append(previous.TrimEnd('\n')).Append('\n').Append(previousFence).Append('\n');
+            }
+        }
+        else
+        {
+            sb.Append('\n');
+        }
+
+        if (!string.IsNullOrWhiteSpace(f.Evidence))
+        {
+            var fence = Fence(f.Evidence);
+            sb.Append("  Evidence excerpt:\n").Append(fence).Append('\n').Append(f.Evidence.TrimEnd('\n')).Append('\n').Append(fence).Append('\n');
+        }
     }
 
     private static string Fence(string content)

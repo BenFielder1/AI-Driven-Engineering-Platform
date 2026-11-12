@@ -45,7 +45,7 @@ See SPEC §10 (D-0.6.1-1 … D-0.6.1-10). Build-time decisions are added below.
 - Changelog 0.6.1 `specHref` → `docs/history/0.6.1.md`, added in M50.
 
 ## Manual checks (Ben)
-- Approve `actions: read` on the existing GitHub App registrations (SPEC Q1).
+- Live log fetches on a real failing check: GitHub Actions job log (redirect to blob storage), GitLab job trace, Bitbucket Pipelines step log (status URL → build number; redirects not followed).
 - A real Vercel project end to end: a missing `vercel.json` gets an added step, and a broken build produces a specific fix step with the log excerpt.
 - Scrollbar in Chrome, Firefox and Safari, light and dark.
 - Cloudflare Workers Builds `PATCH /builds/triggers/{uuid}` with only `branch_excludes` against a real account (stubbed in tests).

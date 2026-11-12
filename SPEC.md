@@ -225,12 +225,12 @@ None new. Log-fetch failures are logged warnings, not errors (FR-236). Plans tha
 - Review report: the existing evidence display shows the new excerpts in a scrolling monospace block (it uses the FR-235 scrollbar).
 
 ## 8. Non-functional requirements
-- **Security:** every excerpt passes through redaction twice (§4.38). Raw GitHub/GitLab/Bitbucket logs are never stored whole, only the excerpt. Tokens used for log fetches are the project's existing Git credentials. No new scopes, except GitHub Actions job logs, which need `actions: read` on the GitHub App. If the App lacks it, the fetch is skipped with a warning (Q1).
+- **Security:** every excerpt is redacted before and after the ANSI strip (§4.38). Raw GitHub/GitLab/Bitbucket logs are never stored whole, only the excerpt. Tokens used for log fetches are the project's existing Git credentials. No new scopes: the GitHub App already has `actions: write` (FR-145), which covers reading job logs. A 403 is skipped with a warning. Redirects never forward the `Authorization` header to another host.
 - **Performance:** log fetches run in parallel with a 10-second timeout each and a 5 MB download cap. They add at most 15 seconds to a review cycle.
 - **Tests:** no test calls a real provider. Fake Git and deploy providers return canned logs, and the fake LLM returns canned review and plan output (rule 10).
 
 ## 9. Environments
-Unchanged from 0.6.0. The GitHub App manifest for new registrations adds `actions: read`. Existing registrations need Ben to approve the new permission (manual check).
+Unchanged from 0.6.0. No GitHub App permission change (D-0.6.1-11).
 
 ## 10. Decisions and assumptions
 
@@ -246,12 +246,13 @@ Unchanged from 0.6.0. The GitHub App manifest for new registrations adds `action
 | D-0.6.1-8 | Failing non-required GitHub checks stay dropped (unchanged), so log fetches are only for required checks | Claude | assumed |
 | D-0.6.1-9 | Build (M46 review): Cloudflare preview triggers and Pages exclusions that exist before 0.6.1 are patched to add `tevrin/*` (keeping other excludes) on link and verify; if the patch fails, readiness `branch_control` is Missing. A Vercel key `*` doesn't match `tevrin/…` (it can't cross `/`) | Claude | assumed |
 | D-0.6.1-10 | Build (M48): the GitHub Pages workflow is owned by deploy-engineer (the VCS packs exclude `pages.yml` from ci-engineer, so a ci-engineer step would be `INVALID_PLAN`), and only `.github/workflows/pages.yml` counts as present. Deploy-engineer also owns `railway.json`/`railway.toml` and `wrangler.toml`/`wrangler.json`. The added-step fields live in the `aide-plan` block, not the API contract. No step is added when the repo file list is unknown or truncated, or the optimisation plan is empty. Steps are added only after the agent's own plan validates, so retry reasons use the agent's numbering. `addedBy` survives human edits only on steps Tevrin added; a step an agent keeps when regenerating a plan becomes agent-written | Claude | assumed |
+| D-0.6.1-11 | Build (M49): failure ids are slugged (`ci / test` → `failure:check:ci-test`), component-qualified when a platform has more than one component (`failure:preview:railway-backend`), and de-duplicated with `-2`, `-3`; a failed Supabase preview migration is `failure:preview:database-migration`. The fingerprint uses log and annotation lines only, never the check title. Logs keep the last 5 MB while streaming. An excerpt over 6,000 characters keeps the top (the error window). The 18,000 total cap applies only to the prompt. Fingerprints are stored under `external_checks.failures` and violations carry `failureId` (old rows read back unchanged). A step carrying a failure block has a 16,000-character limit. When no step names a failure, Tevrin adds a "Fix:" step (marked Added by Tevrin) declaring the files named in the excerpt; if none can be named, or the plan is full, the block goes on step 1 with "Also fix <id>:" (amends FR-239 acceptance 1). The GitHub App's existing `actions: write` covers job logs | Claude | assumed |
 
 ## 11. Open questions
 
 | ID | Question | Who | Blocks |
 | --- | --- | --- | --- |
-| Q1 | Approve the `actions: read` permission on the existing Tevrin GitHub App (production and preview) so job logs can be fetched? Without it, only check output and annotations are used | Ben | the GitHub job log part of FR-236 only |
+| Q1 | ~~Approve `actions: read` on the GitHub App?~~ **Resolved:** the App already has `actions: write` (FR-145), which includes read (D-0.6.1-11) | — | nothing |
 | Q2 | Are the §4.40 required-content lines right for how you deploy to Railway and Render (for example, should `railway.json` be required when Tevrin's own Railway IaC is used)? | Ben | nothing (defaults apply) |
 
 ## 12. Milestones

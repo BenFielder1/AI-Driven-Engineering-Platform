@@ -212,7 +212,13 @@ public sealed partial class GitHubApi
                         MergeReadinessRules.CheckStatusOf(Text(r, "status")),
                         MergeReadinessRules.CheckConclusionOf(Text(r, "conclusion")),
                         false,
-                        HttpsUrl(Text(r, "details_url")) ?? HttpsUrl(Text(r, "html_url")))));
+                        HttpsUrl(Text(r, "details_url")) ?? HttpsUrl(Text(r, "html_url")))
+                    {
+                        RunId = r.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.TryGetInt64(out var runId)
+                            ? runId.ToString(CultureInfo.InvariantCulture)
+                            : null,
+                        App = r.TryGetProperty("app", out var app) && app.ValueKind == JsonValueKind.Object ? Text(app, "slug") : null,
+                    }));
             }
         }
 

@@ -20,29 +20,79 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
     public Domain.GitHosts.CommitStatusHost? Host { get; init; }
 
     /// <summary>
+    /// FR-236: the excerpt of each failed required check the host described (output, annotations, log), by check name; built
+    /// right after each fetch, so whole logs are never kept.
+    /// </summary>
+    public IReadOnlyDictionary<string, FailureExcerptResult> Excerpts { get; init; } = new Dictionary<string, FailureExcerptResult>(StringComparer.Ordinal);
+
+    /// <summary>
     /// The review findings: FR-139 for a GitLab project ("required pipeline job test:backend failed", major when required,
-    /// else minor), FR-85 for GitHub ("required check ci / test failed").
+    /// else minor), FR-85 for GitHub ("required check ci / test failed"). FR-236: a failed required check's evidence is the
+    /// excerpt in <see cref="Excerpts"/>.
     /// </summary>
     public IReadOnlyList<ReviewFinding> Findings() =>
-        Host is { } host ? Domain.GitHosts.CommitStatusFindings.Findings(Checks, host) : ExternalCheckRules.Findings(Checks);
+        Host is { } host ? Domain.GitHosts.CommitStatusFindings.Findings(Checks, host, Excerpts) : ExternalCheckRules.Findings(Checks, Excerpts);
 
     /// <summary>The <c>compliance_report.external_checks</c> JSON (the <see cref="ExternalChecksDto"/> shape) without a preview.</summary>
     public string ToJson() => Compose(this, null)!;
 
     /// <summary>
     /// The <c>compliance_report.external_checks</c> JSON (the <see cref="ExternalChecksDto"/> shape): the PR head's checks
-    /// (FR-85) and the preview deployment review waited for (FR-90); <c>null</c> when there is neither.
+    /// (FR-85) and the preview deployment review waited for (FR-90); <c>null</c> when there is neither. FR-236, FR-240: with
+    /// failure findings, also <c>failures</c> (not part of the API; read back by <see cref="StoredFailures"/>): each failure's
+    /// id, source, excerpt (the finding's evidence), fingerprint (§4.37) and consecutive cycles, which the next cycle compares with.
     /// </summary>
-    public static string? Compose(CollectedChecks? checks, Deployments.PreviewCheckDto? preview) =>
-        checks is null && preview is null
-            ? null
-            : AideJson.Serialize(new
-            {
-                checks = (checks?.Checks ?? []).Select(c => new ExternalCheckDto(c.Name, c.Status == CheckRunStatus.Completed ? c.Conclusion : null, c.Required, c.DetailsUrl)),
-                checksWaitedSeconds = checks?.WaitedSeconds,
-                checksTimedOut = checks?.TimedOut ?? false,
-                preview,
-            });
+    public static string? Compose(
+        CollectedChecks? checks, Deployments.PreviewCheckDto? preview, IReadOnlyList<ReviewFinding>? findings = null, IReadOnlyList<FailureRecord>? records = null)
+    {
+        if (checks is null && preview is null)
+        {
+            return null;
+        }
+
+        var failures = (records ?? [])
+            .Select(r => new StoredFailure(
+                r.Id,
+                FailureIds.SourceOf(r.Id) ?? string.Empty,
+                findings?.FirstOrDefault(f => f.FailureId == r.Id)?.Evidence,
+                r.Fingerprint,
+                r.Cycles))
+            .ToList();
+        return AideJson.Serialize(new
+        {
+            checks = (checks?.Checks ?? []).Select(c => new ExternalCheckDto(c.Name, c.Status == CheckRunStatus.Completed ? c.Conclusion : null, c.Required, c.DetailsUrl)),
+            checksWaitedSeconds = checks?.WaitedSeconds,
+            checksTimedOut = checks?.TimedOut ?? false,
+            preview,
+            failures = failures.Count == 0 ? null : failures,
+        });
+    }
+
+    /// <summary>FR-240: the failure records a report stored in <c>external_checks.failures</c>; empty for older reports or unreadable JSON.</summary>
+    public static IReadOnlyList<FailureRecord> StoredFailures(string? externalChecks)
+    {
+        if (string.IsNullOrWhiteSpace(externalChecks))
+        {
+            return [];
+        }
+
+        try
+        {
+            var stored = AideJson.Deserialize<StoredFailureList>(externalChecks);
+            return [.. (stored.Failures ?? []).OfType<StoredFailure>()
+                .Where(f => !string.IsNullOrEmpty(f.Id) && !string.IsNullOrEmpty(f.Fingerprint))
+                .Select(f => new FailureRecord(f.Id, f.Fingerprint!, Math.Max(1, f.Cycles)))];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>One entry of <c>external_checks.failures</c>.</summary>
+    private sealed record StoredFailure(string Id, string Source, string? Excerpt, string? Fingerprint, int Cycles);
+
+    private sealed record StoredFailureList(List<StoredFailure?>? Failures);
 }
 
 /// <summary>
@@ -120,7 +170,22 @@ public sealed partial class ExternalChecksCollector(
                 LogTimedOut(logger, project.Id);
             }
 
-            return new CollectedChecks(marked, decision.WaitedSeconds, decision.TimedOut);
+            // FR-236: the failed required checks' output, annotations and job logs (each part optional, never failing the review).
+            // Each part (output, annotations, log) has its own 10-second timeout, so a slow log keeps the parts already read.
+            var failed = FailedRequired(marked);
+            var outcomes = failed.Count == 0
+                ? []
+                : await CheckFailureLogs.FanOutAsync(
+                    failed,
+                    async (check, ct) =>
+                    {
+                        var fetched = await api.GetCheckFailureAsync(github.Token, github.Owner, github.Repo, check, ct);
+                        return (fetched.Detail, fetched.Warnings);
+                    },
+                    ExternalCheckRules.Excerpt,
+                    timeout: null,
+                    cancellationToken);
+            return new CollectedChecks(marked, decision.WaitedSeconds, decision.TimedOut) { Excerpts = Excerpts(project.Id, outcomes) };
         }
         catch (GitHubRateLimitedException ex)
         {
@@ -214,14 +279,68 @@ public sealed partial class ExternalChecksCollector(
         }
 
         var source = host.Provider.Kind == GitProvider.Bitbucket ? Domain.GitHosts.CommitStatusHost.Bitbucket : Domain.GitHosts.CommitStatusHost.Gitlab;
-        return new CollectedChecks(checks, decision.WaitedSeconds, decision.TimedOut) { Host = source };
+
+        // FR-236: the failed required jobs' traces (GitLab) or failed step logs (Bitbucket Pipelines).
+        // The provider reads the connection once, then fetches in parallel over HTTP only (the scoped DbContext isn't shared).
+        var failed = FailedRequired(checks);
+        IReadOnlyList<CheckFailureOutcome> outcomes = [];
+        if (failed.Count > 0)
+        {
+            try
+            {
+                var fetched = await host.Provider.GetCheckFailuresAsync(host.Connection, failed, ExternalCheckRules.Excerpt, cancellationToken);
+                if (fetched.IsFailure)
+                {
+                    LogDetailsUnavailable(logger, project.Id, fetched.Error!.Message);
+                }
+
+                outcomes = fetched.IsSuccess ? fetched.Value : [];
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The review never fails because a log fetch failed (a rate limit here doesn't defer either).
+                LogDetailsUnavailable(logger, project.Id, ex.GetType().Name);
+            }
+        }
+
+        return new CollectedChecks(checks, decision.WaitedSeconds, decision.TimedOut) { Host = source, Excerpts = Excerpts(project.Id, outcomes) };
     }
+
+    /// <summary>The most failed required checks whose details are fetched in one review.</summary>
+    public const int MaxDetailedChecks = 10;
+
+    /// <summary>FR-236: the failed required checks whose details are fetched (one per name, at most <see cref="MaxDetailedChecks"/>).</summary>
+    private static List<CheckObservation> FailedRequired(IReadOnlyList<CheckObservation> checks) =>
+        [.. checks.Where(c => c.Required && MergeReadinessRules.IsFailing(c)).DistinctBy(c => c.Name, StringComparer.Ordinal).Take(MaxDetailedChecks)];
+
+    /// <summary>
+    /// FR-236, §8: the excerpts by check name; each warning (a part the host refused, a timeout, any other failure) is logged,
+    /// and that check keeps its name and URL evidence. The excerpts are redacted, ANSI-stripped and redacted again (§4.38).
+    /// </summary>
+    private Dictionary<string, FailureExcerptResult> Excerpts(Guid projectId, IReadOnlyList<CheckFailureOutcome> outcomes)
+    {
+        foreach (var outcome in outcomes)
+        {
+            foreach (var warning in outcome.Warnings)
+            {
+                LogDetailSkipped(logger, projectId, outcome.Check.Name, warning);
+            }
+        }
+
+        return outcomes.Where(o => o.Excerpt is not null).ToDictionary(o => o.Check.Name, o => o.Excerpt!, StringComparer.Ordinal);
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} keeps its failed checks without logs: {Reason}")]
+    private static partial void LogDetailsUnavailable(ILogger logger, Guid projectId, string reason);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Review of project {ProjectId} waits for {Pending} pending check(s)")]
     private static partial void LogWaiting(ILogger logger, Guid projectId, int pending);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} stopped waiting for pending checks after 15 minutes")]
     private static partial void LogTimedOut(ILogger logger, Guid projectId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} keeps check {CheckName} without its log or details: {Reason}")]
+    private static partial void LogDetailSkipped(ILogger logger, Guid projectId, string checkName, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} goes on without the Git host's checks: {Reason}")]
     private static partial void LogUnavailable(ILogger logger, Guid projectId, string reason);

@@ -17,8 +17,12 @@ public class ExternalCheckRulesTests
     {
         var finding = Assert.Single(ExternalCheckRules.Findings([Failed, Failed with { Name = "lint", Required = false }]));
 
+        // FR-237: it is also a failure finding with a stable failure id.
         Assert.Equal(
-            new ReviewFinding(ReviewCategory.Testing, Severity.Major, "required check ci / test failed", null, FindingSource.Deterministic, "ci / test: https://github.com/acme/widgets/runs/1"),
+            new ReviewFinding(ReviewCategory.Testing, Severity.Major, "required check ci / test failed", null, FindingSource.Deterministic, "ci / test: https://github.com/acme/widgets/runs/1")
+            {
+                FailureId = "failure:check:ci-test",
+            },
             finding);
         Assert.Equal(0.10m, ComplianceScoring.Penalty(finding.Severity));
     }

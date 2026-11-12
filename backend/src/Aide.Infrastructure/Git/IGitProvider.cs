@@ -146,6 +146,19 @@ public interface IGitProvider
         GitConnectionSettings settings, string sha, CancellationToken cancellationToken, int? pullRequestNumber = null) =>
         Task.FromResult(Result.Failure<IReadOnlyList<CheckObservation>>(GitHostOperations.NotSupported(Kind, "commit statuses")));
 
+    /// <summary>
+    /// FR-236: the excerpts of failed required checks (<paramref name="excerpt"/> builds each right after its fetch): the
+    /// GitLab job trace, the Bitbucket Pipelines failed step's log (the last 5 MB). The connection is resolved once, before
+    /// the fetches, which then run in parallel over HTTP only (no database), each within 10 seconds. A check the host can't
+    /// describe (an external status, no run id) has no excerpt; a refused read (403, 404) or a timeout is a warning.
+    /// </summary>
+    Task<Result<IReadOnlyList<CheckFailureOutcome>>> GetCheckFailuresAsync(
+        GitConnectionSettings settings,
+        IReadOnlyList<CheckObservation> failed,
+        Func<CheckObservation, Domain.Review.CheckFailureDetail, Domain.Review.FailureExcerptResult?> excerpt,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(Result.Failure<IReadOnlyList<CheckFailureOutcome>>(GitHostOperations.NotSupported(Kind, "check failure logs")));
+
     /// <summary>§4.19, FR-140: publishes the host release (GitLab Release; Bitbucket annotated tag); its URL.</summary>
     Task<Result<string?>> PublishReleaseAsync(GitConnectionSettings settings, HostReleaseRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(Result.Failure<string?>(GitHostOperations.NotSupported(Kind, "publishing releases")));

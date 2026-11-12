@@ -48,7 +48,13 @@ internal sealed record ReviewMaterial(
     /// listing failed or was cut off (then no step is added).
     /// </summary>
     public IReadOnlySet<string>? BranchFiles { get; init; }
+
+    /// <summary>FR-240: this cycle's failure records (id, fingerprint, consecutive cycles), stored in <c>external_checks.failures</c>.</summary>
+    public IReadOnlyList<FailureRecord> FailureRecords { get; init; } = [];
 }
+
+/// <summary>FR-240: the previous cycle's failure records and optimisation plan steps (<c>null</c>: none or unreadable).</summary>
+internal sealed record FailureHistoryInput(IReadOnlyList<FailureRecord> Previous, IReadOnlyList<Domain.Execution.PlanStep>? PreviousPlan);
 
 /// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
 internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult Result);
@@ -146,16 +152,20 @@ public sealed partial class ReviewJobHandler(
 
         // FR-85, FR-139: the PR/MR head's checks are a deterministic input; pending ones are waited for (the job defers itself) first.
         var checks = await externalChecks.CollectAsync(project, payload, cancellationToken);
-        var material = await GatherAsync(
-            project,
-            cancellationToken,
-            [.. checks is null ? [] : checks.Findings(), .. preview?.Findings ?? []]);
 
         // §4.5 row 4: the previous score is the latest earlier cycle's report in the current review timeline (§4.8).
         var previous = await ReviewTimeline.Current(db, project)
             .Where(r => r.ReviewCycle < cycle)
             .NewestFirst()
             .FirstOrDefaultAsync(cancellationToken);
+
+        // FR-240: failures repeated from the previous cycle (same fingerprint) are marked, with that cycle's fix step text.
+        var history = await HistoryAsync(previous, cancellationToken);
+        var material = await GatherAsync(
+            project,
+            cancellationToken,
+            [.. checks is null ? [] : checks.Findings(), .. preview?.Findings ?? []],
+            history);
         var previousText = previous is null
             ? null
             : CodeReviewOutput.PreviousReviewSummary(previous.ReviewCycle, previous.Score, previous.Decision, previous.Violations, previous.MissingFeatures, previous.DriftAreas);
@@ -228,7 +238,9 @@ public sealed partial class ReviewJobHandler(
     /// <param name="project">The project in review.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <param name="externalFindings">FR-85: findings from failed required checks, added to the deterministic ones.</param>
-    private async Task<ReviewMaterial> GatherAsync(Project project, CancellationToken cancellationToken, IReadOnlyList<ReviewFinding>? externalFindings = null)
+    /// <param name="history">FR-240: the previous cycle's failure records and optimisation plan steps, or <c>null</c>.</param>
+    private async Task<ReviewMaterial> GatherAsync(
+        Project project, CancellationToken cancellationToken, IReadOnlyList<ReviewFinding>? externalFindings = null, FailureHistoryInput? history = null)
     {
         var preparation = await preparer.TryPrepareAsync(project.Id, cancellationToken);
         if (preparation.Result.IsFailure)
@@ -281,13 +293,16 @@ public sealed partial class ReviewJobHandler(
                 secrets)
             : [];
         var vercelChecked = version.Stack?.ReviewChecks.Contains(StackReviewChecks.DeployBranchControl, StringComparer.Ordinal) ?? false;
-        var findings = secrets
+        // FR-237: failure ids are unique within the cycle (a second failure with the same id gets -2, so none loses its evidence).
+        var findings = FailureIds.Disambiguate(secrets
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
             .Concat(stackFindings)
             .Concat(vercelChecked ? [] : await VercelConfigFindingsAsync(project.Id, working.Branch, contents, branchPrefixes, cancellationToken))
             .Concat(externalFindings ?? [])
-            .ToList();
+            .ToList());
+        var failureRecords = FailureHistory.Records(findings, history?.Previous);
+        var repeats = FailureHistory.Repeats(failureRecords, history?.PreviousPlan);
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
         var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
         return new ReviewMaterial(
@@ -297,8 +312,11 @@ public sealed partial class ReviewJobHandler(
             // NFR-SEC: secrets the scan flagged never reach the provider; the markers keep the line numbers.
             ReviewCode.RenderForPrompt(tree, changed, ReviewCode.RedactSecrets(contents), limits),
             findings,
-            ReviewCode.RenderFindings(findings, allowlist is not null, endpoints.Count))
+            // §4.38 step 5: the 18,000-character total cap applies to the prompt only; stored evidence, external_checks.failures and
+            // the FR-239 blocks keep each failure's own excerpt (at most 6,000 characters).
+            ReviewCode.RenderFindings(FailureExcerpt.CapAll(findings), allowlist is not null, endpoints.Count, repeats))
         {
+            FailureRecords = failureRecords,
             Requirements = RequirementParser.Parse(specText).Requirements,
             CodebaseSummary = iteration.CodebaseSummary,
             Stack = version,
@@ -328,6 +346,10 @@ public sealed partial class ReviewJobHandler(
         var deployFiles = stack is null
             ? null
             : new Domain.Execution.DeployFileCheck(StackRequiredFiles.For(stack), material.BranchFiles, Optimisation: true);
+
+        // FR-239: each failure's evidence block goes to the step naming its failure id (or a new fix step).
+        var failureEvidence = FailureEvidenceSteps.From(material.Findings);
+        var failures = failureEvidence.Count == 0 ? null : new FailureEvidenceCheck(failureEvidence, material.BranchFiles, maxFiles);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
             : material.ImplementationPlan?.Content;
@@ -357,7 +379,7 @@ public sealed partial class ReviewJobHandler(
         // FR-126: checklist violations take their item's category and severity (still agent violations: no penalty).
         Result<CodeReviewResult> Parse(string text)
         {
-            var read = CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles);
+            var read = CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures);
             return read.IsSuccess
                 ? Result.Success(read.Value with
                 {
@@ -371,6 +393,7 @@ public sealed partial class ReviewJobHandler(
         var problem = parsed.IsSuccess ? requirement(parsed.Value) : parsed.Error!;
         if (problem is null)
         {
+            LogDroppedEvidence(parsed.Value);
             return new ReviewAgentOutcome(first, parsed.Value);
         }
 
@@ -379,14 +402,33 @@ public sealed partial class ReviewJobHandler(
             Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))) with
             {
                 RunKey = AgentOutput.CorrectiveRunKey,
-                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
             },
             cancellationToken);
         var reparsed = Parse(second.Text);
-        return reparsed.IsSuccess
-            ? new ReviewAgentOutcome(second, reparsed.Value)
-            : throw new JobFailedException(reparsed.Error!.Message, transient: false, reparsed.Error.Code);
+        if (reparsed.IsFailure)
+        {
+            throw new JobFailedException(reparsed.Error!.Message, transient: false, reparsed.Error.Code);
+        }
+
+        LogDroppedEvidence(reparsed.Value);
+        return new ReviewAgentOutcome(second, reparsed.Value);
     }
+
+    /// <summary>FR-239: a warning naming each failure whose evidence block couldn't be attached to the plan.</summary>
+    private void LogDroppedEvidence(CodeReviewResult result)
+    {
+        if (result.DroppedFailureEvidence.Count > 0)
+        {
+            LogEvidenceDropped(logger, string.Join(", ", result.DroppedFailureEvidence));
+        }
+    }
+
+    /// <summary>FR-240: <paramref name="report"/>'s failure records and optimisation plan steps, or <c>null</c> without a report.</summary>
+    private async Task<FailureHistoryInput?> HistoryAsync(ComplianceReport? report, CancellationToken cancellationToken) =>
+        report is null
+            ? null
+            : new FailureHistoryInput(CollectedChecks.StoredFailures(report.ExternalChecks), await PlanStepsAsync(report.OptimizationPlanArtifactId, cancellationToken));
 
     private async Task RecordAsync(
         JobExecution job,
@@ -447,7 +489,7 @@ public sealed partial class ReviewJobHandler(
             AgentRunId = outcome.Run.RunId,
             Threshold = project.ComplianceThreshold,
             OptimizationPlanArtifactId = draft?.Id,
-            ExternalChecks = CollectedChecks.Compose(checks, preview?.Check),
+            ExternalChecks = CollectedChecks.Compose(checks, preview?.Check, material.Findings, material.FailureRecords),
             CreatedAt = now,
         };
         db.ComplianceReports.Add(report);
@@ -512,7 +554,17 @@ public sealed partial class ReviewJobHandler(
             return;
         }
 
-        var material = await GatherAsync(project, cancellationToken);
+        // FR-239, FR-240: the cycle's failure findings (as recorded) still get their evidence blocks in the revised plan, and
+        // the failures repeated from the cycle before keep their marks.
+        var before = await ReviewTimeline.Current(db, project)
+            .Where(r => r.ReviewCycle < report.ReviewCycle)
+            .NewestFirst()
+            .FirstOrDefaultAsync(cancellationToken);
+        var material = await GatherAsync(
+            project,
+            cancellationToken,
+            [.. report.Violations.Where(v => v.FailureId is not null && v.Source == FindingSource.Deterministic)],
+            await HistoryAsync(before, cancellationToken));
         var summary = CodeReviewOutput.PreviousReviewSummary(report.ReviewCycle, report.Score, report.Decision, report.Violations, report.MissingFeatures, report.DriftAreas);
         var rejected = payload.ArtifactId is { } id
             ? await db.Artifacts.AsNoTracking().Where(a => a.Id == id && a.ProjectId == project.Id).Select(a => (int?)a.Version).FirstOrDefaultAsync(cancellationToken)
@@ -550,6 +602,18 @@ public sealed partial class ReviewJobHandler(
         var tracked = await db.ComplianceReports.FirstAsync(r => r.Id == report.Id, cancellationToken);
         tracked.OptimizationPlanArtifactId = draft.Id;
         await SaveAsync("saving the revised optimisation plan", cancellationToken);
+    }
+
+    /// <summary>FR-240: the steps of the optimisation plan <paramref name="artifactId"/> (the previous cycle's), or <c>null</c>.</summary>
+    private async Task<IReadOnlyList<Domain.Execution.PlanStep>?> PlanStepsAsync(Guid? artifactId, CancellationToken cancellationToken)
+    {
+        if (artifactId is not { } id)
+        {
+            return null;
+        }
+
+        var content = await db.Artifacts.AsNoTracking().Where(a => a.Id == id).Select(a => a.Content).FirstOrDefaultAsync(cancellationToken);
+        return content is null ? null : Domain.Execution.PlanDocument.ReadSteps(content);
     }
 
     private Task<bool> ReportExistsAsync(Guid jobId, CancellationToken cancellationToken)
@@ -667,6 +731,9 @@ public sealed partial class ReviewJobHandler(
             throw new JobFailedException($"Working copy I/O failed: {ex.GetType().Name}.", transient: true);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The failure evidence of {FailureIds} couldn't be attached to the optimisation plan (the plan would be invalid or the step text too long)")]
+    private static partial void LogEvidenceDropped(ILogger logger, string failureIds);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Review job did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);
