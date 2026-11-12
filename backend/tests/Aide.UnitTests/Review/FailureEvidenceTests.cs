@@ -439,6 +439,33 @@ public sealed class FailureEvidenceTests
     }
 
     [Fact]
+    public void FR239_A_check_failure_with_annotation_paths_in_a_layer_is_owned_by_that_layers_agent()
+    {
+        var stack = NextVercel();
+        var agents = PlanAgents.ForStackOptimization(stack, EmptyBase);
+        var layer = stack.Specialists.First(s => s.Owns.IsMatch("frontend/src/lib/db.ts")).Key;
+
+        Assert.NotEqual(StackAgents.CiEngineer, layer);
+        Assert.Equal(layer, FailureEvidenceSteps.Owner("failure:check:build", ["frontend/src/lib/db.ts"], agents));
+    }
+
+    [Fact]
+    public void FR239_A_check_failure_without_annotation_paths_is_owned_by_the_ci_engineer()
+    {
+        var agents = PlanAgents.ForStackOptimization(NextVercel(), EmptyBase);
+
+        Assert.True(agents.Allows(StackAgents.CiEngineer));
+        Assert.Equal(StackAgents.CiEngineer, FailureEvidenceSteps.Owner("failure:check:build", [], agents));
+    }
+
+    [Fact]
+    public void FR239_A_check_failure_without_a_stack_is_owned_by_the_generalist()
+    {
+        Assert.Equal(PlanAgents.Generalist, FailureEvidenceSteps.Owner("failure:check:build", ["frontend/src/lib/db.ts"], PlanAgents.None));
+        Assert.Equal(PlanAgents.Generalist, FailureEvidenceSteps.Owner("failure:check:build", [], PlanAgents.None));
+    }
+
+    [Fact]
     public void FR239_A_new_fix_step_for_a_preview_failure_is_owned_by_the_deploy_engineer_or_the_generalist_without_a_stack()
     {
         var repo = new HashSet<string>(["frontend/src/app/page.tsx", "README.md"], StringComparer.OrdinalIgnoreCase);
