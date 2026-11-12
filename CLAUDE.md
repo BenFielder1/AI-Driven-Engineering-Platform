@@ -140,8 +140,8 @@ For every phase or fix:
 
    **Never run locally:** the full `dotnet test` (integration tests start PostgreSQL in Docker), Playwright E2E,
    `docker build`, `docker compose`, `deploy-local.sh`, or the whole gate command.
-3. **Commit and push** to the current build branch (e.g. `build/aide-v3`). This is standing permission to push **build
-   branches only.** Never push to `main`, never force-push, and never amend a pushed commit. Use the commit format
+3. **Commit and push** to the current build or release branch (e.g. `build/tevrin-0.6.1`, `release/0.6.1`). This is
+   standing permission to push **build and release branches only.** Never push to `main`, never force-push, and never amend a pushed commit. Use the commit format
    `phase N: <summary> (<IDs>)` or `fix: <summary> (<IDs>)`.
 4. **Wait for CI on that commit.**
    - Find the run: `gh run list --branch <branch> --commit <sha> --json databaseId,status,conclusion,name`.
@@ -164,6 +164,19 @@ A release is a semver tag `x.y.z` (no `v` prefix) on a `main` merge commit plus 
 FR-231, D-V6-25). **Publishing the release deploys `production`** (`deploy.yml`, after the `production` environment's
 reviewer approves). Ben tags and releases, or an agent does, **only after Ben confirms the version and commit in the
 session.** Tag pushes and releases are outside the build-branch push permission in the Commit gate.
+
+**Version workflow (from 0.6.1).** Each version ships in two PRs:
+
+1. **Build PR.** Build on `build/tevrin-<x.y.z>` with the root SPEC/PROGRESS. When every milestone is green on CI, open a
+   PR to `main` with the code only: version bumped, changelog entry with `date: null`, no history page, SPEC/PROGRESS
+   still at the root. Ben merges it, and `preview` deploys after CI on `main`.
+2. **Preview test.** Ben tests the version on `preview`. Fixes go on a new build branch and PR, through the same commit
+   gate. Agents don't start the release prep until Ben confirms in the session that the version is ready.
+3. **Release PR.** On Ben's confirmation, an agent branches `release/<x.y.z>` from `main` and adds the release prep and
+   docs: the changelog `date`, SPEC/PROGRESS moved to `docs/<x.y.z>/` (with the frozen-folder defaults in
+   `docs/_config.yml`), a row in the Versions table, `docs/history/<x.y.z>.md` and the docs-site guide updates. Push,
+   wait for green CI, then open the PR. Ben merges it.
+4. **Tag and release** with the steps below, after Ben confirms the version and commit.
 
 0. **Once:** the `production` GitHub environment is set up as in `docs/operations/releases.md` (required reviewer,
    secrets, deployment branches and tags `main` + `*.*.*`). If it isn't, stop and tell Ben: don't publish.
