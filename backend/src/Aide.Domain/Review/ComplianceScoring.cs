@@ -19,6 +19,14 @@ public sealed record ReviewFinding(
     public string? FailureId { get; init; }
 
     /// <summary>
+    /// FR-246, §4.42: the stable finding id of a deterministic non-failure finding, e.g. <c>finding:dependency:lodash</c>;
+    /// <c>null</c> for failure findings (they have <see cref="FailureId"/>), agent findings and reports written before 0.6.1
+    /// part 2. Not written when <c>null</c>, so old rows read back unchanged.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? FindingId { get; init; }
+
+    /// <summary>
     /// §4.37: the first error line of a failure's annotation and log lines (never the check title or summary), for its
     /// fingerprint; <c>null</c> when it has none or isn't a failure. Not written when <c>null</c>.
     /// </summary>

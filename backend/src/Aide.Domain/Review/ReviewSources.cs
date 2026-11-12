@@ -7,6 +7,9 @@ using Aide.Domain.Execution;
 
 namespace Aide.Domain.Review;
 
+/// <summary>FR-251, §4.44: the spec's endpoint paths, and those dropped because a <c>{</c>, <c>[</c> or <c>&lt;</c> is never closed.</summary>
+public sealed record SpecEndpointPaths(IReadOnlyList<string> Paths, IReadOnlyList<string> Dropped);
+
 /// <summary>
 /// §4.7 / D8: what the deterministic checks need from the project's own technical specification — the endpoint paths of
 /// its API Contracts section and the dependency allowlist of its Technical Architecture section. Nothing here assumes a
@@ -19,24 +22,46 @@ public static partial class SpecReading
 
     /// <summary>
     /// Every distinct endpoint path (<c>/api/todos/{id}</c>) in the "API Contracts" section, in order of appearance. A path
-    /// starts with <c>/</c> (not inside a URL) and contains a letter; a trailing <c>.</c> or <c>/</c> is dropped.
+    /// starts with <c>/</c> (not inside a URL) and contains a letter or a <c>*</c>; trailing <c>.</c>, <c>/</c>, <c>,</c>,
+    /// <c>;</c>, <c>:</c>, a sentence's <c>?</c> and Markdown emphasis <c>*</c> are dropped (FR-251, §4.44: never inside
+    /// braces, so <c>{id:int}</c> and <c>{*any}</c> stay whole). A path left with an unclosed <c>{</c>, <c>[</c> or
+    /// <c>&lt;</c> is dropped (<see cref="ReadEndpointPaths"/> returns it so the caller can warn).
     /// </summary>
-    public static IReadOnlyList<string> EndpointPaths(string specification)
+    public static IReadOnlyList<string> EndpointPaths(string specification) => ReadEndpointPaths(specification).Paths;
+
+    /// <summary><see cref="EndpointPaths"/>, plus the paths dropped for an unclosed bracket (§4.44).</summary>
+    public static SpecEndpointPaths ReadEndpointPaths(string specification)
     {
         ArgumentNullException.ThrowIfNull(specification);
         var section = Section(specification, "api contracts");
         if (section is null)
         {
-            return [];
+            return new([], []);
         }
 
         var paths = new List<string>();
+        var dropped = new List<string>();
         foreach (var line in section)
         {
             foreach (Match match in PathPattern().Matches(line))
             {
-                var path = match.Value.TrimEnd('.', '/', ',', ';', ':');
-                if (path.Length > 1 && path.Any(char.IsAsciiLetter) && !paths.Contains(path, StringComparer.Ordinal))
+                var path = TrimPath(match.Value);
+                if (path.Length <= 1 || !path.Any(c => char.IsAsciiLetter(c) || c == '*'))
+                {
+                    continue;
+                }
+
+                if (RoutePaths.HasUnclosedBracket(path))
+                {
+                    if (!dropped.Contains(path, StringComparer.Ordinal))
+                    {
+                        dropped.Add(path);
+                    }
+
+                    continue;
+                }
+
+                if (!paths.Contains(path, StringComparer.Ordinal))
                 {
                     paths.Add(path);
                 }
@@ -48,7 +73,42 @@ public static partial class SpecReading
             }
         }
 
-        return paths;
+        return new(paths, dropped);
+    }
+
+    /// <summary>
+    /// §4.44: drops trailing punctuation (<c>.</c>, <c>/</c>, <c>,</c>, <c>;</c>, <c>:</c>), a trailing <c>?</c> unless the last
+    /// segment is an optional <c>:x?</c> param, and a trailing run of <c>*</c> that is Markdown emphasis (not a whole
+    /// <c>*</c>/<c>**</c> segment or a <c>:x*</c> param). A <c>{…}</c> segment ends with <c>}</c>, so nothing inside braces is cut.
+    /// </summary>
+    private static string TrimPath(string value)
+    {
+        var path = value;
+        while (true)
+        {
+            var trimmed = path.TrimEnd('.', '/', ',', ';', ':');
+            var last = trimmed[(trimmed.LastIndexOf('/') + 1)..];
+            if (trimmed.EndsWith(')') && trimmed.Count(c => c == ')') > trimmed.Count(c => c == '('))
+            {
+                // "(see /api/todos)": the sentence's closing parenthesis, not part of a (.*) segment.
+                trimmed = trimmed[..^1];
+            }
+            else if (trimmed.EndsWith('?') && !last.StartsWith(':'))
+            {
+                trimmed = trimmed[..^1];
+            }
+            else if (trimmed.EndsWith('*') && last.TrimEnd('*').Length > 0 && !last.StartsWith(':'))
+            {
+                trimmed = trimmed.TrimEnd('*');
+            }
+
+            if (trimmed == path)
+            {
+                return path;
+            }
+
+            path = trimmed;
+        }
     }
 
     /// <summary>
@@ -166,7 +226,11 @@ public static partial class SpecReading
     [GeneratedRegex(@"^(?<hashes>#{1,6})\s+(?<title>.+?)\s*#*\s*$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex HeadingPattern();
 
-    [GeneratedRegex(@"(?<![A-Za-z0-9_.:/\-\\])/[A-Za-z0-9_\-.~{}:<>\[\]]+(?:/[A-Za-z0-9_\-.~{}:<>\[\]]+)*/?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    /// <summary>
+    /// A path: <c>/</c> then segments of letters, digits and <c>_ - . ~ : &lt; &gt; [ ] * + ? =</c>, where a <c>{…}</c> is read
+    /// up to its closing brace (FR-251, §4.44). A lone <c>{</c> is read too, so an unclosed one is detected and dropped.
+    /// </summary>
+    [GeneratedRegex(@"(?<![A-Za-z0-9_.:/\-\\])/(?:\{[^{}\s]*\}|[A-Za-z0-9_\-.~:<>\[\]*+?=(){])+(?:/(?:\{[^{}\s]*\}|[A-Za-z0-9_\-.~:<>\[\]*+?=(){])+)*/?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex PathPattern();
 
     [GeneratedRegex(@"^\s*(?:[-*+]|\d+[.)])\s+(?<text>.+)$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
@@ -175,12 +239,17 @@ public static partial class SpecReading
 
 /// <summary>
 /// §4.7: the dependencies the code declares, read from the package manifests found in the repository (npm
-/// <c>package.json</c>, pip <c>requirements*.txt</c>, NuGet <c>*.csproj</c>, Go <c>go.mod</c>, Cargo <c>Cargo.toml</c>,
-/// Bundler <c>Gemfile</c>, Maven <c>pom.xml</c>). Vendored folders (<c>node_modules/</c>, <c>vendor/</c>) are ignored, and
-/// an unreadable manifest contributes nothing.
+/// <c>package.json</c>, pip <c>requirements*.txt</c> and <c>pyproject.toml</c>, NuGet <c>*.csproj</c>, Go <c>go.mod</c>, Cargo
+/// <c>Cargo.toml</c>, Bundler <c>Gemfile</c>, Maven <c>pom.xml</c>). Vendored folders (<c>node_modules/</c>, <c>vendor/</c>)
+/// are ignored, and an unreadable manifest contributes nothing. FR-253, §4.46: runtime dependencies only; dev, test and
+/// build-only dependencies are skipped.
 /// </summary>
 public static partial class DependencyManifests
 {
+    private static readonly string[] NpmRuntimeSections = ["dependencies", "peerDependencies", "optionalDependencies"];
+    private static readonly string[] RequirementsDevWords = ["dev", "test", "tests", "lint", "doc", "docs"];
+    private static readonly string[] PythonDevGroups = ["dev", "test", "tests", "lint", "docs"];
+
     public static IReadOnlyList<string> Used(IEnumerable<SourceFile> files)
     {
         ArgumentNullException.ThrowIfNull(files);
@@ -197,14 +266,15 @@ public static partial class DependencyManifests
             IEnumerable<string> found = name switch
             {
                 "package.json" => Npm(file.Content),
+                "pyproject.toml" => PyProject(file.Content),
                 "go.mod" => GoModules(file.Content),
                 "Cargo.toml" => Cargo(file.Content),
-                "Gemfile" => GemPattern().Matches(file.Content).Select(m => m.Groups["name"].Value),
-                "pom.xml" => MavenPattern().Matches(file.Content).Select(m => m.Groups["name"].Value.Trim()),
+                "Gemfile" => Gems(file.Content),
+                "pom.xml" => Maven(file.Content),
                 _ when name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase)
-                    => NuGetPattern().Matches(file.Content).Select(m => m.Groups["name"].Value.Trim()),
+                    => NuGet(path, file.Content),
                 _ when name.StartsWith("requirements", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
-                    => Pip(file.Content),
+                    => name.Split(['-', '_', '.']).Any(w => RequirementsDevWords.Contains(w, StringComparer.OrdinalIgnoreCase)) ? [] : Pip(file.Content),
                 _ => [],
             };
             foreach (var dependency in found)
@@ -219,6 +289,7 @@ public static partial class DependencyManifests
         return names;
     }
 
+    /// <summary>§4.46: <c>dependencies</c>, <c>peerDependencies</c> and <c>optionalDependencies</c>; never <c>devDependencies</c>.</summary>
     private static List<string> Npm(string content)
     {
         try
@@ -230,7 +301,7 @@ public static partial class DependencyManifests
             }
 
             var result = new List<string>();
-            foreach (var section in new[] { "dependencies", "devDependencies", "peerDependencies", "optionalDependencies" })
+            foreach (var section in NpmRuntimeSections)
             {
                 if (doc.RootElement.TryGetProperty(section, out var deps) && deps.ValueKind == JsonValueKind.Object)
                 {
@@ -250,8 +321,222 @@ public static partial class DependencyManifests
         content.ReplaceLineEndings("\n").Split('\n')
             .Select(l => l.Trim())
             .Where(l => l.Length > 0 && !l.StartsWith('#') && !l.StartsWith('-'))
-            .Select(l => l.Split(['[', '<', '>', '=', '!', '~', ';', '@', ' '], 2)[0].Trim())
+            .Select(RequirementName)
             .Where(n => n.Length > 0);
+
+    private static string RequirementName(string requirement) =>
+        requirement.Split(['[', '<', '>', '=', '!', '~', ';', '@', ' ', '('], 2)[0].Trim();
+
+    /// <summary>
+    /// §4.46: <c>[project].dependencies</c>, <c>[project.optional-dependencies]</c> groups other than dev, test, tests, lint
+    /// and docs, and <c>[tool.poetry.dependencies]</c> (without <c>python</c>). <c>[dependency-groups]</c> and
+    /// <c>[tool.poetry.group.*]</c> are skipped.
+    /// </summary>
+    private static List<string> PyProject(string content)
+    {
+        var result = new List<string>();
+        string? table = null;
+        var collecting = false;
+        var continuation = 0;
+        foreach (var raw in content.ReplaceLineEndings("\n").Split('\n'))
+        {
+            var line = raw.Trim();
+            if (collecting)
+            {
+                collecting = CollectStrings(line, result);
+                continue;
+            }
+
+            if (continuation > 0)
+            {
+                // The rest of a multi-line array or inline table (e.g. poetry's {version = "1", python = "<3.9"} constraints).
+                continuation += BracketDepth(line);
+                continue;
+            }
+
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+
+            if (line.StartsWith('['))
+            {
+                table = line.Split('#', 2)[0].Trim().Trim('[', ']').Trim();
+                continue;
+            }
+
+            var eq = line.IndexOf('=', StringComparison.Ordinal);
+            if (eq <= 0)
+            {
+                continue;
+            }
+
+            var key = line[..eq].Trim().Trim('"', '\'');
+            var value = line[(eq + 1)..].Trim();
+            var checkedArray = (table == "project" && key == "dependencies")
+                || (table == "project.optional-dependencies" && !PythonDevGroups.Contains(key, StringComparer.OrdinalIgnoreCase));
+            if (checkedArray && value.StartsWith('['))
+            {
+                collecting = CollectStrings(value[1..], result);
+                continue;
+            }
+
+            continuation = Math.Max(0, BracketDepth(value));
+            if (table == "tool.poetry.dependencies"
+                && PoetryKeyPattern().IsMatch(line)
+                && !string.Equals(key, "python", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(key);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Opening minus closing <c>[</c>/<c>{</c> brackets outside strings and comments.</summary>
+    private static int BracketDepth(string text)
+    {
+        var depth = 0;
+        char? quote = null;
+        foreach (var c in text)
+        {
+            if (quote is { } q)
+            {
+                quote = c == q ? null : quote;
+            }
+            else if (c is '"' or '\'')
+            {
+                quote = c;
+            }
+            else if (c == '#')
+            {
+                break;
+            }
+            else
+            {
+                depth += c is '[' or '{' ? 1 : c is ']' or '}' ? -1 : 0;
+            }
+        }
+
+        return depth;
+    }
+
+    /// <summary>Adds the requirement names of the TOML array strings in <paramref name="chunk"/>; <c>true</c> while the array is still open.</summary>
+    private static bool CollectStrings(string chunk, List<string> into)
+    {
+        char? quote = null;
+        var start = 0;
+        for (var i = 0; i < chunk.Length; i++)
+        {
+            var c = chunk[i];
+            if (quote is { } q)
+            {
+                if (c == q)
+                {
+                    var name = RequirementName(chunk[start..i]);
+                    if (name.Length > 0)
+                    {
+                        into.Add(name);
+                    }
+
+                    quote = null;
+                }
+            }
+            else if (c is '"' or '\'')
+            {
+                quote = c;
+                start = i + 1;
+            }
+            else if (c == '#')
+            {
+                return true;
+            }
+            else if (c == ']')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// §4.46: <c>PackageReference</c> items, except those with <c>PrivateAssets="all"</c>; nothing from a test project
+    /// (<c>&lt;IsTestProject&gt;true</c>, under a <c>tests/</c> folder, or named <c>*Tests</c>).
+    /// </summary>
+    private static IEnumerable<string> NuGet(string path, string content)
+    {
+        var segments = path.Split('/');
+        var file = segments[^1];
+        var project = file[..file.LastIndexOf('.')];
+        if (segments[..^1].Any(s => s.Equals("tests", StringComparison.OrdinalIgnoreCase))
+            || project.EndsWith("Tests", StringComparison.OrdinalIgnoreCase)
+            || TestProjectPattern().IsMatch(content))
+        {
+            return [];
+        }
+
+        return NuGetPattern().Matches(content)
+            .Where(m => !PrivateAssetsAllPattern().IsMatch(m.Value))
+            .Select(m => IncludePattern().Match(m.Groups["attrs"].Value))
+            .Where(m => m.Success)
+            .Select(m => m.Groups["name"].Value.Trim());
+    }
+
+    /// <summary>§4.46: every <c>&lt;dependency&gt;</c> except <c>&lt;scope&gt;test&lt;/scope&gt;</c>.</summary>
+    private static IEnumerable<string> Maven(string content) =>
+        MavenPattern().Matches(content)
+            .Select(m => m.Groups["body"].Value)
+            .Where(body => !MavenTestScopePattern().IsMatch(body))
+            .Select(body => MavenArtifactPattern().Match(body))
+            .Where(m => m.Success)
+            .Select(m => m.Groups["name"].Value.Trim());
+
+    /// <summary>§4.46: top-level gems; gems inside a <c>group</c> block naming <c>:development</c> or <c>:test</c> are skipped.</summary>
+    private static List<string> Gems(string content)
+    {
+        var result = new List<string>();
+        var depth = 0;
+        int? skippedDepth = null;
+        foreach (var raw in content.ReplaceLineEndings("\n").Split('\n'))
+        {
+            var line = raw.Split('#', 2)[0].Trim();
+            if (GemGroupPattern().Match(line) is { Success: true } group)
+            {
+                depth++;
+                if (skippedDepth is null && GemDevGroupPattern().IsMatch(group.Groups["groups"].Value))
+                {
+                    skippedDepth = depth;
+                }
+
+                continue;
+            }
+
+            if (GemBlockPattern().IsMatch(line))
+            {
+                depth++;
+                continue;
+            }
+
+            if (line == "end")
+            {
+                if (skippedDepth == depth)
+                {
+                    skippedDepth = null;
+                }
+
+                depth = Math.Max(0, depth - 1);
+                continue;
+            }
+
+            if (skippedDepth is null && GemPattern().Match(line) is { Success: true } gem)
+            {
+                result.Add(gem.Groups["name"].Value);
+            }
+        }
+
+        return result;
+    }
 
     private static List<string> GoModules(string content)
     {
@@ -291,7 +576,7 @@ public static partial class DependencyManifests
             var line = raw.Split('#', 2)[0].Trim();
             if (line.StartsWith('['))
             {
-                inDependencies = line is "[dependencies]" or "[dev-dependencies]" or "[build-dependencies]";
+                inDependencies = line == "[dependencies]";
                 continue;
             }
 
@@ -304,14 +589,41 @@ public static partial class DependencyManifests
         return result;
     }
 
-    [GeneratedRegex(@"^\s*gem\s+['""](?<name>[^'""]+)['""]", RegexOptions.CultureInvariant | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^\s*gem\s+['""](?<name>[^'""]+)['""]", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex GemPattern();
 
-    [GeneratedRegex(@"<PackageReference\s+[^>]*?Include\s*=\s*""(?<name>[^""]+)""", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^group\s*\(?(?<groups>.*?)\)?\s+do\b", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex GemGroupPattern();
+
+    [GeneratedRegex(@"[:'""](?:development|test)\b", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex GemDevGroupPattern();
+
+    [GeneratedRegex(@"\bdo(?:\s*\|[^|]*\|)?$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex GemBlockPattern();
+
+    [GeneratedRegex(@"<PackageReference\b(?<attrs>[^>]*?)(?:/>|>(?<body>(?:(?!</PackageReference>).)*?)</PackageReference>)", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex NuGetPattern();
 
-    [GeneratedRegex(@"<dependency>(?:(?!</dependency>).)*?<artifactId>(?<name>[^<]+)</artifactId>", RegexOptions.CultureInvariant | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"\bInclude\s*=\s*""(?<name>[^""]+)""", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex IncludePattern();
+
+    [GeneratedRegex(@"\bPrivateAssets\s*=\s*""\s*all\s*""|<PrivateAssets>\s*all\s*</PrivateAssets>", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PrivateAssetsAllPattern();
+
+    [GeneratedRegex(@"<IsTestProject>\s*true\s*</IsTestProject>", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex TestProjectPattern();
+
+    [GeneratedRegex(@"<dependency>(?<body>(?:(?!</dependency>).)*?)</dependency>", RegexOptions.CultureInvariant | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex MavenPattern();
+
+    [GeneratedRegex(@"<artifactId>(?<name>[^<]+)</artifactId>", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex MavenArtifactPattern();
+
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]*\s*=", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PoetryKeyPattern();
+
+    [GeneratedRegex(@"<scope>\s*test\s*</scope>", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex MavenTestScopePattern();
 }
 
 /// <summary>A file in the reviewed tree (its repository path and size in bytes).</summary>
@@ -435,7 +747,8 @@ public static class ReviewCode
     /// The <c>{{DETERMINISTIC_FINDINGS?}}</c> input: one line per finding, or a note that there are none. FR-237: a failure
     /// finding (<see cref="ReviewFinding.FailureId"/>) also shows its failure id and its evidence excerpt in a fenced block;
     /// FR-240: a failure in <paramref name="repeats"/> is marked <c>repeated (n cycles)</c> with the previous cycle's fix step
-    /// text. Other findings render as in 0.6.0.
+    /// text. FR-246: another finding with a <see cref="ReviewFinding.FindingId"/> starts with it
+    /// (<c>- finding:dependency:lodash [architecture/major] …</c>); one without renders as in 0.6.0.
     /// </summary>
     public static string RenderFindings(
         IReadOnlyList<ReviewFinding> findings, bool allowlistChecked, int endpointCount, IReadOnlyDictionary<string, FailureRepeat>? repeats = null)
@@ -457,7 +770,7 @@ public static class ReviewCode
                 continue;
             }
 
-            sb.Append(CultureInfo.InvariantCulture, $"- [{f.Category.ToWire()}/{f.Severity.ToWire()}] {f.Message}{(f.Path is null ? string.Empty : $" ({f.Path})")}\n");
+            sb.Append(CultureInfo.InvariantCulture, $"- {(f.FindingId is { } findingId ? findingId + " " : string.Empty)}[{f.Category.ToWire()}/{f.Severity.ToWire()}] {f.Message}{(f.Path is null ? string.Empty : $" ({f.Path})")}\n");
         }
 
         return sb.ToString().TrimEnd();

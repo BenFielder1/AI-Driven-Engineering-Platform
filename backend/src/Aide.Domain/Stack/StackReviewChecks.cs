@@ -46,7 +46,7 @@ public static partial class StackReviewChecks
     /// <summary>The public env prefixes the browser sees (§4.18 <c>no_secret_in_client</c>).</summary>
     public static IReadOnlyList<string> PublicPrefixes { get; } = ["NEXT_PUBLIC_", "VITE_"];
 
-    /// <summary>The findings of every check <paramref name="resolution"/> registers.</summary>
+    /// <summary>The findings of every check <paramref name="resolution"/> registers, each with its FR-246 finding id.</summary>
     public static IReadOnlyList<ReviewFinding> Run(StackResolution resolution, StackReviewInput input)
     {
         ArgumentNullException.ThrowIfNull(resolution);
@@ -57,7 +57,7 @@ public static partial class StackReviewChecks
         var findings = new List<ReviewFinding>();
         foreach (var id in resolution.ReviewChecks)
         {
-            findings.AddRange(id switch
+            IReadOnlyList<ReviewFinding> found = id switch
             {
                 RlsOnEveryTable => RlsOnEveryTableFindings(files),
                 GrantsForExposedTables => GrantsForExposed(files),
@@ -72,7 +72,10 @@ public static partial class StackReviewChecks
                 DeployBranchControl => BranchControl(files, BranchControlTargets(resolution), input.Tree, input.BranchPrefixes),
                 HealthEndpoints when composition.Backend is { } backend => Health(files, backend.Pack, backend.Path),
                 _ => [],
-            });
+            };
+
+            // FR-246, §4.42: finding:stack:<check key>-<path or repo>.
+            findings.AddRange(found.Select(f => f with { FindingId = f.FindingId ?? FindingIds.ForStack(id, f.Path) }));
         }
 
         return findings;

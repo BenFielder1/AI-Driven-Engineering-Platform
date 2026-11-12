@@ -277,7 +277,14 @@ public sealed partial class ReviewJobHandler(
 
         var specText = spec?.Content ?? string.Empty;
         var allowlist = SpecReading.AllowedDependencies(specText);
-        var endpoints = SpecReading.EndpointPaths(specText);
+        // FR-251, §4.44: a path left with an unclosed bracket is dropped with a warning, never reported.
+        var endpointRead = SpecReading.ReadEndpointPaths(specText);
+        var endpoints = endpointRead.Paths;
+        if (endpointRead.Dropped.Count > 0)
+        {
+            LogEndpointPathsDropped(logger, string.Join(", ", endpointRead.Dropped));
+        }
+
         var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
         var secrets = DeterministicChecks.SecretScan(contents);
         // FR-233, §4.36: branch control must block every prefix the project uses (aide/ too for projects with an aide/ branch).
@@ -293,14 +300,16 @@ public sealed partial class ReviewJobHandler(
                 secrets)
             : [];
         var vercelChecked = version.Stack?.ReviewChecks.Contains(StackReviewChecks.DeployBranchControl, StringComparer.Ordinal) ?? false;
-        // FR-237: failure ids are unique within the cycle (a second failure with the same id gets -2, so none loses its evidence).
-        var findings = FailureIds.Disambiguate(secrets
+        // FR-237: failure ids are unique within the cycle (a second failure with the same id gets -2, so none loses its evidence);
+        // FR-246: so are finding ids, in report order.
+        var findings = FindingIds.Disambiguate(FailureIds.Disambiguate(secrets
             .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
-            .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents))
+            // FR-252: file-based routes come from every path in the tree, also files not read for review.
+            .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents, tree.Select(f => f.Path)))
             .Concat(stackFindings)
             .Concat(vercelChecked ? [] : await VercelConfigFindingsAsync(project.Id, working.Branch, contents, branchPrefixes, cancellationToken))
             .Concat(externalFindings ?? [])
-            .ToList());
+            .ToList()));
         var failureRecords = FailureHistory.Records(findings, history?.Previous);
         var repeats = FailureHistory.Repeats(failureRecords, history?.PreviousPlan);
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
@@ -708,7 +717,12 @@ public sealed partial class ReviewJobHandler(
             file = read.Count > 0 ? read[0] : null;
         }
 
-        return Domain.Deployments.VercelConfigRules.ReviewFindings(path, file?.Content, branchPrefixes);
+        // FR-246, §4.42: finding:vercel:<rule>-<path>.
+        return
+        [
+            .. Domain.Deployments.VercelConfigRules.ReviewFindings(path, file?.Content, branchPrefixes)
+                .Select(f => f with { FindingId = FindingIds.ForVercel(StackReviewChecks.DeployBranchControl, f.Path ?? path) }),
+        ];
     }
 
     /// <summary>Git and working-copy failures retry the job; an unsafe working copy fails it.</summary>
@@ -734,6 +748,9 @@ public sealed partial class ReviewJobHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The failure evidence of {FailureIds} couldn't be attached to the optimisation plan (the plan would be invalid or the step text too long)")]
     private static partial void LogEvidenceDropped(ILogger logger, string failureIds);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Specification endpoint paths dropped (unclosed bracket): {Paths}")]
+    private static partial void LogEndpointPathsDropped(ILogger logger, string paths);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Review job did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);

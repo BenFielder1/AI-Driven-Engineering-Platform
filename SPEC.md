@@ -333,6 +333,7 @@ A finding id is `finding:<kind>:<subject>`, where `<subject>` is a slug: lower-c
 | `secret` | path + line | `frontend/src/config.ts` line 12 → `finding:secret:frontend-src-config-ts-12` |
 | `stack` | check key + path (or `repo`) | `container_non_root` on `backend/Dockerfile` → `finding:stack:container-non-root-backend-dockerfile` |
 | `vercel` | rule + path | `finding:vercel:<rule>-<path>` |
+| `advisor` | advisor rule name | `finding:advisor:<name>` (Supabase preview advisors) |
 
 A deterministic check added later uses its own `<kind>` and the same slug rule. The id depends only on the kind and subject, so it's the same in every cycle.
 
@@ -366,7 +367,7 @@ Segments are literal, **param** (`:x`, `{x}`, `{x:…}`, `{x?}`, `<x>`, `[x]`) o
 A catch-all path with prefix P is covered when the code has a route whose text matches P followed by a catch-all marker, or a file route (§4.45) with prefix P and a catch-all segment. A **root** catch-all is also covered by any fallback: `MapFallback`/`MapFallbackToFile`, a `'*'`, `'/*'` or `'/(.*)'` route, Next `app/[...x]`, `app/[[...x]]`, `app/not-found.*`, `pages/404.*`, a SPA rewrite in `vercel.json` (source `/(.*)` or `/:path*`), a `/*` redirect in `netlify.toml` or `_redirects`, or `not_found_handling = "single-page-application"` in a wrangler file.
 
 ### 4.45 File-based routes (part 2)
-Endpoint coverage also builds routes from file paths (any folder depth, so `frontend/src/app/…` counts). A spec literal segment matches only the same literal. A spec param matches a file param or literal. A file catch-all matches one or more remaining segments, and an optional catch-all also matches zero. Trailing `/` and query strings are ignored.
+Endpoint coverage also builds routes from file paths (any folder depth, so `frontend/src/app/…` counts). A spec literal segment matches only the same literal. A spec param matches a file param or literal. A file catch-all covers only a **catch-all** spec path (§4.44) with the same prefix, and an optional catch-all also covers that prefix itself. A non-catch-all spec path needs a non-catch-all route, so an `app/api/[...path]/route.ts` proxy doesn't hide missing `/api/…` endpoints (D-0.6.1-20). Trailing `/` and query strings are ignored.
 - **Next.js App Router** (`app/`, `src/app/`): `page.{tsx,ts,jsx,js,mdx}` and `route.{ts,js}` give the folder path. Drop `(group)` and `@slot` folders, and skip any path with a `_private` folder. `[x]` is a param, `[...x]` a catch-all, `[[...x]]` an optional catch-all. Metadata files at any level: `robots.{ts,js,txt}` → `robots.txt`; `sitemap.{ts,js,xml}` → `sitemap.xml`; `manifest.{ts,js,webmanifest}` → `manifest.webmanifest`; `manifest.json` → `manifest.json`; `favicon.ico`; and `icon`, `apple-icon`, `opengraph-image`, `twitter-image` with any extension → that name.
 - **Pages Router** (`pages/`, `src/pages/`): `x.tsx` and `x/index.tsx` → `/x`, the same for `.ts`, `.jsx` and `.js`. Skip `_app`, `_document` and `_error`.
 - **Static files**: `public/<p>` → `/<p>`.
@@ -385,12 +386,12 @@ Endpoint coverage also builds routes from file paths (any folder depth, so `fron
 | `src/routes/blog/[slug]/+page.svelte` | `/blog/{param}` |
 
 ### 4.46 Runtime dependencies (part 2)
-These rules apply to the manifests `DependencyManifests.Used` already reads:
+These rules apply to the manifests `DependencyManifests.Used` reads (`pyproject.toml` is added in 0.6.1):
 
 | Manifest | Checked | Skipped |
 | --- | --- | --- |
 | `package.json` | `dependencies`, `peerDependencies`, `optionalDependencies` | `devDependencies` |
-| `requirements*.txt` | other files | files whose name contains `dev`, `test`, `lint` or `doc` |
+| `requirements*.txt` | other files | files with a name part (split on `-`, `_`, `.`) of `dev`, `test`, `tests`, `lint`, `doc` or `docs`, e.g. `requirements-dev.txt` (but not `requirements-docker.txt`) |
 | `pyproject.toml` | `[project].dependencies`, `[tool.poetry.dependencies]` | `optional-dependencies` groups named `dev`, `test`, `tests`, `lint` or `docs`; `[dependency-groups]`; `[tool.poetry.group.*]` |
 | `*.csproj` | `PackageReference` | references with `PrivateAssets="all"`; projects with `<IsTestProject>true`, under a `tests/` folder, or named `*Tests` |
 | `Cargo.toml` | `[dependencies]` | `[dev-dependencies]`, `[build-dependencies]` |
@@ -521,6 +522,7 @@ Unchanged from 0.6.0. No GitHub App permission change (D-0.6.1-11). Part 2 needs
 | D-0.6.1-17 | `build_fix` uses the `code_review` model settings. Build-fix steps need no approval gate in any mode (Q3). The build check stays inside the Execution phase with status `Building`, so the lifecycle state machine is unchanged | Claude | assumed |
 | D-0.6.1-18 | Check fixes: catch-all spec paths are read whole (§4.44), file-based routes and `public/` files count (§4.45), and only runtime dependencies are checked (§4.46) | Ben (interview) | agreed |
 | D-0.6.1-19 | Unaddressed findings get one added step per owning agent. A finding with no path is appended to that agent's last step, or step 1. If an added step breaks validation it's dropped and its findings are marked "No step" (and carried), rather than failing the review | Claude | assumed |
+| D-0.6.1-20 | Build (M51 review): a file catch-all covers only catch-all spec paths. Root catch-all markers in code count only in a route call (not a `headers()` source or a CORS mapping), and `.use('*', …)` middleware isn't a fallback. Spec paths may contain `(`/`)` so `(.*)` reads whole. `pyproject.toml` is now read by the dependency check. Supabase advisor findings get the kind `advisor` (§4.42) | Claude | assumed |
 
 ## 11. Open questions
 
