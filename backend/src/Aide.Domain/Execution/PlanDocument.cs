@@ -19,6 +19,11 @@ namespace Aide.Domain.Execution;
 /// "dependencies", "userInstructions"}]}</c>, <c>declaredFiles</c> accepted for <c>files</c>), written with backticks
 /// escaped (<c>`</c>) so text inside it can never close the fence.
 /// </para>
+/// <para>
+/// FR-243, FR-244: a step Tevrin added (§4.41) also has <c>"addedBy": "tevrin"</c> and <c>"addedReason"</c>. Both are read
+/// only from a stored document (<see cref="ParseMarkdown"/>), never from an agent's reply, so an agent can't claim the badge;
+/// they are written only when set, so older documents render byte-identically and read as agent-written.
+/// </para>
 /// </summary>
 public static partial class PlanDocument
 {
@@ -36,15 +41,17 @@ public static partial class PlanDocument
     /// <summary>
     /// The plan generator's reply (FR-29): its JSON object, read and then checked with <see cref="PlanValidator"/>.
     /// Unreadable JSON and rule violations are both <c>INVALID_PLAN</c> with every reason. A generated plan may not
-    /// declare protected paths (§4.6); only an Owner's edit (<see cref="ParseMarkdown"/>) may.
+    /// declare protected paths (§4.6); only an Owner's edit (<see cref="ParseMarkdown"/>) may. FR-243: with
+    /// <paramref name="deployFiles"/>, once the agent's own steps are valid, the steps for missing deployment files are added
+    /// and the plan validated again (<see cref="DeployFileSteps.AddValidated"/>); if that fails, the reason is in the agent's terms.
     /// </summary>
-    public static Result<IReadOnlyList<PlanStep>> ParseAgentOutput(string text, int? maxFilesPerStep, PlanAgents? agents = null)
+    public static Result<IReadOnlyList<PlanStep>> ParseAgentOutput(string text, int? maxFilesPerStep, PlanAgents? agents = null, DeployFileCheck? deployFiles = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         var json = AgentOutput.ExtractJsonObject(text);
         return json is null
             ? Invalid("The reply is not a JSON object with a \"steps\" array.")
-            : ParseAndValidate(json, maxFilesPerStep, allowProtectedPaths: false, agents);
+            : ParseAndValidate(json, maxFilesPerStep, allowProtectedPaths: false, agents, readProvenance: false, deployFiles);
     }
 
     /// <summary>
@@ -59,7 +66,7 @@ public static partial class PlanDocument
         {
             0 => Invalid($"The plan has no ```{BlockLanguage} block with the structured steps."),
             > 1 => Invalid($"The plan has {blocks.Count} ```{BlockLanguage} blocks; keep exactly one."),
-            _ => ParseAndValidate(blocks[0].Groups["json"].Value, maxFilesPerStep, allowProtectedPaths: true, agents),
+            _ => ParseAndValidate(blocks[0].Groups["json"].Value, maxFilesPerStep, allowProtectedPaths: true, agents, readProvenance: true, deployFiles: null),
         };
     }
 
@@ -133,6 +140,11 @@ public static partial class PlanDocument
             {
                 sb.Append("\n**User instructions:** ").Append(Neutralise(step.UserInstructions.Trim())).Append('\n');
             }
+
+            if (step.AddedBy == PlanStep.AddedByTevrin)
+            {
+                sb.Append("\n**Added by Tevrin:** ").Append(Neutralise(OneLine(step.AddedReason ?? string.Empty))).Append('\n');
+            }
         }
 
         sb.Append("\n## Plan data\n\n```").Append(BlockLanguage).Append('\n').Append(ToJson(steps)).Append("\n```\n");
@@ -177,6 +189,13 @@ public static partial class PlanDocument
             step["covers"] = source.Covers;
         }
 
+        // FR-243, FR-244: only on steps Tevrin added.
+        if (source.AddedBy == PlanStep.AddedByTevrin)
+        {
+            step["addedBy"] = PlanStep.AddedByTevrin;
+            step["addedReason"] = string.IsNullOrWhiteSpace(source.AddedReason) ? null : source.AddedReason.Trim();
+        }
+
         return step;
     }
 
@@ -190,14 +209,44 @@ public static partial class PlanDocument
             + "\nReturn the complete corrected plan as one JSON object.";
     }
 
-    private static Result<IReadOnlyList<PlanStep>> ParseAndValidate(string json, int? maxFilesPerStep, bool allowProtectedPaths, PlanAgents? agents)
+    private static Result<IReadOnlyList<PlanStep>> ParseAndValidate(
+        string json, int? maxFilesPerStep, bool allowProtectedPaths, PlanAgents? agents, bool readProvenance, DeployFileCheck? deployFiles)
     {
-        var parsed = ParseJson(json);
-        return parsed.IsFailure ? parsed : PlanValidator.Validate(parsed.Value, maxFilesPerStep, allowProtectedPaths, agents);
+        var parsed = ParseJson(json, readProvenance);
+        if (parsed.IsFailure)
+        {
+            return parsed;
+        }
+
+        // FR-243: the agent's own steps are validated first, so a retry's reasons use its step numbers.
+        var validated = PlanValidator.Validate(parsed.Value, maxFilesPerStep, allowProtectedPaths, agents);
+        return validated.IsFailure || deployFiles is null
+            ? validated
+            : DeployFileSteps.AddValidated(validated.Value, deployFiles, steps => PlanValidator.Validate(steps, maxFilesPerStep, allowProtectedPaths, agents));
     }
 
-    /// <summary>Reads the JSON plan shape into steps (not yet validated). Malformed JSON is <c>INVALID_PLAN</c>.</summary>
-    public static Result<IReadOnlyList<PlanStep>> ParseJson(string json)
+    /// <summary>
+    /// FR-243, FR-244: the steps of a stored document's block, unvalidated, with their provenance; empty when it has no single
+    /// readable block (used to check an edited draft's provenance against the version it edits).
+    /// </summary>
+    public static IReadOnlyList<PlanStep> ReadSteps(string markdown)
+    {
+        ArgumentNullException.ThrowIfNull(markdown);
+        var blocks = BlockPattern().Matches(markdown.ReplaceLineEndings("\n"));
+        if (blocks.Count != 1)
+        {
+            return [];
+        }
+
+        var parsed = ParseJson(blocks[0].Groups["json"].Value, readProvenance: true);
+        return parsed.IsSuccess ? parsed.Value : [];
+    }
+
+    /// <summary>
+    /// Reads the JSON plan shape into steps (not yet validated). Malformed JSON is <c>INVALID_PLAN</c>. With
+    /// <paramref name="readProvenance"/> (a stored document), <c>addedBy</c>/<c>addedReason</c> are read; an agent's reply never sets them.
+    /// </summary>
+    public static Result<IReadOnlyList<PlanStep>> ParseJson(string json, bool readProvenance = false)
     {
         ArgumentNullException.ThrowIfNull(json);
         try
@@ -221,7 +270,7 @@ public static partial class PlanDocument
             foreach (var item in list.EnumerateArray())
             {
                 position++;
-                var step = ReadStep(item, position, reasons);
+                var step = ReadStep(item, position, reasons, readProvenance);
                 if (step is not null)
                 {
                     steps.Add(step);
@@ -238,7 +287,7 @@ public static partial class PlanDocument
         }
     }
 
-    private static PlanStep? ReadStep(JsonElement item, int position, List<string> reasons)
+    private static PlanStep? ReadStep(JsonElement item, int position, List<string> reasons, bool readProvenance)
     {
         var at = $"Step at position {position.ToString(CultureInfo.InvariantCulture)}";
         if (item.ValueKind != JsonValueKind.Object)
@@ -332,6 +381,9 @@ public static partial class PlanDocument
             reasons.Add($"{name}: \"covers\" must be an array of requirement IDs (FR-n).");
         }
 
+        // FR-244: only "tevrin" is a provenance; anything else reads as agent-written.
+        var addedBy = readProvenance && StringOf(item, "addedBy")?.Trim() == PlanStep.AddedByTevrin ? PlanStep.AddedByTevrin : null;
+        var addedReason = addedBy is null ? null : StringOf(item, "addedReason")?.Trim();
         return new PlanStep(
             number,
             title,
@@ -340,7 +392,11 @@ public static partial class PlanDocument
             dependencies,
             string.IsNullOrWhiteSpace(userInstructions) ? null : userInstructions.Trim(),
             string.IsNullOrWhiteSpace(agent) ? null : agent.Trim(),
-            covers);
+            covers)
+        {
+            AddedBy = addedBy,
+            AddedReason = string.IsNullOrEmpty(addedReason) ? null : addedReason,
+        };
     }
 
     private static string? StringOf(JsonElement obj, string name) =>

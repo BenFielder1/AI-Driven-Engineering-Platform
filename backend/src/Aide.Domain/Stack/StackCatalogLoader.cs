@@ -577,6 +577,8 @@ public static partial class StackCatalogLoader
             deploy = new PackDeploy(provider, shapes);
         }
 
+        var requiredFiles = ReadRequiredFiles(raw.RequiredFiles, layer, reasons);
+
         if (reasons.Count > 0)
         {
             return (null, Status(raw));
@@ -606,8 +608,80 @@ public static partial class StackCatalogLoader
             Gate = gate,
             Migrate = migrate,
             Deploy = deploy,
+            RequiredFiles = requiredFiles,
         };
         return (new StackPack(manifest, skill, sections, hash), Status(raw));
+    }
+
+    /// <summary>The longest required-content line of a required file (FR-241).</summary>
+    private const int MaxRequiredContentLength = 500;
+
+    /// <summary>
+    /// FR-241, §4.40: a deploy pack's required files. Each path and alternative is a plain relative path (no glob, no escape,
+    /// declared once); the owner is a specialist key (an unknown agent is a load error); the folder is one of
+    /// <see cref="PackVocabulary.RequiredFileFolders"/>; the content has at least one line.
+    /// </summary>
+    private static List<PackRequiredFile> ReadRequiredFiles(IReadOnlyList<RawRequiredFile>? raw, string layer, List<string> reasons)
+    {
+        var files = new List<PackRequiredFile>();
+        if (raw is null)
+        {
+            return files;
+        }
+
+        if (raw.Count > 0 && layer != StackLayers.Deploy)
+        {
+            reasons.Add("requiredFiles is for deploy packs only.");
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (f, i) in raw.Select((f, i) => (f, i)))
+        {
+            var where = $"requiredFiles[{i}]";
+            string FilePath(string? value, string field)
+            {
+                var path = NormalisePath(value?.Trim() ?? string.Empty);
+                if (path.Length == 0)
+                {
+                    reasons.Add($"{field} is required.");
+                }
+                else if (path.Length > PathGlob.MaxLength || path.IndexOfAny(['*', '?', '{', '}', '!']) >= 0 || Execution.PathRules.IsUnsafe(path)
+                    || Execution.PathRules.HasUnsafeCharacters(path) || path.EndsWith('/'))
+                {
+                    reasons.Add($"{field} '{value}' must be a plain relative file path (no glob, no '..').");
+                }
+                else if (!seen.Add(path))
+                {
+                    reasons.Add($"{field} '{path}' is listed twice.");
+                }
+
+                return path;
+            }
+
+            var path = FilePath(f.Path, $"{where}.path");
+            var alternatives = (f.Alternatives ?? []).Select((a, j) => FilePath(a, $"{where}.alternatives[{j}]")).ToList();
+            var owner = f.Owner?.Trim() ?? string.Empty;
+            if (!StackAgents.All.Contains(owner, StringComparer.Ordinal))
+            {
+                reasons.Add($"{where}.owner '{f.Owner}' isn't a specialist key ({string.Join(", ", StackAgents.All)}).");
+            }
+
+            var folder = f.Folder?.Trim() ?? string.Empty;
+            if (!PackVocabulary.RequiredFileFolders.Contains(folder, StringComparer.Ordinal))
+            {
+                reasons.Add($"{where}.folder '{f.Folder}' is not one of {string.Join(", ", PackVocabulary.RequiredFileFolders)}.");
+            }
+
+            var content = Strings(f.Content, $"{where}.content", reasons, required: true);
+            foreach (var line in content.Where(l => l.Length > MaxRequiredContentLength))
+            {
+                reasons.Add($"{where}.content has a line longer than {MaxRequiredContentLength} characters.");
+            }
+
+            files.Add(new PackRequiredFile(path, alternatives, owner, folder, content));
+        }
+
+        return files;
     }
 
     private static PackPlanRules ReadPlanRules(RawPlanRules? raw, List<string> reasons)
@@ -1502,6 +1576,8 @@ public static partial class StackCatalogLoader
 
         public RawDeploy? Deploy { get; init; }
 
+        public IReadOnlyList<RawRequiredFile>? RequiredFiles { get; init; }
+
         [JsonPropertyName("$schema")]
         public string? Schema { get; init; }
     }
@@ -1661,6 +1737,19 @@ public static partial class StackCatalogLoader
         public string? Command { get; init; }
 
         public bool? NeedsDirectUrl { get; init; }
+    }
+
+    private sealed class RawRequiredFile
+    {
+        public string? Path { get; init; }
+
+        public IReadOnlyList<string?>? Alternatives { get; init; }
+
+        public string? Owner { get; init; }
+
+        public string? Folder { get; init; }
+
+        public IReadOnlyList<string?>? Content { get; init; }
     }
 
     private sealed class RawDeploy

@@ -172,13 +172,15 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             : requirements is not null && PlanScope.Check(plan.Value, requirements) is { } uncovered ? [uncovered] : [];
 
         // FR-89: a stack deploying the frontend to Vercel on a new repository needs vercel.json in the Vercel root directory
-        // (the base isn't listed on read, so with existing code its files are unknown and the warning is skipped).
+        // (the base isn't listed on read, so with existing code its files are unknown and the warning is skipped). Before a
+        // target is set up, its root directory is the frontend layer path (as DeploymentBuildRules derives it), the folder
+        // FR-243's added step creates vercel.json in.
         if (version.Stack?.Composition.Deploy.FrontendHost == "deploy-vercel")
         {
             var rootDirectory = await db.DeploymentTargets.AsNoTracking()
                 .Where(t => t.ProjectId == artifact.ProjectId && t.Component == DeploymentComponent.Frontend)
                 .Select(s => s.RootDirectory)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefaultAsync(cancellationToken) ?? version.Stack.Composition.Frontend?.Path;
             if (VercelConfigRules.PlanWarning(plan.Value, deploysToVercel: true, version.BaseFiles, rootDirectory) is { } vercel)
             {
                 warnings = [.. warnings, vercel];

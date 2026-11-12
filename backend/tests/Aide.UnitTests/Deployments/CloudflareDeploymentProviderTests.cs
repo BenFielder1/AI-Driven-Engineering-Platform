@@ -48,7 +48,7 @@ public class CloudflareDeploymentProviderTests
         var triggers = stub.Where("POST", $"{A}/builds/triggers").Select(c => c.Body).ToList();
         Assert.Equal(2, triggers.Count);
         Assert.Contains(triggers, b => b.Contains("\"branch_includes\":[\"main\"]", StringComparison.Ordinal) && b.Contains("npx wrangler deploy", StringComparison.Ordinal));
-        Assert.Contains(triggers, b => b.Contains("\"branch_excludes\":[\"aide/*\"]", StringComparison.Ordinal) && b.Contains("\"build_token_uuid\":\"bt1\"", StringComparison.Ordinal));
+        Assert.Contains(triggers, b => b.Contains("\"branch_excludes\":[\"tevrin/*\",\"aide/*\"]", StringComparison.Ordinal) && b.Contains("\"build_token_uuid\":\"bt1\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public class CloudflareDeploymentProviderTests
         Assert.Equal("https://site.pages.dev", result.ProductionUrl);
         var patch = Assert.Single(stub.Where("PATCH", $"{A}/pages/projects/site"));
         Assert.Contains("\"preview_deployment_setting\":\"custom\"", patch.Body, StringComparison.Ordinal);
-        Assert.Contains("\"preview_branch_excludes\":[\"aide/*\"]", patch.Body, StringComparison.Ordinal);
+        Assert.Contains("\"preview_branch_excludes\":[\"tevrin/*\",\"aide/*\"]", patch.Body, StringComparison.Ordinal); // FR-234
     }
 
     [Fact]
@@ -284,5 +284,114 @@ public class CloudflareDeploymentProviderTests
         Assert.Null(earlier);
         Assert.Equal("p2", rebuilt.Id);
         Assert.Single(stub.Where("POST", $"{A}/pages/projects/site/deployments/p1/retry"));
+    }
+
+    // ---------- FR-234: existing preview exclusions gain tevrin/* (and aide/*), keeping the others ----------
+
+    private const string LegacyPreviewTrigger =
+        """[{"trigger_uuid":"prod1","branch_includes":["main"],"deploy_command":"npx wrangler deploy","repo_connection_uuid":"rc1","build_token_uuid":"bt1"},{"trigger_uuid":"prev1","branch_includes":["*"],"branch_excludes":["aide/*","wip/*"],"deploy_command":"npx wrangler versions upload"}]""";
+
+    [Fact]
+    public async Task FR234_Linking_a_Worker_patches_a_reused_preview_trigger_to_exclude_tevrin_keeping_other_excludes()
+    {
+        var (provider, stub) = Create();
+        stub.On("GET", $"{A}/workers/scripts", R("""[{"id":"todo-web","tag":"tag1"}]"""))
+            .On("GET", $"{A}/builds/workers/tag1/triggers", R(LegacyPreviewTrigger))
+            .On("PATCH", $"{A}/builds/triggers/prev1", R("{}"))
+            .On("GET", $"{A}/workers/subdomain", R("""{"subdomain":"acme"}"""));
+
+        var result = await provider.SetupTargetAsync(
+            Auth, new DeploymentSetupRequest(Target(DeploymentProvider.Cloudflare, null), false, null, null, null, "todo-web"), TestContext.Current.CancellationToken);
+
+        Assert.Equal("prev1|prod1", result.PreviewResourceId);
+        Assert.Empty(stub.Where("POST", $"{A}/builds/triggers"));
+        var patch = Assert.Single(stub.Where("PATCH", $"{A}/builds/triggers/prev1"));
+        Assert.Contains("\"branch_excludes\":[\"aide/*\",\"wip/*\",\"tevrin/*\"]", patch.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR234_Verify_patches_a_Worker_preview_trigger_missing_tevrin_and_reports_nothing_missing()
+    {
+        var (provider, stub) = Create();
+        stub.On("GET", $"{A}/workers/scripts", R("""[{"id":"todo-web","tag":"tag1"}]"""))
+            .On("GET", $"{A}/builds/workers/tag1/triggers", R(LegacyPreviewTrigger))
+            .On("PATCH", $"{A}/builds/triggers/prev1", R("{}"));
+
+        var check = await provider.VerifyTargetAsync(Auth, Target(DeploymentProvider.Cloudflare, "todo-web", "prev1|prod1"), TestContext.Current.CancellationToken);
+
+        Assert.Equal((true, (IReadOnlyList<string>?)[]), (check.GitAccess, check.BranchControlMissing));
+        Assert.Contains("\"branch_excludes\":[\"aide/*\",\"wip/*\",\"tevrin/*\"]", Assert.Single(stub.Where("PATCH", $"{A}/builds/triggers/prev1")).Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR234_Verify_leaves_a_complete_Worker_preview_trigger_alone()
+    {
+        var (provider, stub) = Create();
+        stub.On("GET", $"{A}/workers/scripts", R("""[{"id":"todo-web","tag":"tag1"}]"""))
+            .On("GET", $"{A}/builds/workers/tag1/triggers", R("""[{"trigger_uuid":"prev1","branch_excludes":["tevrin/*","aide/*"],"deploy_command":"npx wrangler versions upload"}]"""));
+
+        var check = await provider.VerifyTargetAsync(Auth, Target(DeploymentProvider.Cloudflare, "todo-web", "prev1|prod1"), TestContext.Current.CancellationToken);
+
+        Assert.Equal((IReadOnlyList<string>?)[], check.BranchControlMissing);
+        Assert.Empty(stub.Where("PATCH", $"{A}/builds/triggers"));
+    }
+
+    [Fact]
+    public async Task FR234_A_failed_Worker_trigger_patch_reports_the_missing_pattern()
+    {
+        var (provider, stub) = Create();
+        stub.On("GET", $"{A}/workers/scripts", R("""[{"id":"todo-web","tag":"tag1"}]"""))
+            .On("GET", $"{A}/builds/workers/tag1/triggers", R(LegacyPreviewTrigger))
+            .On("PATCH", $"{A}/builds/triggers/prev1", """{"success":false,"errors":[{"code":8000001,"message":"update failed"}]}""", HttpStatusCode.BadRequest);
+
+        var check = await provider.VerifyTargetAsync(Auth, Target(DeploymentProvider.Cloudflare, "todo-web", "prev1|prod1"), TestContext.Current.CancellationToken);
+
+        Assert.Equal((IReadOnlyList<string>?)["tevrin/*"], check.BranchControlMissing);
+    }
+
+    [Fact]
+    public async Task FR234_Linking_Pages_keeps_existing_preview_excludes_and_adds_both_prefixes()
+    {
+        var (provider, stub) = Create();
+        stub.On("GET", $"{A}/workers/scripts", R("[]"))
+            .On("GET", $"{A}/pages/projects/site", R("""{"name":"site","source":{"config":{"owner":"acme","repo_name":"todo","preview_branch_excludes":["wip/*"]}}}"""))
+            .On("PATCH", $"{A}/pages/projects/site", R("""{"name":"site","subdomain":"site.pages.dev"}"""));
+
+        await provider.SetupTargetAsync(
+            Auth, new DeploymentSetupRequest(Target(DeploymentProvider.Cloudflare, null), false, null, null, null, "site"), TestContext.Current.CancellationToken);
+
+        Assert.Contains("\"preview_branch_excludes\":[\"wip/*\",\"tevrin/*\",\"aide/*\"]", Assert.Single(stub.Where("PATCH", $"{A}/pages/projects/site")).Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR234_Verify_patches_Pages_previews_missing_tevrin_and_reports_a_failed_patch()
+    {
+        const string Project = """{"name":"site","source":{"config":{"owner":"acme","repo_name":"todo","preview_deployment_setting":"custom","preview_branch_excludes":["aide/*"]}}}""";
+        var (provider, stub) = Create();
+        stub.On("GET", $"{A}/pages/projects/site", R(Project)).On("PATCH", $"{A}/pages/projects/site", R("{}"));
+
+        var check = await provider.VerifyTargetAsync(Auth, Target(DeploymentProvider.Cloudflare, "pages:site"), TestContext.Current.CancellationToken);
+
+        Assert.Equal((IReadOnlyList<string>?)[], check.BranchControlMissing);
+        Assert.Contains("\"preview_branch_excludes\":[\"aide/*\",\"tevrin/*\"]", Assert.Single(stub.Where("PATCH", $"{A}/pages/projects/site")).Body, StringComparison.Ordinal);
+
+        var (failing, failingStub) = Create();
+        failingStub.On("GET", $"{A}/pages/projects/site", R(Project))
+            .On("PATCH", $"{A}/pages/projects/site", """{"success":false,"errors":[{"code":8000001,"message":"update failed"}]}""", HttpStatusCode.BadRequest);
+        var failed = await failing.VerifyTargetAsync(Auth, Target(DeploymentProvider.Cloudflare, "pages:site"), TestContext.Current.CancellationToken);
+        Assert.Equal((IReadOnlyList<string>?)["tevrin/*"], failed.BranchControlMissing);
+    }
+
+    [Fact]
+    public void FR234_Readiness_names_the_Cloudflare_exclusion_patterns()
+    {
+        var input = new ReadinessInput(DeploymentProvider.Cloudflare, true, ReadinessConnection.Valid, null, true, null, null, [], BranchControlState.Missing, null, true, ["tevrin/*"]);
+
+        var missing = Assert.Single(ReadinessRules.Checklist(input), i => i.Id == ReadinessRules.BranchControl);
+        var ok = Assert.Single(ReadinessRules.Checklist(input with { BranchControl = BranchControlState.Ok, BranchPatterns = ["tevrin/*", "aide/*"] }), i => i.Id == ReadinessRules.BranchControl);
+
+        Assert.Equal(ReadinessState.Error, missing.State);
+        Assert.Contains("don't exclude tevrin/*", missing.Message, StringComparison.Ordinal);
+        Assert.Equal("Cloudflare's preview builds exclude tevrin/* and aide/*.", ok.Message);
     }
 }

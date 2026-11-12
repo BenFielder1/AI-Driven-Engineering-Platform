@@ -131,18 +131,18 @@ public static class ExecutionRules
             : Precondition($"The project is in {phase.ToWire()}; execution can be paused only in the execution phase.");
 
     /// <summary>
-    /// FR-34: the project branch <c>aide/&lt;project-slug&gt;-&lt;short-id&gt;</c>, the short id being the first
+    /// FR-34, amended by FR-232: the project branch <c>tevrin/&lt;project-slug&gt;-&lt;short-id&gt;</c>, the short id being the first
     /// <see cref="BranchShortIdLength"/> hex characters of the project id. A slug that would make an unsafe branch name
-    /// falls back to <see cref="ProjectRules.SlugFallback"/>.
+    /// falls back to <see cref="ProjectRules.SlugFallback"/>. A recorded branch is kept (<see cref="BranchNaming.Choose"/>).
     /// </summary>
     public static string BranchName(string slug, Guid projectId)
     {
         ArgumentNullException.ThrowIfNull(slug);
         var shortId = projectId.ToString("N")[..BranchShortIdLength];
-        var candidate = $"aide/{slug.Trim()}-{shortId}";
+        var candidate = $"{BranchNaming.Prefix}{slug.Trim()}-{shortId}";
         return slug.Trim().Length > 0 && ProjectSettingsRules.IsValidBranchName(candidate)
             ? candidate
-            : $"aide/{ProjectRules.SlugFallback}-{shortId}";
+            : $"{BranchNaming.Prefix}{ProjectRules.SlugFallback}-{shortId}";
     }
 
     private static Result Precondition(string message) =>

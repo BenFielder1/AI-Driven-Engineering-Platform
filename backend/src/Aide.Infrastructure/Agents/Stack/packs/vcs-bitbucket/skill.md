@@ -13,7 +13,7 @@ Tevrin performs every Git and Bitbucket operation itself (branches, commits, pus
 Tevrin holds the Bitbucket credentials (OAuth or scoped API tokens; app passwords no longer work). Generated files never contain tokens, usernames or clone URLs with credentials, and pipelines need no repository token for the gate.
 
 ## Branches and commits
-- Tevrin names branches (`aide/**` version branches) and writes commit messages. Don't add conventions to files.
+- Tevrin names branches (`tevrin/**` version branches; `aide/**` on projects started before Tevrin 0.6.1) and writes commit messages. Don't add conventions to files.
 - Pipelines run for pull requests and the default branch, so Tevrin can read the PR head commit's statuses before merging.
 
 ## PRs (on request)

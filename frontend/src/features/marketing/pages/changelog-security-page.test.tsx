@@ -21,15 +21,16 @@ afterEach(() => {
 })
 
 describe('FR-219 Changelog', () => {
-  it('FR219_FR229_FR230_order_and_count: 0.1.0–0.6.0 (semver), newest first, with the PR merge and release dates', () => {
-    expect(changelog.map((e) => e.version)).toEqual(['0.6.0', '0.5.0', '0.4.0', '0.3.0', '0.2.0', '0.1.0'])
-    // 0.6.0: its release day (FR-230). Then the merge dates of PRs #28, #27, #23, #13 and #1 (gh pr view <n> --json mergedAt).
-    expect(changelog.map((e) => e.date)).toEqual(['2026-11-08', '2026-11-04', '2026-11-01', '2026-10-24', '2026-10-22', '2026-10-10'])
+  it('FR219_FR229_FR230_FR245_order_and_count: 0.1.0–0.6.1 (semver), newest first, with the PR merge and release dates', () => {
+    expect(changelog.map((e) => e.version)).toEqual(['0.6.1', '0.6.0', '0.5.0', '0.4.0', '0.3.0', '0.2.0', '0.1.0'])
+    // 0.6.1: no date until it is released (FR-245, FR-230). 0.6.0: its release day. Then the merge dates of PRs #28, #27,
+    // #23, #13 and #1 (gh pr view <n> --json mergedAt).
+    expect(changelog.map((e) => e.date)).toEqual([null, '2026-11-08', '2026-11-04', '2026-11-01', '2026-10-24', '2026-10-22', '2026-10-10'])
     for (const entry of changelog) {
       expect(entry.version, 'FR-229: x.y.z').toMatch(/^\d+\.\d+\.\d+$/)
       expect(entry.highlights.length, entry.version).toBeGreaterThanOrEqual(3)
       expect(entry.highlights.length, entry.version).toBeLessThanOrEqual(6)
-      expect(entry.asAide, entry.version).toBe(entry.version !== '0.6.0')
+      expect(entry.asAide, entry.version).toBe(!['0.6.0', '0.6.1'].includes(entry.version))
       // FR-229, D-V6-26: the docs history pages are named by version (history/0.N.0/).
       expect(entry.specHref).toBe(`${DOCS_URL}history/${entry.version}/`)
     }
@@ -40,13 +41,16 @@ describe('FR-219 Changelog', () => {
     await screen.findByRole('heading', { level: 1, name: 'Changelog' })
     const entries = screen.getAllByTestId('changelog-entry')
 
-    expect(entries).toHaveLength(6)
-    expect(within(nth(entries, 0)).getByText('8 Nov 2026')).toHaveAttribute('datetime', '2026-11-08')
-    expect(screen.queryByText('In preview')).not.toBeInTheDocument()
-    expect(within(nth(entries, 0)).getByRole('heading', { level: 2 })).toHaveTextContent(/^Tevrin$/)
-    expect(within(nth(entries, 1)).getByRole('heading', { level: 2 })).toHaveTextContent('(as AIDE)')
-    expect(within(nth(entries, 1)).getByText('4 Nov 2026')).toHaveAttribute('datetime', '2026-11-04')
-    expect(within(nth(entries, 5)).getByRole('link', { name: /^0\.1\.0 spec and notes/ })).toHaveAttribute('href', `${DOCS_URL}history/0.1.0/`)
+    // FR-245: 0.6.1 is listed first and shows "In preview" until its release date is set.
+    expect(entries).toHaveLength(7)
+    expect(within(nth(entries, 0)).getByText('In preview')).toBeInTheDocument()
+    expect(screen.getAllByText('In preview')).toHaveLength(1)
+    expect(within(nth(entries, 0)).getByRole('heading', { level: 2 })).not.toHaveTextContent('(as AIDE)')
+    expect(within(nth(entries, 1)).getByText('8 Nov 2026')).toHaveAttribute('datetime', '2026-11-08')
+    expect(within(nth(entries, 1)).getByRole('heading', { level: 2 })).toHaveTextContent(/^Tevrin$/)
+    expect(within(nth(entries, 2)).getByRole('heading', { level: 2 })).toHaveTextContent('(as AIDE)')
+    expect(within(nth(entries, 2)).getByText('4 Nov 2026')).toHaveAttribute('datetime', '2026-11-04')
+    expect(within(nth(entries, 6)).getByRole('link', { name: /^0\.1\.0 spec and notes/ })).toHaveAttribute('href', `${DOCS_URL}history/0.1.0/`)
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   })
 

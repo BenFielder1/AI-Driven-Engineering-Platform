@@ -1,4 +1,5 @@
 using Aide.Domain.Entities;
+using Aide.Domain.Execution;
 
 namespace Aide.Domain.Deployments;
 
@@ -37,6 +38,9 @@ public enum BranchControlState
 /// <summary>
 /// The facts of a readiness check. <see cref="Checked"/> is false when only Tevrin's own data was read (Settings → Deployment
 /// GET); then the platform-dependent items say "verify to check". <see cref="GitAccess"/>: <c>null</c> when unknown.
+/// <see cref="BranchPatterns"/> (FR-233, §4.36): the branch patterns the <c>branch_control</c> message names: the missing ones
+/// when <see cref="BranchControl"/> is <see cref="BranchControlState.Missing"/>, else the required ones; <c>null</c>:
+/// <c>tevrin/**</c>.
 /// </summary>
 public sealed record ReadinessInput(
     DeploymentProvider Provider,
@@ -49,7 +53,8 @@ public sealed record ReadinessInput(
     IReadOnlyList<string> MissingEnv,
     BranchControlState BranchControl,
     string? BranchControlPath,
-    bool? PreviewReady);
+    bool? PreviewReady,
+    IReadOnlyList<string>? BranchPatterns = null);
 
 /// <summary>
 /// FR-144 readiness checklist, pure: <c>connection</c>, <c>git_access</c>, <c>required_env</c>, <c>branch_control</c>,
@@ -71,6 +76,7 @@ public static class ReadinessRules
         ArgumentNullException.ThrowIfNull(input);
         var platform = DeploymentPlatforms.DisplayName(input.Provider);
         var caps = DeploymentPlatforms.Capabilities(input.Provider);
+        var patterns = BranchControlRules.Names(input.BranchPatterns ?? [BranchControlRules.VercelPattern(BranchNaming.Prefix)]);
         var items = new List<ReadinessItem>
         {
             input.Connection switch
@@ -94,13 +100,17 @@ public static class ReadinessRules
             input.MissingEnv.Count == 0
                 ? new(RequiredEnv, ReadinessState.Ok, "Every required environment variable has a value.")
                 : new(RequiredEnv, ReadinessState.Error, $"Missing: {string.Join(", ", input.MissingEnv)}."),
-            input.BranchControl switch
+            (input.Provider, input.BranchControl) switch
             {
-                BranchControlState.Ok => new(BranchControl, ReadinessState.Ok, $"Automatic deploys of aide/** are disabled ({input.BranchControlPath})."),
-                BranchControlState.Missing => new(BranchControl, ReadinessState.Error,
-                    $"{input.BranchControlPath} doesn't stop automatic deploys of aide/**; the deploy step adds it, or add it yourself."),
-                BranchControlState.PlatformManaged => new(BranchControl, ReadinessState.Ok, $"{platform} builds only the production branch; Tevrin deploys aide/** explicitly."),
-                BranchControlState.NotApplicable => new(BranchControl, ReadinessState.Na, $"{platform} only deploys the default branch."),
+                // FR-233, FR-234: Cloudflare's branch control is the preview exclusions Tevrin sets (no repository file).
+                (DeploymentProvider.Cloudflare, BranchControlState.Ok) => new(BranchControl, ReadinessState.Ok, $"Cloudflare's preview builds exclude {patterns}."),
+                (DeploymentProvider.Cloudflare, BranchControlState.Missing) => new(BranchControl, ReadinessState.Error,
+                    $"Cloudflare's preview builds don't exclude {patterns}, and Tevrin couldn't add them. Add them to the preview branch excludes in Cloudflare, then verify again."),
+                (_, BranchControlState.Ok) => new(BranchControl, ReadinessState.Ok, $"Automatic deploys of {patterns} are disabled ({input.BranchControlPath})."),
+                (_, BranchControlState.Missing) => new(BranchControl, ReadinessState.Error,
+                    $"{input.BranchControlPath} doesn't stop automatic deploys of {patterns}; the deploy step adds it, or add it yourself."),
+                (_, BranchControlState.PlatformManaged) => new(BranchControl, ReadinessState.Ok, $"{platform} builds only the production branch; Tevrin deploys {patterns} explicitly."),
+                (_, BranchControlState.NotApplicable) => new(BranchControl, ReadinessState.Na, $"{platform} only deploys the default branch."),
                 _ => new(BranchControl, ReadinessState.Warning, input.Checked ? $"Tevrin couldn't read {input.BranchControlPath} yet (the repository isn't checked out)." : VerifyToCheck),
             },
             !caps.Previews

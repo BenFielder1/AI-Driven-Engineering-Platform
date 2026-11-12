@@ -46,7 +46,11 @@ public static class RolloutFindings
                 Severity.Critical,
                 diverged ? DivergedMessage : MigrationFailedMessage,
                 Source: FindingSource.Deterministic,
-                Evidence: Cut(migration.ErrorMessage ?? migration.ErrorCode ?? "The migration run failed.")));
+                Evidence: FailureExcerpt.Build(migration.ErrorMessage ?? migration.ErrorCode ?? "The migration run failed."))
+            {
+                FailureId = FailureIds.Of(FailureIds.Preview, "database-migration"),
+                FailureErrorLine = FailureExcerpt.Compose(migration.ErrorMessage ?? migration.ErrorCode ?? "The migration run failed.").ErrorLine,
+            });
         }
 
         foreach (var advisor in migration?.Advisors ?? [])
@@ -69,12 +73,17 @@ public static class RolloutFindings
             var evidence = string.IsNullOrWhiteSpace(component.BuildLogTail)
                 ? component.ErrorMessage ?? component.Url ?? "The preview deployment failed without a build log."
                 : component.BuildLogTail;
+            var excerpt = FailureExcerpt.Compose(evidence);
             findings.Add(new ReviewFinding(
                 ReviewCategory.Architecture,
                 Severity.Critical,
                 preDeploy ? PreDeployFailedMessage : BuildFailedMessage(component.Platform),
                 Source: FindingSource.Deterministic,
-                Evidence: Cut(evidence)));
+                Evidence: excerpt.Text)
+            {
+                FailureId = FailureId(component, components),
+                FailureErrorLine = excerpt.ErrorLine,
+            });
         }
 
         return findings;
@@ -87,6 +96,21 @@ public static class RolloutFindings
         "WARN" or "WARNING" => Severity.Minor,
         _ => null,
     };
+
+    /// <summary>
+    /// FR-237: <c>failure:preview:&lt;platform&gt;</c> (<c>failure:preview:vercel</c>), or with the component when the rollout
+    /// deploys more than one component to that platform (<c>failure:preview:railway-backend</c>), whether or not the others
+    /// failed, so the id stays the same across cycles.
+    /// </summary>
+    public static string FailureId(RolloutComponentOutcome component, IReadOnlyList<RolloutComponentOutcome> components)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        ArgumentNullException.ThrowIfNull(components);
+        var platform = component.Platform.ToWire().Replace('_', '-');
+        return components.Count(c => c.Platform == component.Platform) > 1
+            ? FailureIds.Of(FailureIds.Preview, $"{platform}-{component.Component.ToWire()}")
+            : FailureIds.Of(FailureIds.Preview, platform);
+    }
 
     private static string Cut(string text) =>
         text.Length <= PreviewReviewRules.EvidenceMaxLength ? text : text[^PreviewReviewRules.EvidenceMaxLength..];

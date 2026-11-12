@@ -16,6 +16,7 @@ using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
+using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -145,6 +146,116 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         await DeploymentHarness.SettleRolloutAsync(app, id, manualJob.Id);
         var redeployed = (await DeploymentHarness.DeploymentsAsync(app, id)).Last();
         Assert.Equal((DeploymentTrigger.Manual, (Guid?)fixture.Contributor.User!.Id, (Guid?)manualJob.Id, DeploymentStatus.Ready), (redeployed.Trigger, redeployed.TriggeredBy, redeployed.RolloutId, redeployed.Status));
+    }
+
+    /// <summary>Records the prompts the inner responder answers.</summary>
+    private sealed class RecordingResponder(IFakeAgentResponder inner) : IFakeAgentResponder
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
+
+        public Aide.Domain.Agents.AgentKind Agent => inner.Agent;
+
+        public IReadOnlyList<string> Prompts => [.. _prompts];
+
+        public string Respond(LlmRequest request)
+        {
+            _prompts.Enqueue(string.Join("\n", request.Messages.Select(m => m.Content)));
+            return inner.Respond(request);
+        }
+    }
+
+    [Fact]
+    public async Task FR237_FR238_FR239_A_failed_Vercel_preview_log_reaches_the_review_prompt_and_the_stored_fix_steps_evidence_block()
+    {
+        const string ModuleNotFound = "Module not found: Can't resolve '@/lib/db'";
+        var review = new RecordingResponder(new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.80m], OptimizationStepsByCycle = [1] }));
+        var app = AgentJobs.WithResponders(DeploymentHarness.Fake(factory), review);
+        using var fixture = await ExecutingAsync(app, extraFile: FakeDeploymentRules.FailBuildMarker);
+        var id = fixture.Project.Id;
+        await AgentJobs.RunQueuedAsync(app, id);
+        var preview = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id));
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id)).Id);
+
+        // The stored (already redacted) build log tail of a Next.js build that can't resolve a module.
+        var log = "Running \"npm run build\"\n> next build\nCreating an optimized production build ...\nFailed to compile.\n\n./src/app/page.tsx\n"
+            + ModuleNotFound + "\n\nhttps://nextjs.org/docs/messages/module-not-found\nError: Command \"npm run build\" exited with 1";
+        await ProjectApi.WithDbAsync(app, db => db.Deployments.Where(d => d.Id == preview.Id).ExecuteUpdateAsync(s => s.SetProperty(d => d.BuildLogTail, log), Ct));
+
+        await DeploymentHarness.SettleAsync(app, (await ReviewJobAsync(app, id)).Id);
+
+        // FR-237: the prompt's deterministic findings list the failure id with the log line in its excerpt.
+        var prompt = Assert.Single(review.Prompts);
+        var findings = prompt[prompt.IndexOf("<deterministic_findings>", StringComparison.Ordinal)..prompt.IndexOf("</deterministic_findings>", StringComparison.Ordinal)];
+        Assert.Contains("failure id failure:preview:vercel (preview deployment): Vercel preview build failed", findings, StringComparison.Ordinal);
+        Assert.Contains(ModuleNotFound, findings, StringComparison.Ordinal);
+
+        // The finding and external_checks.failures carry the id and the excerpt.
+        var report = await ReportAsync(app, id);
+        var finding = Assert.Single(report.Violations, v => v.Message == "Vercel preview build failed");
+        Assert.Equal("failure:preview:vercel", finding.FailureId);
+        Assert.Contains(ModuleNotFound, finding.Evidence, StringComparison.Ordinal);
+        var failure = Assert.Single(JsonDocument.Parse(report.ExternalChecks!).RootElement.GetProperty("failures").EnumerateArray());
+        Assert.Equal(("failure:preview:vercel", "preview", 1), (failure.GetProperty("id").GetString(), failure.GetProperty("source").GetString(), failure.GetProperty("cycles").GetInt32()));
+
+        // FR-238, FR-239: the fix step naming the failure id is stored with the evidence block (and reads back with it).
+        var plan = await ProjectApi.WithDbAsync(app, db => db.Artifacts.AsNoTracking().SingleAsync(a => a.Id == report.OptimizationPlanArtifactId, Ct));
+        var step = Assert.Single(PlanDocument.ParseMarkdown(plan.Content, 10).Value);
+        Assert.Contains("failure:preview:vercel", step.Title + step.Task, StringComparison.Ordinal);
+        Assert.Contains("**Failure evidence** (added by Tevrin)\nFailure id: failure:preview:vercel\nSource: preview deployment", step.Task, StringComparison.Ordinal);
+        Assert.Contains("    " + ModuleNotFound, step.Task, StringComparison.Ordinal);
+    }
+
+    /// <summary>The newest preview deployment of the project fails with <paramref name="log"/> as its (stored, redacted) build log tail.</summary>
+    private static Task FailNewestPreviewAsync(WebApplicationFactory<Program> app, Guid id, string log) =>
+        ProjectApi.WithDbAsync(app, async db =>
+        {
+            var newest = await db.Deployments
+                .Where(d => d.ProjectId == id && d.Environment == DeploymentEnvironment.Preview)
+                .OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
+                .Select(d => d.Id)
+                .FirstAsync(Ct);
+            await db.Deployments.Where(d => d.Id == newest)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, DeploymentStatus.Error).SetProperty(d => d.BuildLogTail, log), Ct);
+        });
+
+    [Fact]
+    public async Task FR240_The_same_Vercel_error_in_cycles_1_and_2_is_marked_repeated_2_cycles_with_cycle_1s_fix_step_in_cycle_2s_prompt()
+    {
+        var review = new RecordingResponder(new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.80m, 0.81m], OptimizationStepsByCycle = [1, 1] }));
+        var app = AgentJobs.WithResponders(DeploymentHarness.Fake(factory), review);
+        using var fixture = await ExecutingAsync(app, extraFile: FakeDeploymentRules.FailBuildMarker);
+        var id = fixture.Project.Id;
+        string Log(string time, string hash) =>
+            $"> next build\n{time} Error: Cannot find module 'zod' (/vercel/path0/{hash}/x.js)\nError: Command \"npm run build\" exited with 1";
+
+        // Cycle 1: the preview fails; the fix step names failure:preview:vercel.
+        await AgentJobs.RunQueuedAsync(app, id);
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id)).Id);
+        await FailNewestPreviewAsync(app, id, Log("12:01:03", "a1b2c3d4e5"));
+        await DeploymentHarness.SettleAsync(app, (await ReviewJobAsync(app, id)).Id);
+        var first = await ReportAsync(app, id);
+        Assert.Equal(ReviewDecision.ReviewRequired, first.Decision);
+        Assert.DoesNotContain("repeated (", Assert.Single(review.Prompts), StringComparison.Ordinal);
+
+        // The Owner approves the optimisation plan; its step runs and the PR's new head is rolled out, failing the same way.
+        await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, first.OptimizationPlanArtifactId!.Value, "approve"));
+        await AgentJobs.RunQueuedAsync(app, id);
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id)).Id);
+        await FailNewestPreviewAsync(app, id, Log("12:09:44", "9f8e7d6c5b"));
+        await DeploymentHarness.SettleAsync(app, (await ReviewJobAsync(app, id)).Id);
+
+        // Cycle 2's prompt marks the failure repeated (2 cycles) and quotes cycle 1's fix step.
+        Assert.Equal(2, review.Prompts.Count);
+        var prompt = review.Prompts[1];
+        var findings = prompt[prompt.IndexOf("<deterministic_findings>", StringComparison.Ordinal)..prompt.IndexOf("</deterministic_findings>", StringComparison.Ordinal)];
+        Assert.Contains("failure id failure:preview:vercel (preview deployment): Vercel preview build failed — repeated (2 cycles)", findings, StringComparison.Ordinal);
+        Assert.Contains("Previous fix step:", findings, StringComparison.Ordinal);
+        Assert.Contains("Step 1: Review cycle 1 fix 1\nFix failure:preview:vercel:", findings, StringComparison.Ordinal);
+        Assert.DoesNotContain("**Failure evidence**", findings, StringComparison.Ordinal); // the previous block isn't repeated
+
+        var second = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id && r.ReviewCycle == 2, Ct));
+        var failure = Assert.Single(JsonDocument.Parse(second.ExternalChecks!).RootElement.GetProperty("failures").EnumerateArray());
+        Assert.Equal(("failure:preview:vercel", 2), (failure.GetProperty("id").GetString(), failure.GetProperty("cycles").GetInt32()));
     }
 
     [Fact]

@@ -129,6 +129,53 @@ internal sealed partial class GitLabGitProvider
         return Result.Success(CommitStatusFindings.FromGitLab(statuses.Value ?? [], project.Value?.PipelinesMustSucceed ?? false));
     }
 
+    /// <summary>
+    /// FR-236: the failed pipeline jobs' traces (<c>GET /projects/:id/jobs/:job_id/trace</c>, the last 5 MB). The binding
+    /// connection's token is read once (the only database work); the traces are then fetched in parallel. A status without a
+    /// job id, or one GitLab has no job for (an external status), has no excerpt.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<CheckFailureOutcome>>> GetCheckFailuresAsync(
+        GitConnectionSettings settings,
+        IReadOnlyList<CheckObservation> failed,
+        Func<CheckObservation, Domain.Review.CheckFailureDetail, Domain.Review.FailureExcerptResult?> excerpt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(failed);
+        var access = await AccessAsync(settings, cancellationToken);
+        if (access.Failure is { } failure)
+        {
+            return Result.Failure<IReadOnlyList<CheckFailureOutcome>>(ToError(failure));
+        }
+
+        var token = access.Token!;
+        var client = clients.ForInstance(token.InstanceBaseUrl);
+        var repoId = settings.ExternalRepoId!;
+        var outcomes = await CheckFailureLogs.FanOutAsync(
+            failed,
+            async (check, ct) =>
+            {
+                if (!long.TryParse(check.RunId, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var jobId))
+                {
+                    return (Domain.Review.CheckFailureDetail.Empty, []);
+                }
+
+                try
+                {
+                    var trace = await client.GetJobTraceAsync(token.Token, repoId, jobId, CheckFailureLogs.MaxBytes, ct);
+                    return (trace is null ? Domain.Review.CheckFailureDetail.Empty : new Domain.Review.CheckFailureDetail(null, null, [], trace), []);
+                }
+                catch (GitLabApiException ex)
+                {
+                    return (Domain.Review.CheckFailureDetail.Empty, [$"GitLab didn't give the job trace: {Describe(ex)}"]);
+                }
+            },
+            excerpt,
+            CheckFailureLogs.Timeout,
+            cancellationToken);
+        return Result.Success(outcomes);
+    }
+
     /// <summary>FR-65, §4.19: the merge request's state for the merge poll, with the rate-limit back-off for the next poll.</summary>
     public async Task<Result<HostMergeObservation>> ObserveMergeRequestAsync(GitConnectionSettings settings, int number, CancellationToken cancellationToken)
     {

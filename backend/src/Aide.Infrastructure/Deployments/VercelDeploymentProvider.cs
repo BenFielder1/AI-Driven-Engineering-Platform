@@ -8,7 +8,8 @@ namespace Aide.Infrastructure.Deployments;
 /// Bitbucket, link an existing project (it must be unlinked or linked to this repository), env sync per (key, environment),
 /// deployments with <c>gitSource {ref, sha}</c>, adoption of Vercel's production deployment of the merge commit, build log
 /// tail, cancel and promote (rollback). Branch control is the repository's <c>vercel.json</c>
-/// <c>git.deploymentEnabled {"aide/**": false}</c>, which the readiness checklist and review read (<see cref="VercelConfigRules"/>).
+/// <c>git.deploymentEnabled {"tevrin/**": false, "aide/**": false}</c> (FR-233, FR-234), which the readiness checklist and review
+/// read (<see cref="VercelConfigRules"/>).
 /// </summary>
 public sealed class VercelDeploymentProvider(VercelApiClient client) : IDeploymentProvider
 {

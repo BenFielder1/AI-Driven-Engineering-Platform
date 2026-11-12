@@ -110,13 +110,13 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
         await ReleaseFlowTests.StartExecutionAsync(app, fixture);
         await AgentJobs.RunQueuedAsync(app, id);
 
-        // FR-137: one draft PR from aide/<slug>/v0.1.0 to main, linking back to AIDE, linked from the Release page.
+        // FR-137: one draft PR from tevrin/<slug>/v0.1.0 (FR-232) to main, linking back to AIDE, linked from the Release page.
         var created = GitLabHarness.Body(Assert.Single(bitbucket.Api.Requests, r => r.Method == "POST" && r.Path == Repo + "/pullrequests"));
         Assert.Equal(
             (bitbucket.Branch, "main", true, false),
             (created.GetProperty("source").GetProperty("branch").GetProperty("name").GetString(), created.GetProperty("destination").GetProperty("branch").GetProperty("name").GetString(),
                 created.GetProperty("draft").GetBoolean(), created.GetProperty("close_source_branch").GetBoolean()));
-        Assert.StartsWith($"aide/{fixture.Project.Slug}/v0.1.0", bitbucket.Branch, StringComparison.Ordinal);
+        Assert.StartsWith($"tevrin/{fixture.Project.Slug}/v0.1.0", bitbucket.Branch, StringComparison.Ordinal);
         Assert.Contains($"/projects/{id}", created.GetProperty("description").GetString(), StringComparison.Ordinal);
         Assert.Equal(((int?)3, (string?)BitbucketState.PullRequestUrl), await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => new ValueTuple<int?, string?>(v.PullRequestNumber, v.PullRequestUrl)).SingleAsync(Ct)));
 

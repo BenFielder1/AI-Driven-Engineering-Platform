@@ -136,6 +136,6 @@ public class GitBindingRulesTests
         Assert.Equal(expected, GitBindingRules.BitbucketHasWriteAccess(permission));
 
     [Fact]
-    public void FR136_Branches_stay_aide_slug_version_on_every_host() =>
-        Assert.Equal("aide/todo-app/v0.1.0", ReleaseVersionRules.BranchName("todo-app", Guid.CreateVersion7(), SemVer.Parse("0.1.0")));
+    public void FR136_FR232_Branches_are_tevrin_slug_version_on_every_host() =>
+        Assert.Equal("tevrin/todo-app/v0.1.0", ReleaseVersionRules.BranchName("todo-app", Guid.CreateVersion7(), SemVer.Parse("0.1.0")));
 }

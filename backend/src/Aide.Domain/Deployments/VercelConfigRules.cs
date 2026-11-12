@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Review;
@@ -8,7 +7,8 @@ namespace Aide.Domain.Deployments;
 /// <summary>
 /// FR-89: the deterministic checks that a Vercel project's repository stops Vercel's automatic deploys of Tevrin branches
 /// (Tevrin deploys them explicitly). The repository's <c>vercel.json</c> (in the Vercel project's root directory) must set
-/// <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c>; production deploys of the default branch stay on.
+/// <c>git.deploymentEnabled["&lt;prefix&gt;**"]</c> to <c>false</c> for every prefix the project uses (§4.36, FR-233:
+/// <c>tevrin/</c>, plus <c>aide/</c> for projects with an <c>aide/</c> branch); production deploys of the default branch stay on.
 /// <list type="bullet">
 /// <item><see cref="PlanWarning"/>: a plan of a stack that deploys to Vercel (FR-129: the composition's Vercel host, formerly a
 /// preset's deploy target), on a base without <c>vercel.json</c>, where no step declares it, gets a
@@ -21,9 +21,6 @@ public static class VercelConfigRules
 {
     /// <summary>The Vercel project configuration file.</summary>
     public const string FileName = "vercel.json";
-
-    /// <summary>The <c>git.deploymentEnabled</c> key that matches Tevrin's working branches (<c>aide/&lt;slug&gt;-…</c>).</summary>
-    public const string AideBranches = "aide/**";
 
     /// <summary>The repository path of <c>vercel.json</c> for a Vercel project rooted at <paramref name="rootDirectory"/> (<c>.</c>: the repository root).</summary>
     public static string ConfigPath(string? rootDirectory)
@@ -66,42 +63,27 @@ public static class VercelConfigRules
         return new ValidationWarning(
             ErrorCodes.MissingVercelConfig,
             $"No step declares {path}, and the repository has none: Vercel would deploy every Tevrin branch on its own.",
-            [$"Add {path} to a step (the scaffold step for a new repository) with git.deploymentEnabled {{ \"{AideBranches}\": false }}."]);
+            [$"Add {path} to a step (the scaffold step for a new repository) with git.deploymentEnabled {BranchControlRules.VercelSuggestion()}."]);
     }
 
     /// <summary>
     /// The review findings for the branch's <c>vercel.json</c> at <paramref name="path"/>: <paramref name="content"/> is its
-    /// content, or <c>null</c> when the file is missing. Empty when it sets <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c>.
+    /// content, or <c>null</c> when the file is missing. Empty when it blocks every prefix in <paramref name="requiredPrefixes"/>
+    /// (§4.36, FR-233; <c>null</c>: <see cref="BranchControlRules.TevrinOnly"/>). The message names the missing pattern(s).
     /// </summary>
-    public static IReadOnlyList<ReviewFinding> ReviewFindings(string path, string? content)
+    public static IReadOnlyList<ReviewFinding> ReviewFindings(string path, string? content, IReadOnlyList<string>? requiredPrefixes = null)
     {
         ArgumentNullException.ThrowIfNull(path);
+        var required = requiredPrefixes ?? BranchControlRules.TevrinOnly;
         if (content is null)
         {
-            return [Finding($"{path} is missing: add it with git.deploymentEnabled {{ \"{AideBranches}\": false }} so Vercel doesn't deploy Tevrin branches on its own (FR-89).", path)];
+            return [Finding($"{path} is missing: add it with git.deploymentEnabled {BranchControlRules.VercelSuggestion()} so Vercel doesn't deploy Tevrin branches on its own (FR-89).", path)];
         }
 
-        return DisablesAideBranches(content)
+        var missing = BranchControlRules.VercelMissing(content, required);
+        return missing.Count == 0
             ? []
-            : [Finding($"{path} doesn't set git.deploymentEnabled[\"{AideBranches}\"] to false, so Vercel deploys Tevrin branches on its own; Tevrin deploys them explicitly (FR-89).", path)];
-    }
-
-    /// <summary>Whether the JSON <paramref name="content"/> sets <c>git.deploymentEnabled["aide/**"]</c> to <c>false</c> (unreadable JSON: no).</summary>
-    public static bool DisablesAideBranches(string content)
-    {
-        ArgumentNullException.ThrowIfNull(content);
-        try
-        {
-            using var doc = JsonDocument.Parse(content, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("git", out var git) && git.ValueKind == JsonValueKind.Object
-                && git.TryGetProperty("deploymentEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.Object
-                && enabled.TryGetProperty(AideBranches, out var aide) && aide.ValueKind == JsonValueKind.False;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+            : [Finding($"{path} doesn't stop Vercel deploying {BranchControlRules.Names(missing)} on its own: set git.deploymentEnabled {BranchControlRules.Names(missing, quoted: true)} to false, with no other true rule matching. Tevrin deploys its branches explicitly (FR-89).", path)];
     }
 
     private static ReviewFinding Finding(string message, string path) => new(ReviewCategory.Architecture, Severity.Major, message, path);

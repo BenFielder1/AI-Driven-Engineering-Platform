@@ -20,7 +20,7 @@ public sealed record PreparedWorkingCopy(IGitProvider Provider, GitConnectionSet
 public sealed record WorkingCopyPreparation(Result<PreparedWorkingCopy> Result, bool Transient);
 
 /// <summary>
-/// FR-35: prepares a project's working copy and project branch (<c>aide/&lt;slug&gt;-&lt;short-id&gt;</c>) through its Git
+/// FR-35: prepares a project's working copy and project branch (§4.35, FR-232: <c>tevrin/&lt;slug&gt;/v&lt;version&gt;</c>, or a recorded one) through its Git
 /// provider, before the project enters execution (§4.1 "Git working copy prepared") and before every step. Idempotent: an
 /// existing repository and branch are reused, and the branch name, once recorded in the Git settings, never changes (the
 /// branch is not rewritten by a rollback, §4.8). Git work happens outside any database transaction; only the branch name
@@ -64,10 +64,10 @@ public sealed partial class WorkingCopyPreparer(
         var recordedBranch = versionId is { } id
             ? await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == id).Select(v => v.BranchName).FirstOrDefaultAsync(cancellationToken)
             : null;
-        // FR-82, §4.10: the branch is the one stored on the release version (migrated 0.1.0 versions keep their
-        // aide/<slug>-<short-id> name); a version without one gets aide/<slug>/v<version>, stored below. The stored name
-        // is also the "working copy prepared" fact (LifecycleSnapshotLoader), so it is only written here.
-        var branch = BranchFor(recordedBranch, project.Slug, project.Id, project.DevelopmentVersion);
+        // FR-82, §4.10, FR-232/§4.35: the branch is the one stored on the release version (migrated 0.1.0 versions and
+        // versions started before 0.6.1 keep their aide/ name); a version without one gets tevrin/<slug>/v<version>, stored
+        // below. The stored name is also the "working copy prepared" fact (LifecycleSnapshotLoader), so it is only written here.
+        var branch = await BranchForAsync(db, versionId is not null, recordedBranch, project.Slug, project.Id, project.DevelopmentVersion, cancellationToken);
         // FR-82: a github_app connection carries the installation and repository; its provider mints installation tokens.
         var connection = GitConnectionSettings.From(settings);
         var provider = providers.Resolve(settings.Provider);
@@ -94,11 +94,21 @@ public sealed partial class WorkingCopyPreparer(
         return new WorkingCopyPreparation(Result.Success(new PreparedWorkingCopy(provider, connection, branch, token)), Transient: false);
     }
 
-    /// <summary>The version's branch: the recorded one, else <c>aide/&lt;slug&gt;/v&lt;version&gt;</c> (0.1.0 name without a version).</summary>
-    public static string BranchFor(string? recordedBranch, string slug, Guid projectId, string? developmentVersion) =>
-        recordedBranch ?? (SemVer.TryParse(developmentVersion, out var version)
-            ? ReleaseVersionRules.BranchName(slug, projectId, version)
-            : ExecutionRules.BranchName(slug, projectId));
+    /// <summary>
+    /// §4.35 (<see cref="BranchNaming.Choose"/>): the version's recorded branch; else, for a project without release versions
+    /// (<paramref name="hasReleaseVersion"/> false), its most recent recorded step branch; else <c>tevrin/&lt;slug&gt;/v&lt;version&gt;</c>
+    /// (<c>tevrin/&lt;slug&gt;-&lt;short-id&gt;</c> without a development version). Steps are only read when rule 2 can apply.
+    /// </summary>
+    public static async Task<string> BranchForAsync(
+        AideDbContext db, bool hasReleaseVersion, string? recordedBranch, string slug, Guid projectId, string? developmentVersion, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var latestStep = string.IsNullOrWhiteSpace(recordedBranch) && !hasReleaseVersion
+            ? await ExecutionQueries.LatestStepBranchAsync(db, projectId, cancellationToken)
+            : null;
+        var version = SemVer.TryParse(developmentVersion, out var parsed) ? parsed : null;
+        return BranchNaming.Choose(recordedBranch, hasReleaseVersion, latestStep, slug, projectId, version);
+    }
 
     private static WorkingCopyPreparation Failure(string message, bool transient, string code = ErrorCodes.PhasePreconditionFailed) =>
         new(Result.Failure<PreparedWorkingCopy>(new DomainError(code, message) { Details = [message] }), transient);

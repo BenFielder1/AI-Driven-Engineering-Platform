@@ -231,9 +231,9 @@ public sealed class GitLabProjectTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<ExecutionStateDto>(await ana.Client.PostAsJsonAsync($"/api/projects/{id}/execution/start", new { }, Ct), HttpStatusCode.Accepted);
         await AgentJobs.RunQueuedAsync(app, id);
 
-        // Pushed to aide/<slug>/v<version>.
+        // Pushed to tevrin/<slug>/v<version> (FR-232).
         var branch = Aide.Domain.Releases.ReleaseVersionRules.BranchName(project.Slug, id, Aide.Domain.Releases.SemVer.Parse(project.DevelopmentVersion!));
-        Assert.StartsWith($"aide/{project.Slug}/v", branch, StringComparison.Ordinal);
+        Assert.StartsWith($"tevrin/{project.Slug}/v", branch, StringComparison.Ordinal);
         var workingCopy = Path.Combine(factory.WorkspacesRoot, id.ToString("D"));
         Assert.Equal(await TestGit.RunAsync(workingCopy, Ct, "rev-parse", branch), await TestGit.RunAsync(remote.BarePath, Ct, "rev-parse", $"refs/heads/{branch}"));
 

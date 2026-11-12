@@ -64,8 +64,10 @@ public sealed record DeploymentSetupResult(string ResourceId, string Name, strin
 /// <summary>
 /// FR-144 readiness facts only the platform knows: whether its Git integration reaches the repository (<c>null</c>: unknown),
 /// a message about it, and whether the preview environment is ready (<c>null</c>: not applicable or unknown).
+/// <see cref="BranchControlMissing"/> (FR-233, FR-234): for a platform whose branch control Tevrin configures (Cloudflare), the
+/// Tevrin branch patterns still not excluded after Tevrin tried to add them (empty: all excluded); <c>null</c>: not reported.
 /// </summary>
-public sealed record ProviderTargetCheck(bool? GitAccess, string? GitMessage, bool? PreviewReady);
+public sealed record ProviderTargetCheck(bool? GitAccess, string? GitMessage, bool? PreviewReady, IReadOnlyList<string>? BranchControlMissing = null);
 
 /// <summary>
 /// §4.20 <c>DeployAsync {environment, ref, sha}</c>; <see cref="AideDeploymentId"/> is the idempotency key.

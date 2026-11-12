@@ -16,7 +16,7 @@ public enum CommitStatusHost
 /// <c>status</c> (<c>pending</c>, <c>running</c>, <c>success</c>, <c>failed</c>, <c>canceled</c>, <c>skipped</c>, …),
 /// <c>allow_failure</c> and <c>target_url</c>.
 /// </summary>
-public sealed record GitLabCommitStatus(string Name, string? Status, bool AllowFailure, string? TargetUrl);
+public sealed record GitLabCommitStatus(string Name, string? Status, bool AllowFailure, string? TargetUrl, string? Id = null);
 
 /// <summary>
 /// FR-139: a Bitbucket commit status (<c>GET …/commit/{sha}/statuses</c>): <c>name</c> (or <c>key</c>), <c>state</c>
@@ -43,7 +43,7 @@ public static class CommitStatusFindings
         return Distinct(statuses.Select(s =>
         {
             var (status, conclusion) = GitLabMergeReadiness.StatusOf(s.Status);
-            return new CheckObservation(s.Name, status, conclusion, pipelinesMustSucceed && !s.AllowFailure, s.TargetUrl);
+            return new CheckObservation(s.Name, status, conclusion, pipelinesMustSucceed && !s.AllowFailure, s.TargetUrl) { RunId = s.Id };
         }));
     }
 
@@ -76,19 +76,26 @@ public static class CommitStatusFindings
     /// FR-139: one <c>testing</c> finding per failed status: major when required for merge ("required pipeline job
     /// test:backend failed"), else minor ("pipeline job lint failed"); the evidence is the name and the job or build URL.
     /// </summary>
-    public static IReadOnlyList<ReviewFinding> Findings(IEnumerable<CheckObservation> checks, CommitStatusHost host)
+    /// <remarks>
+    /// FR-236, FR-237: a failed <b>required</b> status is a failure finding (<c>failure:check:&lt;name&gt;</c>) whose evidence
+    /// is the §4.38 excerpt of the GitLab job trace or Bitbucket step log in <paramref name="excerpts"/> (by name), headed by
+    /// the name and URL; without one, the name and URL as before. Other failures are unchanged.
+    /// </remarks>
+    public static IReadOnlyList<ReviewFinding> Findings(IEnumerable<CheckObservation> checks, CommitStatusHost host, IReadOnlyDictionary<string, FailureExcerptResult>? excerpts = null)
     {
         ArgumentNullException.ThrowIfNull(checks);
         var noun = host == CommitStatusHost.Gitlab ? "pipeline job" : "build";
         return
         [
             .. checks.Where(MergeReadinessRules.IsFailing)
-                .Select(c => new ReviewFinding(
-                    ReviewCategory.Testing,
-                    c.Required ? Severity.Major : Severity.Minor,
-                    string.Create(CultureInfo.InvariantCulture, $"{(c.Required ? "required " : string.Empty)}{noun} {c.Name} failed"),
-                    Source: FindingSource.Deterministic,
-                    Evidence: string.IsNullOrEmpty(c.DetailsUrl) ? c.Name : $"{c.Name}: {c.DetailsUrl}")),
+                .Select(c => c.Required
+                    ? ExternalCheckRules.Failure(c, Severity.Major, string.Create(CultureInfo.InvariantCulture, $"required {noun} {c.Name} failed"), excerpts)
+                    : new ReviewFinding(
+                        ReviewCategory.Testing,
+                        Severity.Minor,
+                        string.Create(CultureInfo.InvariantCulture, $"{noun} {c.Name} failed"),
+                        Source: FindingSource.Deterministic,
+                        Evidence: ExternalCheckRules.Head(c))),
         ];
     }
 

@@ -145,17 +145,18 @@ public static partial class ReleaseVersionRules
     }
 
     /// <summary>
-    /// The working branch of a release version: <c>aide/&lt;slug&gt;/v&lt;version&gt;</c> (FR-60); a slug that doesn't make a valid
-    /// branch name falls back to <c>aide/project-&lt;short-id&gt;/v&lt;version&gt;</c>.
+    /// The working branch of a new release version: <c>tevrin/&lt;slug&gt;/v&lt;version&gt;</c> (FR-60, amended by FR-232); a slug
+    /// that doesn't make a valid branch name falls back to <c>tevrin/project-&lt;short-id&gt;/v&lt;version&gt;</c>. A recorded
+    /// branch is kept (<see cref="Execution.BranchNaming.Choose"/>).
     /// </summary>
     public static string BranchName(string slug, Guid projectId, SemVer version)
     {
         ArgumentNullException.ThrowIfNull(slug);
         ArgumentNullException.ThrowIfNull(version);
-        var candidate = $"aide/{slug.Trim()}/v{version}";
+        var candidate = $"{Execution.BranchNaming.Prefix}{slug.Trim()}/v{version}";
         return slug.Trim().Length > 0 && ProjectSettingsRules.IsValidBranchName(candidate)
             ? candidate
-            : $"aide/{ProjectRules.SlugFallback}-{projectId.ToString("N")[..8]}/v{version}";
+            : $"{Execution.BranchNaming.Prefix}{ProjectRules.SlugFallback}-{projectId.ToString("N")[..8]}/v{version}";
     }
 
     private static Result<SemVer> Fail(string code, string message) => Result.Failure<SemVer>(new DomainError(code, message));

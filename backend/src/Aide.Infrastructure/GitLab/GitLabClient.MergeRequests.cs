@@ -126,7 +126,8 @@ public sealed partial class GitLabClient
                         Str(s, "name")!,
                         Str(s, "status"),
                         s.TryGetProperty("allow_failure", out var allow) && allow.ValueKind == JsonValueKind.True,
-                        WebLink(Str(s, "target_url")))),
+                        WebLink(Str(s, "target_url")),
+                        Long(s, "id")?.ToString(CultureInfo.InvariantCulture))),
             ];
         }
         catch (GitLabApiException ex) when (ex.Status == 404)

@@ -9,7 +9,7 @@ Tevrin performs every Git and GitLab operation itself (branches, commits, pushes
 - On an empty repo the scaffolder writes `.gitignore` (dependencies, build output, `.env`, `.env.*` except `.env.example`, IDE folders, test reports, CI cache folders `.npm/`, `.nuget/`, `.m2/`, `.uv-cache/`) and `.gitattributes` (`* text=auto eol=lf`). CI, Renovate and templates are left to the ci-engineer.
 
 ## Branches and commits
-- Tevrin names branches (`aide/**` version branches) and writes commit messages. Don't add conventions to files.
+- Tevrin names branches (`tevrin/**` version branches; `aide/**` on projects started before Tevrin 0.6.1) and writes commit messages. Don't add conventions to files.
 - Pipelines must run for merge request events and the default branch only, so Tevrin reads one pipeline per MR head commit (no duplicate branch + MR pipelines).
 
 ## PRs/MRs (on request)

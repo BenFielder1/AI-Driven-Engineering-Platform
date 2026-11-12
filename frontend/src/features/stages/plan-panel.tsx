@@ -1,6 +1,7 @@
 import type { Schemas } from '../../api/client'
 import { Alert } from '../../components/ui/alert'
 import { copyForCode } from '../../lib/errors'
+import { AddedByTevrin } from '../artifacts/added-by-tevrin'
 import { PLAN_BLOCK_LANGUAGE, readPlanDocument } from '../artifacts/plan-block'
 import { specialistLabels } from '../stack/stack-summary'
 import { dependencyWaves } from './plan-waves'
@@ -118,7 +119,10 @@ export function PlanPanel({
                 <th scope="row" className="px-3 py-2 text-left font-medium">
                   {s.number}
                 </th>
-                <td className="px-3 py-2 break-words">{s.title}</td>
+                <td className="px-3 py-2 break-words">
+                  {s.title}
+                  <AddedByTevrin addedBy={s.addedBy} addedReason={s.addedReason} />
+                </td>
                 <td className="px-3 py-2">
                   <Specialist agent={s.agent} />
                 </td>

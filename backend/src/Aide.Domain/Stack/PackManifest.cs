@@ -63,6 +63,9 @@ public sealed record PackManifest
 
     /// <summary>Deploy packs: the provider and the shapes it can deploy.</summary>
     public PackDeploy? Deploy { get; init; }
+
+    /// <summary>FR-241, §4.40: deploy packs: the config files a deployed project needs (catalog 1.2.2).</summary>
+    public IReadOnlyList<PackRequiredFile> RequiredFiles { get; init; } = [];
 }
 
 /// <summary>Where the pack was adapted from (FR-122): the stack-packs plugin, its version and the snapshot date.</summary>
@@ -110,6 +113,13 @@ public sealed record PackMigrate(string Command, bool NeedsDirectUrl);
 
 /// <summary>§4.17 R6–R8: a deploy pack's provider id and the shapes it deploys.</summary>
 public sealed record PackDeploy(string Provider, IReadOnlyList<PackDeployShape> Shapes);
+
+/// <summary>
+/// FR-241, §4.40: a config file a deploy pack needs: its path (relative to <see cref="Folder"/>), the accepted
+/// <see cref="Alternatives"/>, the specialist that writes it, the folder rule (<see cref="PackVocabulary.RequiredFileFolders"/>:
+/// <c>app</c> = each folder the pack deploys, <c>root</c> = the repository root, once) and the required content as checklist lines.
+/// </summary>
+public sealed record PackRequiredFile(string Path, IReadOnlyList<string> Alternatives, string Owner, string Folder, IReadOnlyList<string> Content);
 
 /// <summary>A deploy shape: the component it runs (<see cref="PackVocabulary.Components"/>) and the runtimes it supports.</summary>
 public sealed record PackDeployShape(string Id, string Component, IReadOnlyList<string> Runtimes);

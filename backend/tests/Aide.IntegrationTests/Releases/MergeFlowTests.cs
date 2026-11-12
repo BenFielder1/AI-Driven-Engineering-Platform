@@ -537,10 +537,10 @@ public sealed class MergeFlowTests(AideApiFactory factory)
     private WebApplicationFactory<Program> ReleaseEligible() =>
         AgentJobs.WithResponders(factory, new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.93m] }));
 
-    private static Task<ProjectFixture> GitHubFixtureAsync(WebApplicationFactory<Program> app) =>
+    internal static Task<ProjectFixture> GitHubFixtureAsync(WebApplicationFactory<Program> app) =>
         ProjectApi.FixtureAsync(app, git: new { provider = "github_pat", repoUrl = BareRemote.RepoUrl, defaultBranch = "main", token = Token });
 
-    private static string BranchOf(ProjectFixture fixture) =>
+    internal static string BranchOf(ProjectFixture fixture) =>
         ReleaseVersionRules.BranchName(fixture.Project.Slug, fixture.Project.Id, SemVer.Parse(fixture.Project.DevelopmentVersion!));
 
     private static Task<Job> PollJobAsync(WebApplicationFactory<Program> app, Guid id) =>
@@ -555,7 +555,7 @@ public sealed class MergeFlowTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<ReleaseDto>(await client.GetAsync(new Uri($"/api/projects/{id}/releases/latest", UriKind.Relative), Ct));
 
     /// <summary>The fake GitHub repository acme/widgets: PR #42's state (with ETags), rules, GraphQL, checks and releases.</summary>
-    private sealed class GitHubState
+    internal sealed class GitHubState
     {
         private readonly BareRemote _remote;
 

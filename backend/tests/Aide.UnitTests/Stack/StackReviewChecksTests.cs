@@ -1,3 +1,4 @@
+using Aide.Domain.Deployments;
 using Aide.Domain.Review;
 using Aide.Domain.Stack;
 using static Aide.UnitTests.Stack.StackResolverTests;
@@ -187,18 +188,22 @@ public class StackReviewChecksTests
     }
 
     [Fact]
-    public void FR126_deploy_branch_control_checks_vercel_json_and_netlify_toml()
+    public void FR126_FR233_deploy_branch_control_checks_vercel_json_and_netlify_toml()
     {
         var vercel = Resolve(AspnetSpa(frontendHost: "deploy-vercel", backendHost: "deploy-render"));
         var hit = Assert.Single(StackReviewChecks.Run(vercel, new StackReviewInput([F("frontend/vercel.json", "{\"git\":{}}")])));
         Assert.Equal((ReviewCategory.Architecture, Severity.Major, "frontend/vercel.json"), (hit.Category, hit.Severity, hit.Path));
-        Assert.Empty(StackReviewChecks.Run(vercel, new StackReviewInput([F("frontend/vercel.json", "{\"git\":{\"deploymentEnabled\":{\"aide/**\":false}}}")])));
+        // FR-233: a tevrin/-only project needs tevrin/**; a project with an aide/ branch needs both.
+        Assert.Empty(StackReviewChecks.Run(vercel, new StackReviewInput([F("frontend/vercel.json", "{\"git\":{\"deploymentEnabled\":{\"tevrin/**\":false}}}")])));
+        Assert.Contains("building tevrin/** on its own", Assert.Single(StackReviewChecks.Run(vercel, new StackReviewInput([F("frontend/vercel.json", "{\"git\":{\"deploymentEnabled\":{\"aide/**\":false}}}")]))).Message, StringComparison.Ordinal);
+        Assert.Contains("building aide/** on its own", Assert.Single(StackReviewChecks.Run(vercel, new StackReviewInput([F("frontend/vercel.json", "{\"git\":{\"deploymentEnabled\":{\"tevrin/**\":false}}}")], BranchPrefixes: BranchControlRules.AllPrefixes))).Message, StringComparison.Ordinal);
         Assert.Empty(StackReviewChecks.Run(vercel, new StackReviewInput([])));
         Assert.Contains("missing", Assert.Single(StackReviewChecks.Run(vercel, new StackReviewInput([], Tree: ["frontend/package.json"]))).Message, StringComparison.Ordinal);
 
         var netlify = Resolve(AspnetSpa(frontendHost: "deploy-netlify", backendHost: "deploy-render"));
         Assert.Single(StackReviewChecks.Run(netlify, new StackReviewInput([F("frontend/netlify.toml", "[build]\n  command = \"npm run build\"")])));
-        Assert.Empty(StackReviewChecks.Run(netlify, new StackReviewInput([F("frontend/netlify.toml", "[build]\n  ignore = 'case \"$BRANCH\" in aide/*) exit 0 ;; *) exit 1 ;; esac'")])));
+        Assert.Empty(StackReviewChecks.Run(netlify, new StackReviewInput([F("frontend/netlify.toml", "[build]\n  ignore = 'case \"$BRANCH\" in tevrin/*|aide/*) exit 0 ;; *) exit 1 ;; esac'")], BranchPrefixes: BranchControlRules.AllPrefixes)));
+        Assert.Contains("building aide/* on its own", Assert.Single(StackReviewChecks.Run(netlify, new StackReviewInput([F("frontend/netlify.toml", "[build]\n  ignore = 'case \"$BRANCH\" in tevrin/*) exit 0 ;; *) exit 1 ;; esac'")], BranchPrefixes: BranchControlRules.AllPrefixes))).Message, StringComparison.Ordinal);
     }
 
     [Fact]

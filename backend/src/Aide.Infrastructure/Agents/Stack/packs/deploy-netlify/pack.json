@@ -149,7 +149,7 @@
   "review": {
     "checklist": [
       {
-        "item": "netlify.toml has [build] ignore that exits 0 for aide/* branches",
+        "item": "netlify.toml has [build] ignore that exits 0 for tevrin/* and aide/* branches",
         "category": "architecture",
         "severity": "major"
       },
@@ -213,5 +213,18 @@
         ]
       }
     ]
-  }
+  },
+  "requiredFiles": [
+    {
+      "path": "netlify.toml",
+      "alternatives": [],
+      "owner": "deploy-engineer",
+      "folder": "app",
+      "content": [
+        "[build] with \"command\" and \"publish\" (the build output folder)",
+        "[build] \"ignore\": a command that skips builds of tevrin/ and aide/ branches (it names both prefixes)",
+        "For a client-routed SPA: [[redirects]] from = \"/*\", to = \"/index.html\", status = 200"
+      ]
+    }
+  ]
 }

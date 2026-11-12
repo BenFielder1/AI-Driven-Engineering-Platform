@@ -278,11 +278,12 @@ public class ReleaseVersionRulesTests
     }
 
     [Fact]
-    public void FR60_The_version_branch_is_aide_slug_v_version()
+    public void FR60_FR232_The_version_branch_is_tevrin_slug_v_version()
     {
         var id = Guid.Parse("0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b");
 
-        Assert.Equal("aide/todo-api-4a5b0c/v1.2.0", ReleaseVersionRules.BranchName("todo-api-4a5b0c", id, SemVer.Parse("1.2.0")));
-        Assert.Equal("aide/project-0199a1b2/v1.2.0-rc.1", ReleaseVersionRules.BranchName("bad..slug", id, SemVer.Parse("1.2.0-rc.1")));
+        // FR-232 amends FR-60: new release-version branches use the tevrin/ prefix.
+        Assert.Equal("tevrin/todo-api-4a5b0c/v1.2.0", ReleaseVersionRules.BranchName("todo-api-4a5b0c", id, SemVer.Parse("1.2.0")));
+        Assert.Equal("tevrin/project-0199a1b2/v1.2.0-rc.1", ReleaseVersionRules.BranchName("bad..slug", id, SemVer.Parse("1.2.0-rc.1")));
     }
 }

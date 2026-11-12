@@ -37,7 +37,9 @@
       "render.yaml",
       ".railway/**",
       ".env.example",
-      "{fe}/worker/**"
+      "{fe}/worker/**",
+      "**/wrangler.toml",
+      "**/wrangler.json"
     ]
   },
   "agentSections": {
@@ -209,5 +211,22 @@
         ]
       }
     ]
-  }
+  },
+  "requiredFiles": [
+    {
+      "path": "wrangler.jsonc",
+      "alternatives": [
+        "wrangler.toml",
+        "wrangler.json"
+      ],
+      "owner": "deploy-engineer",
+      "folder": "app",
+      "content": [
+        "\"name\": the Worker or Pages project name",
+        "\"compatibility_date\": a recent date (YYYY-MM-DD)",
+        "\"main\" (the Worker entry) or \"assets\" (the static assets directory)",
+        "Environment bindings (\"vars\" and the like) declared without secret values; secrets are set on the platform"
+      ]
+    }
+  ]
 }

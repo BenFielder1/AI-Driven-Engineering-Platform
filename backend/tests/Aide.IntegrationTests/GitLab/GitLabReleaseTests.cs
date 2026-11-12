@@ -123,6 +123,35 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR236_Two_failed_required_GitLab_jobs_get_their_trace_tails_without_sharing_the_database_context()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var gitlab = new GitLabState(remote) { PipelinesMustSucceed = true };
+        gitlab.Statuses =
+        [
+            new { id = 7, name = "test:backend", status = "failed", allow_failure = false, target_url = gitlab.WebUrl + "/-/jobs/7" },
+            new { id = 11, name = "build", status = "failed", allow_failure = false, target_url = gitlab.WebUrl + "/-/jobs/11" },
+        ];
+        gitlab.Api
+            .On(HttpMethod.Get, Project + "/jobs/7/trace", HttpStatusCode.OK, "$ dotnet test\nFailed Todo.Tests.Create [12 ms]\nError: expected 201 got 500")
+            .On(HttpMethod.Get, Project + "/jobs/11/trace", HttpStatusCode.OK, "$ npm run build\nModule not found: Can't resolve '@/lib/db'");
+        var (app, fixture) = await SetUpAsync(gitlab, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var report = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        var test = Assert.Single(report.Violations, v => v.Message == "required pipeline job test:backend failed");
+        var build = Assert.Single(report.Violations, v => v.Message == "required pipeline job build failed");
+        Assert.Equal(("failure:check:test-backend", "failure:check:build"), (test.FailureId, build.FailureId));
+        Assert.Contains("Error: expected 201 got 500", test.Evidence, StringComparison.Ordinal);
+        Assert.Contains("Module not found: Can't resolve '@/lib/db'", build.Evidence, StringComparison.Ordinal);
+        Assert.Equal(2, gitlab.Api.Requests.Count(r => r.Path.EndsWith("/trace", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public async Task FR139_Review_waits_for_a_pending_GitLab_job_without_counting_an_attempt()
     {
         using var remote = await BareRemote.CreateAsync(Ct);

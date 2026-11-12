@@ -161,5 +161,18 @@
         ]
       }
     ]
-  }
+  },
+  "requiredFiles": [
+    {
+      "path": ".github/workflows/pages.yml",
+      "alternatives": [],
+      "owner": "deploy-engineer",
+      "folder": "root",
+      "content": [
+        "A build job that builds the site and uploads it with actions/upload-pages-artifact",
+        "A deploy job that needs the build job and runs actions/deploy-pages, in the github-pages environment",
+        "permissions: pages: write and id-token: write (contents: read)"
+      ]
+    }
+  ]
 }

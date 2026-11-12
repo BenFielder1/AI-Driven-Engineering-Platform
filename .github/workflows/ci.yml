@@ -105,8 +105,13 @@ jobs:
           global-json-file: backend/global.json
       - run: dotnet restore
       - run: dotnet build tests/Aide.IntegrationTests -c Release --no-restore
+      # Each live test host watches its appsettings files (one inotify instance each); the runner allows 128 per user,
+      # which the rest shard outgrew. Turn off config reload in test hosts and raise the limit.
+      - run: sudo sysctl -w fs.inotify.max_user_instances=1024
       - name: Integration tests (${{ matrix.shard }})
         timeout-minutes: 18
+        env:
+          DOTNET_hostBuilder__reloadConfigOnChange: "false"
         run: >-
           dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll
           ${{ matrix.filter }} -longRunning 120 -noColor -result-trx "${{ github.workspace }}/backend/TestResults/integration-${{ matrix.shard }}.trx"

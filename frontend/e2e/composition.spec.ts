@@ -209,5 +209,6 @@ test('FR90_preview_build_failure: a failed preview build is a critical "Vercel p
   const finding = critical.getByRole('listitem').filter({ hasText: 'Vercel preview build failed' })
   await expect(finding).toBeVisible()
   await expect(finding).toContainText('Category: Architecture')
-  await expect(finding).toContainText(/Evidence: [\s\S]*Failed to compile[\s\S]*exited with 1/)
+  // FR-237: multi-line evidence renders in its own block, so no space follows the label.
+  await expect(finding).toContainText(/Evidence:\s*[\s\S]*Failed to compile[\s\S]*exited with 1/)
 })

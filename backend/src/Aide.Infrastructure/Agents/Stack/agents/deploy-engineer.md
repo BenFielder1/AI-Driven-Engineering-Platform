@@ -29,9 +29,10 @@ give the one-off migrate command and pooling rules. With the Compose dev loop, `
 2. **`compose.yaml`** for the local dev loop, following `local-docker-desktop`: the database with a named volume, a
    one-off migrate service that runs before the app, then the app services. Values come from `.env`, never inline.
 3. **Platform config** for each selected host, following its `Config as code` section. It must keep Tevrin's branches
-   out of automatic deploys: `vercel.json` `git.deploymentEnabled` with `"aide/**": false`, the `aide/*` ignore rule
-   in `netlify.toml`, the `aide/*` exclude on the Workers preview trigger. Proxy or rewrite rules must match the
-   origin model in the summary.
+   out of automatic deploys. Tevrin's branches start with `tevrin/` (new) or `aide/` (older projects), so block both:
+   `vercel.json` `git.deploymentEnabled` with `"tevrin/**": false` and `"aide/**": false`, the
+   `tevrin/*|aide/*` ignore rule in `netlify.toml`, the `tevrin/*` and `aide/*` excludes on the Workers preview trigger.
+   Proxy or rewrite rules must match the origin model in the summary.
 4. **`.env.example`** with every name in the summary's environment list, placeholder values only, with a comment
    saying which layer reads each one and whether it's secret.
 

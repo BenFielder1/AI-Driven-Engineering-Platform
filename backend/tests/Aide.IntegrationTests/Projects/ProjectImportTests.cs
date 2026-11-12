@@ -130,7 +130,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         var prepared = await scope.ServiceProvider.GetRequiredService<Aide.Api.Features.Execution.WorkingCopyPreparer>().PrepareAsync(project.Id, Ct);
 
         Assert.True(prepared.IsSuccess, prepared.Error?.Message);
-        Assert.Equal($"aide/{project.Slug}/v2.4.0", prepared.Value.Branch);
+        Assert.Equal($"tevrin/{project.Slug}/v2.4.0", prepared.Value.Branch); // FR-232
         var workingCopy = Path.Combine(factory.WorkspacesRoot, project.Id.ToString("D"));
         Assert.Equal(_head, await TestGit.RunAsync(workingCopy, Ct, "rev-parse", prepared.Value.Branch));
         var version = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.Id == project.ReleaseVersionId, Ct));

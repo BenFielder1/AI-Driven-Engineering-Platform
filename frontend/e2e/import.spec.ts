@@ -20,7 +20,7 @@ import { createRailwayConnection, deploymentGroups } from './support/tracker-inf
  * `/data/import/existing-app` with tags v0.1.0 and v0.2.0 under Git:Local:ImportRoot):
  * the wizard imports it (FR-73) → badges → the locked codebase summary before the first refinement round (FR-70) and
  * as the refinement run's input (FR-72) → repo tool calls on the runs (FR-71) → the cumulative iteration spec's
- * "Changes in this version" filter (§4.13) → execution's branch aide/<slug>/v0.3.0 from the released tag (FR-73).
+ * "Changes in this version" filter (§4.13) → execution's branch tevrin/<slug>/v0.3.0 from the released tag (FR-73, FR-232).
  */
 
 const SEEDED_REPO = '/data/import/existing-app'
@@ -201,7 +201,7 @@ test('NFR-TEST2, FR-70–FR-73, §4.13: a Local repo is imported at v0.2.0 and 0
   await approveStageGate(page, 'Specification approval')
   await expect(currentPhase(page)).toContainText('Planning')
 
-  // FR-73: execution prepares the working copy on aide/<slug>/v0.3.0 (from the imported tag's commit).
+  // FR-73: execution prepares the working copy on tevrin/<slug>/v0.3.0 (FR-232; from the imported tag's commit).
   await approveDraftViaApi(context, projectId, 'implementation_plan')
   await apiJson(context, 'POST', `/api/projects/${projectId}/phase/advance`, {})
   await approveGateViaApi(context, projectId, 'plan_approval')
@@ -215,7 +215,7 @@ test('NFR-TEST2, FR-70–FR-73, §4.13: a Local repo is imported at v0.2.0 and 0
           ?.branchName ?? null,
       { timeout: 2 * AGENT_TIMEOUT, intervals: [500, 1000] },
     )
-    .toBe(`aide/${project.slug}/v0.3.0`)
+    .toBe(`tevrin/${project.slug}/v0.3.0`)
 })
 
 /**

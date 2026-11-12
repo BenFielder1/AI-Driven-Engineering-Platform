@@ -2,7 +2,7 @@
 
 Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
-**`SPEC.md` is the source of truth.** Between versions there is no root `SPEC.md`: the latest released spec is [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md), and the next version (0.7.0) starts with a new root `SPEC.md` and `PROGRESS.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
+**`SPEC.md` is the source of truth.** The root `SPEC.md` and `PROGRESS.md` describe **0.6.1**, the version being built (branch `build/tevrin-0.6.1`); the latest released spec is [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
 ## Versions
 
@@ -15,7 +15,7 @@ Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates speciali
 | 0.5.0 | [`docs/0.5.0/SPEC.md`](docs/0.5.0/SPEC.md) | [`docs/0.5.0/PROGRESS.md`](docs/0.5.0/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
 | 0.6.0 | [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md) | [`docs/0.6.0/PROGRESS.md`](docs/0.6.0/PROGRESS.md) | Built and merged (PR #29, #31, #32, #33, #34 and #37); released as tag `0.6.0`. Rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site, semver releases. Frozen; never edit except to fix links |
 
-- **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.7.0 new decisions are `D-<x.y.z>-n` (e.g. `D-0.7.0-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
+- **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.6.1 new decisions are `D-<x.y.z>-n` (e.g. `D-0.6.1-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/<x.y.z>/` and add a row here. Then release it (see Releases).
 - **0.6.0 is an increment on 0.5.0 (and 0.1.0–0.4.0):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (0.2.0 starts at FR-53, 0.3.0 at FR-94, 0.4.0 at FR-113, 0.5.0 at FR-163, 0.6.0 at FR-196), and the spec-verifier checks the requirements of 0.1.0–0.6.0.
 - **Scaffolding:** 0.2.0, 0.4.0, 0.5.0 and 0.6.0 M0 were baseline checks, and 0.3.0 migrated the frontend in place. Never re-scaffold the repo.
@@ -73,7 +73,7 @@ scripts/ci/check-version.sh    CI + release deploy: the three version sources ag
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on a published release or dispatch)
 .github/workflows/docs.yml         docs site build + link check, deployed to GitHub Pages (FR-226)
-SPEC.md · PROGRESS.md                          the version being built (none between versions; 0.7.0 adds them)
+SPEC.md · PROGRESS.md                          the version being built (none between versions)
 STACK.md · CLAUDE.md                           stack packs and conventions
 docs/                       Jekyll + just-the-docs site (index.md, _config.yml, Gemfile) and the version archive:
   index.md                  site home
@@ -140,8 +140,8 @@ For every phase or fix:
 
    **Never run locally:** the full `dotnet test` (integration tests start PostgreSQL in Docker), Playwright E2E,
    `docker build`, `docker compose`, `deploy-local.sh`, or the whole gate command.
-3. **Commit and push** to the current build branch (e.g. `build/aide-v3`). This is standing permission to push **build
-   branches only.** Never push to `main`, never force-push, and never amend a pushed commit. Use the commit format
+3. **Commit and push** to the current build or release branch (e.g. `build/tevrin-0.6.1`, `release/0.6.1`). This is
+   standing permission to push **build and release branches only.** Never push to `main`, never force-push, and never amend a pushed commit. Use the commit format
    `phase N: <summary> (<IDs>)` or `fix: <summary> (<IDs>)`.
 4. **Wait for CI on that commit.**
    - Find the run: `gh run list --branch <branch> --commit <sha> --json databaseId,status,conclusion,name`.
@@ -164,6 +164,19 @@ A release is a semver tag `x.y.z` (no `v` prefix) on a `main` merge commit plus 
 FR-231, D-V6-25). **Publishing the release deploys `production`** (`deploy.yml`, after the `production` environment's
 reviewer approves). Ben tags and releases, or an agent does, **only after Ben confirms the version and commit in the
 session.** Tag pushes and releases are outside the build-branch push permission in the Commit gate.
+
+**Version workflow (from 0.6.1).** Each version ships in two PRs:
+
+1. **Build PR.** Build on `build/tevrin-<x.y.z>` with the root SPEC/PROGRESS. When every milestone is green on CI, open a
+   PR to `main` with the code only: version bumped, changelog entry with `date: null`, no history page, SPEC/PROGRESS
+   still at the root. Ben merges it, and `preview` deploys after CI on `main`.
+2. **Preview test.** Ben tests the version on `preview`. Fixes go on a new build branch and PR, through the same commit
+   gate. Agents don't start the release prep until Ben confirms in the session that the version is ready.
+3. **Release PR.** On Ben's confirmation, an agent branches `release/<x.y.z>` from `main` and adds the release prep and
+   docs: the changelog `date`, SPEC/PROGRESS moved to `docs/<x.y.z>/` (with the frozen-folder defaults in
+   `docs/_config.yml`), a row in the Versions table, `docs/history/<x.y.z>.md` and the docs-site guide updates. Push,
+   wait for green CI, then open the PR. Ben merges it.
+4. **Tag and release** with the steps below, after Ben confirms the version and commit.
 
 0. **Once:** the `production` GitHub environment is set up as in `docs/operations/releases.md` (required reviewer,
    secrets, deployment branches and tags `main` + `*.*.*`). If it isn't, stop and tell Ben: don't publish.

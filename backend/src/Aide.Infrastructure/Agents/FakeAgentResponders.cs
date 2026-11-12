@@ -465,6 +465,9 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
         var stepCount = At(script.OptimizationStepsByCycle, cycle, 0);
         var file = FilePattern().Match(FakePrompt.Tag(request, "code")) is { Success: true } m ? m.Groups["path"].Value.Trim() : null;
 
+        // FR-238: like a real review, the first fix step names the first failure id of the deterministic findings.
+        var failure = FailurePattern().Match(FakePrompt.Tag(request, "deterministic_findings")) is { Success: true } f ? f.Value : null;
+
         var categories = new[] { "feature_coverage", "api_contracts", "data_model", "architecture", "security", "testing" };
         return JsonSerializer.Serialize(new
         {
@@ -486,7 +489,9 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
                 {
                     number = k,
                     title = $"Review cycle {cycle} fix {k}",
-                    task = $"Address finding {k} of review cycle {cycle} and document it.",
+                    task = k == 1 && failure is not null
+                        ? $"Fix {failure}: read the first error line of its excerpt, fix the cause and document it; verify that the build passes."
+                        : $"Address finding {k} of review cycle {cycle} and document it.",
                     files = new[] { new { path = $"docs/review/cycle-{cycle}-step-{k}.md", action = "create" } },
                     dependencies = k == 1 ? Array.Empty<int>() : [k - 1],
                     userInstructions = (string?)null,
@@ -501,6 +506,9 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
 
     [GeneratedRegex(@"^- (?<path>[^\s(]+)", RegexOptions.CultureInvariant | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FilePattern();
+
+    [GeneratedRegex(@"failure:[a-z]+:[a-z0-9._-]+", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FailurePattern();
 }
 
 /// <summary>

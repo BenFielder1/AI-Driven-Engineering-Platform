@@ -5,10 +5,11 @@ using Aide.Domain.Review;
 
 namespace Aide.UnitTests.Deployments;
 
-/// <summary>FR-89: the deterministic vercel.json checks (plan warning and review finding).</summary>
+/// <summary>FR-89: the deterministic vercel.json checks (plan warning and review finding), amended by FR-233 (tevrin/**).</summary>
 public class VercelConfigRulesTests
 {
-    private const string Good = "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"aide/**\": false\n    }\n  }\n}\n";
+    // FR-233: a project with only tevrin/ branches needs "tevrin/**": false.
+    private const string Good = "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"tevrin/**\": false\n    }\n  }\n}\n";
 
     /// <summary>FR-129: the stack deploys the frontend to Vercel (formerly a preset's deploy target).</summary>
     private const bool Vercel = true;
@@ -36,7 +37,8 @@ public class VercelConfigRulesTests
 
         Assert.NotNull(warning);
         Assert.Equal(ErrorCodes.MissingVercelConfig, warning.Code);
-        Assert.Contains("aide/**", Assert.Single(warning.Details), StringComparison.Ordinal);
+        // FR-234: the suggested config blocks both prefixes.
+        Assert.Contains("\"tevrin/**\": false, \"aide/**\": false", Assert.Single(warning.Details), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -81,27 +83,28 @@ public class VercelConfigRulesTests
     }
 
     [Fact]
-    public void FR89_A_branch_vercel_json_disabling_aide_branches_gives_no_finding()
+    public void FR89_FR233_A_branch_vercel_json_disabling_tevrin_branches_gives_no_finding()
     {
         Assert.Empty(VercelConfigRules.ReviewFindings("vercel.json", Good));
-        Assert.Empty(VercelConfigRules.ReviewFindings("vercel.json", "{ \"$schema\": \"https://openapi.vercel.sh/vercel.json\", // comment\n \"git\": { \"deploymentEnabled\": { \"main\": true, \"aide/**\": false, } } }"));
+        Assert.Empty(VercelConfigRules.ReviewFindings("vercel.json", "{ \"$schema\": \"https://openapi.vercel.sh/vercel.json\", // comment\n \"git\": { \"deploymentEnabled\": { \"main\": true, \"tevrin/**\": false, } } }"));
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("{}")]
     [InlineData("{ \"git\": { \"deploymentEnabled\": false } }")]
-    [InlineData("{ \"git\": { \"deploymentEnabled\": { \"aide/**\": true } } }")]
-    [InlineData("{ \"git\": { \"deploymentEnabled\": { \"aide/*\": false } } }")]
-    [InlineData("{ \"git\": { \"deploymentEnabled\": { \"aide/**\": \"false\" } } }")]
+    [InlineData("{ \"git\": { \"deploymentEnabled\": { \"tevrin/**\": true } } }")]
+    [InlineData("{ \"git\": { \"deploymentEnabled\": { \"tevrin/*\": false } } }")]
+    [InlineData("{ \"git\": { \"deploymentEnabled\": { \"tevrin/**\": \"false\" } } }")]
+    [InlineData("{ \"git\": { \"deploymentEnabled\": { \"aide/**\": false } } }")] // FR-233: aide/** alone no longer passes
     [InlineData("not json")]
     [InlineData("[]")]
-    public void FR89_A_missing_or_wrong_branch_vercel_json_is_one_major_architecture_finding(string? content)
+    public void FR89_FR233_A_missing_or_wrong_branch_vercel_json_is_one_major_architecture_finding(string? content)
     {
         var finding = Assert.Single(VercelConfigRules.ReviewFindings("web/vercel.json", content));
 
         Assert.Equal((ReviewCategory.Architecture, Severity.Major, FindingSource.Deterministic, "web/vercel.json"), (finding.Category, finding.Severity, finding.Source, finding.Path));
-        Assert.Contains(content is null ? "missing" : "doesn't set", finding.Message, StringComparison.Ordinal);
+        Assert.Contains(content is null ? "missing" : "doesn't stop Vercel deploying tevrin/**", finding.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -112,4 +115,14 @@ public class VercelConfigRulesTests
     [InlineData("apps\\site", "apps/site/vercel.json")]
     public void FR89_The_config_path_follows_the_Vercel_root_directory(string? root, string expected) =>
         Assert.Equal(expected, VercelConfigRules.ConfigPath(root));
+
+    [Fact]
+    public void FR233_The_review_finding_names_each_missing_pattern_for_a_project_with_an_aide_branch()
+    {
+        var both = BranchControlRules.RequiredPrefixes(usesLegacyBranch: true);
+
+        Assert.Empty(VercelConfigRules.ReviewFindings("vercel.json", "{ \"git\": { \"deploymentEnabled\": { \"aide/**\": false, \"tevrin/**\": false } } }", both));
+        var finding = Assert.Single(VercelConfigRules.ReviewFindings("vercel.json", Good, both));
+        Assert.Contains("deploying aide/** on its own", finding.Message, StringComparison.Ordinal);
+    }
 }

@@ -266,7 +266,19 @@ public static class MergeReadinessRules
 }
 
 /// <summary>FR-84, FR-85: a check run or commit status on the PR head; <c>required</c> when the default branch's rules require it.</summary>
-public sealed record CheckObservation(string Name, CheckRunStatus Status, CheckRunConclusion? Conclusion, bool Required, string? DetailsUrl);
+public sealed record CheckObservation(string Name, CheckRunStatus Status, CheckRunConclusion? Conclusion, bool Required, string? DetailsUrl)
+{
+    /// <summary>
+    /// FR-236: the host's id of the run, for fetching a failure's details: the GitHub check-run id (also the Actions job id),
+    /// the GitLab job id; <c>null</c> for commit statuses and when unknown.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? RunId { get; init; }
+
+    /// <summary>FR-236: the GitHub App that created the check run (<c>github-actions</c> for Actions jobs), or <c>null</c>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? App { get; init; }
+}
 
 /// <summary>FR-84: one reason Tevrin can't merge the version's PR itself.</summary>
 public sealed record MergeReadinessReason(MergeReadinessReasonCode Code, string Message);

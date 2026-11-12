@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Aide.Domain.Deployments;
 using Aide.Domain.Stack;
 
 namespace Aide.Infrastructure.Agents;
@@ -8,7 +9,7 @@ namespace Aide.Infrastructure.Agents;
 /// FR-120–FR-128 (D13, §8 composition E2E): what the Fake responders read from a composed prompt. Every composed block
 /// starts with the composition summary (<see cref="StackGuidance.Heading"/>): its Packs table gives the packs and layer
 /// paths, its Specialists list the agents in play; the plan guidance says whether the repository is empty and which
-/// layers a stack change changed, and lists the contract files.
+/// layers a stack change changed, and lists the contract files and (FR-242) the deployment files the repository lacks.
 /// </summary>
 public sealed partial record FakeComposition(
     string? FrontendPack,
@@ -77,12 +78,37 @@ public sealed partial record FakeComposition(
             }
         }
 
+        // FR-242: the deployment files the guidance asks for (those already in the repository say so instead of listing content).
+        var deployFiles = new List<(string Path, string Owner)>();
+        index = system.IndexOf(StackGuidance.DeploymentFilesHeading, StringComparison.Ordinal);
+        if (index >= 0)
+        {
+            foreach (var line in system[index..].ReplaceLineEndings("\n").Split('\n').Skip(1))
+            {
+                if (line.StartsWith('#'))
+                {
+                    break;
+                }
+
+                if (DeploymentFilePattern().Match(line) is { Success: true } d)
+                {
+                    deployFiles.Add((d.Groups["path"].Value, d.Groups["owner"].Value));
+                }
+            }
+        }
+
         return new FakeComposition(
             fe.Pack, fe.Pack is null ? null : fe.Path ?? "frontend",
             be.Pack, be.Pack is null ? null : be.Path ?? "backend",
             data.Pack, vcs.Pack ?? "vcs-github", feHost.Pack, beHost.Pack, local.Pack is not null,
-            agents, changed, contracts);
+            agents, changed, contracts)
+        {
+            DeploymentFiles = deployFiles,
+        };
     }
+
+    /// <summary>FR-242: the deployment files the plan guidance lists as missing (path, owner).</summary>
+    public IReadOnlyList<(string Path, string Owner)> DeploymentFiles { get; init; } = [];
 
     public bool Has(string agent) => Agents.Contains(agent, StringComparer.Ordinal);
 
@@ -97,6 +123,9 @@ public sealed partial record FakeComposition(
 
     [GeneratedRegex(@"^- `(?<path>[^`]+)`\s*$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex ContractPattern();
+
+    [GeneratedRegex(@"^- `(?<path>[^`]+)` for .+?, owner `(?<owner>[a-z-]+)`.*\. Required content:$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex DeploymentFilePattern();
 }
 
 /// <summary>
@@ -211,6 +240,15 @@ public static class FakeStackScripts
                 }
             }
 
+            // FR-242: every deployment file the guidance lists as missing (wrangler.jsonc, railway.json, pages.yml, …).
+            foreach (var (path, owner) in c.DeploymentFiles.Where(f => f.Owner == StackAgents.DeployEngineer))
+            {
+                if (!files.Any(f => string.Equals(f.Item1, path, StringComparison.OrdinalIgnoreCase)))
+                {
+                    files.Add((path, "create"));
+                }
+            }
+
             files.Add((".env.example", action));
             steps.Add((StackAgents.DeployEngineer, "Containers, platforms and environment", "Write the container, platform and local dev-loop configuration and the environment variable inventory.", [], [.. files]));
         }
@@ -252,10 +290,11 @@ public static class FakeStackScripts
         {
             case "compose.yaml":
                 return $"# {header}\nservices:\n  db:\n    image: postgres:18\n    env_file: .env\n    volumes: [db-data:/var/lib/postgresql]\nvolumes:\n  db-data: {{}}\n";
+            // FR-234: the config Tevrin writes blocks both branch prefixes (tevrin/ and the pre-0.6.1 aide/).
             case "vercel.json":
-                return "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"aide/**\": false\n    }\n  }\n}\n";
+                return "{\n  \"git\": {\n    \"deploymentEnabled\": {\n      \"tevrin/**\": false,\n      \"aide/**\": false\n    }\n  }\n}\n";
             case "netlify.toml":
-                return $"# {header}\n[build]\n  ignore = 'case \"$BRANCH\" in aide/*) exit 0 ;; *) exit 1 ;; esac'\n";
+                return $"# {header}\n[build]\n  ignore = '{BranchControlRules.NetlifyIgnoreCommand()}'\n";
             case ".env.example":
                 return "# Environment variable inventory (no values are ever committed).\nDATABASE_URL=\n";
             case "api.json" when path.EndsWith("openapi/api.json", StringComparison.Ordinal):

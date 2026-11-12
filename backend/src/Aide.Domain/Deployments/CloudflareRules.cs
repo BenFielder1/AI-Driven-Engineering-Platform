@@ -25,8 +25,27 @@ public static class CloudflareRules
 
     public const string PreviewDeployCommand = "npx wrangler versions upload";
 
-    /// <summary>Tevrin's branches, excluded from the preview trigger (Tevrin starts their builds itself, SHA-pinned).</summary>
-    public const string AideBranchPattern = "aide/*";
+    /// <summary>
+    /// Tevrin's branches, excluded from the preview trigger (Tevrin starts their builds itself, SHA-pinned): both
+    /// <c>tevrin/*</c> and <c>aide/*</c> (FR-234, §4.36).
+    /// </summary>
+    public static IReadOnlyList<string> TevrinBranchPatterns { get; } = [.. BranchControlRules.AllPrefixes.Select(BranchControlRules.BranchGlob)];
+
+    /// <summary>FR-234: the <see cref="TevrinBranchPatterns"/> an existing preview exclusion list lacks (in pattern order).</summary>
+    public static IReadOnlyList<string> MissingExcludes(IEnumerable<string> existing)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+        var have = existing.Select(e => e.Trim()).ToHashSet(StringComparer.Ordinal);
+        return [.. TevrinBranchPatterns.Where(p => !have.Contains(p))];
+    }
+
+    /// <summary>FR-234: <paramref name="existing"/> (kept, in order) plus the missing <see cref="TevrinBranchPatterns"/>.</summary>
+    public static IReadOnlyList<string> MergedExcludes(IEnumerable<string> existing)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+        var kept = existing.ToList();
+        return [.. kept, .. MissingExcludes(kept)];
+    }
 
     /// <summary>The Workers and Pages dashboard (FR-144 <c>PLATFORM_GIT_NOT_CONNECTED</c> link to install the Git app).</summary>
     public const string DashboardUrl = "https://dash.cloudflare.com/?to=/:account/workers-and-pages";
@@ -87,11 +106,11 @@ public static class CloudflareRules
         "Tevrin production", [productionBranch], [], buildCommand, ProductionDeployCommand, Root(rootDirectory));
 
     /// <summary>
-    /// §4.20: the preview trigger: every branch but <c>aide/*</c> (Tevrin starts version-branch builds itself with the commit
+    /// §4.20: the preview trigger: every branch but <c>tevrin/*</c> and <c>aide/*</c> (FR-234; Tevrin starts version-branch builds itself with the commit
     /// hash), <c>npx wrangler versions upload</c> (a version with a preview URL; production is untouched).
     /// </summary>
     public static CloudflareTriggerSpec PreviewTrigger(string rootDirectory, string? buildCommand) => new(
-        "Tevrin preview", ["*"], [AideBranchPattern], buildCommand, PreviewDeployCommand, Root(rootDirectory));
+        "Tevrin preview", ["*"], TevrinBranchPatterns, buildCommand, PreviewDeployCommand, Root(rootDirectory));
 
     /// <summary>
     /// The target's <c>preview_resource_id</c> for Workers: the preview trigger, then the production trigger
