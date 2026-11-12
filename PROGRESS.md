@@ -33,7 +33,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M47 Scrollbars (FR-235)
 - [x] M48 Deployment files in plans (FR-241–FR-244)
 - [x] M49 Failure evidence in review (FR-236–FR-240)
-- [ ] M50 Release 0.6.1 (FR-245) — tag and release only after Ben confirms
+- [ ] M50 Release 0.6.1 (FR-245): build PR #38 open; after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms
 
 ## Decisions
 See SPEC §10 (D-0.6.1-1 … D-0.6.1-10). Build-time decisions are added below.
