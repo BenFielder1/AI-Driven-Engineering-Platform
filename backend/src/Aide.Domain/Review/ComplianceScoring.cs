@@ -32,6 +32,34 @@ public sealed record ReviewFinding(
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? FailureErrorLine { get; init; }
+
+    /// <summary>
+    /// FR-250, §4.43: how the review's plan handled this deterministic finding (<c>step</c>, <c>waived</c>,
+    /// <c>waiver_refused</c>, <c>no_step</c>); <c>null</c> for agent findings and reports stored before 0.6.1 part 2. Not
+    /// written when <c>null</c>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public FindingHandling? Handling { get; init; }
+
+    /// <summary>FR-250: the plan step that addresses the finding (<c>step</c>, or a refused waiver that got a step); else <c>null</c>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? StepNumber { get; init; }
+
+    /// <summary>FR-249: the waiver's reason when <see cref="Handling"/> is <c>waived</c>; else <c>null</c>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? WaivedReason { get; init; }
+
+    /// <summary>
+    /// FR-247, §4.43 step 5: the consecutive cycles (this one included) in which the review's own plan neither named nor
+    /// validly waived the finding (Tevrin added it, or it had no step); <c>null</c> when it did. The next cycle's prompt
+    /// marks the finding <c>carried (n cycles)</c>. Not part of the API.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? UnaddressedCycles { get; init; }
+
+    /// <summary>FR-249: whether a valid waiver lifted the finding's penalty (it stays in the report).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsWaived => Handling == FindingHandling.Waived;
 }
 
 /// <summary>Category scores after penalties, and the weighted overall score.</summary>
@@ -60,7 +88,8 @@ public static class ComplianceScoring
 
     /// <summary>
     /// Applies deterministic penalties to the agent's category scores (each clamped to 0–1) and computes the
-    /// overall score. The agent must score every category.
+    /// overall score. The agent must score every category. FR-249: a waived finding (<see cref="ReviewFinding.IsWaived"/>)
+    /// adds no penalty.
     /// </summary>
     public static ComplianceScore Score(IReadOnlyDictionary<ReviewCategory, decimal> agentScores, IEnumerable<ReviewFinding> findings)
     {
@@ -73,9 +102,7 @@ public static class ComplianceScoring
             throw new ArgumentException($"Missing category scores: {string.Join(", ", missing)}.", nameof(agentScores));
         }
 
-        var penalties = findings
-            .GroupBy(f => f.Category)
-            .ToDictionary(g => g.Key, g => g.Sum(f => Penalty(f.Severity)));
+        var penalties = Penalties(findings);
 
         var categories = Weights.Keys.ToDictionary(
             c => c,
@@ -83,6 +110,16 @@ public static class ComplianceScoring
 
         var overall = Math.Round(categories.Sum(kv => kv.Value * Weights[kv.Key]), 3, MidpointRounding.AwayFromZero);
         return new ComplianceScore(categories, overall);
+    }
+
+    /// <summary>Each category's deterministic penalty: the sum of its findings' penalties, waived findings excluded (FR-249).</summary>
+    public static IReadOnlyDictionary<ReviewCategory, decimal> Penalties(IEnumerable<ReviewFinding> findings)
+    {
+        ArgumentNullException.ThrowIfNull(findings);
+        return findings
+            .Where(f => !f.IsWaived)
+            .GroupBy(f => f.Category)
+            .ToDictionary(g => g.Key, g => g.Sum(f => Penalty(f.Severity)));
     }
 }
 

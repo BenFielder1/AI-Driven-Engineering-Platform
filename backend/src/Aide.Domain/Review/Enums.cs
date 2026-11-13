@@ -59,6 +59,19 @@ public enum FindingSource
     Agent = 1,
 }
 
+/// <summary>
+/// FR-250, §4.43: how a review's optimisation plan handled a deterministic finding: a step addresses it (named by the
+/// agent, or added by Tevrin), a valid waiver lifted its penalty, its waiver was refused (critical, <c>secret</c> or
+/// <c>failure:</c>; it then got a step if one could be added), or no step could be added.
+/// </summary>
+public enum FindingHandling
+{
+    Step = 0,
+    Waived = 1,
+    WaiverRefused = 2,
+    NoStep = 3,
+}
+
 /// <summary>The review job's state for the project (FR-38): no review in the current cycle, queued or running, finished, or failed.</summary>
 public enum ReviewRunStatus
 {

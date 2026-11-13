@@ -34,6 +34,15 @@ public sealed record CodeReviewResult(
 
     /// <summary>FR-239: failure ids whose evidence block couldn't be attached to the plan (logged as a warning).</summary>
     public IReadOnlyList<string> DroppedFailureEvidence { get; init; } = [];
+
+    /// <summary>FR-248, FR-250, §4.43: how the plan handled each deterministic finding id (empty without a finding check).</summary>
+    public IReadOnlyDictionary<string, FindingOutcome> FindingOutcomes { get; init; } = new Dictionary<string, FindingOutcome>();
+
+    /// <summary>FR-249: the waivers this reply was granted (valid <c>waivedFindings</c> entries).</summary>
+    public IReadOnlyList<FindingWaiver> NewWaivers { get; init; } = [];
+
+    /// <summary>§4.43 step 5: the titles of the steps Tevrin couldn't add (they broke a plan limit; logged as a warning).</summary>
+    public IReadOnlyList<string> DroppedFindingSteps { get; init; } = [];
 }
 
 /// <summary>
@@ -46,6 +55,8 @@ public sealed record CodeReviewResult(
 /// so the one corrective re-run can fix them all. FR-243: with <c>deployFiles</c>, a step for each missing deployment file
 /// is added only after the agent's own steps validate, then the plan is validated again (<see cref="DeployFileSteps.AddValidated"/>).
 /// FR-239: with <c>failures</c>, the failure evidence blocks are attached before that (<see cref="FailureEvidenceSteps.Attach"/>).
+/// FR-247, FR-248: with <c>findings</c>, the reply's optional <c>waivedFindings</c> (<c>[{"id", "reason"}]</c>; malformed entries
+/// are ignored) are read and §4.43 runs after the failure evidence (<see cref="FindingSteps.Apply"/>), also on an empty plan.
 /// </summary>
 public static class CodeReviewOutput
 {
@@ -55,7 +66,12 @@ public static class CodeReviewOutput
     public const int MaxTextLength = 2000;
 
     public static Result<CodeReviewResult> Parse(
-        string text, int maxFilesPerStep, PlanAgents? agents = null, DeployFileCheck? deployFiles = null, FailureEvidenceCheck? failures = null)
+        string text,
+        int maxFilesPerStep,
+        PlanAgents? agents = null,
+        DeployFileCheck? deployFiles = null,
+        FailureEvidenceCheck? failures = null,
+        FindingStepCheck? findings = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         var json = AgentOutput.ExtractJsonObject(text);
@@ -94,7 +110,8 @@ public static class CodeReviewOutput
                 return Invalid(reasons);
             }
 
-            var plan = ReadPlan(root, maxFilesPerStep, agents, deployFiles, failures);
+            var findingCheck = findings is null ? null : findings with { Requests = ReadWaivers(root) };
+            var plan = ReadPlan(root, maxFilesPerStep, agents, deployFiles, failures, findingCheck);
             if (plan.IsFailure)
             {
                 return Result.Failure<CodeReviewResult>(plan.Error!);
@@ -104,6 +121,9 @@ public static class CodeReviewOutput
             {
                 Regressions = regressions,
                 DroppedFailureEvidence = plan.Value.Dropped,
+                FindingOutcomes = plan.Value.Findings?.Outcomes ?? new Dictionary<string, FindingOutcome>(),
+                NewWaivers = plan.Value.Findings?.NewWaivers ?? [],
+                DroppedFindingSteps = plan.Value.Findings?.DroppedSteps ?? [],
             });
         }
     }
@@ -352,12 +372,36 @@ public static class CodeReviewOutput
         return result;
     }
 
-    private static Result<(IReadOnlyList<PlanStep> Steps, string? Markdown, IReadOnlyList<string> Dropped)> ReadPlan(
-        JsonElement root, int maxFilesPerStep, PlanAgents? agents, DeployFileCheck? deployFiles, FailureEvidenceCheck? failures)
+    /// <summary>FR-247: the reply's <c>waivedFindings</c>; entries without a string <c>id</c> are ignored (the reason is checked by §4.43).</summary>
+    private static List<WaiverRequest> ReadWaivers(JsonElement root)
     {
+        var result = new List<WaiverRequest>();
+        if (!root.TryGetProperty("waivedFindings", out var list) || list.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        foreach (var item in list.EnumerateArray().Take(MaxItems))
+        {
+            if (item.ValueKind == JsonValueKind.Object && StringOf(item, "id")?.Trim() is { Length: > 0 } id)
+            {
+                result.Add(new WaiverRequest(id, StringOf(item, "reason") ?? string.Empty));
+            }
+        }
+
+        return result;
+    }
+
+    private sealed record PlanRead(IReadOnlyList<PlanStep> Steps, string? Markdown, IReadOnlyList<string> Dropped, FindingStepResult? Findings);
+
+    private static Result<PlanRead> ReadPlan(
+        JsonElement root, int maxFilesPerStep, PlanAgents? agents, DeployFileCheck? deployFiles, FailureEvidenceCheck? failures, FindingStepCheck? findings)
+    {
+        // §4.43 on an empty plan: waivers still apply and every other finding is "No step".
+        PlanRead Empty() => new([], null, [], findings is null ? null : FindingSteps.Apply([], findings, agents, steps => Result.Success(steps)));
         if (!root.TryGetProperty("optimizationPlan", out var plan) || plan.ValueKind == JsonValueKind.Null)
         {
-            return Result.Success<(IReadOnlyList<PlanStep>, string?, IReadOnlyList<string>)>(([], null, []));
+            return Result.Success(Empty());
         }
 
         var stepsElement = plan.ValueKind switch
@@ -368,7 +412,7 @@ public static class CodeReviewOutput
         };
         if (stepsElement.ValueKind == JsonValueKind.Array && stepsElement.GetArrayLength() == 0)
         {
-            return Result.Success<(IReadOnlyList<PlanStep>, string?, IReadOnlyList<string>)>(([], null, []));
+            return Result.Success(Empty());
         }
 
         var parsed = PlanDocument.ParseJson(plan.GetRawText());
@@ -385,19 +429,34 @@ public static class CodeReviewOutput
             dropped = attached.Dropped;
         }
 
+        // FR-248, §4.43: then every deterministic finding gets a step or a valid waiver, keeping the plan valid.
+        FindingStepResult? handled = null;
+        if (validated.IsSuccess && findings is not null)
+        {
+            handled = FindingSteps.Apply(validated.Value, findings, agents, steps => PlanValidator.Validate(steps, maxFilesPerStep, allowProtectedPaths: false, agents));
+            validated = Result.Success(handled.Steps);
+        }
+
         if (validated.IsSuccess && deployFiles is not null)
         {
             validated = DeployFileSteps.AddValidated(validated.Value, deployFiles, steps => PlanValidator.Validate(steps, maxFilesPerStep, allowProtectedPaths: false, agents));
         }
+
         if (validated.IsFailure)
         {
-            return Result.Failure<(IReadOnlyList<PlanStep>, string?, IReadOnlyList<string>)>(validated.Error!);
+            return Result.Failure<PlanRead>(validated.Error!);
+        }
+
+        // Added deployment-file steps go first in an optimisation plan: the findings' step numbers are read again.
+        if (handled is not null)
+        {
+            handled = handled with { Outcomes = FindingSteps.Renumber(handled.Outcomes, validated.Value) };
         }
 
         var markdown = PlanDocument.RenderChecked(ArtifactType.OptimizationPlan, validated.Value, maxFilesPerStep, agents);
         return markdown.IsSuccess
-            ? Result.Success<(IReadOnlyList<PlanStep>, string?, IReadOnlyList<string>)>((validated.Value, markdown.Value, dropped))
-            : Result.Failure<(IReadOnlyList<PlanStep>, string?, IReadOnlyList<string>)>(markdown.Error!);
+            ? Result.Success(new PlanRead(validated.Value, markdown.Value, dropped, handled))
+            : Result.Failure<PlanRead>(markdown.Error!);
     }
 
     private static string? CleanPath(string? path) =>

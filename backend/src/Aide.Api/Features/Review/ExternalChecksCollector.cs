@@ -41,13 +41,21 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
     /// (FR-85) and the preview deployment review waited for (FR-90); <c>null</c> when there is neither. FR-236, FR-240: with
     /// failure findings, also <c>failures</c> (not part of the API; read back by <see cref="StoredFailures"/>): each failure's
     /// id, source, excerpt (the finding's evidence), fingerprint (§4.37) and consecutive cycles, which the next cycle compares with.
+    /// FR-249: with <paramref name="waivers"/>, also <c>waivers</c> (not part of the API; read back by <see cref="StoredWaivers"/>):
+    /// the waivers in force after the cycle (id, message, reason, cycle). With waivers but no checks and no preview, the JSON
+    /// holds only <c>waivers</c> (read as no external checks).
     /// </summary>
     public static string? Compose(
-        CollectedChecks? checks, Deployments.PreviewCheckDto? preview, IReadOnlyList<ReviewFinding>? findings = null, IReadOnlyList<FailureRecord>? records = null)
+        CollectedChecks? checks,
+        Deployments.PreviewCheckDto? preview,
+        IReadOnlyList<ReviewFinding>? findings = null,
+        IReadOnlyList<FailureRecord>? records = null,
+        IReadOnlyList<FindingWaiver>? waivers = null)
     {
+        var storedWaivers = (waivers ?? []).Select(w => new StoredWaiver(w.Id, w.Message, w.Reason, w.Cycle)).ToList();
         if (checks is null && preview is null)
         {
-            return null;
+            return storedWaivers.Count == 0 ? null : AideJson.Serialize(new { waivers = storedWaivers });
         }
 
         var failures = (records ?? [])
@@ -65,7 +73,58 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
             checksTimedOut = checks?.TimedOut ?? false,
             preview,
             failures = failures.Count == 0 ? null : failures,
+            waivers = storedWaivers.Count == 0 ? null : storedWaivers,
         });
+    }
+
+    /// <summary>
+    /// FR-249: <paramref name="externalChecks"/> with its <c>waivers</c> replaced by <paramref name="waivers"/> (every other
+    /// property kept); <c>null</c> stays <c>null</c> without waivers. Unreadable JSON is kept as it is.
+    /// </summary>
+    public static string? ReplaceWaivers(string? externalChecks, IReadOnlyList<FindingWaiver> waivers)
+    {
+        ArgumentNullException.ThrowIfNull(waivers);
+        var stored = waivers.Select(w => new StoredWaiver(w.Id, w.Message, w.Reason, w.Cycle)).ToList();
+        if (string.IsNullOrWhiteSpace(externalChecks))
+        {
+            return stored.Count == 0 ? externalChecks : AideJson.Serialize(new { waivers = stored });
+        }
+
+        try
+        {
+            if (System.Text.Json.Nodes.JsonNode.Parse(externalChecks) is not System.Text.Json.Nodes.JsonObject root)
+            {
+                return externalChecks;
+            }
+
+            root["waivers"] = stored.Count == 0 ? null : System.Text.Json.Nodes.JsonNode.Parse(AideJson.Serialize(stored));
+            return root.ToJsonString();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return externalChecks;
+        }
+    }
+
+    /// <summary>FR-249: the waivers in force a report stored in <c>external_checks.waivers</c>; empty for older reports or unreadable JSON.</summary>
+    public static IReadOnlyList<FindingWaiver> StoredWaivers(string? externalChecks)
+    {
+        if (string.IsNullOrWhiteSpace(externalChecks))
+        {
+            return [];
+        }
+
+        try
+        {
+            var stored = AideJson.Deserialize<StoredWaiverList>(externalChecks);
+            return [.. (stored.Waivers ?? []).OfType<StoredWaiver>()
+                .Where(w => !string.IsNullOrEmpty(w.Id) && w.Message is not null && !string.IsNullOrEmpty(w.Reason))
+                .Select(w => new FindingWaiver(w.Id, w.Message!, w.Reason!, w.Cycle))];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
     }
 
     /// <summary>FR-240: the failure records a report stored in <c>external_checks.failures</c>; empty for older reports or unreadable JSON.</summary>
@@ -93,6 +152,11 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
     private sealed record StoredFailure(string Id, string Source, string? Excerpt, string? Fingerprint, int Cycles);
 
     private sealed record StoredFailureList(List<StoredFailure?>? Failures);
+
+    /// <summary>One entry of <c>external_checks.waivers</c>.</summary>
+    private sealed record StoredWaiver(string Id, string? Message, string? Reason, int Cycle);
+
+    private sealed record StoredWaiverList(List<StoredWaiver?>? Waivers);
 }
 
 /// <summary>

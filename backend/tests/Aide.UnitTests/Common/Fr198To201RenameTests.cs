@@ -82,7 +82,7 @@ public sealed partial class Fr198To201RenameTests
     [InlineData(AgentKind.SpecGenerator, "7")]
     [InlineData(AgentKind.PlanGenerator, "7")] // FR-242: v7 (deployment files)
     [InlineData(AgentKind.CodeGenerator, "5")]
-    [InlineData(AgentKind.CodeReview, "9")] // FR-238: v9 (failure steps)
+    [InlineData(AgentKind.CodeReview, "10")] // FR-247: v10 (finding ids, waivers)
     [InlineData(AgentKind.RepositoryAnalyst, "3")]
     [InlineData(AgentKind.StackAnalyst, "3")]
     public void FR199_Each_rendered_system_prompt_names_Tevrin_not_AIDE_at_the_new_version(AgentKind agent, string version)

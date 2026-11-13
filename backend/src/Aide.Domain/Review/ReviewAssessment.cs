@@ -34,9 +34,8 @@ public static class ReviewAssessment
         ArgumentNullException.ThrowIfNull(input);
         var agentScores = input.Agent.Categories.ToDictionary(c => c.Category, c => c.Score);
         var scored = ComplianceScoring.Score(agentScores, input.DeterministicFindings);
-        var penalties = input.DeterministicFindings
-            .GroupBy(f => f.Category)
-            .ToDictionary(g => g.Key, g => g.Sum(f => ComplianceScoring.Penalty(f.Severity)));
+        // FR-249: a waived finding stays in the report but carries no penalty.
+        var penalties = ComplianceScoring.Penalties(input.DeterministicFindings);
         var categories = ComplianceScoring.Weights.Keys
             .OrderBy(c => c)
             .Select(c => new CategoryScoreEntry(

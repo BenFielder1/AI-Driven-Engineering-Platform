@@ -4487,6 +4487,8 @@ export interface components {
             action: components["schemas"]["FileAction"];
             contentHash: string;
         };
+        /** @enum {unknown} */
+        FindingHandling: "step" | "waived" | "waiver_refused" | "no_step" | null;
         /**
          * @description Where a review violation came from (§4.7): a deterministic check or the Code Review agent.
          * @enum {unknown}
@@ -7181,7 +7183,14 @@ export interface components {
             /** @description FR-177: the user turned off "Credit me on commits made by Tevrin". */
             commitCreditOptOut?: boolean;
         };
-        /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
+        /**
+         * @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known.
+         *     FR-246, FR-250 (0.6.1 part 2): a deterministic finding has its `findingId` (`finding:&lt;kind&gt;:&lt;subject&gt;`, or a
+         *     failure's `failure:` id) and how the review's plan handled it: `handling` is `step` (`stepNumber` is the
+         *     plan step), `waived` (`waivedReason` says why; no penalty), `waiver_refused` (critical, secret and failure
+         *     findings can't be waived; `stepNumber` when it got a step) or `no_step`. All four are `null` for agent
+         *     findings and reports stored before 0.6.1 part 2.
+         */
         ViolationDto: {
             category: components["schemas"]["ReviewCategory"];
             severity: components["schemas"]["Severity"];
@@ -7189,6 +7198,11 @@ export interface components {
             message: string;
             file: null | string;
             evidence: null | string;
+            findingId?: null | string;
+            handling?: null | components["schemas"]["FindingHandling"];
+            /** Format: int32 */
+            stepNumber?: null | number;
+            waivedReason?: null | string;
         };
         /** @enum {unknown} */
         ViolationSeverity: "error" | "warning";

@@ -51,10 +51,24 @@ internal sealed record ReviewMaterial(
 
     /// <summary>FR-240: this cycle's failure records (id, fingerprint, consecutive cycles), stored in <c>external_checks.failures</c>.</summary>
     public IReadOnlyList<FailureRecord> FailureRecords { get; init; } = [];
+
+    /// <summary>FR-249: the waivers in force from earlier cycles of the version (the previous report's <c>external_checks.waivers</c>).</summary>
+    public IReadOnlyList<FindingWaiver> EarlierWaivers { get; init; } = [];
+
+    /// <summary>FR-247: the findings the previous cycle left unaddressed, with their consecutive cycles, by finding id.</summary>
+    public IReadOnlyDictionary<string, int> Carried { get; init; } = new Dictionary<string, int>();
 }
 
-/// <summary>FR-240: the previous cycle's failure records and optimisation plan steps (<c>null</c>: none or unreadable).</summary>
-internal sealed record FailureHistoryInput(IReadOnlyList<FailureRecord> Previous, IReadOnlyList<Domain.Execution.PlanStep>? PreviousPlan);
+/// <summary>
+/// FR-240: the previous cycle's failure records and optimisation plan steps (<c>null</c>: none or unreadable). FR-247,
+/// FR-249: also the waivers in force and the findings it left unaddressed.
+/// </summary>
+internal sealed record FailureHistoryInput(IReadOnlyList<FailureRecord> Previous, IReadOnlyList<Domain.Execution.PlanStep>? PreviousPlan)
+{
+    public IReadOnlyList<FindingWaiver> Waivers { get; init; } = [];
+
+    public IReadOnlyDictionary<string, int> Carried { get; init; } = new Dictionary<string, int>();
+}
 
 /// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
 internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult Result);
@@ -182,11 +196,15 @@ public sealed partial class ReviewJobHandler(
         await RecordAsync(job, cycle, material, outcome, previous?.Score, checks, preview, cancellationToken);
     }
 
+    /// <summary>FR-249, FR-250: the deterministic findings with the handling the reply's plan gave them (waived ones carry no penalty).</summary>
+    private static IReadOnlyList<ReviewFinding> Handled(CodeReviewResult result, ReviewMaterial material) =>
+        FindingSteps.Annotate(material.Findings, result.FindingOutcomes, material.Carried);
+
     private static IterationReviewResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
         IterationReviewScope.Assess(
             new ReviewAssessmentInput(
                 result,
-                material.Findings,
+                Handled(result, material),
                 project.ComplianceThreshold,
                 cycle,
                 project.MaxReviewCycles,
@@ -303,7 +321,7 @@ public sealed partial class ReviewJobHandler(
         // FR-237: failure ids are unique within the cycle (a second failure with the same id gets -2, so none loses its evidence);
         // FR-246: so are finding ids, in report order.
         var findings = FindingIds.Disambiguate(FailureIds.Disambiguate(secrets
-            .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents)))
+            .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents), DependencyManifests.Manifests(contents)))
             // FR-252: file-based routes come from every path in the tree, also files not read for review.
             .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents, tree.Select(f => f.Path)))
             .Concat(stackFindings)
@@ -312,6 +330,9 @@ public sealed partial class ReviewJobHandler(
             .ToList()));
         var failureRecords = FailureHistory.Records(findings, history?.Previous);
         var repeats = FailureHistory.Repeats(failureRecords, history?.PreviousPlan);
+        // FR-247: findings an earlier waiver still covers are shown waived; those the previous cycle left unaddressed, carried.
+        var earlierWaivers = history?.Waivers ?? [];
+        var carried = history?.Carried ?? new Dictionary<string, int>();
         LogGathered(logger, tree.Count, contents.Count, findings.Count);
         var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
         return new ReviewMaterial(
@@ -323,9 +344,11 @@ public sealed partial class ReviewJobHandler(
             findings,
             // §4.38 step 5: the 18,000-character total cap applies to the prompt only; stored evidence, external_checks.failures and
             // the FR-239 blocks keep each failure's own excerpt (at most 6,000 characters).
-            ReviewCode.RenderFindings(FailureExcerpt.CapAll(findings), allowlist is not null, endpoints.Count, repeats))
+            ReviewCode.RenderFindings(FailureExcerpt.CapAll(findings), allowlist is not null, endpoints.Count, repeats, FindingSteps.Marks(findings, earlierWaivers, carried)))
         {
             FailureRecords = failureRecords,
+            EarlierWaivers = earlierWaivers,
+            Carried = carried,
             Requirements = RequirementParser.Parse(specText).Requirements,
             CodebaseSummary = iteration.CodebaseSummary,
             Stack = version,
@@ -359,6 +382,9 @@ public sealed partial class ReviewJobHandler(
         // FR-239: each failure's evidence block goes to the step naming its failure id (or a new fix step).
         var failureEvidence = FailureEvidenceSteps.From(material.Findings);
         var failures = failureEvidence.Count == 0 ? null : new FailureEvidenceCheck(failureEvidence, material.BranchFiles, maxFiles);
+
+        // FR-248, §4.43: then every deterministic finding gets a step or a valid waiver.
+        var findingCheck = new FindingStepCheck(material.Findings, material.EarlierWaivers, cycle);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
             : material.ImplementationPlan?.Content;
@@ -388,7 +414,7 @@ public sealed partial class ReviewJobHandler(
         // FR-126: checklist violations take their item's category and severity (still agent violations: no penalty).
         Result<CodeReviewResult> Parse(string text)
         {
-            var read = CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures);
+            var read = CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures, findingCheck);
             return read.IsSuccess
                 ? Result.Success(read.Value with
                 {
@@ -411,7 +437,7 @@ public sealed partial class ReviewJobHandler(
             Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))) with
             {
                 RunKey = AgentOutput.CorrectiveRunKey,
-                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures, findingCheck) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
             },
             cancellationToken);
         var reparsed = Parse(second.Text);
@@ -424,20 +450,35 @@ public sealed partial class ReviewJobHandler(
         return new ReviewAgentOutcome(second, reparsed.Value);
     }
 
-    /// <summary>FR-239: a warning naming each failure whose evidence block couldn't be attached to the plan.</summary>
+    /// <summary>
+    /// FR-239: a warning naming each failure whose evidence block couldn't be attached to the plan; §4.43 step 5: one naming
+    /// each findings step Tevrin couldn't add (its findings are "No step").
+    /// </summary>
     private void LogDroppedEvidence(CodeReviewResult result)
     {
         if (result.DroppedFailureEvidence.Count > 0)
         {
             LogEvidenceDropped(logger, string.Join(", ", result.DroppedFailureEvidence));
         }
+
+        if (result.DroppedFindingSteps.Count > 0)
+        {
+            LogFindingStepsDropped(logger, string.Join(", ", result.DroppedFindingSteps));
+        }
     }
 
-    /// <summary>FR-240: <paramref name="report"/>'s failure records and optimisation plan steps, or <c>null</c> without a report.</summary>
+    /// <summary>
+    /// FR-240: <paramref name="report"/>'s failure records and optimisation plan steps, or <c>null</c> without a report.
+    /// FR-247, FR-249: also its waivers in force and the findings it left unaddressed.
+    /// </summary>
     private async Task<FailureHistoryInput?> HistoryAsync(ComplianceReport? report, CancellationToken cancellationToken) =>
         report is null
             ? null
-            : new FailureHistoryInput(CollectedChecks.StoredFailures(report.ExternalChecks), await PlanStepsAsync(report.OptimizationPlanArtifactId, cancellationToken));
+            : new FailureHistoryInput(CollectedChecks.StoredFailures(report.ExternalChecks), await PlanStepsAsync(report.OptimizationPlanArtifactId, cancellationToken))
+            {
+                Waivers = CollectedChecks.StoredWaivers(report.ExternalChecks),
+                Carried = FindingSteps.Carried(report.Violations),
+            };
 
     private async Task RecordAsync(
         JobExecution job,
@@ -498,7 +539,13 @@ public sealed partial class ReviewJobHandler(
             AgentRunId = outcome.Run.RunId,
             Threshold = project.ComplianceThreshold,
             OptimizationPlanArtifactId = draft?.Id,
-            ExternalChecks = CollectedChecks.Compose(checks, preview?.Check, material.Findings, material.FailureRecords),
+            // FR-249: the waivers in force after this cycle (earlier ones not voided by a changed message, and the new ones).
+            ExternalChecks = CollectedChecks.Compose(
+                checks,
+                preview?.Check,
+                material.Findings,
+                material.FailureRecords,
+                FindingSteps.Active(material.EarlierWaivers, material.Findings, outcome.Result.NewWaivers)),
             CreatedAt = now,
         };
         db.ComplianceReports.Add(report);
@@ -569,11 +616,18 @@ public sealed partial class ReviewJobHandler(
             .Where(r => r.ReviewCycle < report.ReviewCycle)
             .NewestFirst()
             .FirstOrDefaultAsync(cancellationToken);
+        // FR-249: the cycle's own waivers (stored with its report) still hold for the revised plan.
+        var beforeHistory = await HistoryAsync(before, cancellationToken);
+        // §4.43: the findings the checks don't recompute from the branch (failures, Supabase advisors) are passed back as recorded.
         var material = await GatherAsync(
             project,
             cancellationToken,
-            [.. report.Violations.Where(v => v.FailureId is not null && v.Source == FindingSource.Deterministic)],
-            await HistoryAsync(before, cancellationToken));
+            [
+                .. report.Violations
+                    .Where(v => v.Source == FindingSource.Deterministic && (v.FailureId is not null || FindingIds.KindOf(v.FindingId) == FindingIds.Advisor))
+                    .Select(v => v with { Handling = null, StepNumber = null, WaivedReason = null, UnaddressedCycles = null }),
+            ],
+            (beforeHistory ?? new FailureHistoryInput([], null)) with { Waivers = CollectedChecks.StoredWaivers(report.ExternalChecks) });
         var summary = CodeReviewOutput.PreviousReviewSummary(report.ReviewCycle, report.Score, report.Decision, report.Violations, report.MissingFeatures, report.DriftAreas);
         var rejected = payload.ArtifactId is { } id
             ? await db.Artifacts.AsNoTracking().Where(a => a.Id == id && a.ProjectId == project.Id).Select(a => (int?)a.Version).FirstOrDefaultAsync(cancellationToken)
@@ -610,6 +664,12 @@ public sealed partial class ReviewJobHandler(
 
         var tracked = await db.ComplianceReports.FirstAsync(r => r.Id == report.Id, cancellationToken);
         tracked.OptimizationPlanArtifactId = draft.Id;
+
+        // FR-250: the report's handling labels, waivers and carried counts follow the revised plan. The scores and the
+        // decision stand ("the rest of the review stands"), so a waiver granted only by the revision lifts no penalty.
+        tracked.Violations = FindingSteps.Revise(tracked.Violations, outcome.Result.FindingOutcomes, material.Carried);
+        tracked.ExternalChecks = CollectedChecks.ReplaceWaivers(
+            tracked.ExternalChecks, FindingSteps.Active(material.EarlierWaivers, material.Findings, outcome.Result.NewWaivers));
         await SaveAsync("saving the revised optimisation plan", cancellationToken);
     }
 
@@ -748,6 +808,9 @@ public sealed partial class ReviewJobHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The failure evidence of {FailureIds} couldn't be attached to the optimisation plan (the plan would be invalid or the step text too long)")]
     private static partial void LogEvidenceDropped(ILogger logger, string failureIds);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Tevrin couldn't add {Steps} to the optimisation plan (the plan would be invalid); their deterministic findings have no step")]
+    private static partial void LogFindingStepsDropped(ILogger logger, string steps);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Specification endpoint paths dropped (unclosed bracket): {Paths}")]
     private static partial void LogEndpointPathsDropped(ILogger logger, string paths);

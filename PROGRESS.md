@@ -27,14 +27,14 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-243 | Deterministic missing-file steps | 3.4, 4.41 | backend (domain) | M48 | done | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
 | FR-244 | "Added by Tevrin" badge, additive step fields | 3.4 | backend + frontend | M48 | done | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
 | FR-245 | Version 0.6.1, history page, docs | 3.5 | deploy + docs | M46, M50 | partial (version bump done) | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
-| FR-246 | Stable finding ids for deterministic findings | 3.6, 4.42 | backend (domain) | M51 | todo | |
+| FR-246 | Stable finding ids for deterministic findings | 3.6, 4.42 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
 | FR-247 | `code_review.md` v10 step-or-waiver, carried/waived marks | 3.6 | backend (prompt) | M52 | todo | |
 | FR-248 | Tevrin adds steps for unaddressed findings | 3.6, 4.43 | backend (domain) | M52 | todo | |
 | FR-249 | Valid waivers lift the penalty; guarded | 3.6, 4.43 | backend + frontend | M52 | todo | |
 | FR-250 | Report shows each finding's handling | 3.6 | frontend + backend | M52 | todo | |
-| FR-251 | Catch-all spec paths read whole and covered by fallbacks | 3.7, 4.44 | backend (domain) | M51 | todo | |
-| FR-252 | File-based routes and `public/` count as endpoints | 3.7, 4.45 | backend (domain) | M51 | todo | |
-| FR-253 | Runtime dependencies only | 3.7, 4.46 | backend (domain) | M51 | todo | |
+| FR-251 | Catch-all spec paths read whole and covered by fallbacks | 3.7, 4.44 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
+| FR-252 | File-based routes and `public/` count as endpoints | 3.7, 4.45 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
+| FR-253 | Runtime dependencies only | 3.7, 4.46 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
 | FR-254 | Build check starts after execution | 3.8, 4.47 | backend (job) | M53 | todo | |
 | FR-255 | Build check waits for preview + required checks | 3.8, 4.47 | backend | M53 | todo | |
 | FR-256 | Build-fix agent and `build_fix` steps | 3.8, 4.48 | backend | M53 | todo | |
@@ -47,7 +47,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M47 Scrollbars (FR-235)
 - [x] M48 Deployment files in plans (FR-241–FR-244)
 - [x] M49 Failure evidence in review (FR-236–FR-240)
-- [ ] M51 Check accuracy and finding ids (FR-246, FR-251–FR-253) — branch `build/tevrin-0.6.1-review`
+- [x] M51 Check accuracy and finding ids (FR-246, FR-251–FR-253) — branch `build/tevrin-0.6.1-review`
 - [ ] M52 Findings in the plan (FR-247–FR-250)
 - [ ] M53 Build check before review (FR-254–FR-259)
 - [ ] M50 Release 0.6.1 (after M53) (FR-245): build PR #38 open; after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms

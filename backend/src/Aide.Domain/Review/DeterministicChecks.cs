@@ -28,9 +28,12 @@ public static partial class DeterministicChecks
 
     /// <summary>
     /// Architecture: a dependency the code uses that isn't on the spec's allowlist is a major finding.
-    /// Names compare case-insensitively. FR-246: id <c>finding:dependency:&lt;package&gt;</c>.
+    /// Names compare case-insensitively. FR-246: id <c>finding:dependency:&lt;package&gt;</c>. §4.43: with
+    /// <paramref name="manifests"/> (<see cref="DependencyManifests.Manifests"/>), the finding's path is the manifest that
+    /// declares it, so its fix step goes to the agent owning that manifest.
     /// </summary>
-    public static IReadOnlyList<ReviewFinding> DependencyAllowlist(IEnumerable<string> allowed, IEnumerable<string> used)
+    public static IReadOnlyList<ReviewFinding> DependencyAllowlist(
+        IEnumerable<string> allowed, IEnumerable<string> used, IReadOnlyDictionary<string, string>? manifests = null)
     {
         ArgumentNullException.ThrowIfNull(allowed);
         ArgumentNullException.ThrowIfNull(used);
@@ -41,7 +44,11 @@ public static partial class DeterministicChecks
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(u => u.Length > 0 && !allow.Contains(u))
                 .Order(StringComparer.OrdinalIgnoreCase)
-                .Select(u => new ReviewFinding(ReviewCategory.Architecture, Severity.Major, $"Dependency '{u}' is not in the specification's architecture.")
+                .Select(u => new ReviewFinding(
+                    ReviewCategory.Architecture,
+                    Severity.Major,
+                    $"Dependency '{u}' is not in the specification's architecture.",
+                    manifests is not null && manifests.TryGetValue(u, out var manifest) ? manifest : null)
                 {
                     FindingId = FindingIds.ForDependency(u),
                 }),

@@ -23,14 +23,30 @@ public sealed record CategoryScoreDto(
     decimal Score,
     IReadOnlyList<EvidenceDto> Evidence);
 
-/// <summary>A violation found by a deterministic check or the review agent (§4.7). <c>file</c> and <c>evidence</c> are set when known.</summary>
+/// <summary>
+/// A violation found by a deterministic check or the review agent (§4.7). <c>file</c> and <c>evidence</c> are set when known.
+/// FR-246, FR-250 (0.6.1 part 2): a deterministic finding has its <c>findingId</c> (<c>finding:&lt;kind&gt;:&lt;subject&gt;</c>, or a
+/// failure's <c>failure:</c> id) and how the review's plan handled it: <c>handling</c> is <c>step</c> (<c>stepNumber</c> is the
+/// plan step), <c>waived</c> (<c>waivedReason</c> says why; no penalty), <c>waiver_refused</c> (critical, secret and failure
+/// findings can't be waived; <c>stepNumber</c> when it got a step) or <c>no_step</c>. All four are <c>null</c> for agent
+/// findings and reports stored before 0.6.1 part 2.
+/// </summary>
 public sealed record ViolationDto(
     ReviewCategory Category,
     Severity Severity,
     FindingSource Source,
     string Message,
     string? File,
-    string? Evidence);
+    string? Evidence)
+{
+    public string? FindingId { get; init; }
+
+    public FindingHandling? Handling { get; init; }
+
+    public int? StepNumber { get; init; }
+
+    public string? WaivedReason { get; init; }
+}
 
 /// <summary>A drift area reported by the review agent (§4.7).</summary>
 public sealed record DriftAreaDto(string Area, Severity Severity, string Description);

@@ -446,3 +446,114 @@ describe('Review activity copy (FR-50)', () => {
     expect(describe_('REVIEW_COMPLETED', {})).toBe('Review completed')
   })
 })
+
+describe('Review report finding handling (FR-249, FR-250)', () => {
+  it('FR250_report_shows_step_waived_and_refused_labels_next_to_findings', async () => {
+    const project = seedReview('viewer', (p) => {
+      seedComplianceReport(p, {
+        decision: 'review_required',
+        violations: [
+          {
+            category: 'testing',
+            severity: 'major',
+            source: 'deterministic',
+            message: 'Endpoint GET /api/orders has no test',
+            file: null,
+            evidence: null,
+            findingId: 'finding:endpoint-untested:GET /api/orders',
+            handling: 'step',
+            stepNumber: 2,
+            waivedReason: null,
+          },
+          {
+            category: 'architecture',
+            severity: 'major',
+            source: 'deterministic',
+            message: 'Dependency "tsx" is not in the allowlist',
+            file: 'package.json',
+            evidence: null,
+            findingId: 'finding:dependency:tsx',
+            handling: 'waived',
+            stepNumber: null,
+            waivedReason: 'tsx is a dev dependency used only by scripts',
+          },
+          {
+            category: 'security',
+            severity: 'critical',
+            source: 'deterministic',
+            message: 'Secret in source',
+            file: 'src/config.ts',
+            evidence: null,
+            findingId: 'finding:secret:src/config.ts',
+            handling: 'waiver_refused',
+            stepNumber: 3,
+            waivedReason: null,
+          },
+        ],
+      })
+    })
+    await openReview(project)
+
+    const violations = region('Violations (3)')
+    const items = within(violations).getAllByTestId('violation')
+    const item = (message: string) => {
+      const found = items.find((li) => li.textContent.includes(message))
+      if (!found) {
+        throw new Error(`No violation "${message}"`)
+      }
+      return found
+    }
+
+    const stepped = item('Endpoint GET /api/orders has no test')
+    expect(within(stepped).getByTestId('finding-handling')).toHaveTextContent(/^Step 2$/)
+    expect(within(stepped).getByText('finding:endpoint-untested:GET /api/orders').tagName).toBe('CODE')
+
+    const refused = item('Secret in source')
+    expect(within(refused).getByTestId('finding-handling')).toHaveTextContent(/^Waiver refused · Step 3$/)
+    expect(within(refused).queryByText('Waived')).not.toBeInTheDocument()
+
+    // FR-249: the waived finding has a neutral Waived badge and its reason, in its own group apart from the counted ones.
+    const waived = item('Dependency "tsx" is not in the allowlist')
+    expect(within(waived).getByText('Waived')).toBeInTheDocument()
+    expect(within(waived).getByTestId('finding-handling')).toHaveTextContent(
+      /^Waived: tsx is a dev dependency used only by scripts$/,
+    )
+    const waivedGroup = within(violations).getByRole('region', { name: 'Waived findings (1)' })
+    expect(waivedGroup).toContainElement(waived)
+    expect(waivedGroup).not.toContainElement(stepped)
+    expect(within(violations).getByRole('region', { name: 'Major (1 violation)' })).toContainElement(stepped)
+    expect(within(violations).getByRole('region', { name: 'Critical (1 violation)' })).toContainElement(refused)
+  })
+
+  it('FR250_finding_without_handling_shows_no_label', async () => {
+    const project = seedReview('viewer', (p) => {
+      seedComplianceReport(p, {
+        decision: 'review_required',
+        violations: [
+          // A report stored before 0.6.1 part 2: no handling fields at all, and one with them explicitly null.
+          { category: 'security', severity: 'critical', source: 'deterministic', message: 'Secret in source', file: 'src/config.ts', evidence: null },
+          {
+            category: 'testing',
+            severity: 'minor',
+            source: 'agent',
+            message: 'Thin coverage of the cart',
+            file: null,
+            evidence: null,
+            findingId: null,
+            handling: null,
+            stepNumber: null,
+            waivedReason: null,
+          },
+        ],
+      })
+    })
+    await openReview(project)
+
+    const violations = region('Violations (2)')
+    expect(within(violations).getAllByTestId('violation')).toHaveLength(2)
+    expect(within(violations).queryByTestId('finding-handling')).not.toBeInTheDocument()
+    expect(within(violations).queryByText(/^Id:/)).not.toBeInTheDocument()
+    expect(within(violations).queryByRole('region', { name: /^Waived findings/ })).not.toBeInTheDocument()
+    expect(within(violations).queryByText('Waived')).not.toBeInTheDocument()
+  })
+})

@@ -250,10 +250,18 @@ public static partial class DependencyManifests
     private static readonly string[] RequirementsDevWords = ["dev", "test", "tests", "lint", "doc", "docs"];
     private static readonly string[] PythonDevGroups = ["dev", "test", "tests", "lint", "docs"];
 
-    public static IReadOnlyList<string> Used(IEnumerable<SourceFile> files)
+    public static IReadOnlyList<string> Used(IEnumerable<SourceFile> files) => [.. UsedIn(files).Keys];
+
+    /// <summary>
+    /// §4.43: each used dependency with the first manifest declaring it (its path, normalised), in the order of
+    /// <see cref="Used"/>; names compare case-insensitively.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Manifests(IEnumerable<SourceFile> files) => UsedIn(files);
+
+    private static OrderedDictionary<string, string> UsedIn(IEnumerable<SourceFile> files)
     {
         ArgumentNullException.ThrowIfNull(files);
-        var names = new List<string>();
+        var names = new OrderedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
             var path = PathRules.Normalize(file.Path);
@@ -279,9 +287,9 @@ public static partial class DependencyManifests
             };
             foreach (var dependency in found)
             {
-                if (dependency.Length > 0 && !names.Contains(dependency, StringComparer.OrdinalIgnoreCase))
+                if (dependency.Length > 0)
                 {
-                    names.Add(dependency);
+                    names.TryAdd(dependency, path);
                 }
             }
         }
@@ -748,10 +756,16 @@ public static class ReviewCode
     /// finding (<see cref="ReviewFinding.FailureId"/>) also shows its failure id and its evidence excerpt in a fenced block;
     /// FR-240: a failure in <paramref name="repeats"/> is marked <c>repeated (n cycles)</c> with the previous cycle's fix step
     /// text. FR-246: another finding with a <see cref="ReviewFinding.FindingId"/> starts with it
-    /// (<c>- finding:dependency:lodash [architecture/major] …</c>); one without renders as in 0.6.0.
+    /// (<c>- finding:dependency:lodash [architecture/major] …</c>); one without renders as in 0.6.0. FR-247: a finding an
+    /// earlier waiver covers (<paramref name="marks"/>) ends with <c>(waived in cycle n: &lt;reason&gt;)</c>, and one the
+    /// previous cycle left unaddressed with <c>— carried (n cycles)</c>.
     /// </summary>
     public static string RenderFindings(
-        IReadOnlyList<ReviewFinding> findings, bool allowlistChecked, int endpointCount, IReadOnlyDictionary<string, FailureRepeat>? repeats = null)
+        IReadOnlyList<ReviewFinding> findings,
+        bool allowlistChecked,
+        int endpointCount,
+        IReadOnlyDictionary<string, FailureRepeat>? repeats = null,
+        FindingMarks? marks = null)
     {
         ArgumentNullException.ThrowIfNull(findings);
         var sb = new StringBuilder();
@@ -770,7 +784,20 @@ public static class ReviewCode
                 continue;
             }
 
-            sb.Append(CultureInfo.InvariantCulture, $"- {(f.FindingId is { } findingId ? findingId + " " : string.Empty)}[{f.Category.ToWire()}/{f.Severity.ToWire()}] {f.Message}{(f.Path is null ? string.Empty : $" ({f.Path})")}\n");
+            sb.Append(CultureInfo.InvariantCulture, $"- {(f.FindingId is { } findingId ? findingId + " " : string.Empty)}[{f.Category.ToWire()}/{f.Severity.ToWire()}] {f.Message}{(f.Path is null ? string.Empty : $" ({f.Path})")}");
+            if (f.FindingId is { } marked && marks is not null)
+            {
+                if (marks.Waived.TryGetValue(marked, out var waiver))
+                {
+                    sb.Append(CultureInfo.InvariantCulture, $" (waived in cycle {waiver.Cycle}: {waiver.Reason.ReplaceLineEndings(" ")})");
+                }
+                else if (marks.Carried.TryGetValue(marked, out var cycles))
+                {
+                    sb.Append(CultureInfo.InvariantCulture, $" — carried ({cycles} {(cycles == 1 ? "cycle" : "cycles")})");
+                }
+            }
+
+            sb.Append('\n');
         }
 
         return sb.ToString().TrimEnd();

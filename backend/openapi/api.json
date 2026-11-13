@@ -19280,6 +19280,15 @@
         },
         "description": "A file an accepted step wrote (FR-34), with the SHA-256 of its content."
       },
+      "FindingHandling": {
+        "enum": [
+          "step",
+          "waived",
+          "waiver_refused",
+          "no_step",
+          null
+        ]
+      },
       "FindingSource": {
         "enum": [
           "deterministic",
@@ -27515,9 +27524,38 @@
               "null",
               "string"
             ]
+          },
+          "findingId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "handling": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FindingHandling"
+              }
+            ]
+          },
+          "stepNumber": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "waivedReason": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known."
+        "description": "A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known.\nFR-246, FR-250 (0.6.1 part 2): a deterministic finding has its `findingId` (`finding:&lt;kind&gt;:&lt;subject&gt;`, or a\nfailure's `failure:` id) and how the review's plan handled it: `handling` is `step` (`stepNumber` is the\nplan step), `waived` (`waivedReason` says why; no penalty), `waiver_refused` (critical, secret and failure\nfindings can't be waived; `stepNumber` when it got a step) or `no_step`. All four are `null` for agent\nfindings and reports stored before 0.6.1 part 2."
       },
       "ViolationSeverity": {
         "enum": [
