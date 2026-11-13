@@ -184,7 +184,11 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
         Assert.Contains("Also address finding:endpoint:api-widgets: `Endpoint '/api/widgets'", draft.Content, StringComparison.Ordinal);
         var report = Assert.Single(await ReportsAsync(app, id));
-        Assert.Contains("\"waivers\":[{\"id\":\"finding:endpoint:api-gadgets\"", report.ExternalChecks, StringComparison.Ordinal);
+        using (var stored = System.Text.Json.JsonDocument.Parse(report.ExternalChecks!)) // jsonb reformats whitespace
+        {
+            var waiver = Assert.Single(stored.RootElement.GetProperty("waivers").EnumerateArray());
+            Assert.Equal("finding:endpoint:api-gadgets", waiver.GetProperty("id").GetString());
+        }
         Assert.Null(ReviewReader.ReadExternalChecks(report.ExternalChecks)); // no checks and no preview were collected
     }
 
