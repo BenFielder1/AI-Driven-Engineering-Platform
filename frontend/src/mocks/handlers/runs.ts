@@ -25,6 +25,7 @@ const promptVersions: Record<AgentKind, string> = {
   code_review: '1',
   repository_analyst: '1',
   stack_analyst: '1',
+  build_fix: '1',
 }
 
 /** Which phase each agent runs in (SPEC §4.1). */
@@ -36,6 +37,7 @@ const phaseOf: Record<AgentKind, Schemas['Phase']> = {
   code_review: 'review',
   repository_analyst: 'refinement',
   stack_analyst: 'analysis',
+  build_fix: 'execution',
 }
 
 let runClock = Date.parse('2026-09-01T10:00:00Z')

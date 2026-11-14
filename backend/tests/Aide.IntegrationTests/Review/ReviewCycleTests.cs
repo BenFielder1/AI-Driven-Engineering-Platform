@@ -160,6 +160,39 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR248_FR249_FR250_A_finding_no_step_names_is_added_to_the_plan_and_a_waived_one_carries_no_penalty()
+    {
+        const string reason = "The specification defers /api/gadgets to a later version.";
+        var reply = System.Text.Json.Nodes.JsonNode.Parse(ReviewReply(0.82m, 1))!.AsObject();
+        reply["waivedFindings"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["id"] = "finding:endpoint:api-gadgets", ["reason"] = reason });
+        var scripted = new ScriptedResponder(AgentKind.CodeReview, reply.ToJsonString());
+        var app = AgentJobs.WithResponders(factory, scripted);
+        using var fixture = await ReviewedAsync(app, Spec.Replace("No HTTP API.", "| GET | /api/widgets |\n| GET | /api/gadgets |", StringComparison.Ordinal));
+        var id = fixture.Project.Id;
+
+        // FR-247: the v10 prompt shows each finding with its id.
+        Assert.Contains("- finding:endpoint:api-widgets [api_contracts/major]", scripted.Prompts[0], StringComparison.Ordinal);
+        var latest = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
+        var widgets = Assert.Single(latest.Violations, v => v.FindingId == "finding:endpoint:api-widgets");
+        Assert.Equal((FindingHandling.Step, (int?)1, (string?)null), (widgets.Handling, widgets.StepNumber, widgets.WaivedReason));
+        var gadgets = Assert.Single(latest.Violations, v => v.FindingId == "finding:endpoint:api-gadgets");
+        Assert.Equal((FindingHandling.Waived, (int?)null, reason), (gadgets.Handling, gadgets.StepNumber, gadgets.WaivedReason));
+        Assert.Equal(0.10m, latest.CategoryScores.Single(c => c.Category == ReviewCategory.ApiContracts).Penalty); // widgets only
+        Assert.All(latest.Violations.Where(v => v.Source == FindingSource.Agent), v => Assert.Null(v.Handling));
+
+        // FR-248: the endpoint without a path is appended to step 1 of the stored plan; FR-249: the waiver is kept for later cycles.
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        Assert.Contains("Also address finding:endpoint:api-widgets: `Endpoint '/api/widgets'", draft.Content, StringComparison.Ordinal);
+        var report = Assert.Single(await ReportsAsync(app, id));
+        using (var stored = System.Text.Json.JsonDocument.Parse(report.ExternalChecks!)) // jsonb reformats whitespace
+        {
+            var waiver = Assert.Single(stored.RootElement.GetProperty("waivers").EnumerateArray());
+            Assert.Equal("finding:endpoint:api-gadgets", waiver.GetProperty("id").GetString());
+        }
+        Assert.Null(ReviewReader.ReadExternalChecks(report.ExternalChecks)); // no checks and no preview were collected
+    }
+
+    [Fact]
     public async Task FR40_Approving_an_optimisation_plan_with_3_steps_runs_them_and_review_cycle_2_starts_automatically()
     {
         var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.82m, 0.95m], OptimizationStepsByCycle = [3, 0] });

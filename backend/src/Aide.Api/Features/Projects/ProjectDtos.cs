@@ -40,6 +40,7 @@ public sealed record ProjectDto(
     decimal ComplianceThreshold,
     int MaxFilesPerStep,
     int MaxReviewCycles,
+    int MaxBuildFixAttempts,
     long? TokenBudget,
     long TokensUsed,
     bool ExecutionPaused,
@@ -234,6 +235,10 @@ public sealed record CreateProjectRequest
     [Range(ProjectLimits.MinReviewCycles, ProjectLimits.MaxReviewCycles)]
     public int MaxReviewCycles { get; init; } = ProjectDefaults.MaxReviewCycles;
 
+    /// <summary>FR-258: build-fix attempts per review cycle before review (0–10, default 5); 0 turns the build check off.</summary>
+    [Range(Domain.Execution.BuildCheckRules.MinAttempts, Domain.Execution.BuildCheckRules.MaxAttempts)]
+    public int MaxBuildFixAttempts { get; init; } = ProjectDefaults.MaxBuildFixAttempts;
+
     /// <summary>Token budget (at least 1000); <c>null</c> or omitted means unlimited.</summary>
     [Range(ProjectLimits.MinTokenBudget, ProjectLimits.MaxTokenBudget)]
     public long? TokenBudget { get; init; }
@@ -333,6 +338,10 @@ public sealed record UpdateProjectRequest
 
     [Range(ProjectLimits.MinReviewCycles, ProjectLimits.MaxReviewCycles)]
     public int? MaxReviewCycles { get; init; }
+
+    /// <summary>FR-258: build-fix attempts per review cycle (0–10); 0 turns the build check off.</summary>
+    [Range(Domain.Execution.BuildCheckRules.MinAttempts, Domain.Execution.BuildCheckRules.MaxAttempts)]
+    public int? MaxBuildFixAttempts { get; init; }
 
     /// <summary>Sets the token budget (at least 1000). To remove the budget, send <c>clearTokenBudget: true</c>.</summary>
     [Range(ProjectLimits.MinTokenBudget, ProjectLimits.MaxTokenBudget)]

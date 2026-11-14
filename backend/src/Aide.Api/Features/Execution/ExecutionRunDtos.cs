@@ -10,7 +10,8 @@ namespace Aide.Api.Features.Execution;
 /// One step of an execution run (FR-57): number, title, the specialist that runs it (<c>agentKey</c>, FR-121; null for the
 /// base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
 /// (<c>commitUrl</c> is null for the Local provider). <c>legacyAgentKey</c> (§4.23): the 0.2.0 agent key a plan locked before
-/// the upgrade named, which now runs as <c>agentKey</c>; null otherwise.
+/// the upgrade named, which now runs as <c>agentKey</c>; null otherwise. FR-256, FR-259: <c>origin</c> (<c>plan</c> or
+/// <c>build_fix</c>) and <c>buildCheckAttempt</c> (the attempt of the build check a build-fix step fixes; null for plan steps).
 /// </summary>
 public sealed record ExecutionStepSummaryDto(
     Guid Id,
@@ -23,7 +24,9 @@ public sealed record ExecutionStepSummaryDto(
     IReadOnlyList<FileManifestEntryDto> ProducedFiles,
     string? CommitSha,
     string? CommitUrl,
-    string? LegacyAgentKey = null);
+    string? LegacyAgentKey,
+    StepOrigin Origin,
+    int? BuildCheckAttempt);
 
 /// <summary>
 /// One execution run (FR-57): the steps of one plan version. <c>id</c> is the plan artifact's id. The development run is

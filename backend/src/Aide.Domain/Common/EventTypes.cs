@@ -171,6 +171,15 @@ public static class EventTypes
     /// </summary>
     public const string GitPushFailed = "GIT_PUSH_FAILED";
 
+    /// <summary>FR-254, §4.47: a build check started (payload: <c>check</c>, the build check item).</summary>
+    public const string BuildCheckStarted = "BUILD_CHECK_STARTED";
+
+    /// <summary>FR-255, FR-258, §4.47: a build check ended (payload: <c>status</c>, <c>failureIds</c> and <c>check</c>).</summary>
+    public const string BuildCheckCompleted = "BUILD_CHECK_COMPLETED";
+
+    /// <summary>FR-256, §4.48: fix steps were planned from a failed build check (payload: <c>stepNumbers</c> and <c>check</c>).</summary>
+    public const string BuildFixPlanned = "BUILD_FIX_PLANNED";
+
     /// <summary>FR-36: the project PR was opened or reused (GitHub), or the branch comparison was recorded (Local).</summary>
     public const string PullRequestOpened = "PULL_REQUEST_OPENED";
 
@@ -401,7 +410,7 @@ public static class EventTypes
         [EventCategory.Gate] = [GateCreated, GateApproved, GateRejected, GateCancelled, GateOverdue],
         [EventCategory.Artifact] = [ArtifactCreated, ArtifactApproved, ArtifactRejected, ArtifactSuperseded, ArtifactInvalidated, ArtifactCorrupted, ArtifactRestored, CodebaseSummaryCreated, TrackerImportCompleted, TrackerImportFailed, SourceItemsRemoved, StackProfileCreated, StackProfileApproved, StackProfileRejected],
         [EventCategory.Run] = [RunStarted, RunCompleted, RunFailed, BudgetExceeded, ConnectionInvalid, ConnectionExpiring],
-        [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten],
+        [EventCategory.Step] = [StepStarted, StepCompleted, StepRejected, StepBlocked, StepUnblocked, ExecutionStarted, ExecutionPaused, ExecutionResumed, ExecutionCompleted, GitPushFailed, PullRequestOpened, PullRequestFailed, PullRequestForgotten, BuildCheckStarted, BuildCheckCompleted, BuildFixPlanned],
         [EventCategory.Review] = [ReviewStarted, ReviewCompleted, ReviewFailed],
         [EventCategory.Release] = [ReleaseStarted, ReleaseCompleted, ReleaseFailed, ReleaseAwaitingMerge, ReleaseMergedExternally, VersionStarted, DeploymentCreated, DeploymentUpdated, DeploymentFailed, DeploymentPreviewReady, PreviewRolloutCompleted, DatabaseReset, MigrationRunStarted, MigrationRunCompleted, MigrationRunFailed, MergedHeadMismatch, DeploymentTargetConfigured, DeploymentTargetFailed, DeploymentGroupConfigured, DeploymentGroupFailed, DatabaseProvisioned, DatabaseProvisioningFailed, DatabaseExpiring],
         [EventCategory.Rollback] = [RollbackCompleted],

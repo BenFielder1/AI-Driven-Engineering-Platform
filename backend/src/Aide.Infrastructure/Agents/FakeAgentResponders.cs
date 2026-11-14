@@ -459,7 +459,9 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
             return raw;
         }
 
-        var cycle = int.TryParse(FakePrompt.Tag(request, "review_cycle"), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var c) && c > 0 ? c : 1;
+        // FR-258: REVIEW_CYCLE may go on after the number (the exhausted build check note).
+        var cycleText = new string([.. FakePrompt.Tag(request, "review_cycle").TakeWhile(char.IsAsciiDigit)]);
+        var cycle = int.TryParse(cycleText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var c) && c > 0 ? c : 1;
         var score = At(script.ScoresByCycle, cycle, 0.9m);
         var drift = At(script.DriftByCycle, cycle, []);
         var stepCount = At(script.OptimizationStepsByCycle, cycle, 0);
@@ -506,6 +508,45 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
 
     [GeneratedRegex(@"^- (?<path>[^\s(]+)", RegexOptions.CultureInvariant | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FilePattern();
+
+    [GeneratedRegex(@"failure:[a-z]+:[a-z0-9._-]+", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FailurePattern();
+}
+
+/// <summary>
+/// Fake Build Fix agent (FR-256, D13): a valid one-step fix plan naming the first failure id of <c>&lt;failures&gt;</c> (none
+/// when there is no id) and creating <c>docs/build-fix/step-&lt;n&gt;.md</c>, n one more than the plan steps listed, so each
+/// attempt's file is new and the Fake Code Generator writes it.
+/// </summary>
+public sealed partial class FakeBuildFixResponder : IFakeAgentResponder
+{
+    public AgentKind Agent => AgentKind.BuildFix;
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var failure = FailurePattern().Match(FakePrompt.Tag(request, "failures")) is { Success: true } f ? f.Value : null;
+        var planSteps = FakePrompt.Tag(request, "plan_steps").ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+        var next = planSteps + 1;
+        return JsonSerializer.Serialize(new
+        {
+            steps = new[]
+            {
+                new
+                {
+                    number = 1,
+                    title = failure is null ? "Fix the build" : $"Fix {failure}",
+                    task = failure is null
+                        ? "Fix the cause of the failed build and verify that the build passes."
+                        : $"Fix {failure}: read the error in its excerpt, fix the cause and verify that the build passes.",
+                    files = new[] { new { path = $"docs/build-fix/step-{next.ToString(System.Globalization.CultureInfo.InvariantCulture)}.md", action = "create" } },
+                    dependencies = Array.Empty<int>(),
+                    userInstructions = (string?)null,
+                },
+            },
+            summary = failure is null ? "Fake build fix." : $"Fake build fix for {failure}.",
+        });
+    }
 
     [GeneratedRegex(@"failure:[a-z]+:[a-z0-9._-]+", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FailurePattern();

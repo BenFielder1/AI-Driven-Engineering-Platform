@@ -33,15 +33,20 @@ public static class LifecycleSeed
         return client.PostAsJsonAsync($"/api/projects/{projectId}/gates/{gateId}/{action}", body ?? new { }, Ct);
     }
 
-    /// <summary>Puts the project at a phase/version/mode (status follows phase unless given).</summary>
+    /// <summary>
+    /// Puts the project at a phase/version/mode (status follows phase unless given). FR-258: <paramref name="maxBuildFixAttempts"/>
+    /// defaults to 0 (the build check off, so execution goes straight to Review as in 0.6.0) for the flows written before
+    /// 0.6.1 part 2; the build check tests pass a value.
+    /// </summary>
     public static Task SetProjectAsync(
-        WebApplicationFactory<Program> factory, Guid projectId, Phase phase, int version, ApprovalMode mode, ProjectStatus? status = null, int reviewCycle = 0) =>
+        WebApplicationFactory<Program> factory, Guid projectId, Phase phase, int version, ApprovalMode mode, ProjectStatus? status = null, int reviewCycle = 0, int maxBuildFixAttempts = 0) =>
         ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == projectId).ExecuteUpdateAsync(
             s => s.SetProperty(p => p.CurrentPhase, phase)
                 .SetProperty(p => p.Checkpoint, version)
                 .SetProperty(p => p.ApprovalMode, mode)
                 .SetProperty(p => p.Status, status ?? PhaseOrder.StatusFor(phase))
-                .SetProperty(p => p.ReviewCycle, reviewCycle),
+                .SetProperty(p => p.ReviewCycle, reviewCycle)
+                .SetProperty(p => p.MaxBuildFixAttempts, maxBuildFixAttempts),
             Ct));
 
     public static Task<Artifact> AddArtifactAsync(

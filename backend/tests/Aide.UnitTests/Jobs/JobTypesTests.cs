@@ -25,6 +25,7 @@ public class JobTypesTests
     [InlineData(AgentKind.PlanGenerator, JobTypes.PlanGeneration)]
     [InlineData(AgentKind.CodeGenerator, JobTypes.Execution)]
     [InlineData(AgentKind.CodeReview, JobTypes.Review)]
+    [InlineData(AgentKind.BuildFix, JobTypes.BuildFix)] // FR-256
     public void FR13_Each_agent_runs_as_a_job_type(AgentKind agent, string expected) =>
         Assert.Equal(expected, JobTypes.ForAgent(agent));
 

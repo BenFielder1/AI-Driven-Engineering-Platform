@@ -5,6 +5,7 @@ import { createContext } from 'react'
 import { readXsrfToken, refreshAntiforgeryToken, XSRF_HEADER, type Schemas } from '../../api/client'
 
 export type ProjectEventMessage = Schemas['ProjectEventMessage']
+export type BuildCheckUpdatedMessage = Schemas['BuildCheckUpdatedMessage']
 
 /** §6 `WS /api/hubs/projects`: same origin, so the web server (server.ts) forwards it (WebSocket upgrade, FR-98). */
 export const PROJECTS_HUB_PATH = '/api/hubs/projects'
@@ -19,6 +20,8 @@ export interface LiveConnection {
   /** Hub methods: `Join(projectId)` (FORBIDDEN hub error for non-members) and `Leave(projectId)`. */
   invoke(method: 'Join' | 'Leave', projectId: string): Promise<void>
   onProjectEvent(handler: (message: ProjectEventMessage) => void): void
+  /** FR-259: `buildCheckUpdated`, the build check item after it starts, changes state or has fix steps planned. */
+  onBuildCheckUpdated(handler: (message: BuildCheckUpdatedMessage) => void): void
   /** Automatic reconnect lost the connection and is retrying. */
   onReconnecting(handler: () => void): void
   /** Automatic reconnect succeeded: the server forgot our groups, so Join again. */
@@ -113,6 +116,11 @@ export const createSignalRConnection: LiveConnectionFactory = () => {
     onProjectEvent: (handler) => {
       register((c) => {
         c.on('projectEvent', handler)
+      })
+    },
+    onBuildCheckUpdated: (handler) => {
+      register((c) => {
+        c.on('buildCheckUpdated', handler)
       })
     },
     onReconnecting: (handler) => {

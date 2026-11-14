@@ -1,6 +1,11 @@
 import { act } from '@testing-library/react'
 
-import type { LiveConnection, LiveConnectionFactory, ProjectEventMessage } from '../features/live/live-connection'
+import type {
+  BuildCheckUpdatedMessage,
+  LiveConnection,
+  LiveConnectionFactory,
+  ProjectEventMessage,
+} from '../features/live/live-connection'
 
 type Handler<T extends unknown[] = []> = (...args: T) => void
 
@@ -12,6 +17,7 @@ export class FakeLiveConnection implements LiveConnection {
   /** Make `Join` fail (e.g. FORBIDDEN for a non-member). */
   failJoin = false
   private eventHandlers: Handler<[ProjectEventMessage]>[] = []
+  private buildCheckHandlers: Handler<[BuildCheckUpdatedMessage]>[] = []
   private reconnectingHandlers: Handler[] = []
   private reconnectedHandlers: Handler[] = []
   private closeHandlers: Handler[] = []
@@ -35,6 +41,10 @@ export class FakeLiveConnection implements LiveConnection {
     this.eventHandlers.push(handler)
   }
 
+  onBuildCheckUpdated(handler: Handler<[BuildCheckUpdatedMessage]>) {
+    this.buildCheckHandlers.push(handler)
+  }
+
   onReconnecting(handler: Handler) {
     this.reconnectingHandlers.push(handler)
   }
@@ -54,6 +64,15 @@ export class FakeLiveConnection implements LiveConnection {
   emit(message: ProjectEventMessage) {
     act(() => {
       for (const h of this.eventHandlers) {
+        h(message)
+      }
+    })
+  }
+
+  /** FR-259: the hub's `buildCheckUpdated` message. */
+  emitBuildCheck(message: BuildCheckUpdatedMessage) {
+    act(() => {
+      for (const h of this.buildCheckHandlers) {
         h(message)
       }
     })

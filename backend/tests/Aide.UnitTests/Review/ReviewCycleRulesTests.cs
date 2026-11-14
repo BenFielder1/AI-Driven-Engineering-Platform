@@ -234,7 +234,7 @@ public class ReviewCycleRulesTests
     }
 
     [Fact]
-    public void S4_7_Used_dependencies_are_read_from_common_manifests_whatever_the_stack()
+    public void S4_7_FR253_Used_runtime_dependencies_are_read_from_common_manifests_whatever_the_stack()
     {
         SourceFile[] files =
         [
@@ -249,7 +249,8 @@ public class ReviewCycleRulesTests
         ];
 
         Assert.Equal(
-            ["express", "jest", "flask", "requests", "Serilog", "github.com/gin-gonic/gin", "golang.org/x/text", "serde", "rails"],
+            // FR-253: jest is only in devDependencies, so it isn't checked.
+            ["express", "flask", "requests", "Serilog", "github.com/gin-gonic/gin", "golang.org/x/text", "serde", "rails"],
             DependencyManifests.Used(files));
     }
 

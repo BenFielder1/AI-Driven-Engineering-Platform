@@ -45,6 +45,9 @@ public sealed class ProjectsHub(AideDbContext db, SystemRoleLookup roles, Projec
     /// <summary>The client method name of <see cref="IProjectsHubClient.ProjectEvent"/>.</summary>
     public const string ProjectEventMethod = "projectEvent";
 
+    /// <summary>FR-259: the client method name of the <c>buildCheckUpdated</c> message (<see cref="BuildChecks.BuildCheckUpdatedMessage"/>).</summary>
+    public const string BuildCheckUpdatedMethod = "buildCheckUpdated";
+
     /// <summary>The hub error message for a join the caller isn't allowed to make.</summary>
     public const string ForbiddenError = ErrorCodes.Forbidden;
 

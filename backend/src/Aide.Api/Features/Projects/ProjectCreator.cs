@@ -144,6 +144,7 @@ public sealed partial class ProjectCreator(
             ComplianceThreshold = request.ComplianceThreshold,
             MaxFilesPerStep = request.MaxFilesPerStep,
             MaxReviewCycles = request.MaxReviewCycles,
+            MaxBuildFixAttempts = request.MaxBuildFixAttempts,
             TokenBudget = request.TokenBudget,
             CreatedAt = now,
             UpdatedAt = now,

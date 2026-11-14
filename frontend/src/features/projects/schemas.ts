@@ -20,6 +20,9 @@ export const limits = {
   filesMax: 100,
   cyclesMin: 1,
   cyclesMax: 10,
+  /** FR-258: build-fix attempts per review cycle (0 turns the build check off). */
+  buildFixMin: 0,
+  buildFixMax: 10,
   budgetMin: 1000,
   urlMax: 2048,
   branchMax: 255,
@@ -34,6 +37,7 @@ export const projectDefaults = {
   complianceThreshold: '0.90',
   maxFilesPerStep: '20',
   maxReviewCycles: '3',
+  maxBuildFixAttempts: '5',
   defaultBranch: 'main',
 } as const
 
@@ -72,6 +76,13 @@ export const checkMaxFiles = (v: string) =>
 
 export const checkMaxCycles = (v: string) =>
   checkWholeNumber(v, limits.cyclesMin, limits.cyclesMax, 'max review cycles')
+
+/** FR-258 (SPEC §7 part 2): the help text of the "Build fix attempts" field. */
+export const BUILD_FIX_HINT = 'Fix attempts per cycle before review. 0 turns the build check off'
+
+/** FR-258: 0–10 build-fix attempts per review cycle. */
+export const checkMaxBuildFixAttempts = (v: string) =>
+  checkWholeNumber(v, limits.buildFixMin, limits.buildFixMax, 'build fix attempts')
 
 /** Empty means unlimited. */
 export function checkTokenBudget(v: string): Check {
@@ -159,6 +170,7 @@ export const wizardShape = z.object({
   complianceThreshold: str,
   maxFilesPerStep: str,
   maxReviewCycles: str,
+  maxBuildFixAttempts: str,
   tokenBudget: str,
   /**
    * FR-82, FR-86, FR-132, FR-135: `github_app` (picker / create), `github_pat` (URL + token), `gitlab` (picker / create),
@@ -291,6 +303,7 @@ export const wizardSchema = wizardShape.superRefine((v, ctx) => {
   addCheck(ctx, 'complianceThreshold', checkThreshold(v.complianceThreshold))
   addCheck(ctx, 'maxFilesPerStep', checkMaxFiles(v.maxFilesPerStep))
   addCheck(ctx, 'maxReviewCycles', checkMaxCycles(v.maxReviewCycles))
+  addCheck(ctx, 'maxBuildFixAttempts', checkMaxBuildFixAttempts(v.maxBuildFixAttempts))
   addCheck(ctx, 'tokenBudget', checkTokenBudget(v.tokenBudget))
   addCheck(ctx, 'defaultBranch', checkBranch(v.defaultBranch))
   if (v.gitMode === 'github_pat') {
@@ -365,6 +378,7 @@ export const wizardDefaults: WizardValues = {
   complianceThreshold: projectDefaults.complianceThreshold,
   maxFilesPerStep: projectDefaults.maxFilesPerStep,
   maxReviewCycles: projectDefaults.maxReviewCycles,
+  maxBuildFixAttempts: projectDefaults.maxBuildFixAttempts,
   tokenBudget: '',
   gitMode: 'github_pat',
   repoUrl: '',
@@ -427,6 +441,7 @@ export const generalSchema = z
     complianceThreshold: str,
     maxFilesPerStep: str,
     maxReviewCycles: str,
+    maxBuildFixAttempts: str,
     tokenBudget: str,
   })
   .superRefine((v, ctx) => {
@@ -434,6 +449,7 @@ export const generalSchema = z
     addCheck(ctx, 'complianceThreshold', checkThreshold(v.complianceThreshold))
     addCheck(ctx, 'maxFilesPerStep', checkMaxFiles(v.maxFilesPerStep))
     addCheck(ctx, 'maxReviewCycles', checkMaxCycles(v.maxReviewCycles))
+    addCheck(ctx, 'maxBuildFixAttempts', checkMaxBuildFixAttempts(v.maxBuildFixAttempts))
     addCheck(ctx, 'tokenBudget', checkTokenBudget(v.tokenBudget))
   })
 

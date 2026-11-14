@@ -294,6 +294,72 @@ function describeStep(type: string, payload: Payload): string | null {
   }
 }
 
+const buildCheckStatuses = [
+  "waiting",
+  "passed",
+  "failed",
+  "skipped",
+  "exhausted",
+  "cancelled",
+] as const;
+
+/** "1 and 2", "4, 5 and 6". */
+function numberList(values: number[]): string {
+  const text = values.map(String);
+  return text.length <= 1
+    ? (text[0] ?? "")
+    : `${text.slice(0, -1).join(", ")} and ${text.at(-1) ?? ""}`;
+}
+
+/**
+ * Build check events (FR-254–FR-258, §4.47); payloads from BuildCheckService: `attempt`, plus `status` and
+ * `failureIds` when completed, `stepNumbers` when fix steps were planned.
+ */
+function describeBuildCheck(type: string, payload: Payload): string | null {
+  const attempt = count(payload, "attempt");
+  const which =
+    attempt === null
+      ? "Build check"
+      : attempt === 0
+        ? "Build check (initial)"
+        : `Build check attempt ${String(attempt)}`;
+  switch (type) {
+    case "BUILD_CHECK_STARTED": {
+      const sha = str(payload, "headSha");
+      return sha ? `${which} started for commit ${sha.slice(0, 7)}` : `${which} started`;
+    }
+    case "BUILD_CHECK_COMPLETED": {
+      const status = oneOf(payload, "status", buildCheckStatuses);
+      const failures = Array.isArray(payload.failureIds) ? payload.failureIds.length : 0;
+      const failed = failures > 0 ? ` (${plural(failures, "failure")})` : "";
+      switch (status) {
+        case "passed":
+          return `${which} passed`;
+        case "skipped":
+          return `${which} skipped: no preview target or required checks`;
+        case "failed":
+          return `${which} failed${failed}`;
+        case "exhausted":
+          return `${which}: build still failing${failed}; review will include the failures`;
+        case "cancelled":
+          return `${which} cancelled`;
+        default:
+          return `${which} completed`;
+      }
+    }
+    case "BUILD_FIX_PLANNED": {
+      const steps = Array.isArray(payload.stepNumbers)
+        ? payload.stepNumbers.filter((n): n is number => typeof n === "number")
+        : [];
+      return steps.length === 0
+        ? "Build fix steps planned"
+        : `Build fix ${steps.length === 1 ? "step" : "steps"} ${numberList(steps)} planned`;
+    }
+    default:
+      return null;
+  }
+}
+
 /** Pull request events (FR-36); payloads from PullRequestJob. */
 function describePullRequest(type: string, payload: Payload): string | null {
   if (type === "PULL_REQUEST_FORGOTTEN") {
@@ -947,6 +1013,11 @@ export function describeActivity(
     case "PULL_REQUEST_FAILED":
     case "PULL_REQUEST_FORGOTTEN":
       text = describePullRequest(type, payload);
+      break;
+    case "BUILD_CHECK_STARTED":
+    case "BUILD_CHECK_COMPLETED":
+    case "BUILD_FIX_PLANNED":
+      text = describeBuildCheck(type, payload);
       break;
     case "STACK_DETECTED":
       text = describeStackDetected(payload);

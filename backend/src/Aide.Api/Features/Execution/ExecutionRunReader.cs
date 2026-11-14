@@ -66,6 +66,7 @@ public sealed class ExecutionRunReader(AideDbContext db)
         var currentPlanId = versionId == project.CurrentReleaseVersionId
             ? plans.Where(p => p.Status == ArtifactStatus.Locked).OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id).Select(p => (Guid?)p.Id).FirstOrDefault()
             : null;
+        var checkAttempts = await ExecutionQueries.BuildCheckAttemptsAsync(db, steps, cancellationToken);
         var stepsByPlan = steps.GroupBy(s => s.PlanArtifactId).ToDictionary(g => g.Key, g => g.OrderBy(s => s.StepNumber).ToList());
         var owners = plans.ToDictionary(p => p.Id, p => ExecutionRunRules.ReportOf(p, reports));
 
@@ -104,7 +105,9 @@ public sealed class ExecutionRunReader(AideDbContext db)
                             [.. (s.FileManifest ?? []).Select(f => new FileManifestEntryDto(f.Path, f.Action, f.ContentHash))],
                             s.CommitSha,
                             git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha),
-                            s.LegacyAgentKey)),
+                            s.LegacyAgentKey,
+                            s.Origin,
+                            s.BuildCheckId is { } checkId && checkAttempts.TryGetValue(checkId, out var checkAttempt) ? checkAttempt : null)),
                     ],
                     owners[plan.Id]?.Id);
             }),

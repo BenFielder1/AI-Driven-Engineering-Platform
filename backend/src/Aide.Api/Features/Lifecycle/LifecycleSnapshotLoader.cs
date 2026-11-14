@@ -60,7 +60,9 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
             .Select(g => new
             {
                 PlanId = g.Key,
-                Total = g.Count(),
+                // Invalidated steps don't count (e.g. the unfinished fix steps of an exhausted build check, §4.47), as for
+                // the runner (ExecutionQueries.CurrentStepsAsync).
+                Total = g.Count(s => s.Status != StepStatus.Invalidated),
                 Completed = g.Count(s => s.Status == StepStatus.Completed),
                 Remaining = g.Count(s => s.Status != StepStatus.Completed && s.Status != StepStatus.Invalidated),
             })

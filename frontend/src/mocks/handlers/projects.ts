@@ -134,6 +134,8 @@ export interface StoredProject extends Omit<
   deployments?: Schemas['DeploymentDto'][]
   /** FR-153: Supabase BaaS migration runs, any order (the API lists newest first); see mocks/handlers/migrations.ts. */
   migrationRuns?: Schemas['MigrationRunDto'][]
+  /** FR-259: build checks, any order (the API lists newest first); see mocks/handlers/execution.ts and fixtures/build-checks.ts. */
+  buildChecks?: Schemas['BuildCheckDto'][]
 }
 
 export interface StoredStack {
@@ -505,6 +507,7 @@ export function seedProject(
     complianceThreshold: 0.9,
     maxFilesPerStep: 20,
     maxReviewCycles: 3,
+    maxBuildFixAttempts: 5,
     tokenBudget: null,
     tokensUsed: 0,
     executionPaused: false,
@@ -550,6 +553,11 @@ function slugify(name: string) {
     .replace(/^-|-$/g, '')
 }
 
+/** FR-258: `maxBuildFixAttempts` is a whole number from 0 to 10 (absent or null: unchanged / the default). */
+function outOfBuildFixRange(value: number | null | undefined): boolean {
+  return value != null && (!Number.isInteger(value) || value < 0 || value > 10)
+}
+
 export function roleOf(project: StoredProject, userId: string): ProjectRole | null {
   return project.members.find((m) => m.userId === userId)?.role ?? null
 }
@@ -578,6 +586,7 @@ export function projectDto(project: StoredProject, userId: string): Project {
     complianceThreshold: p.complianceThreshold,
     maxFilesPerStep: p.maxFilesPerStep,
     maxReviewCycles: p.maxReviewCycles,
+    maxBuildFixAttempts: p.maxBuildFixAttempts,
     tokenBudget: p.tokenBudget,
     tokensUsed: p.tokensUsed,
     executionPaused: p.executionPaused,
@@ -1001,6 +1010,9 @@ export const projectHandlers = [
     if (!body.name.trim()) {
       errors.name = ['The name is required.']
     }
+    if (outOfBuildFixRange(body.maxBuildFixAttempts)) {
+      errors.maxBuildFixAttempts = ['Max build fix attempts must be between 0 and 10.']
+    }
     const mode = body.git.mode ?? body.git.provider
     if (!mode) {
       errors['git.mode'] = ['Choose github_app, github_pat or local.']
@@ -1115,6 +1127,7 @@ export const projectHandlers = [
       complianceThreshold: body.complianceThreshold ?? 0.9,
       maxFilesPerStep: body.maxFilesPerStep ?? 20,
       maxReviewCycles: body.maxReviewCycles ?? 3,
+      maxBuildFixAttempts: body.maxBuildFixAttempts ?? 5,
       tokenBudget: body.tokenBudget ?? null,
       createdAt: now,
       updatedAt: now,
@@ -1188,12 +1201,17 @@ export const projectHandlers = [
     if (body.name?.trim() === '') {
       return validation({ name: ['The name is required.'] })
     }
+    // FR-258: 0–10 fix attempts per cycle.
+    if (outOfBuildFixRange(body.maxBuildFixAttempts)) {
+      return validation({ maxBuildFixAttempts: ['Max build fix attempts must be between 0 and 10.'] })
+    }
     const p = a.project
     p.name = body.name ?? p.name
     p.approvalMode = body.approvalMode ?? p.approvalMode
     p.complianceThreshold = body.complianceThreshold ?? p.complianceThreshold
     p.maxFilesPerStep = body.maxFilesPerStep ?? p.maxFilesPerStep
     p.maxReviewCycles = body.maxReviewCycles ?? p.maxReviewCycles
+    p.maxBuildFixAttempts = body.maxBuildFixAttempts ?? p.maxBuildFixAttempts
     p.tokenBudget = body.clearTokenBudget ? null : (body.tokenBudget ?? p.tokenBudget)
     touch(p)
     return HttpResponse.json<Project>(projectDto(p, a.userId))

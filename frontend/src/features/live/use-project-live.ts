@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useContext, useEffect, useState } from 'react'
 
+import { applyBuildCheckUpdate } from '../execution/build-checks-api'
 import { notificationKeys } from '../notifications/notifications-api'
 import { LiveConnectionContext } from './live-connection'
 import { invalidateAfterJoin, invalidateForEvent } from './live-invalidation'
@@ -102,6 +103,13 @@ export function useProjectLive(projectId: string): LiveStatus {
             }
           }, NOTIFICATION_REFRESH_DEBOUNCE_MS)
         }
+      }
+    })
+    // FR-259: the build check item goes straight into the cached list; its BUILD_CHECK_* projectEvent (category `step`)
+    // also refreshes the execution queries, so a missed message is caught up by that refetch.
+    connection.onBuildCheckUpdated((message) => {
+      if (!disposed && message.projectId === projectId) {
+        applyBuildCheckUpdate(queryClient, projectId, message.check)
       }
     })
     connection.onReconnecting(() => {

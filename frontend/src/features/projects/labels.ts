@@ -211,6 +211,16 @@ export const stepStatusLabels: Record<Schemas['StepStatus'], string> = {
   invalidated: 'Invalidated',
 }
 
+/** FR-259, §4.47: a build check's status. */
+export const buildCheckStatusLabels: Record<Schemas['BuildCheckStatus'], string> = {
+  waiting: 'Waiting',
+  passed: 'Passed',
+  failed: 'Failed',
+  skipped: 'Skipped',
+  exhausted: 'Still failing',
+  cancelled: 'Cancelled',
+}
+
 /** FR-31, FR-33, FR-37: the execution runner's overall status. */
 export const executionRunStatusLabels: Record<Schemas['ExecutionRunStatus'], string> = {
   idle: 'Not running',
@@ -450,6 +460,8 @@ export const agentKindLabels: Record<Schemas['AgentKind'], string> = {
   code_review: 'Code review',
   repository_analyst: 'Repository Analyst',
   stack_analyst: 'Stack Analyst',
+  // FR-256: plans fix steps from a failed build check (0.6.1 part 2).
+  build_fix: 'Build fix',
 }
 
 /** FR-23, FR-25: agent run statuses. Running runs stream nothing in 0.1.0 (SPEC §8, §11 Q3). */

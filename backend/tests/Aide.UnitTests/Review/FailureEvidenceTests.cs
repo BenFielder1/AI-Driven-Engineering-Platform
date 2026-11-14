@@ -356,7 +356,7 @@ public sealed class FailureEvidenceTests
     {
         var template = new EmbeddedPromptLibrary().Template(AgentKind.CodeReview);
 
-        Assert.Equal("9", template.Version);
+        Assert.Equal("10", template.Version); // FR-247: v10 keeps the v9 failure rules
         Assert.Contains("failure id", template.System, StringComparison.Ordinal);
         Assert.Contains("quotes the key error line", template.System, StringComparison.Ordinal);
         Assert.Contains("says how to verify", template.System, StringComparison.Ordinal);

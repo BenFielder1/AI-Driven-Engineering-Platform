@@ -25,6 +25,9 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
     /// </summary>
     public IReadOnlyDictionary<string, FailureExcerptResult> Excerpts { get; init; } = new Dictionary<string, FailureExcerptResult>(StringComparer.Ordinal);
 
+    /// <summary>FR-255: the commit the checks were read for (the PR head, or the branch head for GitLab/Bitbucket).</summary>
+    public string? HeadSha { get; init; }
+
     /// <summary>
     /// The review findings: FR-139 for a GitLab project ("required pipeline job test:backend failed", major when required,
     /// else minor), FR-85 for GitHub ("required check ci / test failed"). FR-236: a failed required check's evidence is the
@@ -41,13 +44,21 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
     /// (FR-85) and the preview deployment review waited for (FR-90); <c>null</c> when there is neither. FR-236, FR-240: with
     /// failure findings, also <c>failures</c> (not part of the API; read back by <see cref="StoredFailures"/>): each failure's
     /// id, source, excerpt (the finding's evidence), fingerprint (§4.37) and consecutive cycles, which the next cycle compares with.
+    /// FR-249: with <paramref name="waivers"/>, also <c>waivers</c> (not part of the API; read back by <see cref="StoredWaivers"/>):
+    /// the waivers in force after the cycle (id, message, reason, cycle). With waivers but no checks and no preview, the JSON
+    /// holds only <c>waivers</c> (read as no external checks).
     /// </summary>
     public static string? Compose(
-        CollectedChecks? checks, Deployments.PreviewCheckDto? preview, IReadOnlyList<ReviewFinding>? findings = null, IReadOnlyList<FailureRecord>? records = null)
+        CollectedChecks? checks,
+        Deployments.PreviewCheckDto? preview,
+        IReadOnlyList<ReviewFinding>? findings = null,
+        IReadOnlyList<FailureRecord>? records = null,
+        IReadOnlyList<FindingWaiver>? waivers = null)
     {
+        var storedWaivers = (waivers ?? []).Select(w => new StoredWaiver(w.Id, w.Message, w.Reason, w.Cycle)).ToList();
         if (checks is null && preview is null)
         {
-            return null;
+            return storedWaivers.Count == 0 ? null : AideJson.Serialize(new { waivers = storedWaivers });
         }
 
         var failures = (records ?? [])
@@ -65,7 +76,58 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
             checksTimedOut = checks?.TimedOut ?? false,
             preview,
             failures = failures.Count == 0 ? null : failures,
+            waivers = storedWaivers.Count == 0 ? null : storedWaivers,
         });
+    }
+
+    /// <summary>
+    /// FR-249: <paramref name="externalChecks"/> with its <c>waivers</c> replaced by <paramref name="waivers"/> (every other
+    /// property kept); <c>null</c> stays <c>null</c> without waivers. Unreadable JSON is kept as it is.
+    /// </summary>
+    public static string? ReplaceWaivers(string? externalChecks, IReadOnlyList<FindingWaiver> waivers)
+    {
+        ArgumentNullException.ThrowIfNull(waivers);
+        var stored = waivers.Select(w => new StoredWaiver(w.Id, w.Message, w.Reason, w.Cycle)).ToList();
+        if (string.IsNullOrWhiteSpace(externalChecks))
+        {
+            return stored.Count == 0 ? externalChecks : AideJson.Serialize(new { waivers = stored });
+        }
+
+        try
+        {
+            if (System.Text.Json.Nodes.JsonNode.Parse(externalChecks) is not System.Text.Json.Nodes.JsonObject root)
+            {
+                return externalChecks;
+            }
+
+            root["waivers"] = stored.Count == 0 ? null : System.Text.Json.Nodes.JsonNode.Parse(AideJson.Serialize(stored));
+            return root.ToJsonString();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return externalChecks;
+        }
+    }
+
+    /// <summary>FR-249: the waivers in force a report stored in <c>external_checks.waivers</c>; empty for older reports or unreadable JSON.</summary>
+    public static IReadOnlyList<FindingWaiver> StoredWaivers(string? externalChecks)
+    {
+        if (string.IsNullOrWhiteSpace(externalChecks))
+        {
+            return [];
+        }
+
+        try
+        {
+            var stored = AideJson.Deserialize<StoredWaiverList>(externalChecks);
+            return [.. (stored.Waivers ?? []).OfType<StoredWaiver>()
+                .Where(w => !string.IsNullOrEmpty(w.Id) && w.Message is not null && !string.IsNullOrEmpty(w.Reason))
+                .Select(w => new FindingWaiver(w.Id, w.Message!, w.Reason!, w.Cycle))];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
     }
 
     /// <summary>FR-240: the failure records a report stored in <c>external_checks.failures</c>; empty for older reports or unreadable JSON.</summary>
@@ -93,6 +155,11 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
     private sealed record StoredFailure(string Id, string Source, string? Excerpt, string? Fingerprint, int Cycles);
 
     private sealed record StoredFailureList(List<StoredFailure?>? Failures);
+
+    /// <summary>One entry of <c>external_checks.waivers</c>.</summary>
+    private sealed record StoredWaiver(string Id, string? Message, string? Reason, int Cycle);
+
+    private sealed record StoredWaiverList(List<StoredWaiver?>? Waivers);
 }
 
 /// <summary>
@@ -113,13 +180,30 @@ public sealed partial class ExternalChecksCollector(
     ILogger<ExternalChecksCollector> logger)
 {
     /// <summary>The checks, or <c>null</c>; throws <see cref="JobDeferredException"/> while waiting for pending checks.</summary>
-    public async Task<CollectedChecks?> CollectAsync(Project project, LifecycleJobPayload payload, CancellationToken cancellationToken)
+    public Task<CollectedChecks?> CollectAsync(Project project, LifecycleJobPayload payload, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        return ReadCoreAsync(project, payload, excerpts: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// FR-255: the checks as they are now, without waiting (the build check decides the waits, §4.47), or <c>null</c> under
+    /// the same rules as <see cref="CollectAsync"/>. Failure excerpts and logs are fetched only with <paramref name="excerpts"/>
+    /// (the build check asks once its decision is final) and once no required check is pending. A rate limit still defers the
+    /// job; a GitHub or Git host error, or a pull request that can't be read, is a transient failure (the job retries) rather
+    /// than "no checks", which would skip the check.
+    /// </summary>
+    public Task<CollectedChecks?> ReadAsync(Project project, bool excerpts, CancellationToken cancellationToken) => ReadCoreAsync(project, null, excerpts, cancellationToken);
+
+    private static JobFailedException Unreadable(string reason) =>
+        new($"The checks of the head commit couldn't be read: {reason}", transient: true);
+
+    private async Task<CollectedChecks?> ReadCoreAsync(Project project, LifecycleJobPayload? payload, bool excerpts, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
-        ArgumentNullException.ThrowIfNull(payload);
         if (await hosts.ResolveAsync(project.Id, cancellationToken) is { } host)
         {
-            return await HostAsync(project, payload, host, cancellationToken);
+            return await HostAsync(project, payload, excerpts, host, cancellationToken);
         }
 
         var target = await access.ResolveAsync(project.Id, cancellationToken);
@@ -146,28 +230,39 @@ public sealed partial class ExternalChecksCollector(
         var now = time.GetUtcNow();
         try
         {
-            if (await api.FindPullAsync(github.Token, github.Owner, github.Repo, pullNumber, cancellationToken) is not { HeadSha: { } head }
-                || await api.ListChecksAsync(github.Token, github.Owner, github.Repo, head, cancellationToken) is not { } checks)
+            if (await api.FindPullAsync(github.Token, github.Owner, github.Repo, pullNumber, cancellationToken) is not { HeadSha: { } head })
+            {
+                return payload is null ? throw Unreadable("the pull request was not found") : null;
+            }
+
+            if (await api.ListChecksAsync(github.Token, github.Owner, github.Repo, head, cancellationToken) is not { } checks)
             {
                 return null;
             }
 
             var rules = await api.GetBranchRulesAsync(github.Token, github.Owner, github.Repo, github.DefaultBranch, cancellationToken);
-            var marked = MergeReadinessRules.MarkRequired(checks, rules.RequiredChecks);
-            var decision = ExternalCheckRules.Decide(marked, payload.ChecksWaitSince, now);
-            if (decision.Wait)
+            // FR-255: for the build check (no review payload) a required context GitHub hasn't registered for the head yet
+            // counts as pending, so the check waits for it (and fails it at 15 minutes) instead of passing or skipping.
+            var marked = MergeReadinessRules.MarkRequired(checks, rules.RequiredChecks, includeMissingRequired: payload is null);
+            var decision = payload is null ? null : ExternalCheckRules.Decide(marked, payload.ChecksWaitSince, now);
+            if (decision is { Wait: true })
             {
                 var pending = marked.Count(MergeReadinessRules.IsPending);
                 LogWaiting(logger, project.Id, pending);
                 throw new JobDeferredException(
                     $"Waiting for {pending} pending check(s) on the pull request before scoring (up to 15 minutes).",
                     decision.RecheckAt!.Value,
-                    AideJson.Serialize(payload with { ChecksWaitSince = decision.WaitingSince }));
+                    AideJson.Serialize(payload! with { ChecksWaitSince = decision.WaitingSince }));
             }
 
-            if (decision.TimedOut)
+            if (decision is { TimedOut: true })
             {
                 LogTimedOut(logger, project.Id);
+            }
+
+            if (payload is null && (!excerpts || RequiredPending(marked)))
+            {
+                return new CollectedChecks(marked, null, false) { HeadSha = head };
             }
 
             // FR-236: the failed required checks' output, annotations and job logs (each part optional, never failing the review).
@@ -185,7 +280,7 @@ public sealed partial class ExternalChecksCollector(
                     ExternalCheckRules.Excerpt,
                     timeout: null,
                     cancellationToken);
-            return new CollectedChecks(marked, decision.WaitedSeconds, decision.TimedOut) { Excerpts = Excerpts(project.Id, outcomes) };
+            return new CollectedChecks(marked, decision?.WaitedSeconds, decision?.TimedOut ?? false) { Excerpts = Excerpts(project.Id, outcomes), HeadSha = head };
         }
         catch (GitHubRateLimitedException ex)
         {
@@ -197,7 +292,7 @@ public sealed partial class ExternalChecksCollector(
         catch (GitHubApiException ex)
         {
             LogUnavailable(logger, project.Id, ex.Message);
-            return null;
+            return payload is null ? throw Unreadable(ex.Message) : null;
         }
     }
 
@@ -208,7 +303,7 @@ public sealed partial class ExternalChecksCollector(
     /// minutes). A version without a merge/pull request or a pushed branch has none; the host failing is logged and review
     /// goes on without them; a rate limit waits for the reset.
     /// </summary>
-    private async Task<CollectedChecks?> HostAsync(Project project, LifecycleJobPayload payload, GitHostTarget host, CancellationToken cancellationToken)
+    private async Task<CollectedChecks?> HostAsync(Project project, LifecycleJobPayload? payload, bool excerpts, GitHostTarget host, CancellationToken cancellationToken)
     {
         var versionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(project.Id, cancellationToken);
         var version = versionId is { } id
@@ -258,27 +353,31 @@ public sealed partial class ExternalChecksCollector(
         if (statuses.IsFailure)
         {
             LogUnavailable(logger, project.Id, statuses.Error!.Message);
-            return null;
+            return payload is null ? throw Unreadable(statuses.Error.Message) : null;
         }
 
         var checks = statuses.Value;
-        var decision = Domain.GitHosts.CommitStatusFindings.Wait(checks, payload.ChecksWaitSince, now);
-        if (decision.Wait)
+        var decision = payload is null ? null : Domain.GitHosts.CommitStatusFindings.Wait(checks, payload.ChecksWaitSince, now);
+        if (decision is { Wait: true })
         {
             var pending = checks.Count(MergeReadinessRules.IsPending);
             LogWaiting(logger, project.Id, pending);
             throw new JobDeferredException(
                 $"Waiting for {pending} pending pipeline job(s) or status(es) on the merge request before scoring (up to 15 minutes).",
                 decision.RecheckAt!.Value,
-                AideJson.Serialize(payload with { ChecksWaitSince = decision.WaitingSince }));
+                AideJson.Serialize(payload! with { ChecksWaitSince = decision.WaitingSince }));
         }
 
-        if (decision.TimedOut)
+        if (decision is { TimedOut: true })
         {
             LogTimedOut(logger, project.Id);
         }
 
         var source = host.Provider.Kind == GitProvider.Bitbucket ? Domain.GitHosts.CommitStatusHost.Bitbucket : Domain.GitHosts.CommitStatusHost.Gitlab;
+        if (payload is null && (!excerpts || RequiredPending(checks)))
+        {
+            return new CollectedChecks(checks, null, false) { Host = source, HeadSha = head };
+        }
 
         // FR-236: the failed required jobs' traces (GitLab) or failed step logs (Bitbucket Pipelines).
         // The provider reads the connection once, then fetches in parallel over HTTP only (the scoped DbContext isn't shared).
@@ -303,8 +402,10 @@ public sealed partial class ExternalChecksCollector(
             }
         }
 
-        return new CollectedChecks(checks, decision.WaitedSeconds, decision.TimedOut) { Host = source, Excerpts = Excerpts(project.Id, outcomes) };
+        return new CollectedChecks(checks, decision?.WaitedSeconds, decision?.TimedOut ?? false) { Host = source, Excerpts = Excerpts(project.Id, outcomes), HeadSha = head };
     }
+
+    private static bool RequiredPending(IReadOnlyList<CheckObservation> checks) => checks.Any(c => c.Required && MergeReadinessRules.IsPending(c));
 
     /// <summary>The most failed required checks whose details are fetched in one review.</summary>
     public const int MaxDetailedChecks = 10;

@@ -1,4 +1,5 @@
 using Aide.Domain.Entities;
+using Aide.Domain.Projects;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,12 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.ComplianceThreshold).HasPrecision(3, 2);
         builder.Property(p => p.ReviewCycle).HasDefaultValue(0);
         builder.Property(p => p.ExtraReviewCycles).HasDefaultValue(0);
+
+        // FR-258, §5: existing rows get 5. The sentinel is the default, so an explicit 0 (check off) is still written.
+        builder.Property(p => p.MaxBuildFixAttempts)
+            .HasDefaultValue(ProjectDefaults.MaxBuildFixAttempts)
+            .HasSentinel(ProjectDefaults.MaxBuildFixAttempts)
+            .IsRequired();
         builder.Property(p => p.ReleasedVersion).HasColumnType("text");
         builder.Property(p => p.DevelopmentVersion).HasColumnType("text");
         builder.Property(p => p.MergeStrategy).HasDefaultValue(MergeStrategy.AideMerges).IsRequired();

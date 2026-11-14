@@ -95,9 +95,10 @@ public class PromptTemplateTests
     [InlineData(AgentKind.SpecGenerator, "7", new[] { "PROJECT_REQUEST" })]
     [InlineData(AgentKind.PlanGenerator, "7", new[] { "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "MAX_FILES_PER_STEP" })] // FR-242: v7 (deployment files)
     [InlineData(AgentKind.CodeGenerator, "5", new[] { "MAX_FILES_PER_STEP", "STEP_NUMBER", "PROJECT_REQUEST", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "STEP_TITLE", "STEP_TASK", "DECLARED_FILES" })]
-    [InlineData(AgentKind.CodeReview, "9", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })] // FR-238: v9 (failure steps)
+    [InlineData(AgentKind.CodeReview, "10", new[] { "REVIEW_CYCLE", "TECHNICAL_SPECIFICATION", "IMPLEMENTATION_PLAN", "CODE", "MAX_FILES_PER_STEP" })] // FR-247: v10 (finding ids, waivers)
     [InlineData(AgentKind.RepositoryAnalyst, "3", new[] { "PROJECT_NAME" })]
     [InlineData(AgentKind.StackAnalyst, "3", new[] { "PROJECT_NAME", "CATALOG_OPTIONS" })]
+    [InlineData(AgentKind.BuildFix, "1", new[] { "FAILURES", "ERROR_SUMMARY", "PLAN_STEPS", "MAX_FILES_PER_STEP" })] // FR-256: build_fix v1
     public void FR24_Every_agent_has_a_versioned_embedded_template_with_its_required_inputs(AgentKind agent, string version, string[] required)
     {
         var template = new EmbeddedPromptLibrary().Template(agent);

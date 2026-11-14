@@ -2111,6 +2111,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{projectId}/versions/{versionId}/build-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The build checks of a release version, newest first (members, FR-259): per review cycle and attempt, the head commit, status, the preview and CI sources with their results, the failures with their log excerpts, and the build-fix step numbers planned from it. */
+        get: operations["ListBuildChecks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/git/pull-request": {
         parameters: {
             query?: never;
@@ -2854,7 +2871,7 @@ export interface components {
          * @description The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70) and the Stack Analyst (FR-180).
          * @enum {unknown}
          */
-        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
+        AgentKind: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst" | "build_fix";
         /** @description Model id per agent; an omitted or `null` agent uses the default model. */
         AgentModelsDto: {
             ideaRefinement?: null | string;
@@ -3304,6 +3321,117 @@ export interface components {
             isAdmin: null | boolean;
             projects: components["schemas"]["BitbucketProjectDto"][];
             projectsTruncated: boolean;
+        };
+        /**
+         * @description One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,
+         *     k the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,
+         *     `skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers
+         *     of the build-fix steps planned from it, and when it started and completed.
+         */
+        BuildCheckDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            releaseVersionId: string;
+            /** Format: int32 */
+            reviewCycle: number;
+            /** Format: int32 */
+            attempt: number;
+            headSha: string;
+            status: components["schemas"]["BuildCheckStatus"];
+            sources: components["schemas"]["BuildCheckSourceDto"][];
+            failures: components["schemas"]["BuildCheckFailureDto"][];
+            fixStepNumbers: number[];
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+        };
+        /**
+         * @description A failure a build check found (FR-256, FR-259): the failure id (as in review findings), its source
+         *         (`preview` or `check`), the message and the redacted log excerpt (§4.38; `null` when there is none).
+         */
+        BuildCheckFailureDto: {
+            failureId: string;
+            source: string;
+            message: string;
+            excerpt: null | string;
+        };
+        /**
+         * @description A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion
+         *         (`success`, `failure`, `timed_out`, …; `null` while pending) and a link to it.
+         */
+        BuildCheckSourceDto: {
+            name: string;
+            kind: components["schemas"]["BuildCheckSourceKind"];
+            conclusion: null | string;
+            url: null | string;
+        };
+        /**
+         * @description The kind of a build check source (§5): the version's preview rollout (`preview`) or a required CI check
+         *                 on the head commit (`check`).
+         * @enum {unknown}
+         */
+        BuildCheckSourceKind: "preview" | "check";
+        /**
+         * @description The state of one build check attempt (§4.47, FR-254–FR-258). Wire values: `waiting`, `passed`,
+         *                 `failed`, `skipped`, `exhausted`, `cancelled`.
+         * @enum {unknown}
+         */
+        BuildCheckStatus: "waiting" | "passed" | "failed" | "skipped" | "exhausted" | "cancelled";
+        /**
+         * @description FR-259: the live `buildCheckUpdated` message, pushed on the project's live channel (the execution event stream)
+         *     when a build check starts, changes state or has fix steps planned: the project, and the check as the list endpoint
+         *     returns it. Not an HTTP response: the schema is added to the OpenAPI components for the generated client.
+         */
+        BuildCheckUpdatedMessage: {
+            /** Format: uuid */
+            projectId: string;
+            /**
+             * @description One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,
+             *     k the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,
+             *     `skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers
+             *     of the build-fix steps planned from it, and when it started and completed.
+             */
+            check: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                releaseVersionId: string;
+                /** Format: int32 */
+                reviewCycle: number;
+                /** Format: int32 */
+                attempt: number;
+                headSha: string;
+                /**
+                 * @description The state of one build check attempt (§4.47, FR-254–FR-258). Wire values: `waiting`, `passed`,
+                 *                 `failed`, `skipped`, `exhausted`, `cancelled`.
+                 * @enum {unknown}
+                 */
+                status: "waiting" | "passed" | "failed" | "skipped" | "exhausted" | "cancelled";
+                sources: {
+                    name: string;
+                    /**
+                     * @description The kind of a build check source (§5): the version's preview rollout (`preview`) or a required CI check
+                     *                 on the head commit (`check`).
+                     * @enum {unknown}
+                     */
+                    kind: "preview" | "check";
+                    conclusion: null | string;
+                    url: null | string;
+                }[];
+                failures: {
+                    failureId: string;
+                    source: string;
+                    message: string;
+                    excerpt: null | string;
+                }[];
+                fixStepNumbers: number[];
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                completedAt: null | string;
+            };
         };
         /**
          * @description One compliance category (§4.7): its weight, the agent's score (0–1), the deterministic penalty (sum of the fixed
@@ -3780,6 +3908,11 @@ export interface components {
             maxFilesPerStep?: number;
             /** Format: int32 */
             maxReviewCycles?: number;
+            /**
+             * Format: int32
+             * @description FR-258: build-fix attempts per review cycle before review (0–10, default 5); 0 turns the build check off.
+             */
+            maxBuildFixAttempts?: number;
             /**
              * Format: int64
              * @description Token budget (at least 1000); `null` or omitted means unlimited.
@@ -4397,7 +4530,9 @@ export interface components {
          * @description One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on
          *     earlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the
          *     branch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider
-         *     (no remote) and before the step is committed.
+         *     (no remote) and before the step is committed. FR-256, FR-259: `origin` is `plan` for the plan's own steps and
+         *     `build_fix` for steps planned after a failed build check; `buildCheckAttempt` is that check's attempt (the
+         *     "Build fix · attempt n" badge), `null` for plan steps.
          */
         ExecutionStepDto: {
             /** Format: uuid */
@@ -4421,12 +4556,16 @@ export interface components {
             completedAt: null | string;
             fileManifest: null | components["schemas"]["FileManifestEntryDto"][];
             commitUrl: null | string;
+            origin: components["schemas"]["StepOrigin"];
+            /** Format: int32 */
+            buildCheckAttempt: null | number;
         };
         /**
          * @description One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the
          *     base Code Generator), status, attempt count, declared vs produced files, and the commit once accepted
          *     (`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the 0.2.0 agent key a plan locked before
-         *     the upgrade named, which now runs as `agentKey`; null otherwise.
+         *     the upgrade named, which now runs as `agentKey`; null otherwise. FR-256, FR-259: `origin` (`plan` or
+         *     `build_fix`) and `buildCheckAttempt` (the attempt of the build check a build-fix step fixes; null for plan steps).
          */
         ExecutionStepSummaryDto: {
             /** Format: uuid */
@@ -4442,7 +4581,10 @@ export interface components {
             producedFiles: components["schemas"]["FileManifestEntryDto"][];
             commitSha: null | string;
             commitUrl: null | string;
-            legacyAgentKey?: null | string;
+            legacyAgentKey: null | string;
+            origin: components["schemas"]["StepOrigin"];
+            /** Format: int32 */
+            buildCheckAttempt: null | number;
         };
         /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
         ExecutionStepsDto: {
@@ -4487,6 +4629,8 @@ export interface components {
             action: components["schemas"]["FileAction"];
             contentHash: string;
         };
+        /** @enum {unknown} */
+        FindingHandling: "step" | "waived" | "waiver_refused" | "no_step" | null;
         /**
          * @description Where a review violation came from (§4.7): a deterministic check or the Code Review agent.
          * @enum {unknown}
@@ -5641,6 +5785,8 @@ export interface components {
             maxFilesPerStep: number;
             /** Format: int32 */
             maxReviewCycles: number;
+            /** Format: int32 */
+            maxBuildFixAttempts: number;
             /** Format: int64 */
             tokenBudget: null | number;
             /** Format: int64 */
@@ -6931,6 +7077,12 @@ export interface components {
             durationMs: number;
             status: components["schemas"]["AgentRunStatus"];
         };
+        /**
+         * @description Where an execution step came from (FR-256): the approved plan (`plan`) or the build-fix agent after a
+         *                 failed build check (`build_fix`). Steps stored before 0.6.1 part 2 read as `plan`.
+         * @enum {unknown}
+         */
+        StepOrigin: "plan" | "build_fix";
         /** @enum {unknown} */
         StepStatus: "pending" | "in_progress" | "completed" | "rejected" | "blocked" | "invalidated";
         /** @description A Guardian violation recorded on a step's last rejected attempt (§4.6, FR-32). Never contains secret values. */
@@ -7162,6 +7314,11 @@ export interface components {
             /** Format: int32 */
             maxReviewCycles?: null | number;
             /**
+             * Format: int32
+             * @description FR-258: build-fix attempts per review cycle (0–10); 0 turns the build check off.
+             */
+            maxBuildFixAttempts?: null | number;
+            /**
              * Format: int64
              * @description Sets the token budget (at least 1000). To remove the budget, send `clearTokenBudget: true`.
              */
@@ -7181,7 +7338,14 @@ export interface components {
             /** @description FR-177: the user turned off "Credit me on commits made by Tevrin". */
             commitCreditOptOut?: boolean;
         };
-        /** @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known. */
+        /**
+         * @description A violation found by a deterministic check or the review agent (§4.7). `file` and `evidence` are set when known.
+         *     FR-246, FR-250 (0.6.1 part 2): a deterministic finding has its `findingId` (`finding:&lt;kind&gt;:&lt;subject&gt;`, or a
+         *     failure's `failure:` id) and how the review's plan handled it: `handling` is `step` (`stepNumber` is the
+         *     plan step), `waived` (`waivedReason` says why; no penalty), `waiver_refused` (critical, secret and failure
+         *     findings can't be waived; `stepNumber` when it got a step) or `no_step`. All four are `null` for agent
+         *     findings and reports stored before 0.6.1 part 2.
+         */
         ViolationDto: {
             category: components["schemas"]["ReviewCategory"];
             severity: components["schemas"]["Severity"];
@@ -7189,6 +7353,11 @@ export interface components {
             message: string;
             file: null | string;
             evidence: null | string;
+            findingId?: null | string;
+            handling?: null | components["schemas"]["FindingHandling"];
+            /** Format: int32 */
+            stepNumber?: null | number;
+            waivedReason?: null | string;
         };
         /** @enum {unknown} */
         ViolationSeverity: "error" | "warning";
@@ -11495,7 +11664,7 @@ export interface operations {
         parameters: {
             query?: {
                 projectId?: string;
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst" | "build_fix";
                 status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
                 provider?: "anthropic" | "openai" | "ollama" | "fake";
                 model?: string;
@@ -15189,7 +15358,7 @@ export interface operations {
     ListRuns: {
         parameters: {
             query?: {
-                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst";
+                agent?: "idea_refinement" | "spec_generator" | "plan_generator" | "code_generator" | "code_review" | "repository_analyst" | "stack_analyst" | "build_fix";
                 page?: number;
                 limit?: number;
                 releaseVersionId?: string;
@@ -15804,6 +15973,47 @@ export interface operations {
             };
             /** @description PHASE_PRECONDITION_FAILED (not in execution), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListBuildChecks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildCheckDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description NOT_FOUND: the project, or the release version in this project. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

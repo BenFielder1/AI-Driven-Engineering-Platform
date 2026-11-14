@@ -25,13 +25,15 @@ export const changelog: readonly ChangelogEntry[] = [
   {
     version: '0.6.1',
     date: null,
-    title: 'Branch names, scrollbars and failure-aware review',
+    title: 'Failure-aware review and a build check before review',
     asAide: false,
     highlights: [
-      'New project and release branches start with tevrin/. Projects that already have an aide/ branch keep it, and their branch-control config still passes.',
-      'A thin, themed scrollbar in the app and on this site, in light and dark.',
+      'New project and release branches start with tevrin/ (existing aide/ branches keep working), and a thin, themed scrollbar in light and dark.',
       'When a build, deploy or CI check fails, review sees the log excerpt and writes a specific fix step with it.',
       'Plans add the deployment config files each platform needs, such as vercel.json, when the plan leaves them out.',
+      'Every deterministic finding has a stable id and gets a fix step in the plan, or a waiver Tevrin checks.',
+      'More accurate checks: catch-all and file-based routes, files in public/, and dependencies used only at runtime.',
+      'A build check before review: when the preview build or CI fails, a build-fix agent plans fixes, with up to 5 fix attempts per cycle.',
     ],
     specHref: docsUrl('history/0.6.1/'),
   },

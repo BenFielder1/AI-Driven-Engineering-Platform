@@ -183,7 +183,8 @@ public sealed class ReviewReader(AideDbContext db, ExecutionRunReader runs)
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
+            // FR-249: a report with waivers but no checks and no preview stores only "waivers".
+            if (root.ValueKind != JsonValueKind.Object || !(root.TryGetProperty("checks", out _) || root.TryGetProperty("preview", out _)))
             {
                 return null;
             }
@@ -283,7 +284,7 @@ public sealed class ReviewReader(AideDbContext db, ExecutionRunReader runs)
                 c.Penalty,
                 c.Score,
                 [.. c.Evidence.Select(e => new EvidenceDto(e.File, e.Reason))]))],
-            [.. report.Violations.Select(v => new ViolationDto(v.Category, v.Severity, v.Source, v.Message, v.Path, v.Evidence))],
+            [.. report.Violations.Select(ToDto)],
             report.MissingFeatures,
             report.DriftLevel,
             [.. report.DriftAreas.Select(d => new DriftAreaDto(d.Area, d.Severity, d.Description))],
@@ -291,6 +292,23 @@ public sealed class ReviewReader(AideDbContext db, ExecutionRunReader runs)
             report.Decision == ReviewDecision.EscalationRequired ? report.EscalationReason : null,
             report.OptimizationPlanArtifactId,
             report.CreatedAt);
+    }
+
+    /// <summary>
+    /// A stored finding as the API shows it. FR-246, FR-250: <c>findingId</c> is the finding id (a failure finding's
+    /// failure id); <c>handling</c>, <c>stepNumber</c> and <c>waivedReason</c> are <c>null</c> for agent findings and reports
+    /// stored before 0.6.1 part 2.
+    /// </summary>
+    public static ViolationDto ToDto(ReviewFinding finding)
+    {
+        ArgumentNullException.ThrowIfNull(finding);
+        return new ViolationDto(finding.Category, finding.Severity, finding.Source, finding.Message, finding.Path, finding.Evidence)
+        {
+            FindingId = finding.FindingId ?? finding.FailureId,
+            Handling = finding.Handling,
+            StepNumber = finding.StepNumber,
+            WaivedReason = finding.WaivedReason,
+        };
     }
 }
 

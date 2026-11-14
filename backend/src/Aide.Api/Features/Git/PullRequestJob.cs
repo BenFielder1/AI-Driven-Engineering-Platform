@@ -116,6 +116,7 @@ public sealed partial class PullRequestJobHandler(
     AgentJobInputs inputs,
     LifecycleService lifecycle,
     Deployments.RolloutScheduler rollouts,
+    BuildChecks.BuildCheckService buildChecks,
     Microsoft.Extensions.Options.IOptions<Notifications.AppOptions> appOptions,
     TimeProvider time,
     ILogger<PullRequestJobHandler> logger) : IJobHandler
@@ -206,18 +207,29 @@ public sealed partial class PullRequestJobHandler(
                 "The Git settings changed while the pull request was being opened; retrying against the new repository.", transient: true, ErrorCodes.Conflict);
         }
 
+        var gate = BuildChecks.BuildCheckGate.Off;
+        string? head = null;
+        Guid? versionId = null;
+        var previewQueued = false;
         if (await db.CurrentReleaseVersionAsync(project.Id, cancellationToken) is { } version)
         {
             version.PullRequestNumber = opened.Number;
             version.PullRequestUrl = opened.Url;
+            versionId = version.Id;
 
             // FR-147 (replaces FR-90's per-run preview): the PR opened or updated, so its head is rolled out to the preview
             // environment (when deployment is set up); the review that follows waits for the rollout. Queued in this
             // transaction, run by the preview_rollout job.
-            var head = comparison?.HeadSha ?? await HeadAsync(project.Id, working.Branch, cancellationToken);
-            if (head is not null)
+            head = comparison?.HeadSha ?? await HeadAsync(project.Id, working.Branch, cancellationToken);
+
+            // FR-254, §4.47: after execution, a build check of the head runs before Review. A check already waiting (or its
+            // fix being planned) only records the PR; a finished check of this head advances with no new rollout.
+            gate = project.CurrentPhase == Phase.Execution
+                ? await buildChecks.GateAsync(project, version.Id, head, cancellationToken)
+                : BuildChecks.BuildCheckGate.Off;
+            if (head is not null && gate is not (BuildChecks.BuildCheckGate.Advance or BuildChecks.BuildCheckGate.Pending))
             {
-                await rollouts.EnqueuePreviewAsync(project.Id, version.Id, working.Branch, head, Domain.Entities.DeploymentTrigger.Auto, null, now, cancellationToken);
+                previewQueued = await rollouts.EnqueuePreviewAsync(project.Id, version.Id, working.Branch, head, Domain.Entities.DeploymentTrigger.Auto, null, now, cancellationToken) is not null;
             }
         }
 
@@ -250,6 +262,26 @@ public sealed partial class PullRequestJobHandler(
         {
             // Review: the project is already there (a writer advanced by hand, or this is a retry); only record the PR.
             await SaveAsync(cancellationToken);
+            return;
+        }
+
+        if (gate == BuildChecks.BuildCheckGate.Start)
+        {
+            // FR-254: the project stays in execution (status building) while the check waits; with nothing to wait for it
+            // is skipped at once and the advance below runs.
+            var check = await buildChecks.StartAsync(
+                project, versionId!.Value, head!, previewQueued, working.Provider.Kind != GitProvider.Local, now, cancellationToken);
+            if (check.Status == Domain.Execution.BuildCheckStatus.Waiting)
+            {
+                await SaveAsync(cancellationToken);
+                LogBuildCheckStarted(logger, check.Attempt);
+                return;
+            }
+        }
+        else if (gate == BuildChecks.BuildCheckGate.Pending)
+        {
+            await SaveAsync(cancellationToken);
+            LogSkipped(logger, "a build check is waiting or its fix is being planned; only the pull request was recorded");
             return;
         }
 
@@ -389,6 +421,9 @@ public sealed partial class PullRequestJobHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The pull request is recorded but the advance to review was refused ({ErrorCode}): {Reason}")]
     private static partial void LogAdvanceRefused(ILogger logger, string errorCode, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pull request recorded; build check attempt {Attempt} started before review")]
+    private static partial void LogBuildCheckStarted(ILogger logger, int attempt);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Comparing the project branch with the default branch failed ({ErrorType})")]
     private static partial void LogCompareFailed(ILogger logger, string errorType);

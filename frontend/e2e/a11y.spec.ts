@@ -126,6 +126,17 @@ const targets: Target[] = [
     ready: (p) => p.getByRole('list', { name: 'Execution steps' }),
   },
   {
+    // FR-259 (SPEC 0.6.1 §3.8): the Build check panel. The fixture project has a Fake Vercel preview target, so the
+    // check before each review ran (and passed); the released project's Execution page shows the newest one.
+    name: 'execution build check panel',
+    path: () => `/projects/${fixture().projectId}/execution`,
+    signedIn: true,
+    ready: (p) => p.getByRole('region', { name: 'Build check' }),
+    prepare: async (p) => {
+      await expect(p.getByTestId('build-check-summary')).toBeVisible()
+    },
+  },
+  {
     name: 'review',
     path: () => `/projects/${fixture().projectId}/review`,
     signedIn: true,

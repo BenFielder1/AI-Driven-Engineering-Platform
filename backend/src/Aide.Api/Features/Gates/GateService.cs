@@ -26,6 +26,7 @@ public sealed partial class GateService(
     RollbackWriter rollbacks,
     JobEnqueuer jobs,
     WorkingCopyPreparer workingCopies,
+    BuildChecks.BuildCheckService buildChecks,
     TimeProvider time,
     ILogger<GateService> logger)
 {
@@ -204,6 +205,24 @@ public sealed partial class GateService(
         }
 
         var steps = await ExecutionQueries.CurrentStepsAsync(db, planId, track: true, cancellationToken);
+
+        // §4.47, FR-258: "continue" on a blocked build-fix step ends its build check exhausted: the unfinished fix steps are
+        // dropped and the pull request job advances to Review with the failures (no retry of the fix).
+        var exhausted = false;
+        foreach (var checkId in steps.Where(s => s.Status == StepStatus.Blocked && s.Origin == StepOrigin.BuildFix && s.BuildCheckId is not null)
+            .Select(s => s.BuildCheckId!.Value).Distinct().ToList())
+        {
+            if (await db.BuildChecks.FirstOrDefaultAsync(c => c.Id == checkId, cancellationToken) is { } check)
+            {
+                exhausted |= await buildChecks.ExhaustAsync(check, planId, actor, now, cancellationToken);
+            }
+        }
+
+        if (exhausted)
+        {
+            return;
+        }
+
         foreach (var step in steps)
         {
             var change = StepRules.Unblock(step.Status);

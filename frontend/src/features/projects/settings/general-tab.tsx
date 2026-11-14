@@ -12,7 +12,7 @@ import { TextField } from '../../../components/ui/text-field'
 import { applyFieldErrors, errorMessage, isApiError } from '../../../lib/errors'
 import { approvalModeDescriptions, approvalModeLabels, approvalModes, formatNumber } from '../labels'
 import { useUpdateProject, type Project } from '../projects-api'
-import { generalSchema, limits, toBudget, type GeneralValues } from '../schemas'
+import { BUILD_FIX_HINT, generalSchema, limits, toBudget, type GeneralValues } from '../schemas'
 
 const fieldIds = {
   name: 'settings-name',
@@ -20,6 +20,7 @@ const fieldIds = {
   complianceThreshold: 'settings-threshold',
   maxFilesPerStep: 'settings-max-files',
   maxReviewCycles: 'settings-max-cycles',
+  maxBuildFixAttempts: 'settings-max-build-fix-attempts',
   tokenBudget: 'settings-token-budget',
 } as const
 
@@ -30,6 +31,7 @@ function toValues(p: Project): GeneralValues {
     complianceThreshold: p.complianceThreshold.toFixed(2),
     maxFilesPerStep: String(p.maxFilesPerStep),
     maxReviewCycles: String(p.maxReviewCycles),
+    maxBuildFixAttempts: String(p.maxBuildFixAttempts),
     tokenBudget: p.tokenBudget === null ? '' : String(p.tokenBudget),
   }
 }
@@ -51,6 +53,9 @@ function toPatch(p: Project, v: GeneralValues): Schemas['UpdateProjectRequest'] 
   }
   if (Number(v.maxReviewCycles) !== p.maxReviewCycles) {
     patch.maxReviewCycles = Number(v.maxReviewCycles)
+  }
+  if (Number(v.maxBuildFixAttempts) !== p.maxBuildFixAttempts) {
+    patch.maxBuildFixAttempts = Number(v.maxBuildFixAttempts)
   }
   const budget = toBudget(v.tokenBudget)
   if (budget === null && p.tokenBudget !== null) {
@@ -92,6 +97,9 @@ export function GeneralReadOnly({ project }: { project: Project }) {
         <Row term="Compliance threshold">{project.complianceThreshold.toFixed(2)}</Row>
         <Row term="Max files per step">{project.maxFilesPerStep}</Row>
         <Row term="Max review cycles">{project.maxReviewCycles}</Row>
+        <Row term="Build fix attempts">
+          {project.maxBuildFixAttempts === 0 ? '0 (build check off)' : project.maxBuildFixAttempts}
+        </Row>
         <Row term="Token budget">{budgetText(project)}</Row>
       </dl>
     </section>
@@ -189,6 +197,18 @@ export function GeneralForm({ project }: { project: Project }) {
             max={limits.cyclesMax}
             error={errors.maxReviewCycles?.message}
             {...register('maxReviewCycles')}
+          />
+          <TextField
+            id={fieldIds.maxBuildFixAttempts}
+            label="Build fix attempts"
+            hint={`0–10. ${BUILD_FIX_HINT}.`}
+            type="number"
+            inputMode="numeric"
+            min={limits.buildFixMin}
+            max={limits.buildFixMax}
+            step={1}
+            error={errors.maxBuildFixAttempts?.message}
+            {...register('maxBuildFixAttempts')}
           />
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">

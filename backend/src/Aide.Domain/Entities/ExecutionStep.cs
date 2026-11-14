@@ -49,6 +49,12 @@ public sealed class ExecutionStep
 
     public string? CommitSha { get; set; }
 
+    /// <summary>FR-256: <c>plan</c> for the approved plan's steps, <c>build_fix</c> for steps planned after a failed build check.</summary>
+    public StepOrigin Origin { get; set; } = StepOrigin.Plan;
+
+    /// <summary>The build check a <c>build_fix</c> step fixes; null for plan steps.</summary>
+    public Guid? BuildCheckId { get; set; }
+
     public DateTimeOffset? StartedAt { get; set; }
 
     public DateTimeOffset? CompletedAt { get; set; }

@@ -46,6 +46,7 @@ import { hostSlotsOfChoice, hostValues, isHostChosen, partsOfHost, wizardHosts, 
 import { WizardHostsStep } from './wizard-hosts-step'
 import { defaultReleasedTag, releasedOptions, semverOfTag } from './released-versions'
 import {
+  BUILD_FIX_HINT,
   limits,
   localSourcePathMax,
   NEVER_RELEASED,
@@ -104,6 +105,7 @@ const fieldIds: Record<Field, string> = {
   complianceThreshold: 'project-threshold',
   maxFilesPerStep: 'project-max-files',
   maxReviewCycles: 'project-max-cycles',
+  maxBuildFixAttempts: 'project-max-build-fix-attempts',
   tokenBudget: 'project-token-budget',
   gitMode: 'project-git-provider',
   repoUrl: 'project-repo-url',
@@ -146,7 +148,7 @@ const stepFields: Record<StepKey, readonly Field[]> = {
   repository: ['gitMode', 'gitlabConnectionId', 'bitbucketConnectionId', 'repoFullName', 'repoUrl', 'defaultBranch', 'gitToken', 'releasedTag', 'localSourcePath'],
   version: ['initialVersion', 'developmentVersion'],
   stack: ['stackKind', ...wizardStackFieldList],
-  configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'tokenBudget', ...llmFields],
+  configuration: ['approvalMode', 'complianceThreshold', 'maxFilesPerStep', 'maxReviewCycles', 'maxBuildFixAttempts', 'tokenBudget', ...llmFields],
   deployment: ['deploymentMode', 'vercelConnectionId', 'vercelProjectMode', 'vercelProjectName', 'vercelRootDirectory', 'vercelProjectId', ...hostFieldNames],
   review: [],
 }
@@ -202,6 +204,7 @@ const serverFieldMap: Record<string, Field> = {
   compliancethreshold: 'complianceThreshold',
   maxfilesperstep: 'maxFilesPerStep',
   maxreviewcycles: 'maxReviewCycles',
+  maxbuildfixattempts: 'maxBuildFixAttempts',
   tokenbudget: 'tokenBudget',
   'git.mode': 'gitMode',
   'git.provider': 'gitMode',
@@ -356,6 +359,7 @@ function toRequest(v: WizardValues): Schemas['CreateProjectRequest'] {
     complianceThreshold: Number(v.complianceThreshold),
     maxFilesPerStep: Number(v.maxFilesPerStep),
     maxReviewCycles: Number(v.maxReviewCycles),
+    maxBuildFixAttempts: Number(v.maxBuildFixAttempts),
     tokenBudget: toBudget(v.tokenBudget),
     git: toGitRequest(v),
     // FR-88: `deployment` only when Vercel is chosen without a stack (skipping omits it).
@@ -1625,6 +1629,18 @@ export function NewProjectWizard({ initialSource }: { initialSource?: Source } =
                   error={errors.maxReviewCycles?.message}
                   {...register('maxReviewCycles')}
                 />
+                <TextField
+                  id={fieldIds.maxBuildFixAttempts}
+                  label="Build fix attempts"
+                  hint={`0–10. Default 5. ${BUILD_FIX_HINT}.`}
+                  type="number"
+                  inputMode="numeric"
+                  min={limits.buildFixMin}
+                  max={limits.buildFixMax}
+                  step={1}
+                  error={errors.maxBuildFixAttempts?.message}
+                  {...register('maxBuildFixAttempts')}
+                />
               </div>
               <TextField
                 id={fieldIds.tokenBudget}
@@ -2070,6 +2086,7 @@ function ReviewSummary({
         <SummaryRow term="Compliance threshold">{Number(values.complianceThreshold).toFixed(2)}</SummaryRow>
         <SummaryRow term="Max files per step">{values.maxFilesPerStep}</SummaryRow>
         <SummaryRow term="Max review cycles">{values.maxReviewCycles}</SummaryRow>
+        <SummaryRow term="Build fix attempts">{values.maxBuildFixAttempts}</SummaryRow>
         <SummaryRow term="Token budget">
           {values.tokenBudget.trim() ? `${Number(values.tokenBudget).toLocaleString()} tokens` : 'No limit'}
         </SummaryRow>

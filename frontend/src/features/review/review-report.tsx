@@ -17,7 +17,8 @@ import type { PreviewCheck } from '../deployments/deployments-api'
 import { previewBuildFailureTitles } from '../deployments/rollout-format'
 import { RolloutStateBadge, RolloutSteps } from '../deployments/rollout-parts'
 import { CategoryBarsChart } from './category-bars-chart'
-import type { CategoryScore, ComplianceReportDetail, FindingSeverity } from './review-api'
+import type { CategoryScore, ComplianceReportDetail, FindingSeverity, Violation } from './review-api'
+import { EvidenceBlock } from '../../components/shared/evidence-block'
 import { panelClass } from '../../components/shared/panel-class'
 import { cn } from '../../lib/utils'
 
@@ -176,52 +177,115 @@ function ViolationEvidence({ evidence, message }: { evidence: string; message: s
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs">Evidence:</span>
-      <pre
-        data-testid="violation-evidence"
-        tabIndex={0}
-        aria-label={`Evidence for ${message}`}
-        className="max-h-64 max-w-full overflow-auto rounded-lg border border-border/60 bg-background px-3 py-2 font-mono text-xs whitespace-pre"
-      >
-        {evidence}
-      </pre>
+      <EvidenceBlock text={evidence} label={`Evidence for ${message}`} testId="violation-evidence" />
     </div>
   )
 }
 
-/** FR-41: violations grouped by severity, each with its category, source, file and evidence. */
+/**
+ * FR-250: how the review's optimisation plan handled a deterministic finding: "Step n", "Waived: <reason>", "Waiver
+ * refused" (with "Step n" when it got a step) or "No step". Null for agent findings and reports stored before 0.6.1
+ * part 2, which then render exactly as before.
+ */
+export function findingHandlingLabel(v: Pick<Violation, 'handling' | 'stepNumber' | 'waivedReason'>): string | null {
+  const step = v.stepNumber != null ? `Step ${String(v.stepNumber)}` : null
+  switch (v.handling) {
+    case 'step':
+      return step ?? 'Step'
+    case 'waived':
+      return v.waivedReason ? `Waived: ${v.waivedReason}` : 'Waived'
+    case 'waiver_refused':
+      return step ? `Waiver refused · ${step}` : 'Waiver refused'
+    case 'no_step':
+      return 'No step'
+    default:
+      return null
+  }
+}
+
+/** FR-41: one violation with its category, source, file and evidence; FR-246/FR-250: its finding id and handling. */
+function ViolationItem({ v }: { v: Violation }) {
+  const waived = v.handling === 'waived'
+  const handling = findingHandlingLabel(v)
+  return (
+    <li
+      data-testid="violation"
+      className={cn('flex flex-col gap-0.5 border-l-2 pl-3 text-sm', waived ? 'border-border/60 text-muted-foreground' : 'border-border')}
+    >
+      <span className="flex flex-wrap items-center gap-2">
+        {waived && <Badge tone="neutral">Waived</Badge>}
+        <span>{v.message}</span>
+      </span>
+      <span className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+        {v.findingId && (
+          <span>
+            Id: <code className="font-mono text-xs">{v.findingId}</code>
+          </span>
+        )}
+        <span>Category: {reviewCategoryLabels[v.category]}</span>
+        <span>Source: {findingSourceLabels[v.source]}</span>
+        {v.file && (
+          <span>
+            File: <code>{v.file}</code>
+          </span>
+        )}
+      </span>
+      {handling && (
+        <span data-testid="finding-handling" className="text-xs font-medium text-foreground">
+          {handling}
+        </span>
+      )}
+      {v.evidence && <ViolationEvidence evidence={v.evidence} message={v.message} />}
+    </li>
+  )
+}
+
+/**
+ * FR-41: violations grouped by severity, each with its category, source, file and evidence. FR-249/FR-250: waived
+ * deterministic findings carry no penalty, so they are listed apart, in their own muted "Waived findings" group below the
+ * findings that count.
+ */
 export function ViolationsSection({ report }: { report: Report }) {
+  const counted = report.violations.filter((v) => v.handling !== 'waived')
+  const waived = report.violations.filter((v) => v.handling === 'waived')
   const groups = findingSeverities
-    .map((severity) => ({ severity, items: report.violations.filter((v) => v.severity === severity) }))
+    .map((severity) => ({ severity, items: counted.filter((v) => v.severity === severity) }))
     .filter((g) => g.items.length > 0)
   return (
     <ReportSection id="review-violations" title={`Violations (${String(report.violations.length)})`}>
-      {groups.length === 0 ? (
+      {report.violations.length === 0 ? (
         <p className="text-sm text-muted-foreground">No violations were found.</p>
       ) : (
-        groups.map(({ severity, items }) => (
-          <section key={severity} aria-labelledby={`violations-${severity}`} className="flex flex-col gap-2">
-            <h4 id={`violations-${severity}`} className="font-semibold">
-              {findingSeverityLabels[severity]} ({plural(items.length, 'violation')})
-            </h4>
-            <ul className="flex flex-col gap-2">
-              {items.map((v, i) => (
-                <li key={`${v.message}-${String(i)}`} className="flex flex-col gap-0.5 border-l-2 border-border pl-3 text-sm">
-                  <span>{v.message}</span>
-                  <span className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                    <span>Category: {reviewCategoryLabels[v.category]}</span>
-                    <span>Source: {findingSourceLabels[v.source]}</span>
-                    {v.file && (
-                      <span>
-                        File: <code>{v.file}</code>
-                      </span>
-                    )}
-                  </span>
-                  {v.evidence && <ViolationEvidence evidence={v.evidence} message={v.message} />}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))
+        <>
+          {groups.map(({ severity, items }) => (
+            <section key={severity} aria-labelledby={`violations-${severity}`} className="flex flex-col gap-2">
+              <h4 id={`violations-${severity}`} className="font-semibold">
+                {findingSeverityLabels[severity]} ({plural(items.length, 'violation')})
+              </h4>
+              <ul className="flex flex-col gap-2">
+                {items.map((v, i) => (
+                  <ViolationItem key={`${v.findingId ?? v.message}-${String(i)}`} v={v} />
+                ))}
+              </ul>
+            </section>
+          ))}
+          {waived.length > 0 && (
+            <section aria-labelledby="violations-waived" className="flex flex-col gap-2 border-t border-border/60 pt-3">
+              <h4 id="violations-waived" className="font-semibold">
+                Waived findings ({String(waived.length)})
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                The review explained why these are false positives. They carry no penalty for the rest of the version while
+                the finding is unchanged.
+              </p>
+              <ul className="flex flex-col gap-2">
+                {waived.map((v, i) => (
+                  <ViolationItem key={`${v.findingId ?? v.message}-${String(i)}`} v={v} />
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
     </ReportSection>
   )

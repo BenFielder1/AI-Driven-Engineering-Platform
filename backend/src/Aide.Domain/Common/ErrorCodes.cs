@@ -393,8 +393,11 @@ public static class ErrorCodes
         public const string DuplicatePath = "DUPLICATE_PATH";
         public const string SecretDetected = "SECRET_DETECTED";
 
+        /// <summary>FR-257, §4.48: a build-fix step added a way to hide build or test errors, or deleted a test file.</summary>
+        public const string BuildErrorsSuppressed = "BUILD_ERRORS_SUPPRESSED";
+
         public static IReadOnlyList<string> All { get; } =
-            [SingleStep, FileLimit, DependencyOrder, PlanAlignment, ScopeCreep, ProtectedPath, UnsafePath, DuplicatePath, SecretDetected];
+            [SingleStep, FileLimit, DependencyOrder, PlanAlignment, ScopeCreep, ProtectedPath, UnsafePath, DuplicatePath, SecretDetected, BuildErrorsSuppressed];
     }
 
     private static readonly Dictionary<string, int> HttpStatus = new(StringComparer.Ordinal)

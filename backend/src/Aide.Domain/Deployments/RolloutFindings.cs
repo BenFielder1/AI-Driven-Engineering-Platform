@@ -21,7 +21,7 @@ public sealed record RolloutMigrationOutcome(MigrationRunStatus Status, string? 
 /// pre-deploy migration failed", with the pre-deploy log.</item>
 /// <item>A failed Supabase BaaS preview migration is a critical <c>data_model</c> finding with the runner's error.</item>
 /// <item>Supabase security advisors: <c>ERROR</c> → major <c>security</c>, <c>WARN</c> → minor <c>security</c>; <c>INFO</c>
-/// is not a finding.</item>
+/// is not a finding. Each has the finding id <c>finding:advisor:&lt;name&gt;</c> (FR-246, §4.42, D-0.6.1-20).</item>
 /// </list>
 /// </summary>
 public static class RolloutFindings
@@ -62,7 +62,11 @@ public static class RolloutFindings
                     severity,
                     $"Supabase advisor: {advisor.Title}",
                     Source: FindingSource.Deterministic,
-                    Evidence: Cut(string.Join("\n", new[] { advisor.Detail, advisor.Remediation }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text ? text : advisor.Name)));
+                    Evidence: Cut(string.Join("\n", new[] { advisor.Detail, advisor.Remediation }.Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } text ? text : advisor.Name))
+                {
+                    // FR-246, §4.42, D-0.6.1-20: finding:advisor:<name>.
+                    FindingId = FindingIds.ForAdvisor(advisor.Name),
+                });
             }
         }
 

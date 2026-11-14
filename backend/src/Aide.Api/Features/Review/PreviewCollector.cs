@@ -35,13 +35,7 @@ public sealed partial class PreviewCollector(AideDbContext db, RolloutReader rol
             return null;
         }
 
-        var jobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == project.Id && j.Type == JobTypes.PreviewRollout && j.Status != JobStatus.Cancelled)
-            .OrderByDescending(j => j.CreatedAt)
-            .ThenByDescending(j => j.Id)
-            .Take(20)
-            .ToListAsync(cancellationToken);
-        var job = jobs.FirstOrDefault(j => RolloutScheduler.TryPayload(j.Payload)?.ReleaseVersionId == id);
+        var job = await NewestRolloutJobAsync(project.Id, id, cancellationToken);
         if (job is null)
         {
             return null;
@@ -77,7 +71,26 @@ public sealed partial class PreviewCollector(AideDbContext db, RolloutReader rol
         return new CollectedPreview(check, await FindingsAsync(rollout, cancellationToken));
     }
 
-    private async Task<IReadOnlyList<ReviewFinding>> FindingsAsync(RolloutDto rollout, CancellationToken cancellationToken)
+    /// <summary>
+    /// The version's newest preview rollout job that wasn't cancelled (the one review waits for), or <c>null</c>. FR-255: the
+    /// build check reads the same rollout, so review reuses the rollout the build check passed or failed.
+    /// </summary>
+    public async Task<Job?> NewestRolloutJobAsync(Guid projectId, Guid releaseVersionId, CancellationToken cancellationToken)
+    {
+        var jobs = await db.Jobs.AsNoTracking()
+            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.PreviewRollout && j.Status != JobStatus.Cancelled)
+            .OrderByDescending(j => j.CreatedAt)
+            .ThenByDescending(j => j.Id)
+            .Take(20)
+            .ToListAsync(cancellationToken);
+        return jobs.FirstOrDefault(j => RolloutScheduler.TryPayload(j.Payload)?.ReleaseVersionId == releaseVersionId);
+    }
+
+    /// <summary>The rollout of a preview rollout job (<see cref="RolloutReader.ForJobAsync"/>).</summary>
+    public Task<RolloutDto> RolloutAsync(Job job, CancellationToken cancellationToken) => rollouts.ForJobAsync(job, cancellationToken);
+
+    /// <summary>The rollout's deterministic findings, as review builds them (<see cref="RolloutFindings.For"/>).</summary>
+    public async Task<IReadOnlyList<ReviewFinding>> FindingsAsync(RolloutDto rollout, CancellationToken cancellationToken)
     {
         var components = rollout.Steps
             .Where(s => s.Step != RolloutStepKind.Migrations && s.Status is { } && s.Provider is { })
