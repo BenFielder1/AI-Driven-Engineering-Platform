@@ -50,10 +50,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M51 Check accuracy and finding ids (FR-246, FR-251–FR-253) — branch `build/tevrin-0.6.1-review`
 - [x] M52 Findings in the plan (FR-247–FR-250)
 - [x] M53 Build check before review (FR-254–FR-259)
-- [ ] M50 Release 0.6.1 (after M53) (FR-245): build PR #38 open; after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms
+- [ ] M50 Release 0.6.1 (after M53) (FR-245): part 1 merged in PR #38; part 2 build PR from `build/tevrin-0.6.1-review` after the audit minors are closed; after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms
 
 ## Decisions
-See SPEC §10 (D-0.6.1-1 … D-0.6.1-10). Build-time decisions are added below.
+See SPEC §10 (D-0.6.1-1 … D-0.6.1-21). Build-time decisions are added below.
 - **D-0.6.1-22** (Build, M53, Claude, assumed): build check details.
   - **Schema:** `build_checks` gains a nullable `superseded_at`; the (version, cycle, attempt) unique index applies only where it is null. Rollback and invalidation cancel the open check and supersede earlier ones, so a re-run starts at attempt 0 with the full budget. Fixes used = checks in force that have fix steps (amends §5).
   - **Steps:** fix steps are stored on the current plan and numbered after its highest step (unique (plan, step) index). The 1–5 limit counts the agent's own steps; Tevrin-added steps may exceed it.
@@ -71,7 +71,6 @@ See SPEC §10 (D-0.6.1-1 … D-0.6.1-10). Build-time decisions are added below.
 
 - GitLab/Bitbucket: "required" is project-level (`only_allow_merge_if_pipeline_succeeds`, `require_passing_builds_to_merge`), so a pipeline not yet started reads as no required checks and the build check is skipped (M53 review; GitHub fixed). Needs the providers to expose the setting.
 - Build check: a waiting check's sources are saved on every poll, but live pushes go out only on transitions.
-- E2E a11y target "execution build check panel" not yet run (CI is the first run).
 
 ## Manual checks (Ben)
 - GitHub job-log redirect: confirm the blob-storage request carries no `Authorization` header (relies on .NET's cross-host redirect stripping; not unit-tested).

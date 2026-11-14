@@ -304,14 +304,19 @@ describe('Build check panel (FR-259)', () => {
 describe('Build fix badge (FR-259)', () => {
   it('FR259_build_fix_steps_carry_the_build_fix_attempt_badge', async () => {
     const project = seedWithChecks((p, steps) => {
-      Object.assign(steps[2] ?? {}, { origin: 'build_fix', buildCheckAttempt: 2, title: 'Fix the missing db module' })
-      seedBuildCheck(p, { attempt: 2, status: 'failed', fixStepNumbers: [3] })
+      // Fix 2 is planned from attempt 1's failure, and attempt 2 checks it.
+      Object.assign(steps[1] ?? {}, { origin: 'build_fix', buildCheckAttempt: 0, title: 'Add the db module' })
+      Object.assign(steps[2] ?? {}, { origin: 'build_fix', buildCheckAttempt: 1, title: 'Fix the missing db module' })
+      seedBuildCheck(p, { attempt: 1, status: 'failed', fixStepNumbers: [3] })
     })
     await openExecution(project)
 
     const list = await screen.findByRole('list', { name: 'Execution steps' })
     const fix = within(list).getByRole('listitem', { name: /^Step 3:/ })
     expect(within(fix).getByTestId('build-fix-badge')).toHaveTextContent('Build fix · attempt 2')
+    // The first fix, planned from the initial check (attempt 0), is fix 1.
+    const firstFix = within(list).getByRole('listitem', { name: /^Step 2:/ })
+    expect(within(firstFix).getByTestId('build-fix-badge')).toHaveTextContent('Build fix · attempt 1')
     const plan = within(list).getByRole('listitem', { name: /^Step 1:/ })
     expect(within(plan).queryByTestId('build-fix-badge')).not.toBeInTheDocument()
   })

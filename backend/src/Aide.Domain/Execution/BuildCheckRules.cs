@@ -282,7 +282,7 @@ public static class BuildCheckRules
         {
             foreach (var c in preview.Components)
             {
-                sources.Add(new BuildCheckSource(Name(c), BuildCheckSourceKind.Preview, ComponentConclusion(c, failed), c.Url));
+                sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, ComponentConclusion(c, failed), c.Url));
             }
 
             if (preview.Components.Count == 0)
@@ -292,8 +292,8 @@ public static class BuildCheckRules
 
             if (failed)
             {
-                var broken = preview.Components.Where(c => c.Status == DeploymentStatus.Error).Select(Name).ToList();
-                failing.AddRange(broken.Count > 0 ? broken : preview.Components.Count > 0 ? preview.Components.Select(Name) : [PreviewSourceName]);
+                var broken = preview.Components.Where(c => c.Status == DeploymentStatus.Error).Select(c => Name(c, preview.Components)).ToList();
+                failing.AddRange(broken.Count > 0 ? broken : preview.Components.Count > 0 ? preview.Components.Select(c => Name(c, preview.Components)) : [PreviewSourceName]);
             }
 
             return null;
@@ -305,7 +305,7 @@ public static class BuildCheckRules
         {
             foreach (var c in preview.Components)
             {
-                sources.Add(new BuildCheckSource(Name(c), BuildCheckSourceKind.Preview, null, current is null ? null : c.Url));
+                sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, null, current is null ? null : c.Url));
             }
 
             return new Wait(decision.RecheckAt!.Value, decision.WaitingSince!.Value);
@@ -322,14 +322,14 @@ public static class BuildCheckRules
 
         foreach (var c in preview.Components)
         {
-            sources.Add(new BuildCheckSource(Name(c), BuildCheckSourceKind.Preview, unfinished.Contains(c) ? TimedOutConclusion : ComponentConclusion(c, false), current is null ? null : c.Url));
+            sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, unfinished.Contains(c) ? TimedOutConclusion : ComponentConclusion(c, false), current is null ? null : c.Url));
         }
 
         foreach (var c in unfinished)
         {
             var id = PreviewFailureId(c, preview.Components);
             timedOut.Add(new BuildCheckFailure(id, id, PreviewTimedOutMessage(c.Platform), FailureIds.Preview, null));
-            failing.Add(Name(c));
+            failing.Add(Name(c, preview.Components));
         }
 
         if (preview.Components.Count == 0)
@@ -398,8 +398,11 @@ public static class BuildCheckRules
         _ => "success",
     };
 
-    private static string Name(BuildCheckPreviewComponent c) =>
-        $"{DeploymentPlatforms.DisplayName(c.Platform)} preview ({c.Component.ToWire()})";
+    /// <summary>FR-259: "Vercel preview" when the preview has one component, else "Vercel preview (frontend)".</summary>
+    private static string Name(BuildCheckPreviewComponent c, IReadOnlyList<BuildCheckPreviewComponent> components) =>
+        components.Count == 1
+            ? $"{DeploymentPlatforms.DisplayName(c.Platform)} preview"
+            : $"{DeploymentPlatforms.DisplayName(c.Platform)} preview ({c.Component.ToWire()})";
 
     private static RolloutComponentOutcome Outcome(BuildCheckPreviewComponent c) =>
         new(c.Component, c.Platform, c.Status ?? DeploymentStatus.Queued, null, null, null, c.Url);

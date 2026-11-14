@@ -817,4 +817,60 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         var pr = Assert.Single(await QueuedAsync(factory, id, JobTypes.PullRequest));
         Assert.Contains(BuildCheckService.ExhaustedTrigger, pr.Payload, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task S4_47_Worked_example_attempts_0_and_1_fail_with_different_errors_attempt_2_passes_3_checks_2_fixes_then_review_with_no_new_rollout()
+    {
+        var app = AgentJobs.WithResponders(DeploymentHarness.Fake(factory), new FakeCodeReviewResponder(new FakeCodeReviewScript { ScoresByCycle = [0.93m] }));
+        using var fixture = await ExecutingAsync(app, maxAttempts: 5, deploy: true);
+        var id = fixture.Project.Id;
+        var errors = new[]
+        {
+            ModuleLog,
+            "> next build\n./app/page.tsx:4:10\nType error: Property 'id' does not exist on type 'Todo'.\nError: Command \"npm run build\" exited with 1",
+        };
+
+        // Attempt 0 and 1: the head's preview fails (each with its own error); a fix is planned and run after each.
+        await AgentJobs.RunQueuedAsync(app, id);
+        foreach (var log in errors)
+        {
+            await SettleNewestRolloutAsync(app, id);
+            await FailNewestPreviewAsync(app, id, log);
+            await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck)).Id);
+            await AgentJobs.RunQueuedAsync(app, id);
+        }
+
+        // Attempt 2: the preview builds; the check passes and review starts.
+        await SettleNewestRolloutAsync(app, id);
+        await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck)).Id);
+        Assert.Equal(Phase.Review, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        var checks = await ChecksAsync(app, id);
+        Assert.Equal([(0, BuildCheckStatus.Failed), (1, BuildCheckStatus.Failed), (2, BuildCheckStatus.Passed)], checks.Select(c => (c.Attempt, c.Status)));
+        Assert.NotEqual(Assert.Single(checks[0].Failures).Fingerprint, Assert.Single(checks[1].Failures).Fingerprint);
+        Assert.Contains(ModuleNotFound, checks[0].Failures[0].Excerpt, StringComparison.Ordinal);
+        Assert.Contains("Type error: Property 'id' does not exist", checks[1].Failures[0].Excerpt, StringComparison.Ordinal);
+        var fixes = await ProjectApi.WithDbAsync(app, db => db.ExecutionSteps.AsNoTracking().Where(s => s.ProjectId == id && s.Origin == StepOrigin.BuildFix).OrderBy(s => s.StepNumber).ToListAsync(Ct));
+        Assert.Equal([(3, (Guid?)checks[0].Id), (4, (Guid?)checks[1].Id)], fixes.Select(s => (s.StepNumber, s.BuildCheckId)));
+
+        // Three rollouts (one per checked commit) and none after the pass; review used the third.
+        var rollouts = await JobsOfAsync(app, id, JobTypes.PreviewRollout);
+        Assert.Equal(3, rollouts.Count);
+        var report = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        var used = JsonDocument.Parse(report.ExternalChecks!).RootElement.GetProperty("preview").GetProperty("rollout").GetProperty("rolloutId").GetString();
+        Assert.Equal(rollouts[^1].Id.ToString(), used);
+    }
+
+    [Fact]
+    public async Task FR258_Creating_a_project_with_maxBuildFixAttempts_11_is_400_VALIDATION()
+    {
+        using var session = await ApiSession.RegisterAsync(factory);
+        var response = await session.Client.PostAsJsonAsync(
+            "/api/projects",
+            new { name = ProjectApi.UniqueName(), idea = "Build a todo API.", git = new { provider = "local" }, maxBuildFixAttempts = 11 },
+            Ct);
+
+        await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.Validation);
+    }
 }

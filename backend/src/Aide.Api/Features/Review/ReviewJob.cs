@@ -454,6 +454,7 @@ public sealed partial class ReviewJobHandler(
         if (problem is null)
         {
             LogDroppedEvidence(parsed.Value);
+            LogRefusedWaivers(project.Id, cycle, parsed.Value, material.Findings);
             return new ReviewAgentOutcome(first, parsed.Value);
         }
 
@@ -472,6 +473,7 @@ public sealed partial class ReviewJobHandler(
         }
 
         LogDroppedEvidence(reparsed.Value);
+        LogRefusedWaivers(project.Id, cycle, reparsed.Value, material.Findings);
         return new ReviewAgentOutcome(second, reparsed.Value);
     }
 
@@ -479,6 +481,19 @@ public sealed partial class ReviewJobHandler(
     /// FR-239: a warning naming each failure whose evidence block couldn't be attached to the plan; §4.43 step 5: one naming
     /// each findings step Tevrin couldn't add (its findings are "No step").
     /// </summary>
+    /// <summary>§8 observability (FR-249): each refused waiver, with why it was refused (critical, secret or failure).</summary>
+    private void LogRefusedWaivers(Guid projectId, int cycle, CodeReviewResult result, IReadOnlyList<ReviewFinding> findings)
+    {
+        foreach (var outcome in result.FindingOutcomes.Values.Where(o => o.Handling == FindingHandling.WaiverRefused))
+        {
+            var finding = findings.FirstOrDefault(f => FindingSteps.IdOf(f) == outcome.Id);
+            var reason = outcome.Id.StartsWith(FailureIds.Prefix, StringComparison.Ordinal) || finding?.FailureId is not null
+                ? "failure"
+                : FindingIds.KindOf(outcome.Id) == FindingIds.Secret ? "secret" : "critical";
+            LogWaiverRefused(logger, projectId, cycle, outcome.Id, reason);
+        }
+    }
+
     private void LogDroppedEvidence(CodeReviewResult result)
     {
         if (result.DroppedFailureEvidence.Count > 0)
@@ -836,6 +851,9 @@ public sealed partial class ReviewJobHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tevrin couldn't add {Steps} to the optimisation plan (the plan would be invalid); their deterministic findings have no step")]
     private static partial void LogFindingStepsDropped(ILogger logger, string steps);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} cycle {ReviewCycle} refused the waiver of {FindingId} ({Reason} findings can't be waived)")]
+    private static partial void LogWaiverRefused(ILogger logger, Guid projectId, int reviewCycle, string findingId, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Specification endpoint paths dropped (unclosed bracket): {Paths}")]
     private static partial void LogEndpointPathsDropped(ILogger logger, string paths);

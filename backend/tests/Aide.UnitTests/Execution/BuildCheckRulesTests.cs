@@ -100,7 +100,7 @@ public sealed class BuildCheckRulesTests
         Assert.Empty(decision.TimedOut);
         Assert.Equal(
             [
-                new BuildCheckSource("Vercel preview (frontend)", BuildCheckSourceKind.Preview, "success", "https://p.vercel.app"),
+                new BuildCheckSource("Vercel preview", BuildCheckSourceKind.Preview, "success", "https://p.vercel.app"),
                 new BuildCheckSource("build", BuildCheckSourceKind.Check, "success", "https://ci/build"),
             ],
             decision.Sources);
@@ -188,7 +188,7 @@ public sealed class BuildCheckRulesTests
         Assert.Equal(BuildCheckStatus.Failed, decision.Status);
         Assert.True(decision.PlanFix);
         Assert.False(decision.ToReview);
-        Assert.Equal(["Vercel preview (frontend)"], decision.Failing);
+        Assert.Equal(["Vercel preview"], decision.Failing); // FR-259: one component, no suffix
         Assert.Equal("failure", Assert.Single(decision.Sources).Conclusion);
     }
 
@@ -279,6 +279,7 @@ public sealed class BuildCheckRulesTests
         var decision = Decide(new BuildCheckObservation(Head, preview, null) { PreviewWaitSince = T0 }, now: T0.AddMinutes(31));
 
         Assert.Equal(["failure:preview:railway-frontend"], decision.TimedOut.Select(f => f.FailureId));
+        Assert.Equal(["Railway preview (backend)", "Railway preview (frontend)"], decision.Sources.Select(s => s.Name)); // FR-259: two components keep the suffix
         Assert.Equal(["success", BuildCheckRules.TimedOutConclusion], decision.Sources.Select(s => s.Conclusion));
     }
 
