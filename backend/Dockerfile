@@ -31,7 +31,7 @@ RUN RID="linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
  && dotnet ef migrations bundle --configuration Release --self-contained -r "$RID" \
       --project src/Aide.Infrastructure --startup-project src/Aide.Api -o /app/efbundle
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
 # git: required by the Local Git provider and project working copies (/data/workspaces).
 # setpriv (util-linux): the entrypoint drops from root to $APP_UID with it (FR-106). Installed only if the base image
 # lacks it (some distros ship it as its own package); the final check fails the build if it is still missing.
