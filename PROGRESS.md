@@ -50,7 +50,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M51 Check accuracy and finding ids (FR-246, FR-251–FR-253) — branch `build/tevrin-0.6.1-review`
 - [x] M52 Findings in the plan (FR-247–FR-250)
 - [x] M53 Build check before review (FR-254–FR-259)
-- [ ] M50 Release 0.6.1 (after M53) (FR-245): part 1 merged in PR #38; part 2 build PR from `build/tevrin-0.6.1-review` after the audit minors are closed; after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms
+- [ ] M50 Release 0.6.1 (after M53) (FR-245): part 1 merged in PR #38; part 2 build PR #47 open (CI [43587633211](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43587633211), audit 14/14 Done); after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms
 
 ## Decisions
 See SPEC §10 (D-0.6.1-1 … D-0.6.1-21). Build-time decisions are added below.
