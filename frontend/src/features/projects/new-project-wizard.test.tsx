@@ -99,6 +99,8 @@ describe('New project wizard (FR-5, FR-73)', () => {
     expect(screen.getByLabelText('Compliance threshold')).toHaveValue(0.9)
     expect(screen.getByLabelText('Max files per step')).toHaveValue(20)
     expect(screen.getByLabelText('Max review cycles')).toHaveValue(3)
+    // FR-258: build fix attempts default to 5 (0–10).
+    expect(screen.getByLabelText('Build fix attempts')).toHaveValue(5)
     expect(screen.getByRole('radio', { name: 'Strict' })).toHaveAccessibleDescription(
       'An Owner approves the spec, the plan and the release before each phase starts.',
     )
@@ -106,6 +108,8 @@ describe('New project wizard (FR-5, FR-73)', () => {
     await user.clear(screen.getByLabelText('Compliance threshold'))
     await user.type(screen.getByLabelText('Compliance threshold'), '1.5')
     await user.type(screen.getByLabelText('Token budget (optional)'), '500')
+    await user.clear(screen.getByLabelText('Build fix attempts'))
+    await user.type(screen.getByLabelText('Build fix attempts'), '11')
     await next(user)
 
     expect(
@@ -114,6 +118,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
     expect(
       screen.getAllByText('Enter a whole number of at least 1,000 tokens, or leave it empty for no limit.'),
     ).not.toHaveLength(0)
+    expect(screen.getAllByText('Enter a whole number from 0 to 10 for build fix attempts.')).not.toHaveLength(0)
     expect(screen.getByRole('heading', { level: 2, name: /Step 6 of 8/ })).toBeInTheDocument()
   })
 
@@ -228,6 +233,7 @@ describe('New project wizard (FR-5, FR-73)', () => {
       complianceThreshold: 0.9,
       maxFilesPerStep: 20,
       maxReviewCycles: 3,
+      maxBuildFixAttempts: 5,
       tokenBudget: 50000,
       source: 'scratch',
       initialVersion: '0.1.0',

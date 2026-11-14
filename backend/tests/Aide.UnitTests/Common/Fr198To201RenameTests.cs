@@ -85,6 +85,7 @@ public sealed partial class Fr198To201RenameTests
     [InlineData(AgentKind.CodeReview, "10")] // FR-247: v10 (finding ids, waivers)
     [InlineData(AgentKind.RepositoryAnalyst, "3")]
     [InlineData(AgentKind.StackAnalyst, "3")]
+    [InlineData(AgentKind.BuildFix, "1")] // FR-256: build_fix v1
     public void FR199_Each_rendered_system_prompt_names_Tevrin_not_AIDE_at_the_new_version(AgentKind agent, string version)
     {
         var template = new EmbeddedPromptLibrary().Template(agent);

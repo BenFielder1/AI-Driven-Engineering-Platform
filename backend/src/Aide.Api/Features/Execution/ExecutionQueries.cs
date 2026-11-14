@@ -43,6 +43,17 @@ public static class ExecutionQueries
         return await query.OrderBy(s => s.StepNumber).ToListAsync(cancellationToken);
     }
 
+    /// <summary>FR-259: the attempt of each build check the given build-fix steps were planned from, by check id.</summary>
+    public static async Task<IReadOnlyDictionary<Guid, int>> BuildCheckAttemptsAsync(AideDbContext db, IEnumerable<ExecutionStep> steps, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(steps);
+        var ids = steps.Where(s => s.BuildCheckId is not null).Select(s => s.BuildCheckId!.Value).Distinct().ToList();
+        return ids.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await db.BuildChecks.AsNoTracking().Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Attempt, cancellationToken);
+    }
+
     /// <summary>An execution job of the project is queued or running (§4.9: at most one).</summary>
     public static Task<bool> JobActiveAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
     {

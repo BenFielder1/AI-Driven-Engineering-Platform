@@ -18,6 +18,7 @@ import { previewBuildFailureTitles } from '../deployments/rollout-format'
 import { RolloutStateBadge, RolloutSteps } from '../deployments/rollout-parts'
 import { CategoryBarsChart } from './category-bars-chart'
 import type { CategoryScore, ComplianceReportDetail, FindingSeverity, Violation } from './review-api'
+import { EvidenceBlock } from '../../components/shared/evidence-block'
 import { panelClass } from '../../components/shared/panel-class'
 import { cn } from '../../lib/utils'
 
@@ -176,14 +177,7 @@ function ViolationEvidence({ evidence, message }: { evidence: string; message: s
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs">Evidence:</span>
-      <pre
-        data-testid="violation-evidence"
-        tabIndex={0}
-        aria-label={`Evidence for ${message}`}
-        className="max-h-64 max-w-full overflow-auto rounded-lg border border-border/60 bg-background px-3 py-2 font-mono text-xs whitespace-pre"
-      >
-        {evidence}
-      </pre>
+      <EvidenceBlock text={evidence} label={`Evidence for ${message}`} testId="violation-evidence" />
     </div>
   )
 }

@@ -25,6 +25,7 @@ import {
   type ExecutionRunStatus,
   type ExecutionStep,
 } from './execution-api'
+import { BuildCheckPanel } from './build-check-panel'
 import { ExecutionRuns, RunsState, StepRunExtras } from './execution-runs'
 import { ExecutionStepItem } from './execution-steps'
 import { panelClass } from '../../components/shared/panel-class'
@@ -178,7 +179,8 @@ function ProgressSummary({
 /**
  * /projects/:id/execution (SPEC §7; FR-31–FR-34, FR-37): progress summary, start/pause/resume for writers, and the
  * current plan's steps with status, attempt, Guardian violations, commit and file manifest, and once every step
- * completed the pull request or branch comparison (FR-36). Live `step` events refresh the steps, /state and the PR (FR-46).
+ * completed the pull request or branch comparison (FR-36), then the build check before review (FR-259). Live `step` events
+ * refresh the steps, /state and the PR (FR-46); `buildCheckUpdated` updates the build check.
  */
 export function ExecutionPage() {
   const { project, can, readOnly, releaseVersionId } = useProjectAccess()
@@ -319,6 +321,14 @@ export function ExecutionPage() {
         {!readOnly && <ProgressSummary status={status} state={s} current={current} />}
 
         {!readOnly && <PullRequestSection projectId={project.id} state={s} writer={writer} />}
+
+        {/* FR-259: the build check of the current review cycle while in Execution (else the newest), above the steps. */}
+        <BuildCheckPanel
+          projectId={project.id}
+          versionId={readOnly ? (releaseVersionId ?? null) : s.releaseVersionId}
+          cycle={!readOnly && s.phase === 'execution' ? s.review.cycle : null}
+          maxAttempts={project.maxBuildFixAttempts}
+        />
 
         {/* The live steps of the current plan always show, even before the runs list has caught up with it. */}
         {!readOnly && activeSteps && !activeInRuns && (

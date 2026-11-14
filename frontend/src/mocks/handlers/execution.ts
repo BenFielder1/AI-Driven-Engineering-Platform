@@ -199,6 +199,8 @@ export function createExecutionSteps(
       startedAt: null,
       completedAt: null,
       fileManifest: null,
+      origin: "plan",
+      buildCheckAttempt: null,
     })),
   );
 }
@@ -282,6 +284,40 @@ export function seedExecution(
   setup?.(stored);
   syncExecutionState(project);
   return stored;
+}
+
+/**
+ * FR-259: a build check of the project's current release version and review cycle (attempt 0, waiting, no sources yet), with
+ * `overrides`. Not stored; see `seedBuildCheck`.
+ */
+export function buildCheck(
+  project: StoredProject,
+  overrides: Partial<Schemas["BuildCheckDto"]> = {},
+): Schemas["BuildCheckDto"] {
+  return {
+    id: nextId(),
+    releaseVersionId: currentVersionId(project),
+    reviewCycle: project.state.review.cycle,
+    attempt: 0,
+    headSha: "9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c",
+    status: "waiting",
+    sources: [],
+    failures: [],
+    fixStepNumbers: [],
+    startedAt: "2026-09-01T11:00:00Z",
+    completedAt: null,
+    ...overrides,
+  };
+}
+
+/** FR-259: stores a build check (see `buildCheck`) on the project and returns it. */
+export function seedBuildCheck(
+  project: StoredProject,
+  overrides: Partial<Schemas["BuildCheckDto"]> = {},
+): Schemas["BuildCheckDto"] {
+  const check = buildCheck(project, overrides);
+  (project.buildChecks ??= []).push(check);
+  return check;
 }
 
 /**
@@ -560,6 +596,8 @@ export function executionRuns(project: StoredProject, releaseVersionId: string):
         producedFiles: s.fileManifest ?? [],
         commitSha: s.commitSha,
         commitUrl: s.commitUrl,
+        origin: s.origin,
+        buildCheckAttempt: s.buildCheckAttempt,
       })),
     };
   });
@@ -648,6 +686,20 @@ export const executionHandlers = [
       return problem(404, "NOT_FOUND", "The execution step was not found.");
     }
     return HttpResponse.json<Attempt[]>(a.project.stepAttempts?.[String(params.stepId)] ?? []);
+  }),
+  // FR-259: the build checks of a release version, newest first (members; NOT_FOUND for an unknown version).
+  http.get("*/api/projects/:projectId/versions/:versionId/build-checks", ({ params }) => {
+    const a = access(params.projectId);
+    if (a instanceof Response) {
+      return a;
+    }
+    if (!a.project.releaseVersions.some((v) => v.id === params.versionId)) {
+      return problem(404, "NOT_FOUND", "The release version was not found in this project.");
+    }
+    const checks = (a.project.buildChecks ?? [])
+      .filter((c) => c.releaseVersionId === params.versionId)
+      .sort((x, y) => Date.parse(y.startedAt) - Date.parse(x.startedAt) || (x.id < y.id ? 1 : x.id > y.id ? -1 : 0));
+    return HttpResponse.json<Schemas["BuildCheckDto"][]>(checks);
   }),
   // FR-30: the steps of a plan version (default: the current locked implementation plan, as in the API).
   http.get("*/api/projects/:id/execution/steps", ({ request, params }) => {

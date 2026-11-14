@@ -28,6 +28,7 @@ public sealed partial class ArtifactService(
     LifecycleSnapshotLoader snapshots,
     LifecycleWriter writer,
     JobEnqueuer jobs,
+    BuildChecks.BuildCheckService buildChecks,
     VersionStackLoader stacks,
     ProjectStackService projectStacks,
     Analysis.StackProfileBaseReader profileBases,
@@ -402,6 +403,14 @@ public sealed partial class ArtifactService(
         foreach (var step in steps.Where(s => reset.Contains(s.Id)))
         {
             step.Status = StepStatus.Invalidated;
+        }
+
+        if (reset.Count > 0 || invalidated.Count > 0)
+        {
+            // §4.47: invalidating the version's work cancels its waiting (or failed, fix pending) build checks and supersedes
+            // the checks in force, so re-execution starts again at attempt 0 with the whole fix budget.
+            await buildChecks.CancelOpenAsync(projectId, actor, now, cancellationToken);
+            await buildChecks.SupersedeAsync(projectId, now, cancellationToken);
         }
 
         var fellBack = false;

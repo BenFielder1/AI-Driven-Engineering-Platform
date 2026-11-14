@@ -51,6 +51,9 @@ public sealed class Project
 
     public int MaxReviewCycles { get; set; } = ProjectDefaults.MaxReviewCycles;
 
+    /// <summary>FR-258: build-fix attempts per review cycle (0–10); 0 turns the build check off.</summary>
+    public int MaxBuildFixAttempts { get; set; } = ProjectDefaults.MaxBuildFixAttempts;
+
     /// <summary>Current review cycle (0 before the first review, §4.5 <c>c</c>).</summary>
     public int ReviewCycle { get; set; }
 

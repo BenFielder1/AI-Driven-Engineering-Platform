@@ -48,3 +48,21 @@ public sealed record NotificationChannelConfig(
     string Target,
     string? SecretEncrypted,
     IReadOnlyList<string> Events);
+
+/// <summary>A source a build check read (§5, FR-255): the preview rollout or a required CI check, its conclusion
+/// (e.g. <c>success</c>, <c>failure</c>, <c>timed_out</c>; null while pending) and a link to it.</summary>
+public sealed record BuildCheckSource(string Name, BuildCheckSourceKind Kind, string? Conclusion, string? Url);
+
+/// <summary>A failure found by a build check (§5, §4.48): the failure id (as in review findings), the normalised
+/// fingerprint used for repeat marks (§4.37), the message, the source it came from, the log excerpt (§4.38) and the
+/// de-duplicated error-summary lines.</summary>
+public sealed record BuildCheckFailure(
+    string FailureId,
+    string Fingerprint,
+    string Message,
+    string Source,
+    string? Excerpt,
+    IReadOnlyList<string>? ErrorSummary = null)
+{
+    public IReadOnlyList<string> ErrorSummary { get; init; } = ErrorSummary ?? [];
+}

@@ -54,6 +54,14 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Decisions
 See SPEC §10 (D-0.6.1-1 … D-0.6.1-10). Build-time decisions are added below.
+- **D-0.6.1-22** (Build, M53, Claude, assumed): build check details.
+  - **Schema:** `build_checks` gains a nullable `superseded_at`; the (version, cycle, attempt) unique index applies only where it is null. Rollback and invalidation cancel the open check and supersede earlier ones, so a re-run starts at attempt 0 with the full budget. Fixes used = checks in force that have fix steps (amends §5).
+  - **Steps:** fix steps are stored on the current plan and numbered after its highest step (unique (plan, step) index). The 1–5 limit counts the agent's own steps; Tevrin-added steps may exceed it.
+  - **Waiting:** the check waits for every source to finish before deciding, and only for required checks. Required contexts not yet reported count as pending (GitHub). A preview timeout yields `failure:preview:<platform>`; checks still pending, or never reported, at 15 min yield `failure:check:<name>` / `failure:check:required-checks`. Provider API errors retry the job.
+  - **Ending the check:** a Local project with no preview is decided `skipped` in the PR job. Exhausted always goes to Review. Passed and skipped count only for their commit. "Continue" on a blocked fix step, an invalid fix plan after one retry, or a dead-lettered check/fix job → `exhausted`. Pausing doesn't cancel.
+  - **Guardian:** `BUILD_ERRORS_SUPPRESSED` is reported under `GuardianCheck.ScopeCreep`. "Deletes a test file" is detected as a test file emptied of content. A redelivered already-committed step skips the rule.
+  - **Naming:** audit events are `BUILD_CHECK_STARTED`, `BUILD_CHECK_COMPLETED`, `BUILD_FIX_PLANNED` (repo convention). Agent kind `build_fix` is added to the contract.
+  - **UI:** attempt 0 reads "Initial check". Outside Execution the panel shows the newest check's cycle ("Before review cycle n+1"). The exhausted badge reads "Still failing".
 
 ## Known issues
 - CI integration shards hit the runner's inotify limit (128) once the rest shard grew; CI now raises it and turns off config reload in test hosts (commit 50f20bb).
@@ -61,10 +69,15 @@ See SPEC §10 (D-0.6.1-1 … D-0.6.1-10). Build-time decisions are added below.
 - Cloudflare Pages: verify now writes preview excludes (sets previews to `custom` if a user switched back to `all`); link already did (D-0.6.1-9).
 - Changelog 0.6.1 `specHref` → `docs/history/0.6.1.md`, added in M50.
 
+- GitLab/Bitbucket: "required" is project-level (`only_allow_merge_if_pipeline_succeeds`, `require_passing_builds_to_merge`), so a pipeline not yet started reads as no required checks and the build check is skipped (M53 review; GitHub fixed). Needs the providers to expose the setting.
+- Build check: a waiting check's sources are saved on every poll, but live pushes go out only on transitions.
+- E2E a11y target "execution build check panel" not yet run (CI is the first run).
+
 ## Manual checks (Ben)
 - GitHub job-log redirect: confirm the blob-storage request carries no `Authorization` header (relies on .NET's cross-host redirect stripping; not unit-tested).
 - Live log fetches on a real failing check: GitHub Actions job log (redirect to blob storage), GitLab job trace, Bitbucket Pipelines step log (status URL → build number; redirects not followed).
 - A real Vercel project end to end: a missing `vercel.json` gets an added step, and a broken build produces a specific fix step with the log excerpt.
 - Scrollbar in Chrome, Firefox and Safari, light and dark.
 - Cloudflare Workers Builds `PATCH /builds/triggers/{uuid}` with only `branch_excludes` against a real account (stubbed in tests).
+- A real GitHub project with branch protection: the build check waits for required CI, and a failing Vercel build gets a build-fix step and a passing attempt.
 - Docker Desktop redeploy and smoke test.

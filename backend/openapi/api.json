@@ -5461,7 +5461,8 @@
                 "code_generator",
                 "code_review",
                 "repository_analyst",
-                "stack_analyst"
+                "stack_analyst",
+                "build_fix"
               ],
               "type": "string"
             }
@@ -10771,7 +10772,8 @@
                 "code_generator",
                 "code_review",
                 "repository_analyst",
-                "stack_analyst"
+                "stack_analyst",
+                "build_fix"
               ],
               "type": "string"
             }
@@ -11640,6 +11642,70 @@
           },
           "409": {
             "description": "PHASE_PRECONDITION_FAILED (not in execution), BUDGET_EXCEEDED (token budget used up) or CONFLICT (a concurrent change).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/versions/{versionId}/build-checks": {
+      "get": {
+        "tags": [
+          "Execution"
+        ],
+        "summary": "The build checks of a release version, newest first (members, FR-259): per review cycle and attempt, the head commit, status, the preview and CI sources with their results, the failures with their log excerpts, and the build-fix step numbers planned from it.",
+        "operationId": "ListBuildChecks",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BuildCheckDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: the project, or the release version in this project.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14540,7 +14606,8 @@
           "code_generator",
           "code_review",
           "repository_analyst",
-          "stack_analyst"
+          "stack_analyst",
+          "build_fix"
         ],
         "description": "The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70) and the Stack Analyst (FR-180)."
       },
@@ -15902,6 +15969,300 @@
         },
         "description": "A workspace the caller can access (FR-135) with the first 100 of its projects (`projectsTruncated`: it has more).\nPass `slug` as `owner` when creating. `isAdmin` is whether the caller administers the workspace, when\nBitbucket says."
       },
+      "BuildCheckDto": {
+        "required": [
+          "id",
+          "releaseVersionId",
+          "reviewCycle",
+          "attempt",
+          "headSha",
+          "status",
+          "sources",
+          "failures",
+          "fixStepNumbers",
+          "startedAt",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reviewCycle": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "headSha": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BuildCheckStatus"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildCheckSourceDto"
+            }
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuildCheckFailureDto"
+            }
+          },
+          "fixStepNumbers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,\nk the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,\n`skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers\nof the build-fix steps planned from it, and when it started and completed."
+      },
+      "BuildCheckFailureDto": {
+        "required": [
+          "failureId",
+          "source",
+          "message",
+          "excerpt"
+        ],
+        "type": "object",
+        "properties": {
+          "failureId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A failure a build check found (FR-256, FR-259): the failure id (as in review findings), its source\n    (`preview` or `check`), the message and the redacted log excerpt (§4.38; `null` when there is none)."
+      },
+      "BuildCheckSourceDto": {
+        "required": [
+          "name",
+          "kind",
+          "conclusion",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BuildCheckSourceKind"
+          },
+          "conclusion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion\n    (`success`, `failure`, `timed_out`, …; `null` while pending) and a link to it."
+      },
+      "BuildCheckSourceKind": {
+        "enum": [
+          "preview",
+          "check"
+        ],
+        "description": "The kind of a build check source (§5): the version's preview rollout (`preview`) or a required CI check\n            on the head commit (`check`)."
+      },
+      "BuildCheckStatus": {
+        "enum": [
+          "waiting",
+          "passed",
+          "failed",
+          "skipped",
+          "exhausted",
+          "cancelled"
+        ],
+        "description": "The state of one build check attempt (§4.47, FR-254–FR-258). Wire values: `waiting`, `passed`,\n            `failed`, `skipped`, `exhausted`, `cancelled`."
+      },
+      "BuildCheckUpdatedMessage": {
+        "required": [
+          "projectId",
+          "check"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "check": {
+            "required": [
+              "id",
+              "releaseVersionId",
+              "reviewCycle",
+              "attempt",
+              "headSha",
+              "status",
+              "sources",
+              "failures",
+              "fixStepNumbers",
+              "startedAt",
+              "completedAt"
+            ],
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "releaseVersionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reviewCycle": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "attempt": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "headSha": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "waiting",
+                  "passed",
+                  "failed",
+                  "skipped",
+                  "exhausted",
+                  "cancelled"
+                ],
+                "description": "The state of one build check attempt (§4.47, FR-254–FR-258). Wire values: `waiting`, `passed`,\n            `failed`, `skipped`, `exhausted`, `cancelled`."
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "required": [
+                    "name",
+                    "kind",
+                    "conclusion",
+                    "url"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "preview",
+                        "check"
+                      ],
+                      "description": "The kind of a build check source (§5): the version's preview rollout (`preview`) or a required CI check\n            on the head commit (`check`)."
+                    },
+                    "conclusion": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "url": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  },
+                  "description": "A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion\n    (`success`, `failure`, `timed_out`, …; `null` while pending) and a link to it."
+                }
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "required": [
+                    "failureId",
+                    "source",
+                    "message",
+                    "excerpt"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "failureId": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "excerpt": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  },
+                  "description": "A failure a build check found (FR-256, FR-259): the failure id (as in review findings), its source\n    (`preview` or `check`), the message and the redacted log excerpt (§4.38; `null` when there is none)."
+                }
+              },
+              "fixStepNumbers": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "completedAt": {
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "format": "date-time"
+              }
+            },
+            "description": "One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,\nk the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,\n`skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers\nof the build-fix steps planned from it, and when it started and completed."
+          }
+        },
+        "description": "FR-259: the live `buildCheckUpdated` message, pushed on the project's live channel (the execution event stream)\nwhen a build check starts, changes state or has fix steps planned: the project, and the check as the list endpoint\nreturns it. Not an HTTP response: the schema is added to the OpenAPI components for the generated client."
+      },
       "CategoryScoreDto": {
         "required": [
           "category",
@@ -17117,6 +17478,13 @@
             "maximum": 10,
             "minimum": 1,
             "type": "integer",
+            "format": "int32"
+          },
+          "maxBuildFixAttempts": {
+            "maximum": 10,
+            "minimum": 0,
+            "type": "integer",
+            "description": "FR-258: build-fix attempts per review cycle before review (0–10, default 5); 0 turns the build check off.",
             "format": "int32"
           },
           "tokenBudget": {
@@ -18973,7 +19341,9 @@
           "startedAt",
           "completedAt",
           "fileManifest",
-          "commitUrl"
+          "commitUrl",
+          "origin",
+          "buildCheckAttempt"
         ],
         "type": "object",
         "properties": {
@@ -19066,9 +19436,19 @@
               "null",
               "string"
             ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/StepOrigin"
+          },
+          "buildCheckAttempt": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         },
-        "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider\n(no remote) and before the step is committed."
+        "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider\n(no remote) and before the step is committed. FR-256, FR-259: `origin` is `plan` for the plan's own steps and\n`build_fix` for steps planned after a failed build check; `buildCheckAttempt` is that check's attempt (the\n\"Build fix · attempt n\" badge), `null` for plan steps."
       },
       "ExecutionStepSummaryDto": {
         "required": [
@@ -19081,7 +19461,10 @@
           "declaredFiles",
           "producedFiles",
           "commitSha",
-          "commitUrl"
+          "commitUrl",
+          "legacyAgentKey",
+          "origin",
+          "buildCheckAttempt"
         ],
         "type": "object",
         "properties": {
@@ -19138,9 +19521,19 @@
               "null",
               "string"
             ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/StepOrigin"
+          },
+          "buildCheckAttempt": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         },
-        "description": "One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the\nbase Code Generator), status, attempt count, declared vs produced files, and the commit once accepted\n(`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the 0.2.0 agent key a plan locked before\nthe upgrade named, which now runs as `agentKey`; null otherwise."
+        "description": "One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the\nbase Code Generator), status, attempt count, declared vs produced files, and the commit once accepted\n(`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the 0.2.0 agent key a plan locked before\nthe upgrade named, which now runs as `agentKey`; null otherwise. FR-256, FR-259: `origin` (`plan` or\n`build_fix`) and `buildCheckAttempt` (the attempt of the build check a build-fix step fixes; null for plan steps)."
       },
       "ExecutionStepsDto": {
         "required": [
@@ -22410,6 +22803,7 @@
           "complianceThreshold",
           "maxFilesPerStep",
           "maxReviewCycles",
+          "maxBuildFixAttempts",
           "tokenBudget",
           "tokensUsed",
           "executionPaused",
@@ -22478,6 +22872,10 @@
             "format": "int32"
           },
           "maxReviewCycles": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxBuildFixAttempts": {
             "type": "integer",
             "format": "int32"
           },
@@ -26653,6 +27051,13 @@
         },
         "description": "The agent run of a step attempt (FR-57): agent, specialist key, model, tokens, duration and status."
       },
+      "StepOrigin": {
+        "enum": [
+          "plan",
+          "build_fix"
+        ],
+        "description": "Where an execution step came from (FR-256): the approved plan (`plan`) or the build-fix agent after a\n            failed build check (`build_fix`). Steps stored before 0.6.1 part 2 read as `plan`."
+      },
       "StepStatus": {
         "enum": [
           "pending",
@@ -27431,6 +27836,16 @@
               "null",
               "integer"
             ],
+            "format": "int32"
+          },
+          "maxBuildFixAttempts": {
+            "maximum": 10,
+            "minimum": 0,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "FR-258: build-fix attempts per review cycle (0–10); 0 turns the build check off.",
             "format": "int32"
           },
           "tokenBudget": {

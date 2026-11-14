@@ -33,6 +33,8 @@ export interface LocalProjectOptions {
   vercelConnectionId?: string
   approvalMode?: 'strict' | 'advisory' | 'autonomous'
   maxReviewCycles?: number
+  /** FR-258: build-fix attempts per cycle (omitted: the API default, 5; 0 turns the build check off). */
+  maxBuildFixAttempts?: number
   initialVersion?: string
 }
 
@@ -45,6 +47,7 @@ export async function createLocalProject(context: BrowserContext, o: LocalProjec
     complianceThreshold: 0.9,
     maxFilesPerStep: 20,
     maxReviewCycles: o.maxReviewCycles ?? 3,
+    ...(o.maxBuildFixAttempts === undefined ? {} : { maxBuildFixAttempts: o.maxBuildFixAttempts }),
     tokenBudget: null,
     source: 'scratch',
     initialVersion: o.initialVersion ?? '0.1.0',

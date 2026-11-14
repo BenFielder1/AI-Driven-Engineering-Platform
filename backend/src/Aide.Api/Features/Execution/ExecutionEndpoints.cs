@@ -27,7 +27,9 @@ public sealed record StepViolationDto(GuardianCheck Check, string Code, Violatio
 /// One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on
 /// earlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the
 /// branch and commit once accepted. <c>commitUrl</c> links the commit on GitHub; it is <c>null</c> for the Local provider
-/// (no remote) and before the step is committed.
+/// (no remote) and before the step is committed. FR-256, FR-259: <c>origin</c> is <c>plan</c> for the plan's own steps and
+/// <c>build_fix</c> for steps planned after a failed build check; <c>buildCheckAttempt</c> is that check's attempt (the
+/// "Build fix · attempt n" badge), <c>null</c> for plan steps.
 /// </summary>
 public sealed record ExecutionStepDto(
     Guid Id,
@@ -45,7 +47,9 @@ public sealed record ExecutionStepDto(
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
     IReadOnlyList<FileManifestEntryDto>? FileManifest,
-    string? CommitUrl);
+    string? CommitUrl,
+    StepOrigin Origin,
+    int? BuildCheckAttempt);
 
 /// <summary>A file an accepted step wrote (FR-34), with the SHA-256 of its content.</summary>
 public sealed record FileManifestEntryDto(string Path, FileAction Action, string ContentHash);
@@ -221,9 +225,10 @@ public static class ExecutionEndpoints
             .Where(g => g.ProjectId == id)
             .Select(g => new { g.Provider, RepoUrl = g.Provider == GitProvider.GithubApp ? "https://github.com/" + g.RepoFullName : g.RepoUrl })
             .FirstOrDefaultAsync(cancellationToken);
+        var attempts = await ExecutionQueries.BuildCheckAttemptsAsync(db, steps, cancellationToken);
         return new ExecutionStepsDto(
             new ExecutionPlanDto(plan.Id, plan.Type, plan.Version, plan.Status),
-            [.. steps.Select(s => ToDto(s, git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha)))]);
+            [.. steps.Select(s => ToDto(s, git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha), attempts))]);
     }
 
     private static RouteHandlerBuilder WithExecutionControlResponses(this RouteHandlerBuilder builder, string conflicts) => builder
@@ -268,7 +273,7 @@ public static class ExecutionEndpoints
             : ApiProblems.FromError(result.Error!);
     }
 
-    private static ExecutionStepDto ToDto(ExecutionStep s, string? commitUrl) => new(
+    private static ExecutionStepDto ToDto(ExecutionStep s, string? commitUrl, IReadOnlyDictionary<Guid, int> buildCheckAttempts) => new(
         s.Id,
         s.StepNumber,
         s.Title,
@@ -284,5 +289,7 @@ public static class ExecutionEndpoints
         s.StartedAt,
         s.CompletedAt,
         s.FileManifest is null ? null : [.. s.FileManifest.Select(f => new FileManifestEntryDto(f.Path, f.Action, f.ContentHash))],
-        commitUrl);
+        commitUrl,
+        s.Origin,
+        s.BuildCheckId is { } checkId && buildCheckAttempts.TryGetValue(checkId, out var attempt) ? attempt : null);
 }

@@ -25,6 +25,7 @@ import {
   type StepAttempt,
 } from './execution-api'
 import { ToolCallsTable } from '../runs/tool-calls'
+import { BuildFixBadge } from './build-fix-badge'
 import { stepTones } from './step-tones'
 import { panelClass } from '../../components/shared/panel-class'
 import { cn } from '../../lib/utils'
@@ -207,6 +208,7 @@ function RunStepItem({ step, headingLevel }: { step: ExecutionStepSummary; headi
           Step {step.number}: {step.title}
         </Heading>
         <Badge tone={stepTones[step.status]}>{stepStatusLabels[step.status]}</Badge>
+        <BuildFixBadge step={step} />
       </div>
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
         <div className="flex gap-1">

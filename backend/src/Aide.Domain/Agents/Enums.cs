@@ -14,4 +14,10 @@ public enum AgentKind
 
     /// <summary>FR-180: infers a version's stack from its repository into a <c>stack_profile</c> draft (D-V5-7).</summary>
     StackAnalyst = 6,
+
+    /// <summary>
+    /// FR-256, §4.48: plans 1–5 fix steps after a failed build check (<c>build_fix</c>). It uses the model and credentials
+    /// configured for <see cref="CodeReview"/> (D-0.6.1-17, <see cref="AgentRunRules.ModelKey"/>).
+    /// </summary>
+    BuildFix = 7,
 }

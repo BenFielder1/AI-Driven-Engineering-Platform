@@ -89,6 +89,8 @@ export const liveInvalidation: Record<EventCategory, (id: string, type: string) 
   // STEP_STARTED/COMPLETED/REJECTED/BLOCKED (FR-31–FR-34) and pause/resume (FR-37): steps, counts and the pause flag
   // (on both /state and the project). A blocked step's escalation gate arrives as a gate event. PULL_REQUEST_OPENED/
   // FAILED and GIT_PUSH_FAILED are step events too: /state's pullRequest summary and the PR comparison change (FR-36).
+  // BUILD_CHECK_STARTED/COMPLETED and BUILD_FIX_PLANNED (FR-254–FR-259) are step events: the build checks sit under the
+  // execution key (their item also arrives as `buildCheckUpdated`, see useProjectLive).
   step: (id) => [project(id), state(id), activity(id), execution(id), pullRequest(id)],
   // REVIEW_STARTED/REVIEW_COMPLETED (FR-38, FR-39): the review status on /state and the compliance report, trend and
   // drift change; a review_required cycle drafts an optimisation plan (FR-40). The decision's gate (pre_release or

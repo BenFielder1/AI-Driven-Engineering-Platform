@@ -85,6 +85,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<ExecutionStepAttempt> ExecutionStepAttempts => Set<ExecutionStepAttempt>();
 
+    public DbSet<BuildCheck> BuildChecks => Set<BuildCheck>();
+
     public DbSet<AuditEvent> Events => Set<AuditEvent>();
 
     public DbSet<Job> Jobs => Set<Job>();
@@ -113,6 +115,8 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<GateStatus>(configurationBuilder);
         MapEnum<EscalationDecision>(configurationBuilder);
         MapEnum<StepStatus>(configurationBuilder);
+        MapEnum<StepOrigin>(configurationBuilder);
+        MapEnum<BuildCheckStatus>(configurationBuilder);
         MapEnum<AgentKind>(configurationBuilder);
         MapEnum<AgentRunStatus>(configurationBuilder);
         MapEnum<LlmProvider>(configurationBuilder);

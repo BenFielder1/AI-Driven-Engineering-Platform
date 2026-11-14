@@ -22,7 +22,7 @@ namespace Aide.Api.Features.Lifecycle;
 /// whose job was queued fail as <c>RELEASE_CANCELLED</c>. Used by the escalation <c>rollback</c> decision and by
 /// <c>POST /rollback</c>.
 /// </summary>
-public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
+public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, BuildChecks.BuildCheckService buildChecks)
 {
     /// <summary>
     /// Rolls the tracked <paramref name="project"/> back to checkpoint <paramref name="targetVersion"/> of its current release
@@ -137,6 +137,11 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer)
             step.StartedAt = null;
             step.CompletedAt = null;
         }
+
+        // §4.47: a rollback cancels the waiting (or failed, fix pending) build checks and supersedes every check in force, so
+        // re-execution starts again at attempt 0 with the whole fix budget.
+        await buildChecks.CancelOpenAsync(id, actor, now, cancellationToken);
+        await buildChecks.SupersedeAsync(id, now, cancellationToken);
 
         var pendingGates = await db.ApprovalGates
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending && g.Id != keepGateId)

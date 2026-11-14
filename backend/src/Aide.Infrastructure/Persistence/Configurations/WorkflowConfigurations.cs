@@ -1,4 +1,5 @@
 using Aide.Domain.Entities;
+using Aide.Domain.Execution;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -77,16 +78,44 @@ internal sealed class ExecutionStepConfiguration : IEntityTypeConfiguration<Exec
         builder.Property(s => s.AgentKey).HasMaxLength(100);
         builder.Property(s => s.LegacyAgentKey).HasColumnType("text");
         builder.PrimitiveCollection(s => s.Covers).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
+
+        // FR-256, §5: existing rows become plan steps; additive, safe for rolling updates.
+        builder.Property(s => s.Origin).HasDefaultValue(StepOrigin.Plan).HasSentinel(StepOrigin.Plan).IsRequired();
         builder.Property(s => s.RowVersion).IsXminRowVersion();
 
         builder.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Artifact>().WithMany().HasForeignKey(s => s.PlanArtifactId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(s => s.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<BuildCheck>().WithMany().HasForeignKey(s => s.BuildCheckId).OnDelete(DeleteBehavior.NoAction);
 
         builder.HasIndex(s => new { s.PlanArtifactId, s.StepNumber }).IsUnique();
+        builder.HasIndex(s => s.BuildCheckId);
         builder.HasIndex(s => new { s.ProjectId, s.Status });
         builder.HasIndex(s => new { s.ProjectId, s.ReleaseVersionId });
         builder.HasIndex(s => s.ReleaseVersionId);
+    }
+}
+
+internal sealed class BuildCheckConfiguration : IEntityTypeConfiguration<BuildCheck>
+{
+    public void Configure(EntityTypeBuilder<BuildCheck> builder)
+    {
+        builder.ToTable("build_checks");
+        builder.HasKey(c => c.Id);
+        builder.Property(c => c.Id).ValueGeneratedNever();
+        builder.Property(c => c.HeadSha).HasMaxLength(64).IsRequired();
+        builder.Property(c => c.Sources).HasJsonbConversion().IsRequired();
+        builder.Property(c => c.Failures).HasJsonbConversion().IsRequired();
+        builder.Property(c => c.RowVersion).IsXminRowVersion();
+
+        builder.HasOne<Project>().WithMany().HasForeignKey(c => c.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(c => c.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
+
+        // §4.47: one check per (version, review cycle, attempt) among the checks in force; a rollback or invalidation
+        // supersedes the earlier ones (kept as history), so re-execution starts again at attempt 0.
+        builder.HasIndex(c => new { c.ReleaseVersionId, c.ReviewCycle, c.Attempt }).IsUnique().HasFilter("superseded_at IS NULL");
+        builder.HasIndex(c => new { c.ProjectId, c.ReleaseVersionId });
+        builder.HasIndex(c => new { c.ProjectId, c.Status });
     }
 }
 

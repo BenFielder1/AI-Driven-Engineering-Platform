@@ -62,3 +62,31 @@ public enum PlanRunStatus
     Blocked = 4,
     Superseded = 5,
 }
+
+/// <summary>Where an execution step came from (FR-256): the approved plan (<c>plan</c>) or the build-fix agent after a
+/// failed build check (<c>build_fix</c>). Steps stored before 0.6.1 part 2 read as <c>plan</c>.</summary>
+public enum StepOrigin
+{
+    Plan = 0,
+    BuildFix = 1,
+}
+
+/// <summary>The state of one build check attempt (§4.47, FR-254–FR-258). Wire values: <c>waiting</c>, <c>passed</c>,
+/// <c>failed</c>, <c>skipped</c>, <c>exhausted</c>, <c>cancelled</c>.</summary>
+public enum BuildCheckStatus
+{
+    Waiting = 0,
+    Passed = 1,
+    Failed = 2,
+    Skipped = 3,
+    Exhausted = 4,
+    Cancelled = 5,
+}
+
+/// <summary>The kind of a build check source (§5): the version's preview rollout (<c>preview</c>) or a required CI check
+/// on the head commit (<c>check</c>).</summary>
+public enum BuildCheckSourceKind
+{
+    Preview = 0,
+    Check = 1,
+}

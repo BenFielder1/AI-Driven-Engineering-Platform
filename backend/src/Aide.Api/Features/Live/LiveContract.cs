@@ -46,7 +46,7 @@ public static class LiveEndpoints
 /// </summary>
 internal sealed class LiveContractDocumentTransformer : IOpenApiDocumentTransformer
 {
-    private static readonly Type[] MessageTypes = [typeof(ProjectEventMessage)];
+    private static readonly Type[] MessageTypes = [typeof(ProjectEventMessage), typeof(BuildChecks.BuildCheckUpdatedMessage)];
 
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
     {

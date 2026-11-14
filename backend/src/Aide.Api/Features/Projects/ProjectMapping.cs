@@ -30,6 +30,7 @@ internal static class ProjectMapping
         p.ComplianceThreshold,
         p.MaxFilesPerStep,
         p.MaxReviewCycles,
+        p.MaxBuildFixAttempts,
         p.TokenBudget,
         p.TokensUsed,
         p.ExecutionPaused,

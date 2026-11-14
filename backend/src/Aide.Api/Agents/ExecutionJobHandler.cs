@@ -140,8 +140,15 @@ public sealed partial class ExecutionJobHandler(
             },
             cancellationToken);
         var reply = CodeGeneration.Parse(outcome.Text);
+        var buildFix = step.Origin == StepOrigin.BuildFix;
+        var previous = buildFix && reply.IsSuccess ? await PreviousContentAsync(project.Id, reply.Value.Files, cancellationToken) : null;
         var result = reply.IsSuccess
-            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, version.ExistsOnBase, version.Stack))
+            ? ExecutionGuardian.Validate(new GuardianInput(step.StepNumber, reply.Value.StepNumber, [.. steps.Select(ExecutionQueries.ToState)], reply.Value.Files, project.MaxFilesPerStep, version.ExistsOnBase, version.Stack)
+            {
+                // FR-257: a build-fix step may not hide errors, compared with each file's content before the step.
+                BuildFix = buildFix,
+                PreviousContent = previous is null ? null : path => previous.GetValueOrDefault(PathRules.Normalize(path)),
+            })
             : new GuardianResult([CodeGeneration.UnreadableViolation(reply.Error!)]);
         if (!result.Accepted)
         {
@@ -154,6 +161,19 @@ public sealed partial class ExecutionJobHandler(
         var normalised = reply.Value.Files.Select(f => new ProducedFile(PathRules.Normalize(f.Path), f.Content)).ToList();
         var commit = await Git(() => workingCopies.CommitStepAsync(project.Id, working.Branch, step.Id, normalised, message, cancellationToken));
         await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, outcome.RunId, cancellationToken);
+    }
+
+    /// <summary>
+    /// FR-257: the working copy's content of the produced files before the step (missing or unreadable files are absent, so
+    /// they count as new), by normalised path.
+    /// </summary>
+    private async Task<Dictionary<string, string?>> PreviousContentAsync(Guid projectId, IReadOnlyList<ProducedFile> files, CancellationToken cancellationToken)
+    {
+        var paths = files.Select(f => PathRules.Normalize(f.Path)).Where(p => p.Length > 0 && !PathRules.IsUnsafe(p)).Distinct(StringComparer.Ordinal).ToList();
+        var read = await Git(() => workingCopies.ReadAsync(projectId, paths, cancellationToken)) ?? [];
+        return read.Where(f => f.State == WorkingFileState.Present)
+            .GroupBy(f => PathRules.Normalize(f.Path), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Content, StringComparer.Ordinal);
     }
 
     /// <summary>

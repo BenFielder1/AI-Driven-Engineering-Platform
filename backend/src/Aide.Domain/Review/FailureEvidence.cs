@@ -283,6 +283,13 @@ public static partial class FailureExcerpt
         return null;
     }
 
+    /// <summary>Whether <paramref name="line"/> matches the §4.37 error pattern.</summary>
+    public static bool IsErrorLine(string line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        return ErrorLine().IsMatch(line);
+    }
+
     /// <summary>The first error line of <paramref name="excerpt"/> (trimmed), or <c>null</c>.</summary>
     public static string? FirstErrorLine(string? excerpt)
     {

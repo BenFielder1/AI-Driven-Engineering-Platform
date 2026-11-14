@@ -2,6 +2,7 @@ import { Link } from '../../lib/navigation'
 import { useState, type ReactNode } from 'react'
 
 import { Badge } from '../../components/ui/badge'
+import { BuildFixBadge } from './build-fix-badge'
 import { stepTones } from './step-tones'
 import { guardianCheckLabels, stepStatusLabels } from '../projects/labels'
 import { RelativeTime } from '../projects/relative-time'
@@ -160,6 +161,7 @@ export function ExecutionStepItem({
           Step {step.number}: {step.title}
         </h4>
         <Badge tone={stepTones[step.status]}>{stepStatusLabels[step.status]}</Badge>
+        <BuildFixBadge step={step} />
         {current && <span className="text-xs font-medium">(running now)</span>}
       </div>
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">

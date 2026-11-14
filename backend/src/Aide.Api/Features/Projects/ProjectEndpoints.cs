@@ -408,6 +408,12 @@ public static partial class ProjectEndpoints
             return ApiProblems.Validation(validation.Error!);
         }
 
+        if (request.MaxBuildFixAttempts is { } attempts && !Domain.Execution.BuildCheckRules.IsValidMaxAttempts(attempts))
+        {
+            // FR-258: 0–10 (the request's range attribute normally answers first).
+            return ApiProblems.Validation(new Dictionary<string, string[]> { ["maxBuildFixAttempts"] = ["Build fix attempts must be between 0 and 10."] });
+        }
+
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         if (project is null)
         {
@@ -435,6 +441,7 @@ public static partial class ProjectEndpoints
         Set("complianceThreshold", project.ComplianceThreshold, request.ComplianceThreshold, v => project.ComplianceThreshold = v);
         Set("maxFilesPerStep", project.MaxFilesPerStep, request.MaxFilesPerStep, v => project.MaxFilesPerStep = v);
         Set("maxReviewCycles", project.MaxReviewCycles, request.MaxReviewCycles, v => project.MaxReviewCycles = v);
+        Set("maxBuildFixAttempts", project.MaxBuildFixAttempts, request.MaxBuildFixAttempts, v => project.MaxBuildFixAttempts = v);
         if (request.ClearTokenBudget && project.TokenBudget is not null)
         {
             project.TokenBudget = null;

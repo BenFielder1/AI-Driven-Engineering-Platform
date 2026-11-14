@@ -112,6 +112,16 @@ public static class JobTypes
     /// </summary>
     public const string Notification = "notification";
 
+    /// <summary>
+    /// FR-254, FR-255, §4.47: one build check of a version's head commit after execution: waits (deferring itself, never
+    /// sleeping) for the preview rollout and the required CI checks, then passes, skips, fails (a fix is planned) or ends
+    /// exhausted; passed, skipped and exhausted advance to Review.
+    /// </summary>
+    public const string BuildCheck = "build_check";
+
+    /// <summary>FR-256, §4.48: the build-fix agent plans 1–5 fix steps from a failed build check.</summary>
+    public const string BuildFix = "build_fix";
+
     /// <summary>The job that runs <paramref name="agent"/>.</summary>
     public static string ForAgent(AgentKind agent) => agent switch
     {
@@ -122,6 +132,7 @@ public static class JobTypes
         AgentKind.CodeReview => Review,
         AgentKind.RepositoryAnalyst => RepositoryAnalysis,
         AgentKind.StackAnalyst => StackAnalysis,
+        AgentKind.BuildFix => BuildFix,
         _ => throw new ArgumentOutOfRangeException(nameof(agent), agent, null),
     };
 

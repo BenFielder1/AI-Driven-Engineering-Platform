@@ -9,6 +9,7 @@ using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Auth;
 using Aide.Api.Features.Bitbucket;
+using Aide.Api.Features.BuildChecks;
 using Aide.Api.Features.Connections;
 using Aide.Api.Features.Databases;
 using Aide.Api.Features.Deployments;
@@ -172,6 +173,7 @@ builder.Services.AddScoped<RefinementService>();
 // Execution runner (FR-31–FR-37): step jobs, Guardian, commits on the project branch, pause/resume.
 builder.Services.AddExecution();
 builder.Services.AddPullRequests();
+builder.Services.AddBuildChecks();
 builder.Services.AddReview();
 
 // Release and rollback (FR-42–FR-45): the release job, retries, rollback, history and versions.
@@ -248,6 +250,7 @@ app.MapRunEndpoints();
 app.MapRefinementEndpoints();
 app.MapAnalysisEndpoints();
 app.MapExecutionEndpoints();
+app.MapBuildCheckEndpoints();
 app.MapGitEndpoints();
 app.MapReviewEndpoints();
 app.MapReleaseEndpoints();

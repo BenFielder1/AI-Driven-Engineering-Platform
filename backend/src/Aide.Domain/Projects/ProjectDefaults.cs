@@ -9,5 +9,6 @@ public static class ProjectDefaults
     public const decimal ComplianceThreshold = 0.90m;
     public const int MaxFilesPerStep = 20;
     public const int MaxReviewCycles = 3;
+    public const int MaxBuildFixAttempts = 5;
     public const int InitialVersion = 1;
 }

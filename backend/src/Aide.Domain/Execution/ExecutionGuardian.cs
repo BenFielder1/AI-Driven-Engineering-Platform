@@ -18,7 +18,17 @@ public sealed record GuardianInput(
     IReadOnlyList<ProducedFile> Files,
     int MaxFilesPerStep,
     Func<string, bool>? ExistsOnBase = null,
-    StackResolution? Stack = null);
+    StackResolution? Stack = null)
+{
+    /// <summary>FR-257: the step is a build fix (origin <c>build_fix</c>), so the suppression rule applies (§4.48).</summary>
+    public bool BuildFix { get; init; }
+
+    /// <summary>
+    /// FR-257: a file's content before this step (the working copy's), or <c>null</c> when it doesn't exist (or wasn't
+    /// readable). Only used for build fixes; without it every file counts as new.
+    /// </summary>
+    public Func<string, string?>? PreviousContent { get; init; }
+}
 
 /// <summary>One violation (§4.6). Messages never include secret values.</summary>
 public sealed record GuardianViolation(GuardianCheck Check, string Code, ViolationSeverity Severity, string Message, string? Path = null);
@@ -34,7 +44,8 @@ public sealed record GuardianResult(IReadOnlyList<GuardianViolation> Violations)
 }
 
 /// <summary>
-/// The Execution Guardian (§4.6, FR-32, D18): runs all six checks and reports every violation.
+/// The Execution Guardian (§4.6, FR-32, D18): runs all six checks and reports every violation. FR-257: a build-fix step
+/// (<see cref="GuardianInput.BuildFix"/>) is also checked by <see cref="BuildErrorSuppression"/>.
 /// Paths are normalised and compared exactly. FR-125: a composition adds its packs' protected paths to scope creep (the
 /// union of 0.1.0's and the packs' protected paths, with the "declared in this step" exception).
 /// </summary>
@@ -55,6 +66,12 @@ public static class ExecutionGuardian
         violations.AddRange(PlanAlignment(declared, produced));
         violations.AddRange(ScopeCreep(input, declared, produced));
         violations.AddRange(SecretScan(input.Files));
+        if (input.BuildFix)
+        {
+            // FR-257: build-fix steps only; plan steps are unchanged.
+            violations.AddRange(BuildErrorSuppression.Check(input.Files, input.PreviousContent));
+        }
+
         return new GuardianResult(violations);
     }
 

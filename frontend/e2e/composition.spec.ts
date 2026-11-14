@@ -180,7 +180,8 @@ test('FR90_preview_build_failure: a failed preview build is a critical "Vercel p
   const projectName = `E2E Preview fail ${String(Date.now())}`
   await registerViaApi(context, 'previewfail', 'Preview Fail Owner')
   const vercelConnectionId = await createVercelConnection(context, 'Fake Vercel')
-  const created = await createLocalProject(context, { name: projectName, idea: IDEA, vercelConnectionId })
+  // FR-258: the fail-build marker is never removed, so the build check is off and review sees the failure directly.
+  const created = await createLocalProject(context, { name: projectName, idea: IDEA, vercelConnectionId, maxBuildFixAttempts: 0 })
   expect(created.deploymentsEnabled).toBe(true)
   const projectId = created.id
 

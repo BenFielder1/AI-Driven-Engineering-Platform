@@ -91,6 +91,13 @@ public sealed partial class SignalRProjectEventPublisher(
                 // method names case-insensitively.
                 await hub.Clients.Group(ProjectsHub.GroupFor(projectId)).SendAsync(ProjectsHub.ProjectEventMethod, message, cancellationToken);
 
+                // FR-259: a build check change also goes out as buildCheckUpdated with the build check item.
+                if (BuildCheckOf(entry.Type, payload) is { } check)
+                {
+                    await hub.Clients.Group(ProjectsHub.GroupFor(projectId)).SendAsync(
+                        ProjectsHub.BuildCheckUpdatedMethod, new BuildChecks.BuildCheckUpdatedMessage(projectId, check), cancellationToken);
+                }
+
                 if (entry.Type == EventTypes.MemberRemoved && RemovedUser(payload) is { } userId)
                 {
                     foreach (var connectionId in viewers.RemoveViewer(userId, projectId))
@@ -103,6 +110,24 @@ public sealed partial class SignalRProjectEventPublisher(
             {
                 LogPublishFailed(logger, ex, projectId, entry.Type);
             }
+        }
+    }
+
+    private static BuildChecks.BuildCheckDto? BuildCheckOf(string type, JsonObject payload)
+    {
+        if (type is not (EventTypes.BuildCheckStarted or EventTypes.BuildCheckCompleted or EventTypes.BuildFixPlanned)
+            || payload["check"] is not JsonObject check)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Infrastructure.Persistence.Conversion.AideJson.Deserialize<BuildChecks.BuildCheckDto>(check.ToJsonString());
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
         }
     }
 

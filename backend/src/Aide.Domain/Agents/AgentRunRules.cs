@@ -51,17 +51,23 @@ public static class AgentRunRules
     public const decimal MaxCostEstimate = 999_999.9999m;
 
     /// <summary>
-    /// FR-22: the model for an agent under the given LLM settings: the agent's own model when set (keyed by the
-    /// agent's wire name, e.g. <c>idea_refinement</c>), else the default model.
+    /// FR-22: the model for an agent under the given LLM settings: the agent's own model when set (keyed by
+    /// <see cref="ModelKey"/>, the agent's wire name, e.g. <c>idea_refinement</c>), else the default model.
     /// </summary>
     public static LlmChoice ChooseModel(AgentKind agent, LlmProvider provider, string defaultModel, IReadOnlyDictionary<string, string>? modelsByAgent)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultModel);
-        var model = modelsByAgent is not null && modelsByAgent.TryGetValue(agent.ToWire(), out var own) && !string.IsNullOrWhiteSpace(own)
+        var model = modelsByAgent is not null && modelsByAgent.TryGetValue(ModelKey(agent), out var own) && !string.IsNullOrWhiteSpace(own)
             ? own.Trim()
             : defaultModel.Trim();
         return new LlmChoice(provider, model);
     }
+
+    /// <summary>
+    /// The key an agent's model is configured under: its wire name, except <c>build_fix</c>, which uses the
+    /// <c>code_review</c> settings (D-0.6.1-17).
+    /// </summary>
+    public static string ModelKey(AgentKind agent) => agent == AgentKind.BuildFix ? AgentKind.CodeReview.ToWire() : agent.ToWire();
 
     /// <summary>
     /// FR-23: cost = input × input price + output × output price, per million tokens, rounded to 4 dp (the column's

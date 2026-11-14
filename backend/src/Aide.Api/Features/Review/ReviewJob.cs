@@ -119,6 +119,7 @@ public sealed partial class ReviewJobHandler(
     LifecycleWriter writer,
     ExternalChecksCollector externalChecks,
     PreviewCollector previews,
+    BuildChecks.BuildCheckService buildChecks,
     VersionStackLoader stacks,
     IDeploymentProviderResolver deploymentProviders,
     TimeProvider time,
@@ -211,6 +212,29 @@ public sealed partial class ReviewJobHandler(
                 project.ExtraReviewCycles,
                 previousScore),
             material.Requirements);
+
+    /// <summary>
+    /// FR-258: the <c>REVIEW_CYCLE</c> input: the cycle number, and when the build check before this review (the one run in
+    /// the previous cycle's execution) ended exhausted, a line saying so with its fix attempts.
+    /// </summary>
+    private async Task<string> ReviewCycleTextAsync(Project project, int cycle, CancellationToken cancellationToken)
+    {
+        var text = cycle.ToString(CultureInfo.InvariantCulture);
+        var versionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(project.Id, cancellationToken);
+        if (versionId is not { } id)
+        {
+            return text;
+        }
+
+        // Only checks in force: a rollback or invalidation supersedes the earlier ones (§4.47), so no stale note is added.
+        var latest = await buildChecks.InForce(id, cycle - 1).AsNoTracking()
+            .Where(c => c.Status != Domain.Execution.BuildCheckStatus.Cancelled)
+            .OrderByDescending(c => c.Attempt)
+            .FirstOrDefaultAsync(cancellationToken);
+        return latest is { Status: Domain.Execution.BuildCheckStatus.Exhausted }
+            ? text + "\n" + Domain.Execution.BuildCheckText.Exhausted(await buildChecks.FixesUsedAsync(latest, cancellationToken))
+            : text;
+    }
 
     /// <summary>The cycle this job reviews: read back from its <c>REVIEW_STARTED</c>, or started now; <c>null</c> if the project left review.</summary>
     private async Task<int?> BeginCycleAsync(JobExecution job, LifecycleJobPayload payload, CancellationToken cancellationToken)
@@ -385,6 +409,7 @@ public sealed partial class ReviewJobHandler(
 
         // FR-248, §4.43: then every deterministic finding gets a step or a valid waiver.
         var findingCheck = new FindingStepCheck(material.Findings, material.EarlierWaivers, cycle);
+        var reviewCycle = await ReviewCycleTextAsync(project, cycle, cancellationToken);
         var plans = material.CurrentOptimizationPlan is { } optimization
             ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
             : material.ImplementationPlan?.Content;
@@ -395,7 +420,7 @@ public sealed partial class ReviewJobHandler(
             Job = job,
             Inputs = new Dictionary<string, string?>
             {
-                ["REVIEW_CYCLE"] = cycle.ToString(CultureInfo.InvariantCulture),
+                ["REVIEW_CYCLE"] = reviewCycle,
                 ["TECHNICAL_SPECIFICATION"] = material.Specification?.Content,
                 ["IMPLEMENTATION_PLAN"] = plans,
                 ["CODEBASE_SUMMARY"] = material.CodebaseSummary?.Content,
