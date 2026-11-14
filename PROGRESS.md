@@ -35,12 +35,12 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-251 | Catch-all spec paths read whole and covered by fallbacks | 3.7, 4.44 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
 | FR-252 | File-based routes and `public/` count as endpoints | 3.7, 4.45 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
 | FR-253 | Runtime dependencies only | 3.7, 4.46 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
-| FR-254 | Build check starts after execution | 3.8, 4.47 | backend (job) | M53 | todo | |
-| FR-255 | Build check waits for preview + required checks | 3.8, 4.47 | backend | M53 | todo | |
-| FR-256 | Build-fix agent and `build_fix` steps | 3.8, 4.48 | backend | M53 | todo | |
-| FR-257 | Guardian rejects error suppression in build fixes | 3.8, 4.48 | backend (domain) | M53 | todo | |
-| FR-258 | `maxBuildFixAttempts`, exhausted → review | 3.8, 4.47 | backend + data | M53 | todo | |
-| FR-259 | Build check panel, Build fix badge, setting | 3.8 | frontend + backend | M53 | todo | |
+| FR-254 | Build check starts after execution | 3.8, 4.47 | backend (job) | M53 | done | [CI 43586017649](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43586017649) |
+| FR-255 | Build check waits for preview + required checks | 3.8, 4.47 | backend | M53 | done | [CI 43586017649](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43586017649) |
+| FR-256 | Build-fix agent and `build_fix` steps | 3.8, 4.48 | backend | M53 | done | [CI 43586017649](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43586017649) |
+| FR-257 | Guardian rejects error suppression in build fixes | 3.8, 4.48 | backend (domain) | M53 | done | [CI 43586017649](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43586017649) |
+| FR-258 | `maxBuildFixAttempts`, exhausted → review | 3.8, 4.47 | backend + data | M53 | done | [CI 43586017649](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43586017649) |
+| FR-259 | Build check panel, Build fix badge, setting | 3.8 | frontend + backend | M53 | done | [CI 43586017649](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43586017649) |
 
 ## Phases
 - [x] M46 Version and branch prefix (FR-232–FR-234, FR-245 bump)
@@ -49,7 +49,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M49 Failure evidence in review (FR-236–FR-240)
 - [x] M51 Check accuracy and finding ids (FR-246, FR-251–FR-253) — branch `build/tevrin-0.6.1-review`
 - [x] M52 Findings in the plan (FR-247–FR-250)
-- [ ] M53 Build check before review (FR-254–FR-259)
+- [x] M53 Build check before review (FR-254–FR-259)
 - [ ] M50 Release 0.6.1 (after M53) (FR-245): build PR #38 open; after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms
 
 ## Decisions
