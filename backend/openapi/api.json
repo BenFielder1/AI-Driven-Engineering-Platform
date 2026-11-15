@@ -15981,7 +15981,9 @@
           "failures",
           "fixStepNumbers",
           "startedAt",
-          "completedAt"
+          "completedAt",
+          "endReason",
+          "fixPlanning"
         ],
         "type": "object",
         "properties": {
@@ -16036,9 +16038,32 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "endReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BuildCheckEndReason"
+              }
+            ]
+          },
+          "fixPlanning": {
+            "$ref": "#/components/schemas/BuildCheckFixPlanning"
           }
         },
-        "description": "One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,\nk the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,\n`skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers\nof the build-fix steps planned from it, and when it started and completed."
+        "description": "One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,\nk the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,\n`skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers\nof the build-fix steps planned from it, and when it started and completed. D-0.6.1-23: `endReason` says why an\nexhausted or cancelled check ended (`null` otherwise), and `fixPlanning` where its fix stands (`none`,\n`planning`, `planned`, `failed`)."
+      },
+      "BuildCheckEndReason": {
+        "enum": [
+          "attempts_used",
+          "fix_plan_invalid",
+          "escalation_continue",
+          "job_failed",
+          "cancelled_by_change",
+          null
+        ]
       },
       "BuildCheckFailureDto": {
         "required": [
@@ -16067,12 +16092,24 @@
         },
         "description": "A failure a build check found (FR-256, FR-259): the failure id (as in review findings), its source\n    (`preview` or `check`), the message and the redacted log excerpt (§4.38; `null` when there is none)."
       },
+      "BuildCheckFixPlanning": {
+        "enum": [
+          "none",
+          "planning",
+          "planned",
+          "failed"
+        ],
+        "description": "Where a build check's fix stands (FR-256, D-0.6.1-23), derived by BuildCheckFixPlanning BuildCheckRules.FixPlanningOf(BuildCheckStatus status, BuildCheckEndReason? endReason, bool hasFixSteps, bool hasFailures). Wire values:\n`none` (no fix is planned from this check), `planning` (the check failed and the build-fix agent is planning),\n`planned` (fix steps were stored) and `failed` (planning ended without steps: an invalid plan after a retry, or\nthe build-fix job failed)."
+      },
       "BuildCheckSourceDto": {
         "required": [
           "name",
           "kind",
           "conclusion",
-          "url"
+          "url",
+          "status",
+          "message",
+          "informational"
         ],
         "type": "object",
         "properties": {
@@ -16093,9 +16130,24 @@
               "null",
               "string"
             ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "informational": {
+            "type": "boolean"
           }
         },
-        "description": "A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion\n    (`success`, `failure`, `timed_out`, …; `null` while pending) and a link to it."
+        "description": "A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion\n    (`success`, `failure`, `timed_out`, `unavailable`, …; `null` while pending) and a link to it.\n    D-0.6.1-23: `status` is where the source stands (a preview's deployment state `queued`, `building`,\n    `ready`, `error`, `canceled`, or a check's `queued`, `in_progress`, `completed`; `null`\n    when not started or not known), `message` explains an `unavailable` or informational source, and\n    `informational` is `true` for a source shown for information only (branch rules unreadable): never waited for,\n    never a failure."
       },
       "BuildCheckSourceKind": {
         "enum": [
@@ -16138,7 +16190,9 @@
               "failures",
               "fixStepNumbers",
               "startedAt",
-              "completedAt"
+              "completedAt",
+              "endReason",
+              "fixPlanning"
             ],
             "type": "object",
             "properties": {
@@ -16179,7 +16233,10 @@
                     "name",
                     "kind",
                     "conclusion",
-                    "url"
+                    "url",
+                    "status",
+                    "message",
+                    "informational"
                   ],
                   "type": "object",
                   "properties": {
@@ -16204,9 +16261,24 @@
                         "null",
                         "string"
                       ]
+                    },
+                    "status": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "message": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "informational": {
+                      "type": "boolean"
                     }
                   },
-                  "description": "A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion\n    (`success`, `failure`, `timed_out`, …; `null` while pending) and a link to it."
+                  "description": "A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion\n    (`success`, `failure`, `timed_out`, `unavailable`, …; `null` while pending) and a link to it.\n    D-0.6.1-23: `status` is where the source stands (a preview's deployment state `queued`, `building`,\n    `ready`, `error`, `canceled`, or a check's `queued`, `in_progress`, `completed`; `null`\n    when not started or not known), `message` explains an `unavailable` or informational source, and\n    `informational` is `true` for a source shown for information only (branch rules unreadable): never waited for,\n    never a failure."
                 }
               },
               "failures": {
@@ -16256,12 +16328,31 @@
                   "string"
                 ],
                 "format": "date-time"
+              },
+              "endReason": {
+                "enum": [
+                  "attempts_used",
+                  "fix_plan_invalid",
+                  "escalation_continue",
+                  "job_failed",
+                  "cancelled_by_change",
+                  null
+                ]
+              },
+              "fixPlanning": {
+                "enum": [
+                  "none",
+                  "planning",
+                  "planned",
+                  "failed"
+                ],
+                "description": "Where a build check's fix stands (FR-256, D-0.6.1-23), derived by BuildCheckFixPlanning BuildCheckRules.FixPlanningOf(BuildCheckStatus status, BuildCheckEndReason? endReason, bool hasFixSteps, bool hasFailures). Wire values:\n`none` (no fix is planned from this check), `planning` (the check failed and the build-fix agent is planning),\n`planned` (fix steps were stored) and `failed` (planning ended without steps: an invalid plan after a retry, or\nthe build-fix job failed)."
               }
             },
-            "description": "One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,\nk the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,\n`skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers\nof the build-fix steps planned from it, and when it started and completed."
+            "description": "One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,\nk the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,\n`skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers\nof the build-fix steps planned from it, and when it started and completed. D-0.6.1-23: `endReason` says why an\nexhausted or cancelled check ended (`null` otherwise), and `fixPlanning` where its fix stands (`none`,\n`planning`, `planned`, `failed`)."
           }
         },
-        "description": "FR-259: the live `buildCheckUpdated` message, pushed on the project's live channel (the execution event stream)\nwhen a build check starts, changes state or has fix steps planned: the project, and the check as the list endpoint\nreturns it. Not an HTTP response: the schema is added to the OpenAPI components for the generated client."
+        "description": "FR-259: the live `buildCheckUpdated` message, pushed on the project's live channel (the execution event stream)\nwhen a build check starts, changes state, has fix steps planned, or (D-0.6.1-23) while waiting its sources change or its\nfix planning starts: the project, and the check as the list endpoint\nreturns it. Not an HTTP response: the schema is added to the OpenAPI components for the generated client."
       },
       "CategoryScoreDto": {
         "required": [
@@ -19343,7 +19434,8 @@
           "fileManifest",
           "commitUrl",
           "origin",
-          "buildCheckAttempt"
+          "buildCheckAttempt",
+          "buildCheckId"
         ],
         "type": "object",
         "properties": {
@@ -19446,9 +19538,16 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "buildCheckId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
-        "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider\n(no remote) and before the step is committed. FR-256, FR-259: `origin` is `plan` for the plan's own steps and\n`build_fix` for steps planned after a failed build check; `buildCheckAttempt` is that check's attempt (the\n\"Build fix · attempt n\" badge), `null` for plan steps."
+        "description": "One execution step of a plan version (FR-30–FR-34): the plan step (number, title, task, declared files, dependencies on\nearlier step numbers, user instructions) and its progress — status, attempt, the last attempt's violations, and the\nbranch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider\n(no remote) and before the step is committed. FR-256, FR-259: `origin` is `plan` for the plan's own steps and\n`build_fix` for steps planned after a failed build check; `buildCheckAttempt` is that check's attempt (the\n\"Build fix · attempt n\" badge), `null` for plan steps. D-0.6.1-23: `buildCheckId` is the id of that check (to\njoin a fix step to its build check item), `null` for plan steps."
       },
       "ExecutionStepSummaryDto": {
         "required": [
@@ -19464,7 +19563,8 @@
           "commitUrl",
           "legacyAgentKey",
           "origin",
-          "buildCheckAttempt"
+          "buildCheckAttempt",
+          "buildCheckId"
         ],
         "type": "object",
         "properties": {
@@ -19531,9 +19631,16 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "buildCheckId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
-        "description": "One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the\nbase Code Generator), status, attempt count, declared vs produced files, and the commit once accepted\n(`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the 0.2.0 agent key a plan locked before\nthe upgrade named, which now runs as `agentKey`; null otherwise. FR-256, FR-259: `origin` (`plan` or\n`build_fix`) and `buildCheckAttempt` (the attempt of the build check a build-fix step fixes; null for plan steps)."
+        "description": "One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the\nbase Code Generator), status, attempt count, declared vs produced files, and the commit once accepted\n(`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the 0.2.0 agent key a plan locked before\nthe upgrade named, which now runs as `agentKey`; null otherwise. FR-256, FR-259: `origin` (`plan` or\n`build_fix`) and `buildCheckAttempt` (the attempt of the build check a build-fix step fixes; null for plan steps).\nD-0.6.1-23: `buildCheckId` is that check's id (null for plan steps)."
       },
       "ExecutionStepsDto": {
         "required": [

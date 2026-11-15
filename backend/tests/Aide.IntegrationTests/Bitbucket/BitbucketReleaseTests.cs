@@ -97,6 +97,29 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
         Assert.Contains(bitbucket.Api.Requests, r => r.Method == "GET" && r.Path.EndsWith("/statuses", StringComparison.Ordinal) && r.Authorization == $"Bearer {Token}");
     }
 
+    [Fact]
+    public async Task FR139_D_0_6_1_23_Mergeability_checks_Bitbucket_refuses_with_403_mean_no_build_is_required_and_review_keeps_the_statuses()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var bitbucket = new BitbucketState(remote)
+        {
+            Statuses = [new { key = "test", name = "test", state = "FAILED", url = "https://ci.example/7" }],
+        };
+        bitbucket.Api.On(HttpMethod.Get, PullRequest + "/mergeability/checks", HttpStatusCode.Forbidden, """{"type":"error","error":{"message":"Your plan doesn't include merge checks."}}""");
+        var (app, fixture) = await SetUpAsync(bitbucket, remote);
+        using var session = fixture;
+        var id = fixture.Project.Id;
+
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        // The statuses are still read; with no build known to be required, the failure is a minor finding, not a required one.
+        var report = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        Assert.DoesNotContain(report.Violations, v => v.Message == "required build test failed");
+        Assert.Equal(Severity.Minor, Assert.Single(report.Violations, v => v.Message.EndsWith("test failed", StringComparison.Ordinal)).Severity);
+        Assert.NotNull(report.ExternalChecks);
+    }
+
     // ---------- FR-137, FR-140: aide_merges ----------
 
     [Fact]

@@ -201,6 +201,7 @@ export function createExecutionSteps(
       fileManifest: null,
       origin: "plan",
       buildCheckAttempt: null,
+      buildCheckId: null,
     })),
   );
 }
@@ -294,7 +295,7 @@ export function buildCheck(
   project: StoredProject,
   overrides: Partial<Schemas["BuildCheckDto"]> = {},
 ): Schemas["BuildCheckDto"] {
-  return {
+  const check: Omit<Schemas["BuildCheckDto"], "fixPlanning"> = {
     id: nextId(),
     releaseVersionId: currentVersionId(project),
     reviewCycle: project.state.review.cycle,
@@ -306,8 +307,34 @@ export function buildCheck(
     fixStepNumbers: [],
     startedAt: "2026-09-01T11:00:00Z",
     completedAt: null,
+    endReason: null,
     ...overrides,
   };
+  return { ...check, fixPlanning: overrides.fixPlanning ?? fixPlanningOf(check) };
+}
+
+/**
+ * D-0.6.1-23: where a check's fix stands, as the backend derives it (BuildCheckRules.FixPlanningOf): fix steps (or an
+ * escalation answered "continue") → `planned`; an invalid plan, or a failed fix job with failures → `failed`; a failed
+ * check without steps yet → `planning`; else `none`.
+ */
+export function fixPlanningOf(
+  check: Pick<Schemas["BuildCheckDto"], "status" | "endReason" | "fixStepNumbers" | "failures">,
+): Schemas["BuildCheckFixPlanning"] {
+  if (check.fixStepNumbers.length > 0 || check.endReason === "escalation_continue") {
+    return "planned";
+  }
+  if (check.endReason === "fix_plan_invalid" || (check.endReason === "job_failed" && check.failures.length > 0)) {
+    return "failed";
+  }
+  return check.status === "failed" ? "planning" : "none";
+}
+
+/** D-0.6.1-23: a build check source (`status` and `message` default to `null`, `informational` to `false`). */
+export function buildCheckSource(
+  source: Pick<Schemas["BuildCheckSourceDto"], "name" | "kind"> & Partial<Schemas["BuildCheckSourceDto"]>,
+): Schemas["BuildCheckSourceDto"] {
+  return { conclusion: null, url: null, status: null, message: null, informational: false, ...source };
 }
 
 /** FR-259: stores a build check (see `buildCheck`) on the project and returns it. */
@@ -598,6 +625,7 @@ export function executionRuns(project: StoredProject, releaseVersionId: string):
         commitUrl: s.commitUrl,
         origin: s.origin,
         buildCheckAttempt: s.buildCheckAttempt,
+        buildCheckId: s.buildCheckId,
       })),
     };
   });

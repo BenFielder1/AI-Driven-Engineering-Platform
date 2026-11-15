@@ -214,7 +214,7 @@ public sealed partial class GateService(
         {
             if (await db.BuildChecks.FirstOrDefaultAsync(c => c.Id == checkId, cancellationToken) is { } check)
             {
-                exhausted |= await buildChecks.ExhaustAsync(check, planId, actor, now, cancellationToken);
+                exhausted |= await buildChecks.ExhaustAsync(check, planId, actor, BuildCheckEndReason.EscalationContinue, now, cancellationToken);
             }
         }
 

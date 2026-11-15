@@ -90,3 +90,33 @@ public enum BuildCheckSourceKind
     Preview = 0,
     Check = 1,
 }
+
+/// <summary>
+/// Why a build check ended <c>exhausted</c> or <c>cancelled</c> (§4.47, D-0.6.1-23). Wire values: <c>attempts_used</c> (the
+/// last allowed check still failed), <c>fix_plan_invalid</c> (the fix plan stayed invalid after one retry),
+/// <c>escalation_continue</c> (a blocked fix step's escalation was answered "continue"), <c>job_failed</c> (the check's or
+/// its fix's job ended without succeeding) and <c>cancelled_by_change</c> (the version was invalidated or rolled back, or
+/// execution stopped). Checks that passed, were skipped or are still open have none.
+/// </summary>
+public enum BuildCheckEndReason
+{
+    AttemptsUsed = 0,
+    FixPlanInvalid = 1,
+    EscalationContinue = 2,
+    JobFailed = 3,
+    CancelledByChange = 4,
+}
+
+/// <summary>
+/// Where a build check's fix stands (FR-256, D-0.6.1-23), derived by <see cref="BuildCheckRules.FixPlanningOf"/>. Wire values:
+/// <c>none</c> (no fix is planned from this check), <c>planning</c> (the check failed and the build-fix agent is planning),
+/// <c>planned</c> (fix steps were stored) and <c>failed</c> (planning ended without steps: an invalid plan after a retry, or
+/// the build-fix job failed).
+/// </summary>
+public enum BuildCheckFixPlanning
+{
+    None = 0,
+    Planning = 1,
+    Planned = 2,
+    Failed = 3,
+}

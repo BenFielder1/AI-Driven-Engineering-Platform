@@ -117,6 +117,7 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<StepStatus>(configurationBuilder);
         MapEnum<StepOrigin>(configurationBuilder);
         MapEnum<BuildCheckStatus>(configurationBuilder);
+        MapEnum<BuildCheckEndReason>(configurationBuilder);
         MapEnum<AgentKind>(configurationBuilder);
         MapEnum<AgentRunStatus>(configurationBuilder);
         MapEnum<LlmProvider>(configurationBuilder);

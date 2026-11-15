@@ -316,7 +316,12 @@ function numberList(values: number[]): string {
  * `failureIds` when completed, `stepNumbers` when fix steps were planned.
  */
 function describeBuildCheck(type: string, payload: Payload): string | null {
-  const attempt = count(payload, "attempt");
+  // D-0.6.1-23: BUILD_CHECK_UPDATED carries only the build check item (`check`), with its attempt inside.
+  const nested = payload.check;
+  const attempt =
+    type === "BUILD_CHECK_UPDATED" && typeof nested === "object" && nested !== null && !Array.isArray(nested)
+      ? count(nested as Payload, "attempt")
+      : count(payload, "attempt");
   const which =
     attempt === null
       ? "Build check"
@@ -347,6 +352,8 @@ function describeBuildCheck(type: string, payload: Payload): string | null {
           return `${which} completed`;
       }
     }
+    case "BUILD_CHECK_UPDATED":
+      return `${which} progress updated`;
     case "BUILD_FIX_PLANNED": {
       const steps = Array.isArray(payload.stepNumbers)
         ? payload.stepNumbers.filter((n): n is number => typeof n === "number")
@@ -1016,6 +1023,7 @@ export function describeActivity(
       break;
     case "BUILD_CHECK_STARTED":
     case "BUILD_CHECK_COMPLETED":
+    case "BUILD_CHECK_UPDATED":
     case "BUILD_FIX_PLANNED":
       text = describeBuildCheck(type, payload);
       break;

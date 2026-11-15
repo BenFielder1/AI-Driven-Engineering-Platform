@@ -3326,7 +3326,9 @@ export interface components {
          * @description One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,
          *     k the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,
          *     `skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers
-         *     of the build-fix steps planned from it, and when it started and completed.
+         *     of the build-fix steps planned from it, and when it started and completed. D-0.6.1-23: `endReason` says why an
+         *     exhausted or cancelled check ended (`null` otherwise), and `fixPlanning` where its fix stands (`none`,
+         *     `planning`, `planned`, `failed`).
          */
         BuildCheckDto: {
             /** Format: uuid */
@@ -3346,7 +3348,11 @@ export interface components {
             startedAt: string;
             /** Format: date-time */
             completedAt: null | string;
+            endReason: null | components["schemas"]["BuildCheckEndReason"];
+            fixPlanning: components["schemas"]["BuildCheckFixPlanning"];
         };
+        /** @enum {unknown} */
+        BuildCheckEndReason: "attempts_used" | "fix_plan_invalid" | "escalation_continue" | "job_failed" | "cancelled_by_change" | null;
         /**
          * @description A failure a build check found (FR-256, FR-259): the failure id (as in review findings), its source
          *         (`preview` or `check`), the message and the redacted log excerpt (§4.38; `null` when there is none).
@@ -3358,14 +3364,30 @@ export interface components {
             excerpt: null | string;
         };
         /**
+         * @description Where a build check's fix stands (FR-256, D-0.6.1-23), derived by BuildCheckFixPlanning BuildCheckRules.FixPlanningOf(BuildCheckStatus status, BuildCheckEndReason? endReason, bool hasFixSteps, bool hasFailures). Wire values:
+         *     `none` (no fix is planned from this check), `planning` (the check failed and the build-fix agent is planning),
+         *     `planned` (fix steps were stored) and `failed` (planning ended without steps: an invalid plan after a retry, or
+         *     the build-fix job failed).
+         * @enum {unknown}
+         */
+        BuildCheckFixPlanning: "none" | "planning" | "planned" | "failed";
+        /**
          * @description A source a build check read (FR-255, FR-259): the preview rollout or a required CI check, its conclusion
-         *         (`success`, `failure`, `timed_out`, …; `null` while pending) and a link to it.
+         *         (`success`, `failure`, `timed_out`, `unavailable`, …; `null` while pending) and a link to it.
+         *         D-0.6.1-23: `status` is where the source stands (a preview's deployment state `queued`, `building`,
+         *         `ready`, `error`, `canceled`, or a check's `queued`, `in_progress`, `completed`; `null`
+         *         when not started or not known), `message` explains an `unavailable` or informational source, and
+         *         `informational` is `true` for a source shown for information only (branch rules unreadable): never waited for,
+         *         never a failure.
          */
         BuildCheckSourceDto: {
             name: string;
             kind: components["schemas"]["BuildCheckSourceKind"];
             conclusion: null | string;
             url: null | string;
+            status: null | string;
+            message: null | string;
+            informational: boolean;
         };
         /**
          * @description The kind of a build check source (§5): the version's preview rollout (`preview`) or a required CI check
@@ -3381,7 +3403,8 @@ export interface components {
         BuildCheckStatus: "waiting" | "passed" | "failed" | "skipped" | "exhausted" | "cancelled";
         /**
          * @description FR-259: the live `buildCheckUpdated` message, pushed on the project's live channel (the execution event stream)
-         *     when a build check starts, changes state or has fix steps planned: the project, and the check as the list endpoint
+         *     when a build check starts, changes state, has fix steps planned, or (D-0.6.1-23) while waiting its sources change or its
+         *     fix planning starts: the project, and the check as the list endpoint
          *     returns it. Not an HTTP response: the schema is added to the OpenAPI components for the generated client.
          */
         BuildCheckUpdatedMessage: {
@@ -3391,7 +3414,9 @@ export interface components {
              * @description One build check of a release version (FR-254–FR-259, §4.47): its review cycle and attempt (0 checks the plan's commit,
              *     k the commit after the k-th fix), the head commit, the status (`waiting`, `passed`, `failed`,
              *     `skipped`, `exhausted`, `cancelled`), the sources read with their results, the failures, the step numbers
-             *     of the build-fix steps planned from it, and when it started and completed.
+             *     of the build-fix steps planned from it, and when it started and completed. D-0.6.1-23: `endReason` says why an
+             *     exhausted or cancelled check ended (`null` otherwise), and `fixPlanning` where its fix stands (`none`,
+             *     `planning`, `planned`, `failed`).
              */
             check: {
                 /** Format: uuid */
@@ -3419,6 +3444,9 @@ export interface components {
                     kind: "preview" | "check";
                     conclusion: null | string;
                     url: null | string;
+                    status: null | string;
+                    message: null | string;
+                    informational: boolean;
                 }[];
                 failures: {
                     failureId: string;
@@ -3431,6 +3459,16 @@ export interface components {
                 startedAt: string;
                 /** Format: date-time */
                 completedAt: null | string;
+                /** @enum {unknown} */
+                endReason: "attempts_used" | "fix_plan_invalid" | "escalation_continue" | "job_failed" | "cancelled_by_change" | null;
+                /**
+                 * @description Where a build check's fix stands (FR-256, D-0.6.1-23), derived by BuildCheckFixPlanning BuildCheckRules.FixPlanningOf(BuildCheckStatus status, BuildCheckEndReason? endReason, bool hasFixSteps, bool hasFailures). Wire values:
+                 *     `none` (no fix is planned from this check), `planning` (the check failed and the build-fix agent is planning),
+                 *     `planned` (fix steps were stored) and `failed` (planning ended without steps: an invalid plan after a retry, or
+                 *     the build-fix job failed).
+                 * @enum {unknown}
+                 */
+                fixPlanning: "none" | "planning" | "planned" | "failed";
             };
         };
         /**
@@ -4532,7 +4570,8 @@ export interface components {
          *     branch and commit once accepted. `commitUrl` links the commit on GitHub; it is `null` for the Local provider
          *     (no remote) and before the step is committed. FR-256, FR-259: `origin` is `plan` for the plan's own steps and
          *     `build_fix` for steps planned after a failed build check; `buildCheckAttempt` is that check's attempt (the
-         *     "Build fix · attempt n" badge), `null` for plan steps.
+         *     "Build fix · attempt n" badge), `null` for plan steps. D-0.6.1-23: `buildCheckId` is the id of that check (to
+         *     join a fix step to its build check item), `null` for plan steps.
          */
         ExecutionStepDto: {
             /** Format: uuid */
@@ -4559,6 +4598,8 @@ export interface components {
             origin: components["schemas"]["StepOrigin"];
             /** Format: int32 */
             buildCheckAttempt: null | number;
+            /** Format: uuid */
+            buildCheckId: null | string;
         };
         /**
          * @description One step of an execution run (FR-57): number, title, the specialist that runs it (`agentKey`, FR-121; null for the
@@ -4566,6 +4607,7 @@ export interface components {
          *     (`commitUrl` is null for the Local provider). `legacyAgentKey` (§4.23): the 0.2.0 agent key a plan locked before
          *     the upgrade named, which now runs as `agentKey`; null otherwise. FR-256, FR-259: `origin` (`plan` or
          *     `build_fix`) and `buildCheckAttempt` (the attempt of the build check a build-fix step fixes; null for plan steps).
+         *     D-0.6.1-23: `buildCheckId` is that check's id (null for plan steps).
          */
         ExecutionStepSummaryDto: {
             /** Format: uuid */
@@ -4585,6 +4627,8 @@ export interface components {
             origin: components["schemas"]["StepOrigin"];
             /** Format: int32 */
             buildCheckAttempt: null | number;
+            /** Format: uuid */
+            buildCheckId: null | string;
         };
         /** @description A plan version's execution steps in step order (FR-30); `plan` is `null` (and no steps) before any plan is approved. */
         ExecutionStepsDto: {

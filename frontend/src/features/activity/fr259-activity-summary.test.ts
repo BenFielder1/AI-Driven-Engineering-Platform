@@ -29,4 +29,10 @@ describe('FR-259: activity summaries of the build check events', () => {
     expect(d('BUILD_FIX_PLANNED', { attempt: 1, stepNumbers: [6] })).toBe('Build fix step 6 planned')
     expect(d('BUILD_FIX_PLANNED', {})).toBe('Build fix steps planned')
   })
+
+  it('FR259_BUILD_CHECK_UPDATED_names_the_attempt_of_the_check_item', () => {
+    expect(d('BUILD_CHECK_UPDATED', { check: { attempt: 0, status: 'waiting' } })).toBe('Build check (initial) progress updated')
+    expect(d('BUILD_CHECK_UPDATED', { check: { attempt: 2 } })).toBe('Build check attempt 2 progress updated')
+    expect(d('BUILD_CHECK_UPDATED', {})).toBe('Build check progress updated')
+  })
 })

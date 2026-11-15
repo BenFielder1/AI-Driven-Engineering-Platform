@@ -54,6 +54,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Decisions
 See SPEC §10 (D-0.6.1-1 … D-0.6.1-21). Build-time decisions are added below.
+- **D-0.6.1-23** (fix after preview testing, branch `build/tevrin-0.6.1-build-check`): the build check no longer dead-letters when GitHub refuses the branch-rules read (403 on a private free-plan repo). It waits for the preview, keeps waiting on host errors, and records `end_reason`. The execution page has a build-check card timeline. See SPEC §4.47 and §10.
 - **D-0.6.1-22** (Build, M53, Claude, assumed): build check details.
   - **Schema:** `build_checks` gains a nullable `superseded_at`; the (version, cycle, attempt) unique index applies only where it is null. Rollback and invalidation cancel the open check and supersede earlier ones, so a re-run starts at attempt 0 with the full budget. Fixes used = checks in force that have fix steps (amends §5).
   - **Steps:** fix steps are stored on the current plan and numbered after its highest step (unique (plan, step) index). The 1–5 limit counts the agent's own steps; Tevrin-added steps may exceed it.
@@ -73,6 +74,7 @@ See SPEC §10 (D-0.6.1-1 … D-0.6.1-21). Build-time decisions are added below.
 - Build check: a waiting check's sources are saved on every poll, but live pushes go out only on transitions.
 
 ## Manual checks (Ben)
+- Re-test the build check on the private GitHub + Vercel project: it waits while Vercel builds, a failed build shows its excerpt, "Planning a fix…" appears, then the fix steps run and the next build card appears.
 - GitHub job-log redirect: confirm the blob-storage request carries no `Authorization` header (relies on .NET's cross-host redirect stripping; not unit-tested).
 - Live log fetches on a real failing check: GitHub Actions job log (redirect to blob storage), GitLab job trace, Bitbucket Pipelines step log (status URL → build number; redirects not followed).
 - A real Vercel project end to end: a missing `vercel.json` gets an added step, and a broken build produces a specific fix step with the log excerpt.

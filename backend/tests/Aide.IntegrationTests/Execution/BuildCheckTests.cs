@@ -20,6 +20,7 @@ using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Live;
+using Aide.IntegrationTests.Releases;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -443,9 +444,17 @@ public sealed class BuildCheckTests(AideApiFactory factory)
 
         Assert.Equal(2, scripted.Prompts.Count); // one retry, with the reasons
         Assert.Contains("Your previous fix plan was rejected", scripted.Prompts[1], StringComparison.Ordinal);
-        Assert.Equal(BuildCheckStatus.Exhausted, Assert.Single(await ChecksAsync(app, id)).Status);
+        var exhausted = Assert.Single(await ChecksAsync(app, id));
+        Assert.Equal((BuildCheckStatus.Exhausted, (BuildCheckEndReason?)BuildCheckEndReason.FixPlanInvalid), (exhausted.Status, exhausted.EndReason));
         var pr = Assert.Single(await QueuedAsync(app, id, JobTypes.PullRequest));
         Assert.Contains(BuildCheckService.ExhaustedTrigger, pr.Payload, StringComparison.Ordinal);
+
+        // D-0.6.1-23: the fix job's start was pushed as "planning"; the item now reads fix planning failed.
+        var started = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.BuildCheckUpdated)).Payload);
+        Assert.Equal("planning", started.GetProperty("check").GetProperty("fixPlanning").GetString());
+        var listed = await ProjectApi.ReadAsync<List<BuildCheckDto>>(await fixture.Viewer.Client.GetAsync(
+            new Uri($"{fixture.Path}/versions/{versionId}/build-checks", UriKind.Relative), Ct));
+        Assert.Equal((BuildCheckEndReason.FixPlanInvalid, BuildCheckFixPlanning.Failed), (Assert.Single(listed).EndReason!.Value, listed[0].FixPlanning));
 
         await AgentJobs.RunQueuedAsync(app, id);
         Assert.Equal(Phase.Review, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
@@ -497,7 +506,8 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         // §4.47: "continue" on the blocked build-fix step exhausts the check; Review starts with the failures.
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(app, id), g => g.Status == GateStatus.Pending);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "continue" }));
-        Assert.Equal(BuildCheckStatus.Exhausted, Assert.Single(await ChecksAsync(app, id), c => c.Id == current.Id).Status);
+        var continued = Assert.Single(await ChecksAsync(app, id), c => c.Id == current.Id);
+        Assert.Equal((BuildCheckStatus.Exhausted, (BuildCheckEndReason?)BuildCheckEndReason.EscalationContinue), (continued.Status, continued.EndReason));
         Assert.Equal(StepStatus.Invalidated, (await ProjectApi.WithDbAsync(app, db => db.ExecutionSteps.AsNoTracking().SingleAsync(s => s.Id == step.Id, Ct))).Status);
         await AgentJobs.RunQueuedAsync(app, id);
         Assert.Equal(Phase.Review, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
@@ -534,6 +544,11 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             new Uri($"{fixture.Path}/versions/{checks[0].ReleaseVersionId}/build-checks", UriKind.Relative), Ct));
         Assert.Equal([2, 1, 0], listed.Select(c => c.Attempt));
         Assert.Equal([[], [4], [3]], listed.Select(c => c.FixStepNumbers.ToArray()));
+
+        // D-0.6.1-23: the last check ended because the attempts were used; the earlier two had their fixes planned.
+        Assert.Equal([BuildCheckEndReason.AttemptsUsed, null, null], listed.Select(c => c.EndReason));
+        Assert.Equal([BuildCheckFixPlanning.None, BuildCheckFixPlanning.Planned, BuildCheckFixPlanning.Planned], listed.Select(c => c.FixPlanning));
+        Assert.Equal(BuildCheckEndReason.AttemptsUsed, checks[2].EndReason);
         Assert.Equal("failure:preview:vercel", Assert.Single(listed[2].Failures).FailureId);
     }
 
@@ -755,6 +770,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.All(checks, c => Assert.NotNull(c.SupersededAt));
         var cancelled = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.BuildCheckCompleted)).Payload);
         Assert.Equal("cancelled", cancelled.GetProperty("status").GetString());
+        Assert.Equal("cancelled_by_change", cancelled.GetProperty("endReason").GetString());
+        Assert.Equal(BuildCheckEndReason.CancelledByChange, checks.Single(c => c.Id == waiting.Id).EndReason);
+        Assert.Null(checks.Single(c => c.Id == exhausted.Id).EndReason); // a final check keeps its state and reason
     }
 
     [Fact]
@@ -772,7 +790,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.False(await DeploymentHarness.RunOnceAsync(app, job.Id));
 
         var check = Assert.Single(await ChecksAsync(app, id));
-        Assert.Equal(BuildCheckStatus.Cancelled, check.Status);
+        Assert.Equal((BuildCheckStatus.Cancelled, (BuildCheckEndReason?)BuildCheckEndReason.CancelledByChange), (check.Status, check.EndReason));
         Assert.NotNull(check.CompletedAt);
     }
 
@@ -813,9 +831,15 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             await db.SaveChangesAsync(Ct);
         }
 
-        Assert.Equal(BuildCheckStatus.Exhausted, Assert.Single(await ChecksAsync(factory, id)).Status);
+        var ended = Assert.Single(await ChecksAsync(factory, id));
+        Assert.Equal((BuildCheckStatus.Exhausted, (BuildCheckEndReason?)BuildCheckEndReason.JobFailed), (ended.Status, ended.EndReason));
         var pr = Assert.Single(await QueuedAsync(factory, id, JobTypes.PullRequest));
         Assert.Contains(BuildCheckService.ExhaustedTrigger, pr.Payload, StringComparison.Ordinal);
+
+        // D-0.6.1-23: the item says why it ended (a dead fix job leaves its failed check's planning failed; the seeded check has no failures).
+        var listed = await ProjectApi.ReadAsync<List<BuildCheckDto>>(await fixture.Viewer.Client.GetAsync(
+            new Uri($"{fixture.Path}/versions/{versionId}/build-checks", UriKind.Relative), Ct));
+        Assert.Equal(BuildCheckEndReason.JobFailed, Assert.Single(listed).EndReason);
     }
 
     [Fact]
@@ -872,5 +896,166 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             Ct);
 
         await Problems.AssertAsync(response, HttpStatusCode.BadRequest, ErrorCodes.Validation);
+    }
+
+    // ---------- D-0.6.1-23: the Git host never ends the check early; live progress ----------
+
+    private const string RulesPath = "/repos/acme/widgets/rules/branches/main";
+
+    private const string ProRequired = """{"message":"Upgrade to GitHub Pro or make this repository public to enable this feature."}""";
+
+    /// <summary>A GitHub project (the fake GitHub on a bare remote) in execution with a 2-step plan, optionally bound to the Fake preview target.</summary>
+    private static async Task<ProjectFixture> GitHubExecutingAsync(WebApplicationFactory<Program> app, MergeFlowTests.GitHubState github, bool deploy)
+    {
+        var fixture = await MergeFlowTests.GitHubFixtureAsync(app);
+        github.Branch = MergeFlowTests.BranchOf(fixture);
+        var id = fixture.Project.Id;
+        if (deploy)
+        {
+            await DeploymentHarness.BindAsync(app, id, await DeploymentHarness.SeedConnectionAsync(app, fixture.Owner.User!.Id), fixture.Owner.User!.Id);
+        }
+
+        await SeedExecutionAsync(app, id, maxAttempts: 5);
+        await ProjectApi.ReadAsync<ExecutionStateDto>(
+            await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/execution/start", new { }, Ct), HttpStatusCode.Accepted);
+        return fixture;
+    }
+
+    [Fact]
+    public async Task FR255_Branch_rules_GitHub_refuses_with_403_mean_no_required_checks_so_the_check_waits_for_the_preview_fails_on_its_error_and_plans_a_fix()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var github = new MergeFlowTests.GitHubState(remote);
+        github.Api.On(HttpMethod.Get, RulesPath, HttpStatusCode.Forbidden, ProRequired);
+        await using var app = remote.App(AgentJobs.WithResponders(DeploymentHarness.Fake(factory), new FakeBuildFixResponder()), github.Api, out _);
+        using var fixture = await GitHubExecutingAsync(app, github, deploy: true);
+        var id = fixture.Project.Id;
+
+        // Execution completes; the PR job opens the PR, queues the rollout and starts attempt 0, whose first poll defers.
+        await AgentJobs.RunQueuedAsync(app, id);
+        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        Assert.Equal(0, job.Attempts);
+        Assert.True(AideJson.Deserialize<BuildCheckJobPayload>(job.Payload).RulesWarned); // the warning is logged once per check
+        Assert.True(github.Api.Count(HttpMethod.Get, RulesPath) > 0);
+        var check = Assert.Single(await ChecksAsync(app, id));
+        Assert.Equal(BuildCheckStatus.Waiting, check.Status);
+        var rules = Assert.Single(check.Sources, s => s.Name == BuildCheckRules.RulesSourceName);
+        Assert.Equal(BuildCheckRules.UnavailableConclusion, rules.Conclusion);
+        Assert.Contains("Upgrade to GitHub Pro", rules.Message, StringComparison.Ordinal);
+
+        // It keeps waiting for the preview (another poll defers, never a failed attempt)...
+        Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
+        Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
+
+        // ...then the preview ends in Error: the check fails with the preview failure and a fix is planned.
+        await SettleNewestRolloutAsync(app, id);
+        await FailNewestPreviewAsync(app, id, ModuleLog);
+        Assert.False(await DeploymentHarness.RunOnceAsync(app, job.Id));
+        var failed = Assert.Single(await ChecksAsync(app, id));
+        Assert.Equal((BuildCheckStatus.Failed, (BuildCheckEndReason?)null), (failed.Status, failed.EndReason));
+        Assert.Equal("failure:preview:vercel", Assert.Single(failed.Failures).FailureId);
+
+        // The fix runs, the PR job pushes, and attempt 1 starts; no build check job was ever dead-lettered.
+        await AgentJobs.RunQueuedAsync(app, id);
+        var checks = await ChecksAsync(app, id);
+        Assert.Equal([(0, BuildCheckStatus.Failed), (1, BuildCheckStatus.Waiting)], checks.Select(c => (c.Attempt, c.Status)));
+        Assert.DoesNotContain(await JobsOfAsync(app, id, JobTypes.BuildCheck), j => j.Status is JobStatus.Dead or JobStatus.Failed);
+        Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
+    }
+
+    [Fact]
+    public async Task FR255_A_5xx_reading_the_check_runs_keeps_the_check_waiting_and_at_15_minutes_it_goes_on_without_them_never_failing_the_job()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var github = new MergeFlowTests.GitHubState(remote) { RequiredChecks = ["build"] };
+        var answer = github.Api.Fallback!;
+        github.Api.Fallback = r => r.Path.EndsWith("/check-runs", StringComparison.Ordinal)
+            ? ((HttpStatusCode, string)?)(HttpStatusCode.BadGateway, """{"message":"Server Error"}""")
+            : answer(r);
+        await using var app = remote.App(factory, github.Api, out _);
+        using var fixture = await GitHubExecutingAsync(app, github, deploy: false);
+        var id = fixture.Project.Id;
+
+        // The first poll can't read the checks: it defers (not a failed attempt) and shows the checks as not read yet.
+        await AgentJobs.RunQueuedAsync(app, id);
+        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        Assert.Equal(0, job.Attempts);
+        var check = Assert.Single(await ChecksAsync(app, id));
+        Assert.Equal(BuildCheckStatus.Waiting, check.Status);
+        var unread = Assert.Single(check.Sources);
+        Assert.Equal((BuildCheckRules.HeadChecksSourceName, (string?)null), (unread.Name, unread.Conclusion));
+        Assert.Contains("HTTP 502", unread.Message, StringComparison.Ordinal);
+        Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
+        Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
+
+        // Still unreadable after 15 minutes: the check goes on without them (no failure, no fix) and review starts.
+        job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var payload = AideJson.Deserialize<BuildCheckJobPayload>(job.Payload) with { ChecksWaitSince = DateTimeOffset.UtcNow.AddMinutes(-16) };
+        await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id).ExecuteUpdateAsync(s => s.SetProperty(j => j.Payload, AideJson.Serialize(payload)), Ct));
+        Assert.False(await DeploymentHarness.RunOnceAsync(app, job.Id));
+
+        check = Assert.Single(await ChecksAsync(app, id));
+        Assert.Equal(BuildCheckStatus.Skipped, check.Status);
+        Assert.Empty(check.Failures);
+        Assert.Equal(BuildCheckRules.UnavailableConclusion, Assert.Single(check.Sources).Conclusion);
+        Assert.Empty(await JobsOfAsync(app, id, JobTypes.BuildFix));
+        Assert.DoesNotContain(await JobsOfAsync(app, id, JobTypes.BuildCheck), j => j.Status is JobStatus.Dead or JobStatus.Failed);
+        Assert.Equal(Phase.Review, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
+    }
+
+    [Fact]
+    public async Task FR259_A_waiting_checks_source_status_change_is_pushed_live_and_an_unchanged_poll_pushes_nothing()
+    {
+        var app = DeploymentHarness.Fake(factory);
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var id = fixture.Project.Id;
+        await DeploymentHarness.BindAsync(app, id, await DeploymentHarness.SeedConnectionAsync(app, fixture.Owner.User!.Id), fixture.Owner.User!.Id);
+        await SeedExecutionAsync(app, id, maxAttempts: 5);
+        await using var viewer = await LiveClient.ConnectAsync(app, fixture.Viewer);
+        var updates = Channel.CreateUnbounded<JsonElement>();
+        viewer.Connection.On<JsonElement>(Aide.Api.Features.Live.ProjectsHub.BuildCheckUpdatedMethod, m => updates.Writer.TryWrite(m));
+        await viewer.JoinAsync(id);
+        await ProjectApi.ReadAsync<ExecutionStateDto>(
+            await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/execution/start", new { }, Ct), HttpStatusCode.Accepted);
+        await AgentJobs.RunQueuedAsync(app, id);
+        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var rollout = await DeploymentHarness.RolloutJobAsync(app, id);
+        if (!await ProjectApi.WithDbAsync(app, db => db.Deployments.AnyAsync(d => d.ProjectId == id && d.Environment == DeploymentEnvironment.Preview, Ct)))
+        {
+            Assert.True(await DeploymentHarness.RunOnceAsync(app, rollout.Id)); // the rollout schedules its deployment and keeps running
+        }
+
+        Task SetPreviewAsync(DeploymentStatus status) => ProjectApi.WithDbAsync(app, async db =>
+        {
+            var newest = await db.Deployments.Where(d => d.ProjectId == id && d.Environment == DeploymentEnvironment.Preview)
+                .OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Select(d => d.Id).FirstAsync(Ct);
+            await db.Deployments.Where(d => d.Id == newest).ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, status), Ct);
+        });
+
+        // Queued, then Building: the Building poll pushes the item with the source's status.
+        await SetPreviewAsync(DeploymentStatus.Queued);
+        Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
+        await SetPreviewAsync(DeploymentStatus.Building);
+        Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        JsonElement building;
+        do
+        {
+            building = await updates.Reader.ReadAsync(timeout.Token);
+        }
+        while (building.GetProperty("check").GetProperty("sources").EnumerateArray().All(s => s.GetProperty("status").GetString() != "building"));
+
+        var source = building.GetProperty("check").GetProperty("sources").EnumerateArray().Single(s => s.GetProperty("kind").GetString() == "preview");
+        Assert.Equal(("Vercel preview", JsonValueKind.Null), (source.GetProperty("name").GetString(), source.GetProperty("conclusion").ValueKind));
+        Assert.Equal("waiting", building.GetProperty("check").GetProperty("status").GetString());
+        var stored = Assert.Single(await ChecksAsync(app, id));
+        Assert.Equal("building", Assert.Single(stored.Sources).Status);
+
+        // An unchanged poll stores and pushes nothing.
+        var before = (await LifecycleSeed.EventsAsync(app, id, EventTypes.BuildCheckUpdated)).Count;
+        Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
+        Assert.Equal(before, (await LifecycleSeed.EventsAsync(app, id, EventTypes.BuildCheckUpdated)).Count);
     }
 }

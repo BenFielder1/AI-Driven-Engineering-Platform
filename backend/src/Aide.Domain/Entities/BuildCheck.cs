@@ -33,6 +33,9 @@ public sealed class BuildCheck
     /// <summary>The failures found (empty unless the check failed or was exhausted).</summary>
     public IReadOnlyList<BuildCheckFailure> Failures { get; set; } = [];
 
+    /// <summary>Why the check ended <c>exhausted</c> or <c>cancelled</c> (D-0.6.1-23); <c>null</c> otherwise and for checks stored before it.</summary>
+    public BuildCheckEndReason? EndReason { get; set; }
+
     public DateTimeOffset StartedAt { get; set; }
 
     public DateTimeOffset? CompletedAt { get; set; }

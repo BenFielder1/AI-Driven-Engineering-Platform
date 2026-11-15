@@ -160,6 +160,23 @@ public sealed partial class GitHubApi
     }
 
     /// <summary>
+    /// D-0.6.1-23: <see cref="GetBranchRulesAsync"/>, with rules GitHub refuses (403: plan limits such as "Upgrade to GitHub
+    /// Pro", or a missing permission) or doesn't have (404) read as <see cref="GitHubBranchRules.None"/> and the reason
+    /// returned (<c>null</c> when the rules were read). Any other failure propagates.
+    /// </summary>
+    public async Task<(GitHubBranchRules Rules, string? Unavailable)> GetBranchRulesOrNoneAsync(string token, string owner, string repo, string branch, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await GetBranchRulesAsync(token, owner, repo, branch, cancellationToken), null);
+        }
+        catch (GitHubApiException ex) when (ex.Kind is GitHubFailureKind.Forbidden or GitHubFailureKind.NotFound)
+        {
+            return (GitHubBranchRules.None, ex.Message);
+        }
+    }
+
+    /// <summary>
     /// FR-84: the PR's <c>mergeStateStatus</c> and <c>reviewDecision</c> through GraphQL; <c>null</c> when GraphQL is
     /// unavailable for the token (401/403/404, or GraphQL errors such as missing scopes) so readiness degrades gracefully.
     /// </summary>

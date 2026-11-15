@@ -49,9 +49,15 @@ public sealed record NotificationChannelConfig(
     string? SecretEncrypted,
     IReadOnlyList<string> Events);
 
-/// <summary>A source a build check read (§5, FR-255): the preview rollout or a required CI check, its conclusion
-/// (e.g. <c>success</c>, <c>failure</c>, <c>timed_out</c>; null while pending) and a link to it.</summary>
-public sealed record BuildCheckSource(string Name, BuildCheckSourceKind Kind, string? Conclusion, string? Url);
+/// <summary>A source a build check read (§5, FR-255): the preview rollout or a CI check, its conclusion
+/// (e.g. <c>success</c>, <c>failure</c>, <c>timed_out</c>, <c>unavailable</c>; null while pending) and a link to it.
+/// D-0.6.1-23: <see cref="Status"/> is where a pending source stands (a preview component's deployment state <c>queued</c>,
+/// <c>building</c>, …, or a check's <c>queued</c>/<c>in_progress</c>; <c>null</c> when not started or not known), and
+/// <see cref="Message"/> explains an <c>unavailable</c> or informational source. <see cref="Informational"/> marks a source
+/// shown for information only (the branch rules couldn't be read): never waited for and never a failure. All three are
+/// absent in rows stored before.</summary>
+public sealed record BuildCheckSource(
+    string Name, BuildCheckSourceKind Kind, string? Conclusion, string? Url, string? Status = null, string? Message = null, bool Informational = false);
 
 /// <summary>A failure found by a build check (§5, §4.48): the failure id (as in review findings), the normalised
 /// fingerprint used for repeat marks (§4.37), the message, the source it came from, the log excerpt (§4.38) and the

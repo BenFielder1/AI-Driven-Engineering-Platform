@@ -180,6 +180,13 @@ public static class EventTypes
     /// <summary>FR-256, §4.48: fix steps were planned from a failed build check (payload: <c>stepNumbers</c> and <c>check</c>).</summary>
     public const string BuildFixPlanned = "BUILD_FIX_PLANNED";
 
+    /// <summary>
+    /// D-0.6.1-23: a waiting build check's sources changed (e.g. the preview went from queued to building), or its fix
+    /// planning started (payload: <c>check</c>, the build check item). Uncategorised: it only carries the live
+    /// <c>buildCheckUpdated</c> message, not an activity entry.
+    /// </summary>
+    public const string BuildCheckUpdated = "BUILD_CHECK_UPDATED";
+
     /// <summary>FR-36: the project PR was opened or reused (GitHub), or the branch comparison was recorded (Local).</summary>
     public const string PullRequestOpened = "PULL_REQUEST_OPENED";
 

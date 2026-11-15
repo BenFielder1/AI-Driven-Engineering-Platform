@@ -22,15 +22,18 @@ namespace Aide.Api.Features.BuildChecks;
 /// (<see cref="PreviewCollector"/>) and the PR head's checks with their required marks (<see cref="ExternalChecksCollector"/>)
 /// — and lets <see cref="BuildCheckRules.Decide"/> rule:
 /// <list type="bullet">
-/// <item><c>waiting</c>: the sources are stored and the job defers itself to the re-check time (never sleeps), keeping when
-/// the waits started in its payload. Results for an older SHA count as not there yet.</item>
+/// <item><c>waiting</c>: the job defers itself to the re-check time (never sleeps), keeping when the waits started in its
+/// payload. Results for an older SHA count as not there yet. D-0.6.1-23: the sources are stored only when they changed, and
+/// then pushed live (<c>BUILD_CHECK_UPDATED</c> → <c>buildCheckUpdated</c>).</item>
 /// <item><c>failed</c>: the failures (failure id, fingerprint, message, excerpt, error summary) are stored and the build-fix
 /// job is queued (FR-256).</item>
 /// <item><c>passed</c>, <c>skipped</c>, <c>exhausted</c>: the pull request job's advance to Review runs (expected from
 /// execution) with no new rollout; review's collectors read the same rollout and checks.</item>
 /// </list>
 /// A project that left execution, or moved to another version, cancels the check. Redelivery is safe: a final or failed
-/// check is left alone.
+/// check is left alone. D-0.6.1-23: the Git host never ends the check early. Branch rules it refuses (403/404) mean no
+/// required check (one warning per check), and checks it can't serve (5xx, 429, network, timeout) count as not reported yet:
+/// the check keeps waiting and, at the checks timeout, goes on without them. Only unexpected errors fail the job.
 /// </summary>
 public sealed partial class BuildCheckJobHandler(
     AideDbContext db,
@@ -62,17 +65,15 @@ public sealed partial class BuildCheckJobHandler(
             || (project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(project.Id, cancellationToken)) != check.ReleaseVersionId)
         {
             // §4.47: execution was stopped (the project left execution) or the version changed.
-            buildChecks.Complete(check, BuildCheckStatus.Cancelled, [], [], now);
+            buildChecks.Complete(check, BuildCheckStatus.Cancelled, [], [], now, endReason: BuildCheckEndReason.CancelledByChange);
             await SaveAsync(cancellationToken);
             return;
         }
 
         var (preview, rollout) = await PreviewAsync(project.Id, check.ReleaseVersionId, cancellationToken);
         var collected = await externalChecks.ReadAsync(project, excerpts: false, cancellationToken);
-        var observation = new BuildCheckObservation(
-            check.HeadSha,
-            preview,
-            collected is null ? null : new BuildCheckChecks(collected.HeadSha, collected.Checks))
+        payload = Warn(project.Id, check.Id, payload, collected);
+        var observation = new BuildCheckObservation(check.HeadSha, preview, ChecksOf(collected))
         {
             PreviewWaitSince = payload.PreviewWaitSince,
             ChecksWaitSince = payload.ChecksWaitSince,
@@ -80,8 +81,12 @@ public sealed partial class BuildCheckJobHandler(
         var decision = BuildCheckRules.Decide(observation, await buildChecks.FixesUsedAsync(check, cancellationToken), project.MaxBuildFixAttempts, now);
         if (decision.Wait)
         {
-            check.Sources = decision.Sources;
-            await SaveAsync(cancellationToken);
+            // D-0.6.1-23: an unchanged poll saves and pushes nothing.
+            if (buildChecks.Progress(check, decision.Sources, now))
+            {
+                await SaveAsync(cancellationToken);
+            }
+
             LogWaiting(logger, project.Id, check.Id, check.Attempt);
             throw new JobDeferredException(
                 "Waiting for the preview build and the required checks of the head commit (build check).",
@@ -93,15 +98,16 @@ public sealed partial class BuildCheckJobHandler(
         if (decision.Status is BuildCheckStatus.Failed or BuildCheckStatus.Exhausted)
         {
             // The failed checks' excerpts and logs are fetched once, now that the decision is final (not on every poll).
-            if (collected is not null && collected.Checks.Any(c => c.Required && Domain.Releases.MergeReadinessRules.IsFailing(c)))
+            if (collected is { Unreadable: null } && collected.Checks.Any(c => c.Required && Domain.Releases.MergeReadinessRules.IsFailing(c))
+                && await externalChecks.ReadAsync(project, excerpts: true, cancellationToken) is { Unreadable: null } withExcerpts)
             {
-                collected = await externalChecks.ReadAsync(project, excerpts: true, cancellationToken) ?? collected;
+                collected = withExcerpts;
             }
 
             failures = await FailuresAsync(check.HeadSha, rollout, collected, decision, cancellationToken);
         }
 
-        buildChecks.Complete(check, decision.Status, decision.Sources, failures, now);
+        buildChecks.Complete(check, decision.Status, decision.Sources, failures, now, endReason: decision.EndReason);
         if (decision.PlanFix)
         {
             jobs.Enqueue(JobTypes.BuildFix, new BuildFixJobPayload(project.Id, check.Id), project.Id, now);
@@ -110,6 +116,35 @@ public sealed partial class BuildCheckJobHandler(
         }
 
         await AdvanceAsync(project.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// D-0.6.1-23: the checks as the rules see them: <c>null</c> without a checks host or PR, not read on this poll when the
+    /// Git host failed, else the head's checks with whether the branch rules were readable.
+    /// </summary>
+    private static BuildCheckChecks? ChecksOf(CollectedChecks? collected) => collected switch
+    {
+        null => null,
+        { Unreadable: { } reason } => BuildCheckChecks.NotRead(reason),
+        _ => new BuildCheckChecks(collected.HeadSha, collected.Checks) { RulesUnavailable = collected.RulesUnavailable },
+    };
+
+    /// <summary>D-0.6.1-23: one warning per check about unreadable branch rules, and one about unreadable checks (kept in the payload).</summary>
+    private BuildCheckJobPayload Warn(Guid projectId, Guid checkId, BuildCheckJobPayload payload, CollectedChecks? collected)
+    {
+        if (collected?.RulesUnavailable is { } rules && !payload.RulesWarned)
+        {
+            LogRulesUnavailable(logger, projectId, checkId, rules);
+            payload = payload with { RulesWarned = true };
+        }
+
+        if (collected?.Unreadable is { } reason && !payload.UnreadableWarned)
+        {
+            LogChecksUnreadable(logger, projectId, checkId, reason);
+            payload = payload with { UnreadableWarned = true };
+        }
+
+        return payload;
     }
 
     /// <summary>The PR job's advance to Review (expected from execution), committing the check with the transition.</summary>
@@ -218,12 +253,18 @@ public sealed partial class BuildCheckJobHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The build check finished but the advance to review was refused ({ErrorCode}): {Reason}")]
     private static partial void LogAdvanceRefused(ILogger logger, string errorCode, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Build check {BuildCheckId} of project {ProjectId} goes on without required checks: the branch rules couldn't be read: {Reason}")]
+    private static partial void LogRulesUnavailable(ILogger logger, Guid projectId, Guid buildCheckId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Build check {BuildCheckId} of project {ProjectId} couldn't read the Git host's checks and keeps waiting: {Reason}")]
+    private static partial void LogChecksUnreadable(ILogger logger, Guid projectId, Guid buildCheckId, string reason);
 }
 
 /// <summary>
 /// A build-check or build-fix job that ended without succeeding must not leave the project waiting in execution forever:
-/// its check ends <c>exhausted</c> (§4.47 "any → exhausted"), its unfinished fix steps are dropped and the pull request job
-/// is queued, which advances to Review with the failures.
+/// its check ends <c>exhausted</c> (§4.47 "any → exhausted") with the end reason <c>job_failed</c> (D-0.6.1-23), its
+/// unfinished fix steps are dropped and the pull request job is queued, which advances to Review with the failures.
 /// </summary>
 public sealed class BuildCheckJobEndedHook(BuildCheckService buildChecks, TimeProvider time) : IJobEndedHook
 {
@@ -253,6 +294,6 @@ public sealed class BuildCheckJobEndedHook(BuildCheckService buildChecks, TimePr
         }
 
         var planId = await ExecutionQueries.CurrentPlanIdAsync(db, projectId, cancellationToken);
-        await buildChecks.ExhaustAsync(check, planId, SystemActor.Name, time.GetUtcNow(), cancellationToken);
+        await buildChecks.ExhaustAsync(check, planId, SystemActor.Name, BuildCheckEndReason.JobFailed, time.GetUtcNow(), cancellationToken);
     }
 }

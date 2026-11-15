@@ -179,7 +179,8 @@ function ProgressSummary({
 /**
  * /projects/:id/execution (SPEC §7; FR-31–FR-34, FR-37): progress summary, start/pause/resume for writers, and the
  * current plan's steps with status, attempt, Guardian violations, commit and file manifest, and once every step
- * completed the pull request or branch comparison (FR-36), then the build check before review (FR-259). Live `step` events
+ * completed the pull request or branch comparison (FR-36), then the build check timeline before review (FR-259,
+ * D-0.6.1-23). Live `step` events
  * refresh the steps, /state and the PR (FR-46); `buildCheckUpdated` updates the build check.
  */
 export function ExecutionPage() {
@@ -271,6 +272,10 @@ export function ExecutionPage() {
       </ol>
     ) : null
 
+  // D-0.6.1-23: the build check's fix cards show their steps' live status, from the steps on the page (the current plan's
+  // steps first, then the runs' step summaries); live `step` events refresh both.
+  const fixStepCandidates = [...list, ...(runs.data ?? []).flatMap((r) => r.steps)].filter((x) => x.origin === 'build_fix')
+
   const activeRunId = readOnly ? null : (plan?.artifactId ?? null)
   const activeInRuns = activeRunId !== null && (runs.data ?? []).some((r) => r.id === activeRunId && !r.superseded)
 
@@ -328,6 +333,7 @@ export function ExecutionPage() {
           versionId={readOnly ? (releaseVersionId ?? null) : s.releaseVersionId}
           cycle={!readOnly && s.phase === 'execution' ? s.review.cycle : null}
           maxAttempts={project.maxBuildFixAttempts}
+          steps={fixStepCandidates}
         />
 
         {/* The live steps of the current plan always show, even before the runs list has caught up with it. */}

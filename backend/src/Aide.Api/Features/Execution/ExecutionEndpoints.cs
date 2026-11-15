@@ -29,7 +29,8 @@ public sealed record StepViolationDto(GuardianCheck Check, string Code, Violatio
 /// branch and commit once accepted. <c>commitUrl</c> links the commit on GitHub; it is <c>null</c> for the Local provider
 /// (no remote) and before the step is committed. FR-256, FR-259: <c>origin</c> is <c>plan</c> for the plan's own steps and
 /// <c>build_fix</c> for steps planned after a failed build check; <c>buildCheckAttempt</c> is that check's attempt (the
-/// "Build fix · attempt n" badge), <c>null</c> for plan steps.
+/// "Build fix · attempt n" badge), <c>null</c> for plan steps. D-0.6.1-23: <c>buildCheckId</c> is the id of that check (to
+/// join a fix step to its build check item), <c>null</c> for plan steps.
 /// </summary>
 public sealed record ExecutionStepDto(
     Guid Id,
@@ -49,7 +50,8 @@ public sealed record ExecutionStepDto(
     IReadOnlyList<FileManifestEntryDto>? FileManifest,
     string? CommitUrl,
     StepOrigin Origin,
-    int? BuildCheckAttempt);
+    int? BuildCheckAttempt,
+    Guid? BuildCheckId);
 
 /// <summary>A file an accepted step wrote (FR-34), with the SHA-256 of its content.</summary>
 public sealed record FileManifestEntryDto(string Path, FileAction Action, string ContentHash);
@@ -291,5 +293,6 @@ public static class ExecutionEndpoints
         s.FileManifest is null ? null : [.. s.FileManifest.Select(f => new FileManifestEntryDto(f.Path, f.Action, f.ContentHash))],
         commitUrl,
         s.Origin,
-        s.BuildCheckId is { } checkId && buildCheckAttempts.TryGetValue(checkId, out var attempt) ? attempt : null);
+        s.BuildCheckId is { } checkId && buildCheckAttempts.TryGetValue(checkId, out var attempt) ? attempt : null,
+        s.BuildCheckId);
 }

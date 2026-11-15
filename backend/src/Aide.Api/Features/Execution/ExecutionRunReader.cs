@@ -107,7 +107,8 @@ public sealed class ExecutionRunReader(AideDbContext db)
                             git is null ? null : ExecutionQueries.CommitUrl(git.Provider, git.RepoUrl, s.CommitSha),
                             s.LegacyAgentKey,
                             s.Origin,
-                            s.BuildCheckId is { } checkId && checkAttempts.TryGetValue(checkId, out var checkAttempt) ? checkAttempt : null)),
+                            s.BuildCheckId is { } checkId && checkAttempts.TryGetValue(checkId, out var checkAttempt) ? checkAttempt : null,
+                            s.BuildCheckId)),
                     ],
                     owners[plan.Id]?.Id);
             }),
