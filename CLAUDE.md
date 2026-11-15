@@ -2,7 +2,7 @@
 
 Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
-**`SPEC.md` is the source of truth.** The root `SPEC.md` and `PROGRESS.md` describe **0.6.1**, the version being built (part 1 merged in PR #38; part 2 on branch `build/tevrin-0.6.1-review`); the latest released spec is [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
+**`SPEC.md` is the source of truth.** No version is being built, so there is no root `SPEC.md` or `PROGRESS.md`; the latest released spec is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). When the next version starts, its spec and build log go at the root. Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
 ## Versions
 
@@ -14,6 +14,7 @@ Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates speciali
 | 0.4.0 | [`docs/0.4.0/SPEC.md`](docs/0.4.0/SPEC.md) | [`docs/0.4.0/PROGRESS.md`](docs/0.4.0/PROGRESS.md) | Built and merged (PR #27). Frozen; never edit except to fix links |
 | 0.5.0 | [`docs/0.5.0/SPEC.md`](docs/0.5.0/SPEC.md) | [`docs/0.5.0/PROGRESS.md`](docs/0.5.0/PROGRESS.md) | Built and merged (PR #28). Frozen; never edit except to fix links |
 | 0.6.0 | [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md) | [`docs/0.6.0/PROGRESS.md`](docs/0.6.0/PROGRESS.md) | Built and merged (PR #29, #31, #32, #33, #34 and #37); released as tag `0.6.0`. Rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site, semver releases. Frozen; never edit except to fix links |
+| 0.6.1 | [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md) | [`docs/0.6.1/PROGRESS.md`](docs/0.6.1/PROGRESS.md) | Built and merged (PR #38, #47, #48 and #49); released as tag `0.6.1`. `tevrin/` branch prefix, themed scrollbars, failure-aware review, deployment files in plans, deterministic findings in the plan, a build check before review. Frozen; never edit except to fix links |
 
 - **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.6.1 new decisions are `D-<x.y.z>-n` (e.g. `D-0.6.1-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/<x.y.z>/` and add a row here. Then release it (see Releases).
@@ -79,7 +80,7 @@ docs/                       Jekyll + just-the-docs site (index.md, _config.yml, 
   index.md                  site home
   getting-started/ guides/ operations/ reference/ history/   site sections (front matter: title, nav_order, parent)
   brand.md                  logo files, colours, usage rules
-  0.1.0 … 0.6.0/            frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
+  0.1.0 … 0.6.1/            frozen SPEC.md + PROGRESS.md + research (never edit except links; no front matter)
   0.6.0/brand/               brand assets (used by the frontend generator and the docs site logo)
 ```
 

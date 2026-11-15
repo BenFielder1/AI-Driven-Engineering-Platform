@@ -42,3 +42,4 @@ The CLI maps some of these to exit codes: see the [CLI guide](../guides/cli.md).
 | --- | --- |
 | 0.1.0 to 0.5.0 | Section 6, API, in [0.1.0](../0.1.0/SPEC.md), [0.2.0](../0.2.0/SPEC.md), [0.3.0](../0.3.0/SPEC.md), [0.4.0](../0.4.0/SPEC.md) and [0.5.0](../0.5.0/SPEC.md) |
 | 0.6.0 | No new codes. Copy that names the product now says Tevrin |
+| 0.6.1 | No new codes. An out-of-range `maxBuildFixAttempts` is `VALIDATION`. `BUILD_ERRORS_SUPPRESSED` is a Guardian violation on a build-fix step, not an API error ([0.6.1](../0.6.1/SPEC.md)) |
