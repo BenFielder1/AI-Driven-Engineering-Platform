@@ -61,7 +61,7 @@ frontend/   src/app, src/features, src/api/generated (generated) · server.ts ·
 deploy/     k8s/ (Kustomize) · scripts/ · railway/ (ops docs)
 .railway/   Railway infrastructure as code
 .github/    workflows: ci.yml, deploy.yml, docs.yml
-docs/       the docs site, and the specs of each version in docs/0.1.0 to docs/0.6.0
+docs/       the docs site, and the specs of each version in docs/0.1.0 to docs/0.6.1
 STACK.md · CLAUDE.md
 ```
 
@@ -80,10 +80,10 @@ STACK.md · CLAUDE.md
 | [Guides](docs/guides/index.md) | Connections, GitHub App, GitLab, Bitbucket, LLM providers, trackers, stacks, deployments, notifications, CLI |
 | [Operations](docs/operations/index.md) | Local Kubernetes, Railway, PostgreSQL 17 to 18 upgrade, CI |
 | [Reference](docs/reference/index.md) | Configuration, API, architecture, testing, error codes, repo layout |
-| [History](docs/history/index.md) | Specs and build logs for versions 0.1.0 to 0.6.0 |
+| [History](docs/history/index.md) | Specs and build logs for versions 0.1.0 to 0.6.1 |
 | [Brand](docs/brand.md) | Logo files, colours, usage rules |
 
-The spec is the source of truth for behaviour: the latest is [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md), with its build log in [`docs/0.6.0/PROGRESS.md`](docs/0.6.0/PROGRESS.md), and a version in development has a root `SPEC.md` and `PROGRESS.md`. [`CLAUDE.md`](CLAUDE.md) holds the conventions.
+The spec is the source of truth for behaviour: the latest is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md), with its build log in [`docs/0.6.1/PROGRESS.md`](docs/0.6.1/PROGRESS.md), and a version in development has a root `SPEC.md` and `PROGRESS.md`. [`CLAUDE.md`](CLAUDE.md) holds the conventions.
 
 ## Licence
 

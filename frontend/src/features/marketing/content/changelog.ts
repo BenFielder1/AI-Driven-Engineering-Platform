@@ -24,7 +24,7 @@ export const IN_PREVIEW = 'In preview'
 export const changelog: readonly ChangelogEntry[] = [
   {
     version: '0.6.1',
-    date: null,
+    date: '2026-11-15',
     title: 'Failure-aware review and a build check before review',
     asAide: false,
     highlights: [

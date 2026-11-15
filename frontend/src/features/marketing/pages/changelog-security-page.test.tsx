@@ -23,9 +23,9 @@ afterEach(() => {
 describe('FR-219 Changelog', () => {
   it('FR219_FR229_FR230_FR245_order_and_count: 0.1.0–0.6.1 (semver), newest first, with the PR merge and release dates', () => {
     expect(changelog.map((e) => e.version)).toEqual(['0.6.1', '0.6.0', '0.5.0', '0.4.0', '0.3.0', '0.2.0', '0.1.0'])
-    // 0.6.1: no date until it is released (FR-245, FR-230). 0.6.0: its release day. Then the merge dates of PRs #28, #27,
+    // 0.6.1 and 0.6.0: their release days (FR-245, FR-230). Then the merge dates of PRs #28, #27,
     // #23, #13 and #1 (gh pr view <n> --json mergedAt).
-    expect(changelog.map((e) => e.date)).toEqual([null, '2026-11-08', '2026-11-04', '2026-11-01', '2026-10-24', '2026-10-22', '2026-10-10'])
+    expect(changelog.map((e) => e.date)).toEqual(['2026-11-15', '2026-11-08', '2026-11-04', '2026-11-01', '2026-10-24', '2026-10-22', '2026-10-10'])
     for (const entry of changelog) {
       expect(entry.version, 'FR-229: x.y.z').toMatch(/^\d+\.\d+\.\d+$/)
       expect(entry.highlights.length, entry.version).toBeGreaterThanOrEqual(3)
@@ -41,10 +41,10 @@ describe('FR-219 Changelog', () => {
     await screen.findByRole('heading', { level: 1, name: 'Changelog' })
     const entries = screen.getAllByTestId('changelog-entry')
 
-    // FR-245: 0.6.1 is listed first and shows "In preview" until its release date is set.
+    // FR-245: 0.6.1 is listed first with its release date; no entry is "In preview".
     expect(entries).toHaveLength(7)
-    expect(within(nth(entries, 0)).getByText('In preview')).toBeInTheDocument()
-    expect(screen.getAllByText('In preview')).toHaveLength(1)
+    expect(within(nth(entries, 0)).getByText('15 Nov 2026')).toHaveAttribute('datetime', '2026-11-15')
+    expect(screen.queryAllByText('In preview')).toHaveLength(0)
     expect(within(nth(entries, 0)).getByRole('heading', { level: 2 })).not.toHaveTextContent('(as AIDE)')
     expect(within(nth(entries, 1)).getByText('8 Nov 2026')).toHaveAttribute('datetime', '2026-11-08')
     expect(within(nth(entries, 1)).getByRole('heading', { level: 2 })).toHaveTextContent(/^Tevrin$/)

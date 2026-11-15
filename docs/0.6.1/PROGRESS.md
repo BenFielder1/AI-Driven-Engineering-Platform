@@ -1,6 +1,6 @@
 # Build progress (0.6.1)
 
-Spec: `SPEC.md` (0.6.1; 0.1.0–0.6.0 in `docs/`) · Stack: `STACK.md` · Branch: `build/tevrin-0.6.1` (part 1, PR #38), `build/tevrin-0.6.1-review` (part 2) · Started: 2026-11-11
+Spec: `SPEC.md` (0.6.1; 0.1.0–0.6.0 in `docs/`) · Stack: `STACK.md` · Branch: `build/tevrin-0.6.1` (part 1, PR #38), `build/tevrin-0.6.1-review` (part 2, PR #47), `build/tevrin-0.6.1-build-check` (fix, PR #48), `release/0.6.1` (release) · Started: 2026-11-11
 
 **Gate:** GitHub Actions CI on the pushed head commit, after a static `stack-reviewer` pass (CLAUDE.md "Commit gate").
 Agents never run the full gate, Docker, Testcontainers or E2E locally.
@@ -26,7 +26,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-242 | `plan_generator.md` v7 names required files | 3.4 | backend (prompt) | M48 | done | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
 | FR-243 | Deterministic missing-file steps | 3.4, 4.41 | backend (domain) | M48 | done | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
 | FR-244 | "Added by Tevrin" badge, additive step fields | 3.4 | backend + frontend | M48 | done | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
-| FR-245 | Version 0.6.1, history page, docs | 3.5 | deploy + docs | M46, M50 | partial (version bump done) | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
+| FR-245 | Version 0.6.1, history page, docs | 3.5 | deploy + docs | M46, M50 | done | [CI 43183692831](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43183692831) |
 | FR-246 | Stable finding ids for deterministic findings | 3.6, 4.42 | backend (domain) | M51 | done | [CI 43287918035](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43287918035) |
 | FR-247 | `code_review.md` v10 step-or-waiver, carried/waived marks | 3.6 | backend (prompt) | M52 | done | [CI 43382325337](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43382325337) |
 | FR-248 | Tevrin adds steps for unaddressed findings | 3.6, 4.43 | backend (domain) | M52 | done | [CI 43382325337](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43382325337) |
@@ -50,7 +50,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M51 Check accuracy and finding ids (FR-246, FR-251–FR-253) — branch `build/tevrin-0.6.1-review`
 - [x] M52 Findings in the plan (FR-247–FR-250)
 - [x] M53 Build check before review (FR-254–FR-259)
-- [ ] M50 Release 0.6.1 (after M53) (FR-245): part 1 merged in PR #38; part 2 build PR #47 open (CI [43587633211](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43587633211), audit 14/14 Done); after Ben tests on preview, `release/0.6.1` PR with the release prep and docs (docs stashed locally as "0.6.1 docs for release branch"); then tag and release after Ben confirms
+- [x] M50 Release 0.6.1 (after M53) (FR-245): part 1 merged in PR #38, part 2 in PR #47, the build check fix in PR #48 (CI on `main` [43716168445](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/43716168445)). Ben tested on preview and confirmed the version on 2026-11-15. The `release/0.6.1` PR sets the changelog date (2026-11-15), moves SPEC and PROGRESS to `docs/0.6.1/`, and adds the CLAUDE.md row, `docs/history/0.6.1.md` and the guide updates. Tag and release follow after Ben confirms the commit
 
 ## Decisions
 See SPEC §10 (D-0.6.1-1 … D-0.6.1-21). Build-time decisions are added below.
@@ -68,7 +68,6 @@ See SPEC §10 (D-0.6.1-1 … D-0.6.1-21). Build-time decisions are added below.
 - CI integration shards hit the runner's inotify limit (128) once the rest shard grew; CI now raises it and turns off config reload in test hosts (commit 50f20bb).
 - Cloudflare: a transient failure reading Workers triggers reports all patterns missing (Error) rather than Unknown (review Minor, M46).
 - Cloudflare Pages: verify now writes preview excludes (sets previews to `custom` if a user switched back to `all`); link already did (D-0.6.1-9).
-- Changelog 0.6.1 `specHref` → `docs/history/0.6.1.md`, added in M50.
 
 - GitLab/Bitbucket: "required" is project-level (`only_allow_merge_if_pipeline_succeeds`, `require_passing_builds_to_merge`), so a pipeline not yet started reads as no required checks and the build check is skipped (M53 review; GitHub fixed). Needs the providers to expose the setting.
 - Build check: a waiting check's sources are saved on every poll, but live pushes go out only on transitions.

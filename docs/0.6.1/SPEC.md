@@ -2,7 +2,7 @@
 
 2026-11-12 (part 2 added) · Ben Fielder · **0.6.1**, built on the 0.6.0 codebase in this repo. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) … [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's 0.6.1 brief (2026-11-11), his part 2 brief on review findings and build reliability (2026-11-12), the interview answers in §10, a survey of the review, plan, execution and deployment code, and the scrollbar CSS of benfielder.com.
 
-> **Part 2 (2026-11-12).** Part 1 (§3.1–§3.4, M46–M49) was merged in PR #38. Part 2 adds §3.6–§3.8 (FR-246–FR-259, §4.42–§4.48, M51–M53) on the build branch `build/tevrin-0.6.1-review`. The release (M50) now runs after M53.
+> **Part 2 (2026-11-12).** Part 1 (§3.1–§3.4, M46–M49) was merged in PR #38. Part 2 adds §3.6–§3.8 (FR-246–FR-259, §4.42–§4.48, M51–M53), merged in PR #47, with a build check fix after preview testing in PR #48 (D-0.6.1-23). The release (M50) ran after M53: 0.6.1 was released on 2026-11-15.
 
 > **How this spec relates to 0.1.0–0.6.0.** 0.6.1 is an increment on the released 0.6.0 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends …)*. New requirements continue from **FR-232**, domain rules from **§4.35**, decisions use **`D-0.6.1-n`**, and milestones continue from **M46**. Earlier tests stay green unless an amendment changes what they assert; then update the test and name the amendment in it.
 

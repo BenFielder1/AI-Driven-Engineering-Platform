@@ -32,4 +32,4 @@ Agents write artifacts. People approve them at gates. Every state change is logg
 
 ## Source of truth
 
-The spec is the source of truth for behaviour. The latest spec and build log are [0.6.0 SPEC](0.6.0/SPEC.md) and [PROGRESS](0.6.0/PROGRESS.md). Every version is under [History](history/index.md).
+The spec is the source of truth for behaviour. The latest spec and build log are [0.6.1 SPEC](0.6.1/SPEC.md) and [PROGRESS](0.6.1/PROGRESS.md). Every version is under [History](history/index.md).
