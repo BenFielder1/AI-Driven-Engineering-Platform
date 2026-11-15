@@ -119,11 +119,18 @@ internal sealed partial class GitLabGitProvider
         }
 
         var repoId = settings.ExternalRepoId!;
-        var project = await ApiAsync(settings, access, (c, t) => c.GetProjectAsync(t, repoId, cancellationToken), cancellationToken);
+        // D-0.6.1-23: project settings GitLab refuses (403) or hides (404) mean no job is known to be required; the statuses
+        // are still read.
+        var project = await ApiAsync(settings, access, (c, t) => c.GetProjectAsync(t, repoId, cancellationToken), cancellationToken, conflictStatuses: [403, 404]);
         var statuses = await ApiAsync(settings, access, (c, t) => c.ListCommitStatusesAsync(t, repoId, sha, cancellationToken), cancellationToken);
         if ((project.Failure ?? statuses.Failure) is { } readFailure)
         {
             return Result.Failure<IReadOnlyList<CheckObservation>>(ToError(readFailure));
+        }
+
+        if (project.Conflict)
+        {
+            LogRequiredUnknown(logger, settings.ProjectId, project.ConflictStatus ?? 0);
         }
 
         return Result.Success(CommitStatusFindings.FromGitLab(statuses.Value ?? [], project.Value?.PipelinesMustSucceed ?? false));
@@ -581,4 +588,7 @@ internal sealed partial class GitLabGitProvider
 
     [LoggerMessage(Level = LogLevel.Information, Message = "The GitLab Release {Tag} of project {ProjectId} already exists; reusing it")]
     private static partial void LogReleaseReused(ILogger logger, Guid projectId, string tag);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "GitLab didn't show the settings of project {ProjectId} (HTTP {Status}); no pipeline job is treated as required")]
+    private static partial void LogRequiredUnknown(ILogger logger, Guid projectId, int status);
 }

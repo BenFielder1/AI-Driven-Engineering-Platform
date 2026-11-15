@@ -72,7 +72,8 @@ public static class ActivityEndpoints
         var query = cursor is { } c
             ? db.Events.FromSql($"SELECT * FROM events WHERE (created_at, id) < ({c.OccurredAt}, {c.Id})")
             : db.Events;
-        query = query.AsNoTracking().Where(e => e.ProjectId == id);
+        // D-0.6.1-23: BUILD_CHECK_UPDATED only carries the live buildCheckUpdated message; it isn't an activity entry.
+        query = query.AsNoTracking().Where(e => e.ProjectId == id && e.Type != EventTypes.BuildCheckUpdated);
         if (releaseVersionId is { } versionId)
         {
             // Events carry no release version: a version's activity is the time from its start to the next version's start.

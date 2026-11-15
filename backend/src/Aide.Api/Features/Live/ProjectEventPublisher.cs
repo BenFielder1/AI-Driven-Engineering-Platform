@@ -78,7 +78,8 @@ public sealed partial class SignalRProjectEventPublisher(
         ArgumentNullException.ThrowIfNull(events);
         foreach (var entry in events)
         {
-            if (entry.ProjectId is not { } projectId || EventTypes.CategoryOf(entry.Type) is not { } category)
+            var category = EventTypes.CategoryOf(entry.Type);
+            if (entry.ProjectId is not { } projectId || (category is null && entry.Type != EventTypes.BuildCheckUpdated))
             {
                 continue;
             }
@@ -86,12 +87,16 @@ public sealed partial class SignalRProjectEventPublisher(
             try
             {
                 var payload = JsonNode.Parse(entry.Payload) as JsonObject ?? [];
-                var message = new ProjectEventMessage(entry.Id, projectId, entry.Type, category, payload, entry.CreatedAt);
-                // Sent by name: the typed-client proxy would use the C# name "ProjectEvent", and only the JS client matches
-                // method names case-insensitively.
-                await hub.Clients.Group(ProjectsHub.GroupFor(projectId)).SendAsync(ProjectsHub.ProjectEventMethod, message, cancellationToken);
+                if (category is { } known)
+                {
+                    var message = new ProjectEventMessage(entry.Id, projectId, entry.Type, known, payload, entry.CreatedAt);
+                    // Sent by name: the typed-client proxy would use the C# name "ProjectEvent", and only the JS client matches
+                    // method names case-insensitively.
+                    await hub.Clients.Group(ProjectsHub.GroupFor(projectId)).SendAsync(ProjectsHub.ProjectEventMethod, message, cancellationToken);
+                }
 
-                // FR-259: a build check change also goes out as buildCheckUpdated with the build check item.
+                // FR-259: a build check change also goes out as buildCheckUpdated with the build check item (D-0.6.1-23: alone for
+                // BUILD_CHECK_UPDATED, the uncategorised progress event).
                 if (BuildCheckOf(entry.Type, payload) is { } check)
                 {
                     await hub.Clients.Group(ProjectsHub.GroupFor(projectId)).SendAsync(
@@ -115,7 +120,7 @@ public sealed partial class SignalRProjectEventPublisher(
 
     private static BuildChecks.BuildCheckDto? BuildCheckOf(string type, JsonObject payload)
     {
-        if (type is not (EventTypes.BuildCheckStarted or EventTypes.BuildCheckCompleted or EventTypes.BuildFixPlanned)
+        if (type is not (EventTypes.BuildCheckStarted or EventTypes.BuildCheckCompleted or EventTypes.BuildFixPlanned or EventTypes.BuildCheckUpdated)
             || payload["check"] is not JsonObject check)
         {
             return null;

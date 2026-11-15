@@ -57,7 +57,9 @@ internal sealed partial class BitbucketGitProvider
     /// <summary>
     /// FR-139: the commit's statuses (<c>GET …/commit/{sha}/statuses</c>) as checks, required when the destination branch
     /// requires passing builds (<c>require_passing_builds_to_merge</c> in the version's pull request mergeability checks,
-    /// read only when <paramref name="pullRequestNumber"/> is known; otherwise none is required).
+    /// read only when <paramref name="pullRequestNumber"/> is known; otherwise none is required). D-0.6.1-23: mergeability
+    /// checks Bitbucket refuses (403, e.g. a plan without merge checks) or doesn't have (404) mean no status is known to be
+    /// required; the statuses are still returned (a warning is logged).
     /// </summary>
     public async Task<Result<IReadOnlyList<CheckObservation>>> GetCommitStatusesAsync(
         GitConnectionSettings settings, string sha, CancellationToken cancellationToken, int? pullRequestNumber = null)
@@ -79,14 +81,19 @@ internal sealed partial class BitbucketGitProvider
         var required = false;
         if (pullRequestNumber is { } number && statuses.Value is { Count: > 0 })
         {
-            var checks = await ApiAsync(settings, access, (c, a) => c.GetMergeabilityChecksAsync(a, settings.RepoFullName!, number, cancellationToken), cancellationToken);
-            if (checks.Failure is { } checksFailure)
+            var checks = await ApiAsync(
+                settings, access, (c, a) => c.GetMergeabilityChecksAsync(a, settings.RepoFullName!, number, cancellationToken), cancellationToken, conflictStatuses: [403, 404]);
+            if (checks.Conflict)
+            {
+                LogRequiredUnknown(logger, settings.ProjectId, checks.ConflictStatus ?? 0);
+            }
+            else if (checks.Failure is { } checksFailure)
             {
                 // Whether builds are required can't be told: fail like the statuses read (review goes on without them).
                 return Result.Failure<IReadOnlyList<CheckObservation>>(ToError(checksFailure));
             }
 
-            required = checks.Value is { } found && MergeabilityChecks.RequiresPassingBuilds(found);
+            required = !checks.Conflict && checks.Value is { } found && MergeabilityChecks.RequiresPassingBuilds(found);
         }
 
         return Result.Success(CommitStatusFindings.FromBitbucket(statuses.Value ?? [], required));
@@ -727,4 +734,7 @@ internal sealed partial class BitbucketGitProvider
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Bitbucket refused creating the tag {Tag} of project {ProjectId} with HTTP {Status}")]
     private static partial void LogTagRefused(ILogger logger, Guid projectId, string tag, int status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Bitbucket didn't show the merge checks of project {ProjectId} (HTTP {Status}); no build status is treated as required")]
+    private static partial void LogRequiredUnknown(ILogger logger, Guid projectId, int status);
 }

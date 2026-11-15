@@ -11,8 +11,15 @@ using Microsoft.EntityFrameworkCore;
 namespace Aide.Api.Features.BuildChecks;
 
 /// <summary>Payload of a <see cref="JobTypes.BuildCheck"/> job: the check, and when the preview and the checks started being
-/// waited for (§4.47; kept across deferrals, <c>null</c> before the first wait).</summary>
-public sealed record BuildCheckJobPayload(Guid ProjectId, Guid BuildCheckId, DateTimeOffset? PreviewWaitSince = null, DateTimeOffset? ChecksWaitSince = null);
+/// waited for (§4.47; kept across deferrals, <c>null</c> before the first wait). D-0.6.1-23: whether the check already logged
+/// its warning about unreadable branch rules and about unreadable checks (one warning each per check).</summary>
+public sealed record BuildCheckJobPayload(
+    Guid ProjectId,
+    Guid BuildCheckId,
+    DateTimeOffset? PreviewWaitSince = null,
+    DateTimeOffset? ChecksWaitSince = null,
+    bool RulesWarned = false,
+    bool UnreadableWarned = false);
 
 /// <summary>Payload of a <see cref="JobTypes.BuildFix"/> job: the failed check to plan fix steps for (FR-256).</summary>
 public sealed record BuildFixJobPayload(Guid ProjectId, Guid BuildCheckId);
@@ -121,8 +128,19 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
         return check;
     }
 
-    /// <summary>Ends a waiting check with <paramref name="status"/> (or a failed one as exhausted/cancelled) and writes <c>BUILD_CHECK_COMPLETED</c>.</summary>
-    public void Complete(BuildCheck check, BuildCheckStatus status, IReadOnlyList<BuildCheckSource> sources, IReadOnlyList<BuildCheckFailure> failures, DateTimeOffset now, string actor = SystemActor.Name)
+    /// <summary>
+    /// Ends a waiting check with <paramref name="status"/> (or a failed one as exhausted/cancelled) and writes
+    /// <c>BUILD_CHECK_COMPLETED</c>. D-0.6.1-23: an exhausted check records <paramref name="endReason"/>, a cancelled one
+    /// <c>cancelled_by_change</c> unless another reason is given.
+    /// </summary>
+    public void Complete(
+        BuildCheck check,
+        BuildCheckStatus status,
+        IReadOnlyList<BuildCheckSource> sources,
+        IReadOnlyList<BuildCheckFailure> failures,
+        DateTimeOffset now,
+        string actor = SystemActor.Name,
+        BuildCheckEndReason? endReason = null)
     {
         ArgumentNullException.ThrowIfNull(check);
         if (!BuildCheckRules.CanTransition(check.Status, status) || status == BuildCheckStatus.Waiting)
@@ -131,6 +149,12 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
         }
 
         check.Status = status;
+        check.EndReason = status switch
+        {
+            BuildCheckStatus.Exhausted => endReason,
+            BuildCheckStatus.Cancelled => endReason ?? BuildCheckEndReason.CancelledByChange,
+            _ => null,
+        };
         if (sources.Count > 0 || check.Sources.Count == 0)
         {
             check.Sources = sources;
@@ -153,6 +177,7 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
                 reviewCycle = check.ReviewCycle,
                 attempt = check.Attempt,
                 status,
+                endReason = check.EndReason,
                 failureIds,
                 check = BuildCheckReader.ToDto(check, FixStepNumbers(check.Id)),
             },
@@ -160,6 +185,40 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
             now);
         var joined = string.Join(", ", failureIds);
         LogTransition(logger, check.ProjectId, check.ReleaseVersionId, check.ReviewCycle, check.Attempt, check.Id, status, joined);
+    }
+
+    /// <summary>
+    /// D-0.6.1-23: a waiting check's poll stores <paramref name="sources"/> only when they changed, with a
+    /// <c>BUILD_CHECK_UPDATED</c> event so the change goes out live as <c>buildCheckUpdated</c>. Returns whether they changed
+    /// (an unchanged poll saves and pushes nothing).
+    /// </summary>
+    public bool Progress(BuildCheck check, IReadOnlyList<BuildCheckSource> sources, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        ArgumentNullException.ThrowIfNull(sources);
+        if (check.Status != BuildCheckStatus.Waiting || !BuildCheckRules.SourcesChanged(check.Sources, sources))
+        {
+            return false;
+        }
+
+        check.Sources = sources;
+        Updated(check, now);
+        return true;
+    }
+
+    /// <summary>
+    /// D-0.6.1-23: <c>BUILD_CHECK_UPDATED</c> with the check item as it is now (e.g. when the build-fix job starts planning),
+    /// pushed live as <c>buildCheckUpdated</c>; not an activity entry.
+    /// </summary>
+    public void Updated(BuildCheck check, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        db.AddEvent(
+            EventTypes.BuildCheckUpdated,
+            check.ProjectId,
+            new { buildCheckId = check.Id, releaseVersionId = check.ReleaseVersionId, reviewCycle = check.ReviewCycle, attempt = check.Attempt, check = BuildCheckReader.ToDto(check, FixStepNumbers(check.Id)) },
+            SystemActor.Name,
+            now);
     }
 
     /// <summary>FR-256: <c>BUILD_FIX_PLANNED</c> with the stored fix steps' numbers (added to the unit of work by the caller).</summary>
@@ -187,7 +246,7 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
             .ToListAsync(cancellationToken);
         foreach (var check in open)
         {
-            Complete(check, BuildCheckRules.Cancel(check.Status), [], [], now, actor);
+            Complete(check, BuildCheckRules.Cancel(check.Status), [], [], now, actor, BuildCheckEndReason.CancelledByChange);
         }
 
         if (open.Count > 0)
@@ -207,9 +266,11 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
     /// §4.47 "any → exhausted" (fix planning invalid after a retry, a blocked fix step answered "continue", or the check's job
     /// ended without succeeding): the check is exhausted, its fix steps that didn't complete are dropped (invalidated) so every
     /// remaining step is completed, and the pull request job is queued: it finds the exhausted check of the head and advances
-    /// to Review without a new rollout. Returns whether the check changed.
+    /// to Review without a new rollout. D-0.6.1-23: <paramref name="reason"/> is recorded as the check's end reason. Returns
+    /// whether the check changed.
     /// </summary>
-    public async Task<bool> ExhaustAsync(BuildCheck check, Guid? planArtifactId, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<bool> ExhaustAsync(
+        BuildCheck check, Guid? planArtifactId, string actor, BuildCheckEndReason reason, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(check);
         var next = BuildCheckRules.Exhaust(check.Status);
@@ -226,7 +287,7 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
             step.Status = StepStatus.Invalidated;
         }
 
-        Complete(check, next, [], [], now, actor);
+        Complete(check, next, [], [], now, actor, reason);
         if (planArtifactId is { } planId)
         {
             await pullRequests.EnqueueAsync(check.ProjectId, planId, ExhaustedTrigger, now, cancellationToken);

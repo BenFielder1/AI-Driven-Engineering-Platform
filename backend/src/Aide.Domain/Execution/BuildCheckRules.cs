@@ -25,7 +25,25 @@ public sealed record BuildCheckPreview(string? RolloutSha, RolloutState? State, 
 /// <see cref="CheckObservation.Required"/> already marked from the branch rules (<see cref="MergeReadinessRules.MarkRequired"/>,
 /// the review collectors' rules).
 /// </summary>
-public sealed record BuildCheckChecks(string? Sha, IReadOnlyList<CheckObservation> Checks);
+public sealed record BuildCheckChecks(string? Sha, IReadOnlyList<CheckObservation> Checks)
+{
+    /// <summary>
+    /// D-0.6.1-23: why the checks couldn't be read on this poll (the Git host failed, timed out or answered 5xx, or the pull
+    /// request couldn't be read); <c>null</c> when they were read. Unread checks count as not reported yet: the check keeps
+    /// waiting, and at the checks timeout it goes on without them (an <c>unavailable</c> source, never a failure).
+    /// </summary>
+    public string? Unreadable { get; init; }
+
+    /// <summary>
+    /// D-0.6.1-23: why the branch rules couldn't be read (403 or 404: plan limits, a missing permission, no protection);
+    /// <c>null</c> when they were. Then no check is known to be required: the checks are shown for information only and the
+    /// build check waits for the preview alone.
+    /// </summary>
+    public string? RulesUnavailable { get; init; }
+
+    /// <summary>D-0.6.1-23: checks that couldn't be read on this poll, for <paramref name="reason"/>.</summary>
+    public static BuildCheckChecks NotRead(string reason) => new(null, []) { Unreadable = reason };
+}
 
 /// <summary>
 /// What one poll of a build check saw (§4.47). <see cref="Preview"/> is <c>null</c> when the version has no preview target;
@@ -65,6 +83,9 @@ public sealed record BuildCheckDecision(
 
     /// <summary><c>passed</c>, <c>skipped</c> or <c>exhausted</c>: the PR job's advance to Review runs, with no new rollout.</summary>
     public bool ToReview => BuildCheckRules.GoesToReview(Status);
+
+    /// <summary>D-0.6.1-23: <c>attempts_used</c> when the poll exhausted the check (a failure with no fix left), else <c>null</c>.</summary>
+    public BuildCheckEndReason? EndReason => Status == BuildCheckStatus.Exhausted ? BuildCheckEndReason.AttemptsUsed : null;
 }
 
 /// <summary>
@@ -100,6 +121,15 @@ public static class BuildCheckRules
 
     /// <summary>The conclusion recorded for a source that didn't finish in time.</summary>
     public const string TimedOutConclusion = "timed_out";
+
+    /// <summary>D-0.6.1-23: the conclusion of a source the build check went on without (unreadable checks, unreadable branch rules).</summary>
+    public const string UnavailableConclusion = "unavailable";
+
+    /// <summary>D-0.6.1-23: the source name shown when the branch rules couldn't be read.</summary>
+    public const string RulesSourceName = "branch rules";
+
+    /// <summary>D-0.6.1-23: the message of a check shown for information while the branch rules are unknown.</summary>
+    public const string NotRequiredMessage = "Shown for information: the branch rules couldn't be read, so this check isn't waited for";
 
     /// <summary>FR-258: a <c>maxBuildFixAttempts</c> value the settings accept (0–10; out of range is 400 <c>VALIDATION</c>).</summary>
     public static bool IsValidMaxAttempts(int value) => value is >= MinAttempts and <= MaxAttempts;
@@ -170,7 +200,7 @@ public static class BuildCheckRules
         ArgumentOutOfRangeException.ThrowIfNegative(attempt);
         var head = observation.HeadSha;
         var checks = observation.Checks;
-        var checksCurrent = checks is not null && SameSha(checks.Sha, head);
+        var checksCurrent = checks is not null && checks.Unreadable is null && SameSha(checks.Sha, head);
         var required = checksCurrent ? checks!.Checks.Where(c => c.Required).ToList() : [];
 
         // No preview target and no required checks (on the head SHA): nothing to wait for.
@@ -195,7 +225,7 @@ public static class BuildCheckRules
 
         if (checks is not null)
         {
-            var wait = Checks(checksCurrent, required, observation.ChecksWaitSince, now, sources, timedOut, failing);
+            var wait = Checks(checks, checksCurrent, required, observation.ChecksWaitSince, now, sources, timedOut, failing);
             checksSince = wait?.Since;
             recheck = Earliest(recheck, wait?.RecheckAt);
         }
@@ -205,8 +235,9 @@ public static class BuildCheckRules
             return new BuildCheckDecision(BuildCheckStatus.Waiting, recheck, previewSince, checksSince, sources, [], []);
         }
 
+        // D-0.6.1-23: with no preview and checks that stayed unreadable, nothing was checked: skipped, not passed.
         var status = failing.Count == 0
-            ? BuildCheckStatus.Passed
+            ? observation.Preview is null && checks?.Unreadable is not null ? BuildCheckStatus.Skipped : BuildCheckStatus.Passed
             : attempt < maxFixes ? BuildCheckStatus.Failed : BuildCheckStatus.Exhausted;
         return new BuildCheckDecision(status, null, null, null, sources, timedOut, failing);
     }
@@ -282,7 +313,7 @@ public static class BuildCheckRules
         {
             foreach (var c in preview.Components)
             {
-                sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, ComponentConclusion(c, failed), c.Url));
+                sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, ComponentConclusion(c, failed), c.Url, c.Status?.ToWire()));
             }
 
             if (preview.Components.Count == 0)
@@ -305,7 +336,8 @@ public static class BuildCheckRules
         {
             foreach (var c in preview.Components)
             {
-                sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, null, current is null ? null : c.Url));
+                // D-0.6.1-23: the component's deployment state for the head (queued, building, …), so the panel can show progress.
+                sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, null, current is null ? null : c.Url, current is null ? null : c.Status?.ToWire()));
             }
 
             return new Wait(decision.RecheckAt!.Value, decision.WaitingSince!.Value);
@@ -322,7 +354,7 @@ public static class BuildCheckRules
 
         foreach (var c in preview.Components)
         {
-            sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, unfinished.Contains(c) ? TimedOutConclusion : ComponentConclusion(c, false), current is null ? null : c.Url));
+            sources.Add(new BuildCheckSource(Name(c, preview.Components), BuildCheckSourceKind.Preview, unfinished.Contains(c) ? TimedOutConclusion : ComponentConclusion(c, false), current is null ? null : c.Url, current is null ? null : c.Status?.ToWire()));
         }
 
         foreach (var c in unfinished)
@@ -344,17 +376,31 @@ public static class BuildCheckRules
     }
 
     private static Wait? Checks(
-        bool current, List<CheckObservation> required, DateTimeOffset? since, DateTimeOffset now,
+        BuildCheckChecks checks, bool current, List<CheckObservation> required, DateTimeOffset? since, DateTimeOffset now,
         List<BuildCheckSource> sources, List<BuildCheckFailure> timedOut, List<string> failing)
     {
-        // Checks read for an older SHA count as pending: the head SHA's checks haven't been reported yet.
+        // Checks read for an older SHA, or not read on this poll (D-0.6.1-23), count as pending: the head SHA's checks
+        // haven't been reported yet.
         var pending = current ? required.Where(MergeReadinessRules.IsPending).ToList() : [];
         var waitFor = current ? pending : [new CheckObservation("head", CheckRunStatus.Queued, null, true, null)];
         var decision = ExternalCheckRules.Decide(waitFor, since, now);
         if (decision.Wait)
         {
-            sources.AddRange(required.Select(c => new BuildCheckSource(c.Name, BuildCheckSourceKind.Check, Conclusion(c), c.DetailsUrl)));
+            sources.AddRange(required.Select(c => new BuildCheckSource(c.Name, BuildCheckSourceKind.Check, Conclusion(c), c.DetailsUrl, StatusOf(c))));
+            if (checks.Unreadable is { } reason)
+            {
+                sources.Add(new BuildCheckSource(HeadChecksSourceName, BuildCheckSourceKind.Check, null, null, null, ChecksNotReadYetMessage(reason)));
+            }
+
+            Informational(checks, current, sources);
             return new Wait(decision.RecheckAt!.Value, decision.WaitingSince!.Value);
+        }
+
+        if (!current && decision.TimedOut && checks.Unreadable is { } unreadable)
+        {
+            // D-0.6.1-23: the Git host never let the checks be read within the wait: go on without them (never a failure).
+            sources.Add(new BuildCheckSource(HeadChecksSourceName, BuildCheckSourceKind.Check, UnavailableConclusion, null, null, ChecksUnavailableMessage(unreadable)));
+            return null;
         }
 
         if (!current && decision.TimedOut)
@@ -370,7 +416,7 @@ public static class BuildCheckRules
         foreach (var check in required)
         {
             var timed = decision.TimedOut && MergeReadinessRules.IsPending(check);
-            sources.Add(new BuildCheckSource(check.Name, BuildCheckSourceKind.Check, timed ? TimedOutConclusion : Conclusion(check), check.DetailsUrl));
+            sources.Add(new BuildCheckSource(check.Name, BuildCheckSourceKind.Check, timed ? TimedOutConclusion : Conclusion(check), check.DetailsUrl, StatusOf(check)));
             if (timed)
             {
                 var id = FailureIds.Of(FailureIds.Check, check.Name);
@@ -383,8 +429,73 @@ public static class BuildCheckRules
             }
         }
 
+        Informational(checks, current, sources);
         return null;
     }
+
+    /// <summary>
+    /// D-0.6.1-23: with the branch rules unknown, the head's checks are shown for information (never waited for, never a
+    /// failure), after a <see cref="RulesSourceName"/> source saying why.
+    /// </summary>
+    private static void Informational(BuildCheckChecks checks, bool current, List<BuildCheckSource> sources)
+    {
+        if (checks.RulesUnavailable is not { } reason)
+        {
+            return;
+        }
+
+        sources.Add(new BuildCheckSource(RulesSourceName, BuildCheckSourceKind.Check, UnavailableConclusion, null, null, RulesUnavailableMessage(reason), Informational: true));
+        if (current)
+        {
+            sources.AddRange(checks.Checks.Where(c => !c.Required)
+                .Select(c => new BuildCheckSource(c.Name, BuildCheckSourceKind.Check, Conclusion(c), c.DetailsUrl, StatusOf(c), NotRequiredMessage, Informational: true)));
+        }
+    }
+
+    /// <summary>D-0.6.1-23: the message of a checks source that couldn't be read on the last poll (the check keeps waiting).</summary>
+    public static string ChecksNotReadYetMessage(string reason) => $"The checks couldn't be read yet ({reason}); still waiting";
+
+    /// <summary>D-0.6.1-23: the message when the checks stayed unreadable until the checks timeout (the check went on without them).</summary>
+    public static string ChecksUnavailableMessage(string reason) =>
+        string.Create(CultureInfo.InvariantCulture, $"The checks couldn't be read within {(int)ExternalCheckRules.WaitLimit.TotalMinutes} minutes ({reason}); the build check went on without them");
+
+    /// <summary>D-0.6.1-23: the message when the branch rules couldn't be read (no check is known to be required).</summary>
+    public static string RulesUnavailableMessage(string reason) =>
+        $"The branch rules couldn't be read ({reason}), so no check is known to be required; the build check waits for the preview only";
+
+    /// <summary>
+    /// D-0.6.1-23: whether a waiting check's sources changed since the last poll (any name, conclusion, status, link or message),
+    /// so an unchanged poll neither saves nor pushes <c>buildCheckUpdated</c>.
+    /// </summary>
+    public static bool SourcesChanged(IReadOnlyList<BuildCheckSource> before, IReadOnlyList<BuildCheckSource> after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        return !before.SequenceEqual(after);
+    }
+
+    /// <summary>
+    /// FR-256, D-0.6.1-23: where a check's fix stands. Fix steps stored (or a fix step's escalation answered "continue") is
+    /// <c>planned</c>; an invalid plan after the retry, or a failed check whose fix job failed, is <c>failed</c>; a failed check
+    /// with no steps yet is <c>planning</c>; anything else is <c>none</c>.
+    /// </summary>
+    public static BuildCheckFixPlanning FixPlanningOf(BuildCheckStatus status, BuildCheckEndReason? endReason, bool hasFixSteps, bool hasFailures)
+    {
+        if (hasFixSteps || endReason == BuildCheckEndReason.EscalationContinue)
+        {
+            return BuildCheckFixPlanning.Planned;
+        }
+
+        // A dead build-check job never stored failures; a dead build-fix job leaves its failed check's failures.
+        if (endReason == BuildCheckEndReason.FixPlanInvalid || (endReason == BuildCheckEndReason.JobFailed && hasFailures))
+        {
+            return BuildCheckFixPlanning.Failed;
+        }
+
+        return status == BuildCheckStatus.Failed ? BuildCheckFixPlanning.Planning : BuildCheckFixPlanning.None;
+    }
+
+    private static string StatusOf(CheckObservation check) => check.Status.ToWire();
 
     private static string? Conclusion(CheckObservation check) =>
         MergeReadinessRules.IsPending(check) ? null : check.Conclusion?.ToWire() ?? "neutral";

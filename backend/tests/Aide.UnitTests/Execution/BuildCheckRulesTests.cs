@@ -100,8 +100,8 @@ public sealed class BuildCheckRulesTests
         Assert.Empty(decision.TimedOut);
         Assert.Equal(
             [
-                new BuildCheckSource("Vercel preview", BuildCheckSourceKind.Preview, "success", "https://p.vercel.app"),
-                new BuildCheckSource("build", BuildCheckSourceKind.Check, "success", "https://ci/build"),
+                new BuildCheckSource("Vercel preview", BuildCheckSourceKind.Preview, "success", "https://p.vercel.app", "ready"),
+                new BuildCheckSource("build", BuildCheckSourceKind.Check, "success", "https://ci/build", "completed"),
             ],
             decision.Sources);
     }
@@ -202,7 +202,7 @@ public sealed class BuildCheckRulesTests
 
         Assert.Equal(BuildCheckStatus.Failed, decision.Status);
         Assert.Equal(["build"], decision.Failing);
-        Assert.Contains(new BuildCheckSource("build", BuildCheckSourceKind.Check, "failure", "https://ci/build"), decision.Sources);
+        Assert.Contains(new BuildCheckSource("build", BuildCheckSourceKind.Check, "failure", "https://ci/build", "completed"), decision.Sources);
     }
 
     [Fact]
@@ -413,4 +413,168 @@ public sealed class BuildCheckRulesTests
         Assert.Equal(BuildCheckStatus.Failed, timedOut.Status);
         Assert.Equal("failure:check:build", Assert.Single(timedOut.TimedOut).FailureId);
     }
+
+    // ---------- D-0.6.1-23: the Git host never ends the check early ----------
+
+    private const string RulesRefused = "GitHub: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)";
+
+    private static BuildCheckChecks RulesUnknown(string? sha, params CheckObservation[] checks) => new(sha, checks) { RulesUnavailable = RulesRefused };
+
+    [Fact]
+    public void FR255_Branch_rules_the_host_refuses_mean_no_required_check_so_the_check_waits_for_the_preview_only()
+    {
+        // Rules unreadable: nothing is marked required; a pending CI run isn't waited for, only the running preview.
+        var observation = new BuildCheckObservation(
+            Head,
+            Rollout(Head, RolloutState.Running),
+            RulesUnknown(Head, Check("build", CheckRunStatus.InProgress, required: false)));
+
+        var decision = Decide(observation);
+
+        Assert.True(decision.Wait);
+        Assert.Equal(T0 + PreviewReviewRules.RecheckInterval, decision.RecheckAt);
+        Assert.Null(decision.ChecksWaitSince);
+        Assert.Equal(
+            [
+                new BuildCheckSource("Vercel preview", BuildCheckSourceKind.Preview, null, "https://p.vercel.app", "building"),
+                new BuildCheckSource(BuildCheckRules.RulesSourceName, BuildCheckSourceKind.Check, BuildCheckRules.UnavailableConclusion, null, null, BuildCheckRules.RulesUnavailableMessage(RulesRefused), Informational: true),
+                new BuildCheckSource("build", BuildCheckSourceKind.Check, null, "https://ci/build", "in_progress", BuildCheckRules.NotRequiredMessage, Informational: true),
+            ],
+            decision.Sources);
+    }
+
+    [Fact]
+    public void FR255_With_branch_rules_refused_a_preview_error_fails_the_check_and_an_informational_failing_check_doesnt_count()
+    {
+        var observation = new BuildCheckObservation(
+            Head,
+            Rollout(Head, RolloutState.Failed, DeploymentStatus.Error),
+            RulesUnknown(Head, Check("lint", CheckRunStatus.Completed, CheckRunConclusion.Failure, required: false)));
+
+        var decision = Decide(observation, attempt: 0, max: 5);
+
+        Assert.Equal(BuildCheckStatus.Failed, decision.Status);
+        Assert.True(decision.PlanFix);
+        Assert.Equal(["Vercel preview"], decision.Failing);
+        Assert.Contains(decision.Sources, s => s.Name == "lint" && s.Conclusion == "failure" && s.Informational);
+    }
+
+    [Fact]
+    public void FR255_With_branch_rules_refused_and_a_successful_preview_the_check_passes()
+    {
+        var decision = Decide(new BuildCheckObservation(Head, Rollout(Head, RolloutState.Succeeded, DeploymentStatus.Ready), RulesUnknown(Head)));
+
+        Assert.Equal(BuildCheckStatus.Passed, decision.Status);
+        Assert.Contains(decision.Sources, s => s.Name == BuildCheckRules.RulesSourceName && s.Conclusion == BuildCheckRules.UnavailableConclusion);
+    }
+
+    [Fact]
+    public void FR255_With_branch_rules_refused_and_no_preview_target_the_check_is_skipped() =>
+        Assert.Equal(BuildCheckStatus.Skipped, Decide(new BuildCheckObservation(Head, null, RulesUnknown(Head, Check("build", CheckRunStatus.InProgress, required: false)))).Status);
+
+    [Fact]
+    public void FR255_Checks_the_host_couldnt_serve_keep_the_check_waiting_as_not_reported_yet()
+    {
+        var observation = new BuildCheckObservation(Head, Rollout(Head, RolloutState.Succeeded, DeploymentStatus.Ready), BuildCheckChecks.NotRead("GitHub: Server Error (HTTP 502)"));
+
+        var decision = Decide(observation);
+
+        Assert.True(decision.Wait);
+        Assert.Equal(T0 + ExternalCheckRules.RecheckInterval, decision.RecheckAt);
+        Assert.Equal(T0, decision.ChecksWaitSince);
+        var unread = Assert.Single(decision.Sources, s => s.Kind == BuildCheckSourceKind.Check);
+        Assert.Equal((BuildCheckRules.HeadChecksSourceName, (string?)null), (unread.Name, unread.Conclusion));
+        Assert.Equal(BuildCheckRules.ChecksNotReadYetMessage("GitHub: Server Error (HTTP 502)"), unread.Message);
+    }
+
+    [Fact]
+    public void FR255_Checks_still_unreadable_at_15_minutes_are_unavailable_never_a_failure_and_the_preview_decides()
+    {
+        const string Reason = "Could not reach GitHub: the request timed out.";
+        var since = T0 - ExternalCheckRules.WaitLimit - TimeSpan.FromSeconds(1);
+
+        var passed = Decide(new BuildCheckObservation(Head, Rollout(Head, RolloutState.Succeeded, DeploymentStatus.Ready), BuildCheckChecks.NotRead(Reason)) { ChecksWaitSince = since });
+        var failed = Decide(new BuildCheckObservation(Head, Rollout(Head, RolloutState.Failed, DeploymentStatus.Error), BuildCheckChecks.NotRead(Reason)) { ChecksWaitSince = since });
+
+        Assert.Equal(BuildCheckStatus.Passed, passed.Status);
+        Assert.Empty(passed.TimedOut);
+        var unavailable = Assert.Single(passed.Sources, s => s.Kind == BuildCheckSourceKind.Check);
+        Assert.Equal((BuildCheckRules.UnavailableConclusion, BuildCheckRules.ChecksUnavailableMessage(Reason)), (unavailable.Conclusion, unavailable.Message));
+        Assert.Equal(BuildCheckStatus.Failed, failed.Status);
+        Assert.Equal(["Vercel preview"], failed.Failing);
+        Assert.Empty(failed.TimedOut);
+    }
+
+    [Fact]
+    public void FR255_With_no_preview_target_checks_unreadable_until_the_timeout_are_skipped_not_passed()
+    {
+        var observation = new BuildCheckObservation(Head, null, BuildCheckChecks.NotRead("GitHub: Bad Gateway (HTTP 502)"))
+        {
+            ChecksWaitSince = T0 - ExternalCheckRules.WaitLimit - TimeSpan.FromSeconds(1),
+        };
+
+        var decision = Decide(observation);
+
+        Assert.Equal(BuildCheckStatus.Skipped, decision.Status);
+        Assert.Equal(BuildCheckRules.UnavailableConclusion, Assert.Single(decision.Sources).Conclusion);
+    }
+
+    // ---------- D-0.6.1-23: live progress, end reason and fix planning (FR-258, FR-259) ----------
+
+    [Theory]
+    [InlineData(DeploymentStatus.Queued, "queued")]
+    [InlineData(DeploymentStatus.Building, "building")]
+    public void FR259_A_waiting_head_preview_source_carries_its_deployment_status(DeploymentStatus status, string wire)
+    {
+        var decision = Decide(new BuildCheckObservation(Head, Rollout(Head, RolloutState.Running, status), null));
+
+        var source = Assert.Single(decision.Sources);
+        Assert.Equal((null, wire), (source.Conclusion, source.Status));
+    }
+
+    [Fact]
+    public void FR259_A_rollout_of_an_older_sha_shows_no_status_for_the_head()
+    {
+        var decision = Decide(new BuildCheckObservation(Head, Rollout(Older, RolloutState.Running, DeploymentStatus.Building), null));
+
+        Assert.Null(Assert.Single(decision.Sources).Status);
+    }
+
+    [Fact]
+    public void FR259_Sources_changed_compares_every_field_so_unchanged_polls_push_nothing()
+    {
+        IReadOnlyList<BuildCheckSource> queued = [new("Vercel preview", BuildCheckSourceKind.Preview, null, "https://p.vercel.app", "queued")];
+        IReadOnlyList<BuildCheckSource> same = [new("Vercel preview", BuildCheckSourceKind.Preview, null, "https://p.vercel.app", "queued")];
+        IReadOnlyList<BuildCheckSource> building = [new("Vercel preview", BuildCheckSourceKind.Preview, null, "https://p.vercel.app", "building")];
+
+        Assert.False(BuildCheckRules.SourcesChanged(queued, same));
+        Assert.True(BuildCheckRules.SourcesChanged(queued, building));
+        Assert.True(BuildCheckRules.SourcesChanged([], queued));
+        Assert.False(BuildCheckRules.SourcesChanged([], []));
+    }
+
+    [Fact]
+    public void FR258_An_exhausted_decision_ends_with_attempts_used_and_other_decisions_have_no_end_reason()
+    {
+        var failing = new BuildCheckObservation(Head, Rollout(Head, RolloutState.Failed, DeploymentStatus.Error), null);
+
+        Assert.Equal(BuildCheckEndReason.AttemptsUsed, Decide(failing, attempt: 2, max: 2).EndReason);
+        Assert.Null(Decide(failing, attempt: 1, max: 2).EndReason);
+        Assert.Null(Decide(new BuildCheckObservation(Head, null, null)).EndReason);
+    }
+
+    [Theory]
+    [InlineData(BuildCheckStatus.Waiting, null, false, false, BuildCheckFixPlanning.None)]
+    [InlineData(BuildCheckStatus.Passed, null, false, false, BuildCheckFixPlanning.None)]
+    [InlineData(BuildCheckStatus.Failed, null, false, true, BuildCheckFixPlanning.Planning)]
+    [InlineData(BuildCheckStatus.Failed, null, true, true, BuildCheckFixPlanning.Planned)]
+    [InlineData(BuildCheckStatus.Exhausted, BuildCheckEndReason.FixPlanInvalid, false, true, BuildCheckFixPlanning.Failed)]
+    [InlineData(BuildCheckStatus.Exhausted, BuildCheckEndReason.JobFailed, false, true, BuildCheckFixPlanning.Failed)]
+    [InlineData(BuildCheckStatus.Exhausted, BuildCheckEndReason.JobFailed, false, false, BuildCheckFixPlanning.None)]
+    [InlineData(BuildCheckStatus.Exhausted, BuildCheckEndReason.EscalationContinue, false, true, BuildCheckFixPlanning.Planned)]
+    [InlineData(BuildCheckStatus.Exhausted, BuildCheckEndReason.AttemptsUsed, false, true, BuildCheckFixPlanning.None)]
+    [InlineData(BuildCheckStatus.Cancelled, BuildCheckEndReason.CancelledByChange, false, true, BuildCheckFixPlanning.None)]
+    public void FR256_Fix_planning_is_derived_from_the_status_end_reason_and_fix_steps(
+        BuildCheckStatus status, BuildCheckEndReason? endReason, bool hasFixSteps, bool hasFailures, BuildCheckFixPlanning expected) =>
+        Assert.Equal(expected, BuildCheckRules.FixPlanningOf(status, endReason, hasFixSteps, hasFailures));
 }

@@ -88,6 +88,26 @@ public sealed class CheckFailureEvidenceTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR85_D_0_6_1_23_Branch_rules_GitHub_refuses_with_403_keep_the_checks_in_review_with_none_required_and_no_required_finding()
+    {
+        using var remote = await BareRemote.CreateAsync(Ct);
+        var github = FailingBuild(remote, HttpStatusCode.OK);
+        github.Api.On(HttpMethod.Get, Repo + "/rules/branches/main", HttpStatusCode.Forbidden, """{"message":"Upgrade to GitHub Pro or make this repository public to enable this feature."}""");
+        await using var app = remote.App(Reviewing(), github.Api, out _);
+        using var fixture = await MergeFlowTests.GitHubFixtureAsync(app);
+        var id = fixture.Project.Id;
+        github.Branch = MergeFlowTests.BranchOf(fixture);
+        await ReleaseFlowTests.StartExecutionAsync(app, fixture);
+        await AgentJobs.RunQueuedAsync(app, id);
+
+        // Review keeps the check (previously the 403 dropped every check), marked not required, so no required-check finding.
+        var report = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
+        var check = Assert.Single(JsonDocument.Parse(report.ExternalChecks!).RootElement.GetProperty("checks").EnumerateArray());
+        Assert.Equal(("build", "failure", false), (check.GetProperty("name").GetString(), check.GetProperty("conclusion").GetString(), check.GetProperty("required").GetBoolean()));
+        Assert.DoesNotContain(report.Violations, v => v.Message == "required check build failed" || v.FailureId == "failure:check:build");
+    }
+
+    [Fact]
     public void FR240_Stored_failures_round_trip_and_an_old_format_row_reads_as_none()
     {
         var finding = new ReviewFinding(ReviewCategory.Testing, Severity.Major, "required check build failed", Evidence: "build\nError: x")

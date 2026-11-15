@@ -164,7 +164,13 @@ public sealed partial class MergeReadinessService(
         }
 
         var repo = await api.GetRepoMergeSettingsAsync(github.Token, github.Owner, github.Repo, cancellationToken);
-        var rules = await api.GetBranchRulesAsync(github.Token, github.Owner, github.Repo, github.DefaultBranch, cancellationToken);
+        // D-0.6.1-23: rules GitHub refuses (403, e.g. a free private repository) or doesn't have (404) mean none apply.
+        var (rules, rulesUnavailable) = await api.GetBranchRulesOrNoneAsync(github.Token, github.Owner, github.Repo, github.DefaultBranch, cancellationToken);
+        if (rulesUnavailable is { } reason)
+        {
+            LogRulesUnavailable(logger, project.Id, reason);
+        }
+
         var graph = await api.GetPullGraphAsync(github.Token, github.Owner, github.Repo, pull.Number, cancellationToken);
         if (graph is null)
         {
@@ -302,6 +308,9 @@ public sealed partial class MergeReadinessService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "GraphQL is unavailable for project {ProjectId}'s GitHub token; merge readiness is read without mergeStateStatus and reviewDecision")]
     private static partial void LogGraphQlUnavailable(ILogger logger, Guid projectId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The branch rules of project {ProjectId} couldn't be read, so merge readiness assumes none: {Reason}")]
+    private static partial void LogRulesUnavailable(ILogger logger, Guid projectId, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Merge readiness of project {ProjectId}: GitHub failed with HTTP {Status}")]
     private static partial void LogUpstream(ILogger logger, Guid projectId, int? status);

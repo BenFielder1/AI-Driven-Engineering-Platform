@@ -76,6 +76,14 @@ public sealed partial class BuildFixJobHandler(
             return;
         }
 
+        // D-0.6.1-23: the fix job started planning (pushed live as buildCheckUpdated, so the panel shows "Planning fix…"
+        // while the agent runs); only on the first delivery, so a retried job doesn't push it again.
+        if (job.Attempt <= 1)
+        {
+            buildChecks.Updated(check, time.GetUtcNow());
+            await SaveAsync(cancellationToken);
+        }
+
         var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
         var preparation = await preparer.TryPrepareAsync(project.Id, cancellationToken);
         if (preparation.Result.IsFailure)
@@ -146,7 +154,7 @@ public sealed partial class BuildFixJobHandler(
         {
             // §4.48 step 4: invalid after one retry: the check is exhausted and Review starts with the failures.
             LogInvalid(logger, check.Id, processed.Error!.Message);
-            await buildChecks.ExhaustAsync(check, planId, SystemActor.Name, now, cancellationToken);
+            await buildChecks.ExhaustAsync(check, planId, SystemActor.Name, BuildCheckEndReason.FixPlanInvalid, now, cancellationToken);
             await SaveAsync(cancellationToken);
             return;
         }

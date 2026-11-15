@@ -550,6 +550,11 @@ namespace Aide.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("end_reason");
+
                     b.Property<string>("Failures")
                         .IsRequired()
                         .HasColumnType("jsonb")

@@ -29,6 +29,21 @@ public sealed record CollectedChecks(IReadOnlyList<CheckObservation> Checks, int
     public string? HeadSha { get; init; }
 
     /// <summary>
+    /// D-0.6.1-23 (build check only): why the checks couldn't be read on this poll (a Git host error, 5xx, timeout or an
+    /// unreadable pull request); <c>null</c> when they were. The build check keeps waiting instead of failing its job.
+    /// </summary>
+    public string? Unreadable { get; init; }
+
+    /// <summary>
+    /// D-0.6.1-23: why GitHub's branch rules couldn't be read (403 or 404); <c>null</c> when they were (or for GitLab and
+    /// Bitbucket, whose providers treat the same refusal as "none required"). No check is marked required then.
+    /// </summary>
+    public string? RulesUnavailable { get; init; }
+
+    /// <summary>D-0.6.1-23: checks that couldn't be read, for <paramref name="reason"/>.</summary>
+    public static CollectedChecks NotRead(string reason) => new([], null, false) { Unreadable = reason };
+
+    /// <summary>
     /// The review findings: FR-139 for a GitLab project ("required pipeline job test:backend failed", major when required,
     /// else minor), FR-85 for GitHub ("required check ci / test failed"). FR-236: a failed required check's evidence is the
     /// excerpt in <see cref="Excerpts"/>.
@@ -190,13 +205,11 @@ public sealed partial class ExternalChecksCollector(
     /// FR-255: the checks as they are now, without waiting (the build check decides the waits, §4.47), or <c>null</c> under
     /// the same rules as <see cref="CollectAsync"/>. Failure excerpts and logs are fetched only with <paramref name="excerpts"/>
     /// (the build check asks once its decision is final) and once no required check is pending. A rate limit still defers the
-    /// job; a GitHub or Git host error, or a pull request that can't be read, is a transient failure (the job retries) rather
-    /// than "no checks", which would skip the check.
+    /// job. D-0.6.1-23: a GitHub or Git host error (5xx, network, timeout, a refusal), or a pull request that can't be read,
+    /// never fails the job: the result is <see cref="CollectedChecks.NotRead"/> (not "no checks", which would skip the check),
+    /// and the build check keeps waiting. Branch rules GitHub refuses (403) or doesn't have (404) mean no check is required.
     /// </summary>
     public Task<CollectedChecks?> ReadAsync(Project project, bool excerpts, CancellationToken cancellationToken) => ReadCoreAsync(project, null, excerpts, cancellationToken);
-
-    private static JobFailedException Unreadable(string reason) =>
-        new($"The checks of the head commit couldn't be read: {reason}", transient: true);
 
     private async Task<CollectedChecks?> ReadCoreAsync(Project project, LifecycleJobPayload? payload, bool excerpts, CancellationToken cancellationToken)
     {
@@ -209,6 +222,12 @@ public sealed partial class ExternalChecksCollector(
         var target = await access.ResolveAsync(project.Id, cancellationToken);
         if (target.IsFailure)
         {
+            if (payload is null)
+            {
+                // D-0.6.1-23: an installation token GitHub didn't issue (5xx, network, timeout) isn't "no checks host".
+                return CollectedChecks.NotRead(target.Error!.Message);
+            }
+
             LogUnavailable(logger, project.Id, target.Error!.Message);
             return null;
         }
@@ -232,15 +251,16 @@ public sealed partial class ExternalChecksCollector(
         {
             if (await api.FindPullAsync(github.Token, github.Owner, github.Repo, pullNumber, cancellationToken) is not { HeadSha: { } head })
             {
-                return payload is null ? throw Unreadable("the pull request was not found") : null;
+                return payload is null ? CollectedChecks.NotRead("the pull request was not found") : null;
             }
 
             if (await api.ListChecksAsync(github.Token, github.Owner, github.Repo, head, cancellationToken) is not { } checks)
             {
-                return null;
+                // D-0.6.1-23: checks GitHub won't show (403/404) are unreadable for the build check, not "no checks host".
+                return payload is null ? CollectedChecks.NotRead("GitHub didn't show the check runs or statuses of the head commit (HTTP 403 or 404)") : null;
             }
 
-            var rules = await api.GetBranchRulesAsync(github.Token, github.Owner, github.Repo, github.DefaultBranch, cancellationToken);
+            var (rules, rulesUnavailable) = await RulesAsync(project.Id, github, log: payload is not null, cancellationToken);
             // FR-255: for the build check (no review payload) a required context GitHub hasn't registered for the head yet
             // counts as pending, so the check waits for it (and fails it at 15 minutes) instead of passing or skipping.
             var marked = MergeReadinessRules.MarkRequired(checks, rules.RequiredChecks, includeMissingRequired: payload is null);
@@ -262,7 +282,7 @@ public sealed partial class ExternalChecksCollector(
 
             if (payload is null && (!excerpts || RequiredPending(marked)))
             {
-                return new CollectedChecks(marked, null, false) { HeadSha = head };
+                return new CollectedChecks(marked, null, false) { HeadSha = head, RulesUnavailable = rulesUnavailable };
             }
 
             // FR-236: the failed required checks' output, annotations and job logs (each part optional, never failing the review).
@@ -280,7 +300,7 @@ public sealed partial class ExternalChecksCollector(
                     ExternalCheckRules.Excerpt,
                     timeout: null,
                     cancellationToken);
-            return new CollectedChecks(marked, decision?.WaitedSeconds, decision?.TimedOut ?? false) { Excerpts = Excerpts(project.Id, outcomes), HeadSha = head };
+            return new CollectedChecks(marked, decision?.WaitedSeconds, decision?.TimedOut ?? false) { Excerpts = Excerpts(project.Id, outcomes), HeadSha = head, RulesUnavailable = rulesUnavailable };
         }
         catch (GitHubRateLimitedException ex)
         {
@@ -291,9 +311,31 @@ public sealed partial class ExternalChecksCollector(
         }
         catch (GitHubApiException ex)
         {
+            if (payload is null)
+            {
+                // D-0.6.1-23: the build check keeps waiting (logged by its job), never fails its job.
+                return CollectedChecks.NotRead(ex.Message);
+            }
+
             LogUnavailable(logger, project.Id, ex.Message);
-            return payload is null ? throw Unreadable(ex.Message) : null;
+            return null;
         }
+    }
+
+    /// <summary>
+    /// FR-85, D-0.6.1-23: the default branch's rules. GitHub refusing them (403: plan limits such as "Upgrade to GitHub Pro",
+    /// or a missing permission) or not having them (404) is not an error: no check is known to be required, and the reason
+    /// is returned (logged here for review, with <paramref name="log"/>; the build check logs it once). Any other failure propagates.
+    /// </summary>
+    private async Task<(GitHubBranchRules Rules, string? Unavailable)> RulesAsync(Guid projectId, GitHubRepoTarget github, bool log, CancellationToken cancellationToken)
+    {
+        var read = await api.GetBranchRulesOrNoneAsync(github.Token, github.Owner, github.Repo, github.DefaultBranch, cancellationToken);
+        if (log && read.Unavailable is { } reason)
+        {
+            LogRulesUnavailable(logger, projectId, reason);
+        }
+
+        return read;
     }
 
     /// <summary>
@@ -322,7 +364,7 @@ public sealed partial class ExternalChecksCollector(
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
         {
             LogUnavailable(logger, project.Id, ex.GetType().Name);
-            return null;
+            return payload is null ? CollectedChecks.NotRead($"the branch head couldn't be read ({ex.GetType().Name})") : null;
         }
 
         if (head is null)
@@ -352,8 +394,14 @@ public sealed partial class ExternalChecksCollector(
 
         if (statuses.IsFailure)
         {
+            if (payload is null)
+            {
+                // D-0.6.1-23: the build check keeps waiting (logged by its job), never fails its job.
+                return CollectedChecks.NotRead(statuses.Error!.Message);
+            }
+
             LogUnavailable(logger, project.Id, statuses.Error!.Message);
-            return payload is null ? throw Unreadable(statuses.Error.Message) : null;
+            return null;
         }
 
         var checks = statuses.Value;
@@ -445,4 +493,7 @@ public sealed partial class ExternalChecksCollector(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} goes on without the Git host's checks: {Reason}")]
     private static partial void LogUnavailable(ILogger logger, Guid projectId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The branch rules of project {ProjectId} couldn't be read, so no check is treated as required: {Reason}")]
+    private static partial void LogRulesUnavailable(ILogger logger, Guid projectId, string reason);
 }

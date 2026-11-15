@@ -413,6 +413,7 @@ A build check belongs to a release version, a review cycle and an **attempt**. A
 | any | The version is invalidated or rolled back, or execution is stopped | `cancelled` |
 
 - Results for an older SHA are ignored, and the check keeps waiting. The waits and timeouts are the existing ones: the preview rollout follows `PreviewReviewRules` (10 s, 30 min) and the checks follow `ExternalCheckRules` (30 s, 15 min). Waiting uses job deferral, never sleeps.
+- **Git host refusals (D-0.6.1-23):** a 403 or 404 on the host's branch-rules read (plan limits, missing permission, no protection) means no required checks are known. The check logs a warning and still waits for the preview rollout. The head's checks are shown for information but don't count. Any other read error (5xx, 429, network, timeout, or an unreadable PR or head) never fails the job: the check keeps waiting, and if the checks are still unreadable at the 15-minute checks timeout it carries on without them (source `unavailable`, no failure). It still waits for the preview. A check that ends `exhausted` or `cancelled` records why (`end_reason`).
 - On `passed`, `skipped` or `exhausted`, the PR job's existing advance to Review runs and **no new rollout is queued**. Review's collectors read the same rollout and checks. The attempt count resets in each review cycle.
 - Worked example, m = 5: attempt 0 fails (`Can't resolve '@/lib/db'`) → fix 1 → attempt 1 fails (`Type error: Property 'id' does not exist`) → fix 2 → attempt 2 passes → Review. That's 3 checks and 2 fixes.
 - Audit events: `build_check.started`, `build_check.completed` (with status) and `build_fix.planned` (with step numbers).
@@ -459,6 +460,7 @@ No schema changes and no migrations. Failure excerpts live in the existing `comp
   - `sources` jsonb (name, kind `preview`/`check`, conclusion, URL);
   - `failures` jsonb (failure id, fingerprint, message, excerpt, error summary);
   - `started_at`, `completed_at`, `xmin`.
+  - `end_reason` (nullable string enum: `attempts_used`, `fix_plan_invalid`, `escalation_continue`, `job_failed`, `cancelled_by_change`), added by a second additive migration (D-0.6.1-23).
   - Unique on (`release_version_id`, `review_cycle`, `attempt`), with FKs cascading like `execution_steps`.
 - `execution_steps`: `origin` (string, not null, default `plan`; `plan` or `build_fix`), and a nullable `build_check_id` FK.
 - `projects`: `max_build_fix_attempts` (int, not null, default 5).
@@ -473,6 +475,7 @@ No new endpoints and no contract change. The plan is read from the artifact's `a
 - The execution step DTO gains `origin` (`plan` or `build_fix`) and `buildCheckAttempt` (int or null).
 - The review report finding DTO gains `findingId`, `handling`, `stepNumber` and `waivedReason` (all nullable).
 - The existing execution event stream sends a `buildCheckUpdated` event with the build check item.
+- Build check items also carry `endReason`, and `fixPlanning` (`none`, `planning`, `planned`, `failed`); each source carries `status` (e.g. `queued`, `building`, `ready`, `error`, `in_progress`, `completed`) and `message`. `buildCheckUpdated` is also sent when a waiting check's sources change, and when fix planning starts and its steps are stored (D-0.6.1-23).
 
 ### Error codes
 None new. Log-fetch failures are logged warnings, not errors (FR-236). Plans that fail validation after a step is added use `INVALID_PLAN` (422, unchanged). An out-of-range `maxBuildFixAttempts` is 400 `VALIDATION`. `BUILD_ERRORS_SUPPRESSED` is a Guardian violation code (like the existing ones), not an API error.
@@ -524,6 +527,7 @@ Unchanged from 0.6.0. No GitHub App permission change (D-0.6.1-11). Part 2 needs
 | D-0.6.1-19 | Unaddressed findings get one added step per owning agent. A finding with no path is appended to that agent's last step, or step 1. If an added step breaks validation it's dropped and its findings are marked "No step" (and carried), rather than failing the review | Claude | assumed |
 | D-0.6.1-20 | Build (M51 review): a file catch-all covers only catch-all spec paths. Root catch-all markers in code count only in a route call (not a `headers()` source or a CORS mapping), and `.use('*', …)` middleware isn't a fallback. Spec paths may contain `(`/`)` so `(.*)` reads whole. `pyproject.toml` is now read by the dependency check. Supabase advisor findings get the kind `advisor` (§4.42) | Claude | assumed |
 | D-0.6.1-21 | Build (M52): a waiver of a critical, `secret` or `failure:` finding is refused whatever its reason. Dependency findings carry the declaring manifest's path. Path ownership skips the scaffolder. Stack checks map to agents by a fixed check-to-agent table. With an empty optimisation plan no steps are added and every leftover finding is "No step" (amends §4.43 step 5). The carried count is stored on the finding (`unaddressedCycles`, not in the API), and waivers in force are kept in `external_checks.waivers`. When a rejected optimisation plan is revised, the §4.43 pass runs on the revised plan and the stored handling, waivers and carried counts are updated from it. Scores and the decision stay as first computed, so a waiver granted only in the revision is shown but its penalty stays for that cycle | Claude | assumed |
+| D-0.6.1-23 | Build (fix after preview testing): a private GitHub repo on the free plan returns 403 for branch rules, which dead-lettered the build check and ended it `exhausted` after 0 attempts while the Vercel build was still running. Rules 403/404 now mean "no required checks known" (for review too: its checks are kept, none required). Other host read errors keep the check waiting, and it carries on without the checks at 15 minutes (`unavailable`; `skipped` when there's no preview). `end_reason` explains an exhausted or cancelled check. The execution page shows the check as a card timeline per attempt: the build (live source status and the failure excerpt) → the fix (planning, then its steps with live status) → the next build (amends FR-255, FR-259, §5, §6) | Ben (preview test) / Claude (details) | agreed / assumed |
 
 ## 11. Open questions
 
