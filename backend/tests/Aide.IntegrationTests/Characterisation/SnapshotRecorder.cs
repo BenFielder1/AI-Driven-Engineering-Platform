@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,7 @@ namespace Aide.IntegrationTests.Characterisation;
 /// Each list is in creation order: <c>created_at</c>, then (for rows written in one transaction, which share it) a key with
 /// every run-specific value blanked. Then <see cref="SnapshotNormaliser"/> replaces ids, SHAs, timestamps and literals.
 /// </summary>
-internal static class SnapshotRecorder
+internal static partial class SnapshotRecorder
 {
     private const string ProjectSql =
         "SELECT slug, current_phase, status, checkpoint, review_cycle, extra_review_cycles, approval_mode, released_version, development_version FROM projects WHERE id = @project";
@@ -339,19 +340,58 @@ internal static class SnapshotRecorder
 
                 return result;
             case JsonArray array:
-                var items = new JsonArray();
-                foreach (var item in array)
+                var items = array.Select(item => Normalise(item, normaliser)).ToList();
+                if (items.Count > 1 && items.All(item => IdLabelKey(item) is not null))
                 {
-                    items.Add(Normalise(item, normaliser));
+                    // D-0.7.0-22: a list made only of id labels is a set (e.g. resetStepIds, invalidated artifact ids,
+                    // recipients), often read with no ORDER BY: sorted by kind, then number (users by role).
+                    items = [.. items.OrderBy(item => IdLabelKey(item)!.Value.Kind, StringComparer.Ordinal)
+                        .ThenBy(item => IdLabelKey(item)!.Value.Number)
+                        .ThenBy(item => IdLabelKey(item)!.Value.Role, StringComparer.Ordinal)];
                 }
 
-                return items;
+                var list = new JsonArray();
+                foreach (var item in items)
+                {
+                    list.Add(item);
+                }
+
+                return list;
             case JsonValue value when value.GetValueKind() == JsonValueKind.String:
                 return JsonValue.Create(normaliser.Normalise(value.GetValue<string>()));
             default:
                 return node.DeepClone();
         }
     }
+
+    /// <summary>
+    /// The sort key of a normalised id label: <c>&lt;kind&gt;#n</c> (any kind but <c>sha</c> and <c>hex</c>, whose lists, e.g.
+    /// commits, keep their order) or <c>user:&lt;role&gt;</c>; <c>null</c> for anything else.
+    /// </summary>
+    private static (string Kind, int Number, string Role)? IdLabelKey(JsonNode? node)
+    {
+        if (node is not JsonValue value || value.GetValueKind() != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var text = value.GetValue<string>();
+        if (UserLabel().Match(text) is { Success: true } user)
+        {
+            return ("user:", 0, user.Groups["role"].Value);
+        }
+
+        return IdLabel().Match(text) is { Success: true } id && id.Groups["kind"].Value is not ("sha" or "hex")
+            && int.TryParse(id.Groups["n"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+            ? (id.Groups["kind"].Value, n, string.Empty)
+            : null;
+    }
+
+    [GeneratedRegex("^(?<kind>[a-z_]+)#(?<n>[0-9]+)$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex IdLabel();
+
+    [GeneratedRegex("^user:(?<role>[a-z]+)$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex UserLabel();
 
     // ---------- reading ----------
 

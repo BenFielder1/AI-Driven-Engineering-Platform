@@ -90,6 +90,8 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Rule:** nothing that holds SDLC values moves (`NotificationType`, `EventTypes`, notification messages); those wait for M56.
 - **D-0.7.0-21** (Build, M55, Claude, assumed): the LLM layer, `PromptTemplate`, `AgentRunRules`, `Artifact`/`ArtifactRules`/`RestoreRules`, `ApprovalGate`/`GateRules`/`GateFollowUp`/`GateResolution` and the `AgentRun` entity are keyed by SDLC enums. They move in M56 (string keys) or M58 (`Phase`), not M55. FR-264–FR-268 are completed across M55–M56.
 
+- **D-0.7.0-22** (Build, M55, Claude, assumed): the characterisation recorder now treats arrays made only of id labels as sets, sorted by kind and then number. CI run [44125867549](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44125867549) on the namespace-only commit a483584 returned `resetStepIds` in a different order (an unordered query), with no behaviour change. This is a one-time normalisation change: those arrays in the committed snapshots are re-sorted, nothing else in them changes, and the freeze base in `scripts/ci/check-snapshots-frozen.sh` moves to that commit. This is the only allowed snapshot edit in 0.7.0.
+
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.

@@ -65,6 +65,15 @@ Normalisation:
   because FR-273 (M56) writes the generic name, with the same meaning, in new payloads.
 - Ids used as object keys are labelled in an order that never depends on the raw id: members are visited by blanked key,
   then blanked value.
+- A list made only of id labels (`<kind>#n` of any kind but `sha` and `hex`, or `user:<role>`), e.g. `resetStepIds`,
+  `invalidatedArtifactIds` or recipients, is a set: it is sorted by kind, then number (users by role). Such lists are
+  often read with no `ORDER BY`. Lists of commits (`sha#n`), of objects or of other values keep their order. This rule
+  was added in M55 (D-0.7.0-22) after CI run 44125867549 returned `resetStepIds` in another order on a namespace-only
+  commit. It was a one-time normalisation change: the matching arrays in the committed snapshots were re-sorted and
+  nothing else changed. Two arrays in `new_project_request_approved_mid_execution.json` moved;
+  `rollback_to_checkpoint_2.json` has one more such array that was already sorted. This is the only snapshot edit
+  allowed in 0.7.0. An id seen first inside such a set is still numbered in the order the set was read; that is stable
+  only while the id isn't referenced anywhere later in the snapshot.
 - Content hashes stay. When an artifact's content itself holds a run-specific value (an id, a SHA, a date), its hash is
   taken over the normalised content and shown as `normalised:<sha-256>`.
 - Each list is in creation order (`created_at`). Rows written in one transaction share `created_at`, and v7 ids are
