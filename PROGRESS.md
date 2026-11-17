@@ -69,7 +69,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Phases
 - [x] M54 Version and characterisation (FR-260, FR-261, FR-309 bump): snapshots 8dce91a, re-sorted d4d84f8 (D-0.7.0-22); freeze step in CI
 - [x] M55 Engine projects and the lift (FR-262–FR-268): a483584, 2312ec8, CI green [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760). Types keyed by SDLC enums finish in M56/M58 (D-0.7.0-21)
-- [ ] M56 String keys (FR-269–FR-274): keys and job types/triggers done (39b7f24, efb38aa, [CI 44160448308](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44160448308)); M56c (remaining lift) in progress
+- [x] M56 String keys (FR-269–FR-274) and the remaining lift: 39b7f24, efb38aa, ade145d, [CI 44170479903](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44170479903). FR-264–FR-268 finish in M58 for the types that still need `Phase`
 - [ ] M57 Definitions and packs (FR-275–FR-286, FR-290)
 - [ ] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294)
 - [ ] M59 Stage execution and run logging (FR-295–FR-298)
