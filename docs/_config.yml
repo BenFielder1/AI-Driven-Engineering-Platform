@@ -121,6 +121,12 @@ defaults:
       nav_exclude: true
       search_exclude: true
       render_with_liquid: false
+  - scope:
+      path: "0.7.0"
+    values:
+      nav_exclude: true
+      search_exclude: true
+      render_with_liquid: false
   # D-V6-26: the version folders were renamed from vN to x.y.z. The old URLs of the frozen pages redirect here,
   # because their files can't take front matter; the history pages carry their own redirect_from.
   - scope:
