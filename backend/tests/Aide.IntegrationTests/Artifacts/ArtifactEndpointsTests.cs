@@ -1,16 +1,14 @@
 using System.Net;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Lifecycle;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Artifacts;
 
@@ -33,7 +31,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
         for (var v = 1; v <= 3; v++)
         {
-            await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: v, projectVersionAtCreation: 2);
+            await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: v, projectVersionAtCreation: 2);
         }
 
         const string content = "# Spec v4\r\nEdited in the browser.\r\n";
@@ -57,8 +55,8 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 2, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 2, projectVersionAtCreation: 2);
 
         var draft = await ArtifactApi.ReadAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Spec, "# Spec v3", baseVersion: 2), HttpStatusCode.Created);
 
@@ -71,7 +69,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
         // Both editors opened v1; the first save wins.
         await ArtifactApi.ReadAsync(await ArtifactApi.CreateDraftAsync(fixture.Owner.Client, id, Spec, "# First edit", baseVersion: 1), HttpStatusCode.Created);
 
@@ -80,7 +78,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         var problem = await Problems.AssertAsync(stale, HttpStatusCode.Conflict, ErrorCodes.Conflict);
         Assert.Equal("latestVersion: 2", Assert.Single(problem.GetProperty("details").EnumerateArray()).GetString());
         var versions = await ProjectApi.WithDbAsync(factory, db => db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == id && a.Type == ArtifactType.TechnicalSpecification)
+            .Where(a => a.ProjectId == id && a.Type == SdlcArtifacts.TechnicalSpecification)
             .OrderBy(a => a.Version)
             .Select(a => new { a.Version, a.Status, a.Content })
             .ToListAsync(Ct));
@@ -94,8 +92,8 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
-        var agentDraft = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
+        var agentDraft = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 2);
 
         var stale = await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Spec, "# Edit of v1", baseVersion: 1);
 
@@ -109,8 +107,8 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 1, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 2);
 
         var draft = await ArtifactApi.ReadAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Spec, "# CLI upload"), HttpStatusCode.Created);
 
@@ -182,13 +180,13 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Locked, version: 1);
-        var v2 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Draft, version: 2, createdByUserId: fixture.Owner.User!.Id);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, version: 1);
+        var v2 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, version: 2, createdByUserId: fixture.Owner.User!.Id);
 
         var list = await ProjectApi.ReadAsync<List<ArtifactSummaryDto>>(await ArtifactApi.GetAsync(fixture.Viewer.Client, id, "/"));
         Assert.Equal(
-            [(ArtifactType.ProjectRequest, 1, ArtifactStatus.Locked), (ArtifactType.TechnicalSpecification, 2, ArtifactStatus.Draft)],
+            [(SdlcArtifacts.ProjectRequest, 1, ArtifactStatus.Locked), (SdlcArtifacts.TechnicalSpecification, 2, ArtifactStatus.Draft)],
             list.Select(a => (a.Type, a.Version, a.Status)));
         Assert.All(list, a => Assert.Equal(ArtifactIntegrity.Ok, a.Integrity));
 
@@ -223,7 +221,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, ArtifactStatus.Draft);
+        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, ArtifactStatus.Draft);
 
         var approved = await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve", "LGTM"));
 
@@ -242,7 +240,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, ArtifactStatus.Draft);
+        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, ArtifactStatus.Draft);
 
         await Problems.AssertAsync(await ArtifactApi.DecideAsync(fixture.Contributor.Client, id, draft.Id, "approve"), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
         await Problems.AssertAsync(await ArtifactApi.DecideAsync(fixture.Viewer.Client, id, draft.Id, "reject"), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
@@ -255,7 +253,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         using var other = await ProjectApi.FixtureAsync(factory);
-        var foreign = await LifecycleSeed.AddArtifactAsync(factory, other.Project.Id, ArtifactType.ProjectRequest, ArtifactStatus.Draft);
+        var foreign = await LifecycleSeed.AddArtifactAsync(factory, other.Project.Id, SdlcArtifacts.ProjectRequest, ArtifactStatus.Draft);
 
         await Problems.AssertAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, fixture.Project.Id, Guid.NewGuid(), "approve"), HttpStatusCode.NotFound, ErrorCodes.NotFound);
         await Problems.AssertAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, fixture.Project.Id, foreign.Id, "reject"), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -268,7 +266,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     public async Task FR17_Deciding_a_non_draft_is_ARTIFACT_NOT_DRAFT(ArtifactStatus status, string action)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        var artifact = await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, ArtifactType.ProjectRequest, status);
+        var artifact = await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, SdlcArtifacts.ProjectRequest, status);
 
         var response = await ArtifactApi.DecideAsync(fixture.Owner.Client, fixture.Project.Id, artifact.Id, action);
 
@@ -279,7 +277,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     public async Task FR17_Changing_a_locked_artifact_is_ARTIFACT_LOCKED()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        var locked = await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, ArtifactType.ProjectRequest);
+        var locked = await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, SdlcArtifacts.ProjectRequest);
 
         var response = await ArtifactApi.DecideAsync(fixture.Owner.Client, fixture.Project.Id, locked.Id, "reject", "No");
 
@@ -294,7 +292,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Advisory);
-        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Draft);
+        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft);
 
         var rejected = await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "reject", "  Add auth  "));
 
@@ -330,12 +328,12 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 1);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
-        var spec3 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
-        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.OptimizationPlan, ArtifactStatus.Draft, projectVersionAtCreation: 5);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
+        var spec3 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
+        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, ArtifactStatus.Draft, projectVersionAtCreation: 5);
         var steps = await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 3, StepStatus.Completed);
-        var escalation = await LifecycleSeed.AddGateAsync(factory, id, GateType.Escalation);
+        var escalation = await LifecycleSeed.AddGateAsync(factory, id, EngineGates.Escalation);
         await ProjectApi.WithDbAsync(factory, async db =>
         {
             db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = JobTypes.Execution, Payload = "{}", ProjectId = id, Status = JobStatus.Queued, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
@@ -379,9 +377,9 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 2);
         await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.ExtraReviewCycles, 1), Ct));
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
 
         var spec4 = await ArtifactApi.ReadAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Spec, "# Spec v4"), HttpStatusCode.Created);
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, spec4.Id, "approve"));
@@ -396,9 +394,9 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var spec = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
-        var oldPlan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
-        var newPlan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 3);
+        var spec = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
+        var oldPlan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
+        var newPlan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 3);
         await LifecycleSeed.AddStepsAsync(factory, id, oldPlan.Id, 1);
         var newSteps = await LifecycleSeed.AddStepsAsync(factory, id, newPlan.Id, 2);
 
@@ -419,7 +417,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Advisory);
-        var v1 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
+        var v1 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
         var gate = (await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id))).Gate!;
         Assert.Equal(v1.Id, gate.ArtifactId);
 
@@ -445,7 +443,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 1);
         await LifecycleSeed.AddReportAsync(factory, id, 5, ReviewDecision.ReviewRequired);
         await LifecycleSeed.PrepareWorkingCopyAsync(factory, id);
-        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.OptimizationPlan, ArtifactStatus.Draft, projectVersionAtCreation: 5);
+        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, ArtifactStatus.Draft, projectVersionAtCreation: 5);
         await LifecycleSeed.AddStepsAsync(factory, id, optimisation.Id, 2);
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, optimisation.Id, "approve"));
@@ -463,9 +461,9 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Invalidated, version: 1, content: "# Spec\nGET /todos\n");
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Superseded, version: 2, content: "# Spec\n");
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 3, content: "# Spec\nGET /todos\nPOST /todos\n");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Invalidated, version: 1, content: "# Spec\nGET /todos\n");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Superseded, version: 2, content: "# Spec\n");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 3, content: "# Spec\nGET /todos\nPOST /todos\n");
 
         var diff = await ProjectApi.ReadAsync<ArtifactDiffDto>(await ArtifactApi.GetAsync(fixture.Viewer.Client, id, $"/{Spec}/diff?from=1&to=3"));
 
@@ -486,7 +484,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     public async Task FR21_Diff_of_a_missing_version_is_NOT_FOUND_and_bad_input_is_VALIDATION(string query, HttpStatusCode status, string code)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, ArtifactType.TechnicalSpecification);
+        await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, SdlcArtifacts.TechnicalSpecification);
 
         var response = await ArtifactApi.GetAsync(fixture.Owner.Client, fixture.Project.Id, $"/{Spec}/diff{query}");
 
@@ -497,7 +495,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
     public async Task FR21_A_version_diffed_with_itself_has_no_changes()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, ArtifactType.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, SdlcArtifacts.ProjectRequest);
 
         var diff = await ProjectApi.ReadAsync<ArtifactDiffDto>(await ArtifactApi.GetAsync(fixture.Owner.Client, fixture.Project.Id, "/project_request/diff?from=1&to=1"));
 
@@ -513,8 +511,8 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         var v1 = string.Join('\n', Enumerable.Range(1, 40).Select(i => $"line {i}")) + "\n";
         var v2 = v1.Replace("line 20\n", "line twenty\n", StringComparison.Ordinal);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, ArtifactStatus.Superseded, version: 1, content: v1);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, version: 2, content: v2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, ArtifactStatus.Superseded, version: 1, content: v1);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, version: 2, content: v2);
 
         var diff = await ProjectApi.ReadAsync<ArtifactDiffDto>(await ArtifactApi.GetAsync(fixture.Owner.Client, id, "/project_request/diff?from=1&to=2"));
 
@@ -531,8 +529,8 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         var huge = string.Concat(Enumerable.Repeat("x\n", (LineDiff.MaxTotalLines / 2) + 1));
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, ArtifactStatus.Superseded, version: 1, content: huge);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, version: 2, content: huge + "y\n");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, ArtifactStatus.Superseded, version: 1, content: huge);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, version: 2, content: huge + "y\n");
 
         var response = await ArtifactApi.GetAsync(fixture.Owner.Client, id, "/project_request/diff?from=1&to=2");
 
@@ -545,10 +543,10 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft);
+        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft);
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "reject", "split step 4"));
 
-        Assert.Equal(JobTypes.ForAgent(AgentKind.PlanGenerator), Assert.Single(await LifecycleSeed.JobsAsync(factory, id)).Type);
+        Assert.Equal(JobTypes.ForAgent(SdlcAgents.PlanGenerator), Assert.Single(await LifecycleSeed.JobsAsync(factory, id)).Type);
     }
 }

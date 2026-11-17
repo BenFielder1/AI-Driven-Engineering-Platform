@@ -17,7 +17,7 @@ namespace Aide.Domain.Artifacts;
 /// <param name="ChosenIntegrity">The chosen version's integrity, re-checked on this read (FR-20).</param>
 /// <param name="LatestVersion">The highest version of the type (version numbers are project-wide).</param>
 public sealed record RestoreFacts(
-    ArtifactType Type,
+    string Type,
     Phase ProjectPhase,
     ProjectStatus ProjectStatus,
     Guid? DevelopmentReleaseVersionId,
@@ -38,7 +38,7 @@ public static class RestoreRules
     /// §4.12 "Producing phase per artifact type": the phase in which a type can be restored, or <c>null</c> for
     /// <c>codebase_summary</c>, which is produced automatically in refinement and is never restorable.
     /// </summary>
-    public static Phase? RestorablePhase(ArtifactType type) =>
+    public static Phase? RestorablePhase(string type) =>
         CodebaseSummaryRules.IsAutoLocked(type) ? null : ArtifactRules.ProducingPhase(type);
 
     /// <summary>
@@ -58,35 +58,35 @@ public static class RestoreRules
         var phase = RestorablePhase(facts.Type);
         if (phase is null)
         {
-            return NotAllowed(RestoreReasons.StageCompleted, $"The {facts.Type.ToWire()} is produced automatically and can't be restored.");
+            return NotAllowed(RestoreReasons.StageCompleted, $"The {facts.Type} is produced automatically and can't be restored.");
         }
 
         if (facts.ProjectPhase.IsBefore(phase.Value))
         {
             return NotAllowed(
                 RestoreReasons.StageNotReached,
-                $"The {facts.Type.ToWire()} is produced in {phase.Value.ToWire()}; the project is still in {facts.ProjectPhase.ToWire()}.");
+                $"The {facts.Type} is produced in {phase.Value.ToWire()}; the project is still in {facts.ProjectPhase.ToWire()}.");
         }
 
         if (facts.ProjectPhase != phase)
         {
             return NotAllowed(
                 RestoreReasons.StageCompleted,
-                $"The {facts.Type.ToWire()} can only be restored in {phase.Value.ToWire()}; the project is in {facts.ProjectPhase.ToWire()}. Roll back the project to change it.");
+                $"The {facts.Type} can only be restored in {phase.Value.ToWire()}; the project is in {facts.ProjectPhase.ToWire()}. Roll back the project to change it.");
         }
 
         if (facts.DevelopmentReleaseVersionId is not { } development || facts.ChosenReleaseVersionId != development)
         {
             return NotAllowed(
                 RestoreReasons.OtherReleaseVersion,
-                $"{facts.Type.ToWire()} v{facts.ChosenVersion} doesn't belong to the release version in development.");
+                $"{facts.Type} v{facts.ChosenVersion} doesn't belong to the release version in development.");
         }
 
         if (facts.ChosenVersion >= facts.LatestVersion)
         {
             return Result.Failure<RestorePlan>(new DomainError(
                 ErrorCodes.Validation,
-                $"{facts.Type.ToWire()} v{facts.ChosenVersion} is already the latest version; there is nothing to restore.")
+                $"{facts.Type} v{facts.ChosenVersion} is already the latest version; there is nothing to restore.")
             {
                 Details = ["version: already the latest version"],
             });
@@ -94,7 +94,7 @@ public static class RestoreRules
 
         if (facts.ChosenIntegrity == ArtifactIntegrity.Corrupted)
         {
-            return NotAllowed(RestoreReasons.Corrupted, $"{facts.Type.ToWire()} v{facts.ChosenVersion} is corrupted and can't be restored.");
+            return NotAllowed(RestoreReasons.Corrupted, $"{facts.Type} v{facts.ChosenVersion} is corrupted and can't be restored.");
         }
 
         return Result.Success(new RestorePlan(facts.LatestVersion + 1, facts.LatestVersion, facts.ChosenVersion));

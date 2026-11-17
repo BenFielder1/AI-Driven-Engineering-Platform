@@ -4,6 +4,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Rollback;
 
@@ -178,7 +179,7 @@ public static class RollbackRules
             .Where(a => a.ProjectVersionAtCreation > target && ArtifactRules.ShouldInvalidate(a.Status))
             .ToList();
         var invalidatedPlanIds = invalidated
-            .Where(a => a.Type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan)
+            .Where(a => a.Type is SdlcArtifacts.ImplementationPlan or SdlcArtifacts.OptimizationPlan)
             .Select(a => a.Id)
             .ToHashSet();
         var resetSteps = request.Steps

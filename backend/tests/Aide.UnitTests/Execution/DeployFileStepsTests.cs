@@ -1,11 +1,11 @@
 using System.Text.Json;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Execution;
 using Aide.Domain.Stack;
 using Aide.UnitTests.Stack;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Execution;
@@ -106,7 +106,7 @@ public sealed class DeployFileStepsTests
 
         Assert.True(parsed.IsSuccess, parsed.Error is null ? null : string.Join(" | ", parsed.Error.Details));
         Assert.Equal(7, parsed.Value.Count);
-        var markdown = PlanDocument.RenderChecked(ArtifactType.ImplementationPlan, parsed.Value, 20, agents);
+        var markdown = PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, parsed.Value, 20, agents);
         Assert.True(markdown.IsSuccess, markdown.Error?.Message);
         Assert.Contains("**Added by Tevrin:** frontend/vercel.json was missing from the plan", markdown.Value, StringComparison.Ordinal);
         var stored = PlanDocument.ParseMarkdown(markdown.Value, 20, agents).Value;
@@ -201,7 +201,7 @@ public sealed class DeployFileStepsTests
         var agents = PlanAgents.ForStackOptimization(stack, EmptyBase);
         var validated = PlanValidator.Validate(steps, 20, allowProtectedPaths: false, agents);
         Assert.True(validated.IsSuccess, validated.Error is null ? null : string.Join(" | ", validated.Error.Details));
-        Assert.True(PlanDocument.RenderChecked(ArtifactType.OptimizationPlan, validated.Value, 20, agents).IsSuccess);
+        Assert.True(PlanDocument.RenderChecked(SdlcArtifacts.OptimizationPlan, validated.Value, 20, agents).IsSuccess);
 
         // The branch already has it (an earlier step wrote it): unchanged. An empty optimisation plan stays empty.
         branch.Add("frontend/vercel.json");
@@ -323,7 +323,7 @@ public sealed class DeployFileStepsTests
     {
         var steps = PlanDocument.ParseAgentOutput("""{"steps": [{"number": 1, "title": "T", "task": "Do it.", "files": [{"path": "a.txt", "action": "create"}], "dependencies": []}]}""", 20).Value;
 
-        var markdown = PlanDocument.Render(ArtifactType.ImplementationPlan, steps);
+        var markdown = PlanDocument.Render(SdlcArtifacts.ImplementationPlan, steps);
 
         Assert.DoesNotContain("addedBy", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("Added by Tevrin", markdown, StringComparison.Ordinal);

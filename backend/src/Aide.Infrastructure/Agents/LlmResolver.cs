@@ -17,7 +17,7 @@ public interface ILlmResolver
     /// The project's LLM settings (provider, the agent's model or the default model) when saved, else the system
     /// defaults (<see cref="ILlmProviderCatalog.FallbackProvider"/>, with its configured models); plus the key.
     /// </summary>
-    Task<ResolvedLlm> ResolveAsync(Guid projectId, AgentKind agent, CancellationToken cancellationToken);
+    Task<ResolvedLlm> ResolveAsync(Guid projectId, string agent, CancellationToken cancellationToken);
 
     /// <summary>
     /// The key for <paramref name="provider"/> (<see cref="LlmConnectionRules.ChooseKey"/>): the project's bound connection
@@ -37,7 +37,7 @@ internal sealed partial class LlmResolver(
     IEnumerable<ILlmProvider> providers,
     ILogger<LlmResolver> logger) : ILlmResolver
 {
-    public async Task<ResolvedLlm> ResolveAsync(Guid projectId, AgentKind agent, CancellationToken cancellationToken)
+    public async Task<ResolvedLlm> ResolveAsync(Guid projectId, string agent, CancellationToken cancellationToken)
     {
         var (settings, bound) = await LoadAsync(projectId, cancellationToken);
         LlmChoice choice;

@@ -1,9 +1,9 @@
 using System.Net;
 using Aide.Api.Features.Projects;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Projects;
 
@@ -31,9 +31,9 @@ public sealed class ProjectListKpiTests(AideApiFactory factory)
             await db.Projects.Where(p => p.Id == released.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, ProjectStatus.Released).SetProperty(p => p.CurrentPhase, Phase.Release), Ct);
         });
-        await LifecycleSeed.AddGateAsync(factory, gated.Id, GateType.SpecApproval);
-        await LifecycleSeed.AddGateAsync(factory, gated.Id, GateType.PlanApproval);
-        var decided = await LifecycleSeed.AddGateAsync(factory, reviewing.Id, GateType.PreRelease);
+        await LifecycleSeed.AddGateAsync(factory, gated.Id, SdlcGates.SpecApproval);
+        await LifecycleSeed.AddGateAsync(factory, gated.Id, SdlcGates.PlanApproval);
+        var decided = await LifecycleSeed.AddGateAsync(factory, reviewing.Id, SdlcGates.PreRelease);
         await ProjectApi.WithDbAsync(factory, db => db.ApprovalGates.Where(g => g.Id == decided.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.Status, GateStatus.Approved), Ct));
 

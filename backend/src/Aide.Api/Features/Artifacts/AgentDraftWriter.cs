@@ -26,7 +26,7 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
     /// The new draft, the one this run already created (idempotent), or <c>null</c> when the type can't be drafted in the
     /// project's current phase any more (<see cref="ArtifactRules.CanCreateDraft"/>) or the project is gone.
     /// </summary>
-    public async Task<Artifact?> AddAsync(Guid projectId, ArtifactType type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<Artifact?> AddAsync(Guid projectId, string type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
         var existingForRun = await db.Artifacts.AsNoTracking()
@@ -98,7 +98,7 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
     /// type), parent = latest, stored <c>locked</c> with no gate, and <c>CODEBASE_SUMMARY_CREATED</c>. Idempotent per run;
     /// <c>null</c> when the project is gone or <paramref name="releaseVersionId"/> is no longer its current version. Not saved.
     /// </summary>
-    public async Task<Artifact?> AddLockedAsync(Guid projectId, Guid releaseVersionId, ArtifactType type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<Artifact?> AddLockedAsync(Guid projectId, Guid releaseVersionId, string type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
         if (ArtifactRules.InitialStatus(type) != ArtifactStatus.Locked)

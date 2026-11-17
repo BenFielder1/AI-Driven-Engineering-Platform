@@ -1,10 +1,10 @@
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Notifications;
 
@@ -19,7 +19,7 @@ public sealed class GateTimerTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(App);
         var id = fixture.Project.Id;
-        var gate = await LifecycleSeed.AddGateAsync(App, id, GateType.PreRelease, createdAt: DateTimeOffset.UtcNow.AddHours(-25));
+        var gate = await LifecycleSeed.AddGateAsync(App, id, SdlcGates.PreRelease, createdAt: DateTimeOffset.UtcNow.AddHours(-25));
 
         await NotificationJobs.RunGateTimersAsync(App);
         await NotificationJobs.RunGateTimersAsync(App);
@@ -41,7 +41,7 @@ public sealed class GateTimerTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(App);
         var id = fixture.Project.Id;
-        var gate = await LifecycleSeed.AddGateAsync(App, id, GateType.SpecApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-73));
+        var gate = await LifecycleSeed.AddGateAsync(App, id, SdlcGates.SpecApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-73));
         var phase = (await LifecycleSeed.ProjectAsync(App, id)).CurrentPhase;
 
         await NotificationJobs.RunGateTimersAsync(App);
@@ -78,14 +78,14 @@ public sealed class GateTimerTests(AideApiFactory factory)
             db.ApprovalGates.AddRange(projects.Select((p, i) => new Aide.Domain.Entities.ApprovalGate
             {
                 ProjectId = p.Id,
-                Type = GateType.PreRelease,
+                Type = SdlcGates.PreRelease,
                 CreatedAt = now.AddHours(-60).AddSeconds(-i),
                 RemindedAt = now.AddHours(-30),
             }));
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
             return projects.Select(p => p.Id).ToList();
         });
-        var fresh = await LifecycleSeed.AddGateAsync(App, id, GateType.PlanApproval, createdAt: now.AddHours(-25));
+        var fresh = await LifecycleSeed.AddGateAsync(App, id, SdlcGates.PlanApproval, createdAt: now.AddHours(-25));
 
         try
         {
@@ -108,8 +108,8 @@ public sealed class GateTimerTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(App);
         var id = fixture.Project.Id;
-        var recent = await LifecycleSeed.AddGateAsync(App, id, GateType.PlanApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-23));
-        var decided = await LifecycleSeed.AddGateAsync(App, id, GateType.PreRelease, createdAt: DateTimeOffset.UtcNow.AddHours(-100));
+        var recent = await LifecycleSeed.AddGateAsync(App, id, SdlcGates.PlanApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-23));
+        var decided = await LifecycleSeed.AddGateAsync(App, id, SdlcGates.PreRelease, createdAt: DateTimeOffset.UtcNow.AddHours(-100));
         await ProjectApi.WithDbAsync(App, async db =>
         {
             var gate = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(db.ApprovalGates, g => g.Id == decided.Id, TestContext.Current.CancellationToken);

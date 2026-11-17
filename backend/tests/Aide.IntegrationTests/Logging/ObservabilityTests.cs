@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Logging;
 
@@ -124,7 +125,7 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var runner = scope.ServiceProvider.GetRequiredService<AgentRunner>();
-            var request = new AgentRunRequest { ProjectId = fixture.Project.Id, Agent = AgentKind.SpecGenerator, Job = job };
+            var request = new AgentRunRequest { ProjectId = fixture.Project.Id, Agent = SdlcAgents.SpecGenerator, Job = job };
             var ex = await Assert.ThrowsAsync<JobFailedException>(() => runner.RunAsync(request, Ct));
             Assert.Equal(ErrorCodes.MissingInput, ex.ErrorCode);
         }

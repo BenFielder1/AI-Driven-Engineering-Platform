@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Http.Json;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Tokens;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
@@ -13,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Admin;
 
@@ -292,9 +292,9 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
         var t0 = DateTimeOffset.UtcNow.AddHours(-1);
         await ProjectApi.WithDbAsync(factory, async db =>
         {
-            db.AgentRuns.Add(NewRun(projectA, AgentKind.SpecGenerator, AgentRunStatus.Succeeded, LlmProvider.Fake, model, t0, error: null));
-            db.AgentRuns.Add(NewRun(projectA, AgentKind.PlanGenerator, AgentRunStatus.Failed, LlmProvider.Anthropic, model, t0.AddMinutes(1), error: "PROVIDER_ERROR: 503"));
-            db.AgentRuns.Add(NewRun(projectB, AgentKind.CodeReview, AgentRunStatus.Succeeded, LlmProvider.Openai, model, t0.AddMinutes(2), error: null));
+            db.AgentRuns.Add(NewRun(projectA, SdlcAgents.SpecGenerator, AgentRunStatus.Succeeded, LlmProvider.Fake, model, t0, error: null));
+            db.AgentRuns.Add(NewRun(projectA, SdlcAgents.PlanGenerator, AgentRunStatus.Failed, LlmProvider.Anthropic, model, t0.AddMinutes(1), error: "PROVIDER_ERROR: 503"));
+            db.AgentRuns.Add(NewRun(projectB, SdlcAgents.CodeReview, AgentRunStatus.Succeeded, LlmProvider.Openai, model, t0.AddMinutes(2), error: null));
             await db.SaveChangesAsync(Ct);
         });
         var path = $"/api/admin/runs?model={model}";
@@ -310,11 +310,11 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
         Assert.Equal([nameB, nameA, nameA], all.Items.Select(r => r.ProjectName));
         Assert.Equal([projectA, projectA], ofA.Items.Select(r => r.ProjectId));
         var failedRun = Assert.Single(failed.Items);
-        Assert.Equal((AgentKind.PlanGenerator, "PROVIDER_ERROR: 503", 120, 80, 0.0123m, 4567L), (failedRun.Agent, failedRun.Error, failedRun.InputTokens, failedRun.OutputTokens, failedRun.CostEstimate, failedRun.DurationMs));
+        Assert.Equal((SdlcAgents.PlanGenerator, "PROVIDER_ERROR: 503", 120, 80, 0.0123m, 4567L), (failedRun.Agent, failedRun.Error, failedRun.InputTokens, failedRun.OutputTokens, failedRun.CostEstimate, failedRun.DurationMs));
         Assert.Equal(projectB, Assert.Single(openai.Items).ProjectId);
-        Assert.Equal(AgentKind.SpecGenerator, Assert.Single(spec.Items).Agent);
+        Assert.Equal(SdlcAgents.SpecGenerator, Assert.Single(spec.Items).Agent);
         Assert.Equal((3, 1), (page2.Total, page2.Items.Count));
-        Assert.Equal(AgentKind.SpecGenerator, page2.Items[0].Agent);
+        Assert.Equal(SdlcAgents.SpecGenerator, page2.Items[0].Agent);
     }
 
     [Theory]
@@ -423,7 +423,7 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
     private Task<List<Job>> JobsOfTypeAsync(string type) =>
         ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking().Where(j => j.Type == type).ToListAsync(Ct));
 
-    private static AgentRun NewRun(Guid projectId, AgentKind agent, AgentRunStatus status, LlmProvider provider, string model, DateTimeOffset createdAt, string? error) => new()
+    private static AgentRun NewRun(Guid projectId, string agent, AgentRunStatus status, LlmProvider provider, string model, DateTimeOffset createdAt, string? error) => new()
     {
         ProjectId = projectId,
         Agent = agent,

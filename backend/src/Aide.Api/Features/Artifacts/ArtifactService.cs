@@ -2,6 +2,7 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -18,6 +19,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Artifacts;
 
@@ -46,7 +48,7 @@ public sealed partial class ArtifactService(
     /// <paramref name="baseVersion"/>, <c>CONFLICT</c> unless that is still the latest version.
     /// </summary>
     public async Task<Result<Artifact>> CreateDraftAsync(
-        Guid projectId, ArtifactType type, string content, int? baseVersion, Guid userId, string actor, CancellationToken cancellationToken)
+        Guid projectId, string type, string content, int? baseVersion, Guid userId, string actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
@@ -90,7 +92,7 @@ public sealed partial class ArtifactService(
 
         // FR-183: an edited profile is validated (catalog options, FR-119 paths, folders and files at the base commit) and
         // stored re-rendered from its document, with the VCS fixed to the repository's host.
-        if (type == ArtifactType.StackProfile)
+        if (type == SdlcArtifacts.StackProfile)
         {
             var profile = await NormaliseProfileAsync(project, content, cancellationToken);
             if (profile.IsFailure)
@@ -156,7 +158,7 @@ public sealed partial class ArtifactService(
     /// approval rules (FR-17).
     /// </summary>
     public async Task<Result<Artifact>> RestoreAsync(
-        Guid projectId, ArtifactType type, int version, Guid userId, string actor, CancellationToken cancellationToken)
+        Guid projectId, string type, int version, Guid userId, string actor, CancellationToken cancellationToken)
     {
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
         if (project is null)
@@ -168,7 +170,7 @@ public sealed partial class ArtifactService(
             .FirstOrDefaultAsync(a => a.ProjectId == projectId && a.Type == type && a.Version == version, cancellationToken);
         if (chosen is null)
         {
-            return Result.Failure<Artifact>(new DomainError(ErrorCodes.NotFound, $"Version {version} of the {type.ToWire()} was not found."));
+            return Result.Failure<Artifact>(new DomainError(ErrorCodes.NotFound, $"Version {version} of the {type} was not found."));
         }
 
         var chosenIntegrity = await integrity.CheckAsync(chosen, cancellationToken);
@@ -241,7 +243,7 @@ public sealed partial class ArtifactService(
     /// drafts are history. Version numbers stay project-wide.
     /// </summary>
     private async Task SupersedeOpenDraftsAsync(
-        Project project, ArtifactType type, NewDraftPlan numbering, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        Project project, string type, NewDraftPlan numbering, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (numbering.SupersededVersions.Count == 0)
         {
@@ -277,7 +279,7 @@ public sealed partial class ArtifactService(
             return ArtifactNotFound();
         }
 
-        if (generalist is not null && checkedArtifact.Type != ArtifactType.StackProfile)
+        if (generalist is not null && checkedArtifact.Type != SdlcArtifacts.StackProfile)
         {
             return Result.Failure<Artifact>(new DomainError(ErrorCodes.Validation, "The request is invalid.") { Details = ["generalist: only a stack_profile has a No stack (general) choice."] });
         }
@@ -342,7 +344,7 @@ public sealed partial class ArtifactService(
         // FR-181, FR-183: a profile approves like PUT /stack; "No stack (general)" is recorded on a new version (rule 9).
         StackProfileApproval? profileApproval = null;
         ReleaseVersion? profileVersion = null;
-        if (artifact.Type == ArtifactType.StackProfile)
+        if (artifact.Type == SdlcArtifacts.StackProfile)
         {
             var prepared = await PrepareProfileApprovalAsync(project, artifact, artifacts, generalist == true, userId, actor, now, cancellationToken);
             if (prepared.IsFailure)
@@ -422,7 +424,7 @@ public sealed partial class ArtifactService(
         if (cascade.Effect.FallbackPhase is { } fallback)
         {
             var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
-            var reason = $"{artifact.Type.ToWire()} v{artifact.Version} approved; downstream work invalidated";
+            var reason = $"{artifact.Type} v{artifact.Version} approved; downstream work invalidated";
             var transition = LifecycleStateMachine.Apply(state, TransitionRequest.Fallback(fallback, reason), LifecycleSnapshot.Empty);
             if (transition.IsFailure)
             {
@@ -446,7 +448,7 @@ public sealed partial class ArtifactService(
             steps.Add(step);
         }
 
-        if (artifact.Type == ArtifactType.OptimizationPlan && project.CurrentPhase == Phase.Review)
+        if (artifact.Type == SdlcArtifacts.OptimizationPlan && project.CurrentPhase == Phase.Review)
         {
             await StartReviewCycleAsync(project, artifact, steps, actor, now, cancellationToken);
         }
@@ -522,7 +524,7 @@ public sealed partial class ArtifactService(
             new { artifactId = artifact.Id, type = artifact.Type, version = artifact.Version, comment = cleanComment, rerunAgent = decided.Value.RerunAgent, jobId },
             actor,
             now);
-        if (artifact.Type == ArtifactType.StackProfile)
+        if (artifact.Type == SdlcArtifacts.StackProfile)
         {
             // FR-183, FR-193: no comment text in the payload.
             db.AddEvent(
@@ -613,7 +615,7 @@ public sealed partial class ArtifactService(
         }
 
         var existing = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == project.Id && a.Type == ArtifactType.StackProfile)
+            .Where(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.StackProfile)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
         var numbering = ArtifactRules.NewDraft(existing);
@@ -621,7 +623,7 @@ public sealed partial class ArtifactService(
         var recorded = new Artifact
         {
             ProjectId = project.Id,
-            Type = ArtifactType.StackProfile,
+            Type = SdlcArtifacts.StackProfile,
             Version = numbering.Version,
             ParentVersion = numbering.ParentVersion,
             Content = content,
@@ -746,7 +748,7 @@ public sealed partial class ArtifactService(
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;
-            gate.Comment = $"Cancelled: {approved.Type.ToWire()} v{approved.Version} was approved.";
+            gate.Comment = $"Cancelled: {approved.Type} v{approved.Version} was approved.";
             db.AddEvent(
                 EventTypes.GateCancelled,
                 project.Id,
@@ -812,9 +814,9 @@ public sealed partial class ArtifactService(
             ? null
             : new DomainError(
                 ErrorCodes.WrongPhase,
-                $"{artifact.Type.ToWire()} v{artifact.Version} belongs to a released version and is read-only. Start a new version to change it.");
+                $"{artifact.Type} v{artifact.Version} belongs to a released version and is read-only. Start a new version to change it.");
 
-    private static bool IsPlan(ArtifactType type) => type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan;
+    private static bool IsPlan(string type) => type is SdlcArtifacts.ImplementationPlan or SdlcArtifacts.OptimizationPlan;
 
     /// <summary>FR-30: a <c>pending</c> execution step of a locked plan version.</summary>
     private static ExecutionStep NewStep(Guid projectId, Guid releaseVersionId, Guid planArtifactId, PlanStep step) => new()
@@ -847,14 +849,14 @@ public sealed partial class ArtifactService(
         Result.Failure<Artifact>(new DomainError(ErrorCodes.NotFound, "The artifact was not found."));
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: draft {ArtifactType} v{Version} created")]
-    private static partial void LogDraftCreated(ILogger logger, Guid projectId, ArtifactType artifactType, int version);
+    private static partial void LogDraftCreated(ILogger logger, Guid projectId, LoggedKey artifactType, int version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{RestoredFromVersion} restored as draft v{Version}")]
-    private static partial void LogRestored(ILogger logger, Guid projectId, ArtifactType artifactType, int restoredFromVersion, int version);
+    private static partial void LogRestored(ILogger logger, Guid projectId, LoggedKey artifactType, int restoredFromVersion, int version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{Version} approved ({Invalidated} artifacts invalidated, {Reset} steps reset, fallback {Fallback})")]
-    private static partial void LogApproved(ILogger logger, Guid projectId, ArtifactType artifactType, int version, int invalidated, int reset, Phase? fallback);
+    private static partial void LogApproved(ILogger logger, Guid projectId, LoggedKey artifactType, int version, int invalidated, int reset, Phase? fallback);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{Version} rejected (agent re-run: {Rerun})")]
-    private static partial void LogRejected(ILogger logger, Guid projectId, ArtifactType artifactType, int version, bool rerun);
+    private static partial void LogRejected(ILogger logger, Guid projectId, LoggedKey artifactType, int version, bool rerun);
 }

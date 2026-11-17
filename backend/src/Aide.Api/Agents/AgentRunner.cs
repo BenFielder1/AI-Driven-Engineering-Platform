@@ -28,7 +28,7 @@ public sealed record AgentRunRequest
 {
     public required Guid ProjectId { get; init; }
 
-    public required AgentKind Agent { get; init; }
+    public required string Agent { get; init; }
 
     public required JobExecution Job { get; init; }
 
@@ -145,12 +145,13 @@ public sealed partial class AgentRunner(
         using var scope = logger.BeginScope(new Dictionary<string, object?>
         {
             ["RunId"] = runId,
-            ["Agent"] = request.Agent.ToWire(),
+            ["Agent"] = request.Agent,
             [ProjectLogScope.ProjectIdKey] = request.ProjectId,
         });
         using var activity = AideTelemetry.Source.StartActivity("agent run", ActivityKind.Internal);
         activity?.SetTag(AideTelemetry.RunIdTag, runId.ToString());
-        activity?.SetTag(AideTelemetry.AgentTag, request.Agent.ToWire());
+        // 0.6.1 tagged the AgentKind value, which exporters render by member name (IdeaRefinement).
+        activity?.SetTag(AideTelemetry.AgentTag, KeyNames.ToPascalCase(request.Agent));
         activity?.SetTag(AideTelemetry.ProjectIdTag, request.ProjectId.ToString());
         try
         {
@@ -319,7 +320,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 run.ProjectId,
-                new { agent = run.Agent.ToWire(), tokenBudget = budget.TokenBudget, tokensUsed = used, jobId = request.Job.Id, runId = run.Id },
+                new { agent = run.Agent, tokenBudget = budget.TokenBudget, tokensUsed = used, jobId = request.Job.Id, runId = run.Id },
                 SystemActor.Name,
                 time.GetUtcNow());
             LogBudgetExceeded(logger, used, budget.TokenBudget);
@@ -460,7 +461,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 project.Id,
-                new { agent = request.Agent.ToWire(), tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, jobId = request.Job.Id },
+                new { agent = request.Agent, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, jobId = request.Job.Id },
                 SystemActor.Name,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -492,7 +493,7 @@ public sealed partial class AgentRunner(
         db.AddEvent(
             EventTypes.RunStarted,
             project.Id,
-            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey, legacyAgentKey = request.LegacyAgentKey },
+            new { runId, jobId = request.Job.Id, agent = request.Agent, provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey, legacyAgentKey = request.LegacyAgentKey },
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);
@@ -565,7 +566,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.RunCompleted,
                 run.ProjectId,
-                new { runId = run.Id, agent = run.Agent.ToWire(), inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs, warnings },
+                new { runId = run.Id, agent = run.Agent, inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs, warnings },
                 SystemActor.Name,
                 now);
         }
@@ -601,7 +602,7 @@ public sealed partial class AgentRunner(
         db.AddEvent(
             EventTypes.RunFailed,
             run.ProjectId,
-            new { runId = run.Id, agent = run.Agent.ToWire(), errorCode, error = run.Error, attempts = run.Attempts, deadLettered = deadLetter },
+            new { runId = run.Id, agent = run.Agent, errorCode, error = run.Error, attempts = run.Attempts, deadLettered = deadLetter },
             SystemActor.Name,
             now);
     }

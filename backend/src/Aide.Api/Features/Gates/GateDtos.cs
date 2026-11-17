@@ -1,9 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using Aide.Api.Features.Activity;
-using Aide.Domain.Artifacts;
-using Aide.Domain.Gates;
+using Aide.Api.Features.Projects;
 using Aide.Domain.Review;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Gates;
 
@@ -18,10 +18,10 @@ namespace Aide.Api.Features.Gates;
 /// </summary>
 public sealed record GateDto(
     Guid Id,
-    GateType Type,
+    [WireEnum(typeof(SdlcGates))] string Type,
     GateStatus Status,
     Guid? ArtifactId,
-    ArtifactType? ArtifactType,
+    [WireEnum(typeof(SdlcArtifacts))] string? ArtifactType,
     int? ArtifactVersion,
     EscalationReason? EscalationReason,
     string? Reason,

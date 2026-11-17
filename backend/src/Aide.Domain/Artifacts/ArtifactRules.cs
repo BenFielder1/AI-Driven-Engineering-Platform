@@ -1,8 +1,8 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Artifacts;
 
@@ -13,63 +13,63 @@ public sealed record ArtifactVersion(int Version, ArtifactStatus Status);
 public sealed record NewDraftPlan(int Version, int? ParentVersion, IReadOnlyList<int> SupersededVersions);
 
 /// <summary>A status change from approve/reject; <see cref="Changed"/> is false for an idempotent no-op.</summary>
-public sealed record ArtifactStatusChange(ArtifactStatus NewStatus, bool Changed, AgentKind? RerunAgent = null);
+public sealed record ArtifactStatusChange(ArtifactStatus NewStatus, bool Changed, string? RerunAgent = null);
 
 /// <summary>Artifact lifecycle rules (§4.3, FR-16–FR-18, FR-20).</summary>
 public static class ArtifactRules
 {
     /// <summary>The types that go through drafts and approval (0.1.0 §4.3); <c>codebase_summary</c> (auto-locked, FR-70) is not one.</summary>
-    public static IReadOnlyList<ArtifactType> All { get; } =
-        [ArtifactType.ProjectRequest, ArtifactType.TechnicalSpecification, ArtifactType.ImplementationPlan, ArtifactType.OptimizationPlan];
+    public static IReadOnlyList<string> All { get; } =
+        [SdlcArtifacts.ProjectRequest, SdlcArtifacts.TechnicalSpecification, SdlcArtifacts.ImplementationPlan, SdlcArtifacts.OptimizationPlan];
 
     /// <summary>
     /// The agent that produces a type (re-run on rejection or corruption). <c>codebase_summary</c> is written by the
-    /// Repository Analyst (FR-70), which runs as the <c>repository_analysis</c> job rather than an <see cref="AgentKind"/>
-    /// re-run, so it throws here (see <see cref="RerunAgent"/>).
+    /// Repository Analyst (FR-70), which runs as the <c>repository_analysis</c> job rather than an agent
+    /// (<see cref="SdlcAgents"/>) re-run, so it throws here (see <see cref="RerunAgent"/>).
     /// </summary>
-    public static AgentKind ProducingAgent(ArtifactType type) => type switch
+    public static string ProducingAgent(string type) => type switch
     {
-        ArtifactType.ProjectRequest => AgentKind.IdeaRefinement,
-        ArtifactType.TechnicalSpecification => AgentKind.SpecGenerator,
-        ArtifactType.ImplementationPlan => AgentKind.PlanGenerator,
-        ArtifactType.OptimizationPlan => AgentKind.CodeReview,
+        SdlcArtifacts.ProjectRequest => SdlcAgents.IdeaRefinement,
+        SdlcArtifacts.TechnicalSpecification => SdlcAgents.SpecGenerator,
+        SdlcArtifacts.ImplementationPlan => SdlcAgents.PlanGenerator,
+        SdlcArtifacts.OptimizationPlan => SdlcAgents.CodeReview,
 
         // FR-180: the Stack Analyst (re-run on rejection, FR-183, and on corruption, FR-20).
-        ArtifactType.StackProfile => AgentKind.StackAnalyst,
+        SdlcArtifacts.StackProfile => SdlcAgents.StackAnalyst,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
     /// <summary>The phase in which a type is produced.</summary>
-    public static Phase ProducingPhase(ArtifactType type) => type switch
+    public static Phase ProducingPhase(string type) => type switch
     {
-        ArtifactType.ProjectRequest => Phase.Refinement,
-        ArtifactType.TechnicalSpecification => Phase.Specification,
-        ArtifactType.ImplementationPlan => Phase.Planning,
-        ArtifactType.OptimizationPlan => Phase.Review,
+        SdlcArtifacts.ProjectRequest => Phase.Refinement,
+        SdlcArtifacts.TechnicalSpecification => Phase.Specification,
+        SdlcArtifacts.ImplementationPlan => Phase.Planning,
+        SdlcArtifacts.OptimizationPlan => Phase.Review,
 
         // §4.12: produced automatically at the start of refinement.
-        ArtifactType.CodebaseSummary => Phase.Refinement,
+        SdlcArtifacts.CodebaseSummary => Phase.Refinement,
 
         // FR-170: imported at the start of the work, while the project is in refinement (D-V5-10).
-        ArtifactType.SourceItems => Phase.Refinement,
+        SdlcArtifacts.SourceItems => Phase.Refinement,
 
         // FR-179, §4.27: produced and approved in analysis, the first phase of a version that infers its stack.
-        ArtifactType.StackProfile => Phase.Analysis,
+        SdlcArtifacts.StackProfile => Phase.Analysis,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
     /// <summary>
     /// The agent re-run when a version of <paramref name="type"/> is rejected or found corrupted, or <c>null</c> when none
-    /// is: <c>codebase_summary</c> has no <see cref="AgentKind"/> (its analyst is re-queued as a job, FR-70).
+    /// is: <c>codebase_summary</c> has no <see cref="SdlcAgents"/> (its analyst is re-queued as a job, FR-70).
     /// </summary>
-    public static AgentKind? RerunAgent(ArtifactType type) =>
+    public static string? RerunAgent(string type) =>
         CodebaseSummaryRules.IsAutoLocked(type) ? null : ProducingAgent(type);
 
     /// <summary>
     /// The status a new agent-authored version is stored with: <c>locked</c> for an auto-locked type (FR-70
     /// <c>codebase_summary</c>, no approval gate), <c>draft</c> otherwise.
     /// </summary>
-    public static ArtifactStatus InitialStatus(ArtifactType type) =>
+    public static ArtifactStatus InitialStatus(string type) =>
         CodebaseSummaryRules.IsAutoLocked(type) ? ArtifactStatus.Locked : ArtifactStatus.Draft;
 
     /// <summary>Allowed stored-status moves: draft → locked/rejected/superseded/invalidated, locked → invalidated, any → corrupted.</summary>
@@ -123,12 +123,12 @@ public static class ArtifactRules
     /// was a human edit (FR-18). FR-183 (amends FR-17 for <c>stack_profile</c>): the Stack Analyst always re-runs, a human
     /// edit included; it gets the rejected draft, so it can keep the user's corrections that agree with the comment.
     /// </summary>
-    public static Result<ArtifactStatusChange> Reject(ArtifactType type, ArtifactStatus status, bool authoredByAgent) => status switch
+    public static Result<ArtifactStatusChange> Reject(string type, ArtifactStatus status, bool authoredByAgent) => status switch
     {
         ArtifactStatus.Draft => Result.Success(new ArtifactStatusChange(
             ArtifactStatus.Rejected,
             Changed: true,
-            authoredByAgent || type == ArtifactType.StackProfile ? RerunAgent(type) : null)),
+            authoredByAgent || type == SdlcArtifacts.StackProfile ? RerunAgent(type) : null)),
         ArtifactStatus.Locked => Result.Failure<ArtifactStatusChange>(Locked()),
         _ => NotDraft(status),
     };
@@ -151,7 +151,7 @@ public static class ArtifactRules
     /// replace newer work, and a human-authored artifact (FR-18) has no agent to regenerate it.
     /// </summary>
     public static ArtifactStatusChange OnIntegrityCheck(
-        ArtifactType type, ArtifactStatus status, string content, string storedHash, bool authoredByAgent = true, bool isCurrentVersion = true) =>
+        string type, ArtifactStatus status, string content, string storedHash, bool authoredByAgent = true, bool isCurrentVersion = true) =>
         ContentHash.Matches(content, storedHash) || status == ArtifactStatus.Corrupted
             ? new ArtifactStatusChange(status, Changed: false)
             : new ArtifactStatusChange(ArtifactStatus.Corrupted, Changed: true, authoredByAgent && isCurrentVersion ? RerunAgent(type) : null);
@@ -217,14 +217,14 @@ public static class ArtifactRules
     /// (<see cref="ProjectStatus.Releasing"/>, or <see cref="ProjectStatus.AwaitingMerge"/>, FR-65). Otherwise <c>WRONG_PHASE</c>. The auto-locked <c>codebase_summary</c> is
     /// never drafted: <c>ARTIFACT_LOCKED</c> (FR-70).
     /// </summary>
-    public static Result CanCreateDraft(ArtifactType type, Phase phase, ProjectStatus status)
+    public static Result CanCreateDraft(string type, Phase phase, ProjectStatus status)
     {
         if (CodebaseSummaryRules.IsAutoLocked(type))
         {
             // FR-70, FR-170: never a draft; only the Repository Analyst or an import writes new (locked) versions.
             return Result.Failure(new DomainError(
                 ErrorCodes.ArtifactLocked,
-                type == ArtifactType.SourceItems
+                type == SdlcArtifacts.SourceItems
                     ? "The source items are a locked snapshot of imports; re-import or remove items instead."
                     : "The codebase summary is written and locked by the Repository Analyst; it can't be edited."));
         }
@@ -232,22 +232,22 @@ public static class ArtifactRules
         var producing = ProducingPhase(type);
         if (status is ProjectStatus.Releasing or ProjectStatus.AwaitingMerge)
         {
-            return WrongPhase($"A release is in progress; {type.ToWire()} can't be edited until it finishes.");
+            return WrongPhase($"A release is in progress; {type} can't be edited until it finishes.");
         }
 
-        if (type == ArtifactType.OptimizationPlan && phase != Phase.Review)
+        if (type == SdlcArtifacts.OptimizationPlan && phase != Phase.Review)
         {
             return WrongPhase($"The optimization plan can only be edited during review, not in {phase.ToWire()}.");
         }
 
         // FR-183, §4.27: the profile belongs to analysis; once approved, Settings → Stack changes the pinned composition (FR-117).
-        if (type == ArtifactType.StackProfile && phase != Phase.Analysis)
+        if (type == SdlcArtifacts.StackProfile && phase != Phase.Analysis)
         {
             return WrongPhase($"The stack profile can only be edited during analysis, not in {phase.ToWire()}. Change the stack in Settings → Stack instead.");
         }
 
         return phase.IsBefore(producing)
-            ? WrongPhase($"The {type.ToWire()} is produced in {producing.ToWire()}; the project is still in {phase.ToWire()}.")
+            ? WrongPhase($"The {type} is produced in {producing.ToWire()}; the project is still in {phase.ToWire()}.")
             : Result.Success();
     }
 

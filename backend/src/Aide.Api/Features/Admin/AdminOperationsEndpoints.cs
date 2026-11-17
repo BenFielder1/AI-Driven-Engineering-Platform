@@ -3,7 +3,6 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Projects;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -11,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Admin;
 
@@ -147,7 +147,7 @@ public static class AdminOperationsEndpoints
         AideDbContext db,
         CancellationToken cancellationToken,
         Guid? projectId = null,
-        [WireEnum(typeof(AgentKind))] string? agent = null,
+        [WireEnum(typeof(SdlcAgents))] string? agent = null,
         [WireEnum(typeof(AgentRunStatus))] string? status = null,
         [WireEnum(typeof(LlmProvider))] string? provider = null,
         [MaxLength(ModelMaxLength)] string? model = null,
@@ -162,7 +162,7 @@ public static class AdminOperationsEndpoints
 
         if (agent is not null)
         {
-            var wanted = EnumStrings.Parse<AgentKind>(agent);
+            var wanted = SdlcAgents.Parse(agent);
             query = query.Where(r => r.Agent == wanted);
         }
 

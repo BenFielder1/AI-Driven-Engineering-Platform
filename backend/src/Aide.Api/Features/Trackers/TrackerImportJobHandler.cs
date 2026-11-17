@@ -1,5 +1,4 @@
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
@@ -15,6 +14,7 @@ using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Trackers;
 
@@ -185,7 +185,7 @@ public sealed partial class TrackerImportJobHandler(
     /// <summary>§4.26: the budget of the refinement model's catalog entry.</summary>
     private async Task<int> BudgetAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var model = await llm.ResolveAsync(projectId, AgentKind.IdeaRefinement, cancellationToken);
+        var model = await llm.ResolveAsync(projectId, SdlcAgents.IdeaRefinement, cancellationToken);
         var entry = LlmOutputLimits.Find(catalog.Catalog(model.Provider), model.Model);
         return SourceItemLimits.MaxRenderedBytes(entry?.ContextTokens);
     }

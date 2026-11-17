@@ -1,15 +1,13 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Support;
 
@@ -52,7 +50,7 @@ public static class LifecycleSeed
     public static Task<Artifact> AddArtifactAsync(
         WebApplicationFactory<Program> factory,
         Guid projectId,
-        ArtifactType type,
+        string type,
         ArtifactStatus status = ArtifactStatus.Locked,
         int version = 1,
         int projectVersionAtCreation = 1,
@@ -133,7 +131,7 @@ public static class LifecycleSeed
             var run = new AgentRun
             {
                 ProjectId = projectId,
-                Agent = AgentKind.CodeReview,
+                Agent = SdlcAgents.CodeReview,
                 Phase = Phase.Review,
                 Provider = LlmProvider.Fake,
                 Model = "fake-1",
@@ -160,7 +158,7 @@ public static class LifecycleSeed
         });
 
     public static Task<ApprovalGate> AddGateAsync(
-        WebApplicationFactory<Program> factory, Guid projectId, GateType type, Guid? artifactId = null, DateTimeOffset? createdAt = null) =>
+        WebApplicationFactory<Program> factory, Guid projectId, string type, Guid? artifactId = null, DateTimeOffset? createdAt = null) =>
         ProjectApi.WithDbAsync(factory, async db =>
         {
             var gate = new ApprovalGate { ProjectId = projectId, Type = type, ArtifactId = artifactId, CreatedAt = createdAt ?? DateTimeOffset.UtcNow };

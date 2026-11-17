@@ -6,8 +6,6 @@ using Aide.Api.Features.BuildChecks;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Projects;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
@@ -25,6 +23,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Execution;
 
@@ -64,9 +63,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
     private static async Task<Artifact> SeedExecutionAsync(WebApplicationFactory<Program> app, Guid id, int maxAttempts, string? extraFile = null, bool completed = false)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory, maxBuildFixAttempts: maxAttempts);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.AddRange(Enumerable.Range(1, 2).Select(n => new ExecutionStep
@@ -151,7 +150,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
 
-        public AgentKind Agent => inner.Agent;
+        public string Agent => inner.Agent;
 
         public IReadOnlyList<string> Prompts => [.. _prompts];
 
@@ -404,7 +403,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             steps = new[] { new { number = 1, title = "Create the db module", task = "Add lib/db.ts.", files = new[] { new { path = "lib/db.ts", action = "create" } }, dependencies = Array.Empty<int>() } },
             summary = "Adds the missing module.",
         });
-        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.BuildFix, reply));
+        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.BuildFix, reply));
         var (fixture, _, versionId) = await FailedChecksAsync(app);
         using var __ = fixture;
         var id = fixture.Project.Id;
@@ -427,7 +426,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
     [Fact]
     public async Task FR258_A_fix_plan_still_invalid_after_one_retry_exhausts_the_check_and_review_starts()
     {
-        var scripted = new ScriptedResponder(AgentKind.BuildFix, "not a plan", "still not a plan");
+        var scripted = new ScriptedResponder(SdlcAgents.BuildFix, "not a plan", "still not a plan");
         var app = AgentJobs.WithResponders(factory, scripted);
         var (fixture, _, versionId) = await FailedChecksAsync(app);
         using var __ = fixture;
@@ -470,7 +469,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             files = new[] { new { path = "next.config.ts", content = "export default { typescript: { ignoreBuildErrors: true } };\n" } },
             notes = "Turned off type errors.",
         });
-        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.CodeGenerator, code));
+        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.CodeGenerator, code));
         var (fixture, planId, versionId) = await FailedChecksAsync(app);
         using var __ = fixture;
         var id = fixture.Project.Id;
@@ -571,7 +570,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         using var fixture = await ExecutingAsync(app, maxAttempts: 5, deploy: false);
         var id = fixture.Project.Id;
         await AgentJobs.RunQueuedAsync(app, id);
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
         await AgentJobs.RunQueuedAsync(app, id);
@@ -687,9 +686,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             await LifecycleSeed.AddTransitionAsync(app, id, history[i].From, history[i].To, history[i].Version, t0.AddMinutes(i));
         }
 
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, projectVersionAtCreation: 1, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2, content: "# Spec\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 4, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, projectVersionAtCreation: 1, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2, content: "# Spec\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 4, content: AgentJobs.PlanMarkdown(2));
         await LifecycleSeed.AddStepsAsync(app, id, plan.Id, 2, StepStatus.Completed);
         var versionId = await DeploymentHarness.VersionIdAsync(app, id);
 
@@ -747,9 +746,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Execution, 5, ApprovalMode.Advisory, maxBuildFixAttempts: 5);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
         await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 2, StepStatus.Completed);
         var versionId = await DeploymentHarness.VersionIdAsync(factory, id);
         var exhausted = Seeded(id, versionId, 0, BuildCheckStatus.Exhausted);

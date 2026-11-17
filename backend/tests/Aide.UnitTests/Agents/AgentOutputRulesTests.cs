@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Infrastructure.Agents;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;
 
@@ -197,12 +197,12 @@ public class PlanDocumentTests
     {
         var steps = PlanDocument.ParseAgentOutput(Reply, 20).Value;
 
-        var markdown = PlanDocument.Render(ArtifactType.ImplementationPlan, steps);
+        var markdown = PlanDocument.Render(SdlcArtifacts.ImplementationPlan, steps);
         var parsed = PlanDocument.ParseMarkdown(markdown, 20);
 
         Assert.True(parsed.IsSuccess, parsed.Error?.Message);
         Assert.Equal(PlanDocument.ToJson(steps), PlanDocument.ToJson(parsed.Value));
-        Assert.Equal(markdown, PlanDocument.Render(ArtifactType.ImplementationPlan, parsed.Value));
+        Assert.Equal(markdown, PlanDocument.Render(SdlcArtifacts.ImplementationPlan, parsed.Value));
         Assert.StartsWith("# Implementation plan\n", markdown, StringComparison.Ordinal);
         Assert.Contains("## Step 2: API", markdown, StringComparison.Ordinal);
         Assert.Contains("- `src/routes.ts` (create)", markdown, StringComparison.Ordinal);
@@ -217,13 +217,13 @@ public class PlanDocumentTests
         var json = PlanDocument.ToJson(steps);
 
         Assert.DoesNotContain("`", json, StringComparison.Ordinal);
-        Assert.Equal("Create the `app` (FR-1).", PlanDocument.ParseMarkdown(PlanDocument.Render(ArtifactType.OptimizationPlan, steps), null).Value[0].Task);
+        Assert.Equal("Create the `app` (FR-1).", PlanDocument.ParseMarkdown(PlanDocument.Render(SdlcArtifacts.OptimizationPlan, steps), null).Value[0].Task);
     }
 
     [Fact]
     public void FR18_An_edited_block_is_validated()
     {
-        var markdown = PlanDocument.Render(ArtifactType.ImplementationPlan, PlanDocument.ParseAgentOutput(Reply, 20).Value)
+        var markdown = PlanDocument.Render(SdlcArtifacts.ImplementationPlan, PlanDocument.ParseAgentOutput(Reply, 20).Value)
             .Replace("\"dependencies\": [\n        1\n      ]", "\"dependencies\": [\n        2\n      ]", StringComparison.Ordinal);
 
         var result = PlanDocument.ParseMarkdown(markdown, 20);
@@ -256,7 +256,7 @@ public class PlanDocumentTests
     {
         var steps = OneStep(task);
 
-        var markdown = PlanDocument.RenderChecked(ArtifactType.ImplementationPlan, steps, 20);
+        var markdown = PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, steps, 20);
 
         Assert.True(markdown.IsSuccess, markdown.Error?.Message);
         Assert.Single(markdown.Value.Split('\n'), line => line.StartsWith("```aide-plan", StringComparison.Ordinal));
@@ -270,7 +270,7 @@ public class PlanDocumentTests
     {
         const string instructions = "Then run:\n```aide-plan\n{\"steps\": [{\"number\": 1}]}\n```";
 
-        var markdown = PlanDocument.RenderChecked(ArtifactType.ImplementationPlan, OneStep("Task.", instructions), null);
+        var markdown = PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, OneStep("Task.", instructions), null);
 
         Assert.True(markdown.IsSuccess, markdown.Error?.Message);
         Assert.Contains("\\`\\`\\`aide-plan", markdown.Value, StringComparison.Ordinal);
@@ -329,7 +329,7 @@ public class PlanDocumentTests
     {
         PlanStep[] steps = [new(1, "CI", "Add CI.", [new DeclaredFile(".github/workflows/x.yml", FileAction.Create)], [])];
 
-        var parsed = PlanDocument.ParseMarkdown(PlanDocument.Render(ArtifactType.ImplementationPlan, steps), 20);
+        var parsed = PlanDocument.ParseMarkdown(PlanDocument.Render(SdlcArtifacts.ImplementationPlan, steps), 20);
 
         Assert.True(parsed.IsSuccess, parsed.Error?.Message);
         Assert.Equal(".github/workflows/x.yml", parsed.Value[0].Files[0].Path);
@@ -357,7 +357,7 @@ public class AgentOutputTests
 /// <summary>D13: the built-in Fake replies are valid for their agents (E2E and the dev seed rely on them).</summary>
 public class FakeAgentResponderTests
 {
-    private static LlmRequest Request(AgentKind agent, string user) => new()
+    private static LlmRequest Request(string agent, string user) => new()
     {
         Model = "fake-1",
         System = "system",
@@ -372,13 +372,13 @@ public class FakeAgentResponderTests
     {
         var responder = new FakeIdeaRefinementResponder();
 
-        var first = RefinementRules.Parse(responder.Respond(Request(AgentKind.IdeaRefinement, FirstRound))).Value;
+        var first = RefinementRules.Parse(responder.Respond(Request(SdlcAgents.IdeaRefinement, FirstRound))).Value;
         Assert.Equal(["q1", "q2", "q3"], first.Questions.Select(q => q.Id));
         Assert.StartsWith("# Demo: Todo API", first.ProjectRequest, StringComparison.Ordinal);
 
         var answers = RefinementRules.FormatAnswers([new("q1", first.Questions[0].Question, "Just me"), new("q2", first.Questions[1].Question, "API only")]);
         var second = RefinementRules.Parse(responder.Respond(Request(
-            AgentKind.IdeaRefinement,
+            SdlcAgents.IdeaRefinement,
             FirstRound.Replace("<current_draft>\n\n</current_draft>", $"<current_draft>\n{first.ProjectRequest}\n</current_draft>", StringComparison.Ordinal)
                 .Replace("<answers>\n\n</answers>", $"<answers>\n{answers}\n</answers>", StringComparison.Ordinal)))).Value;
         Assert.Equal(["q3"], second.Questions.Select(q => q.Id));
@@ -386,7 +386,7 @@ public class FakeAgentResponderTests
         Assert.Contains("API only", second.ProjectRequest, StringComparison.Ordinal);
 
         var third = RefinementRules.Parse(responder.Respond(Request(
-            AgentKind.IdeaRefinement,
+            SdlcAgents.IdeaRefinement,
             FirstRound.Replace("<current_draft>\n\n</current_draft>", $"<current_draft>\n{second.ProjectRequest}\n</current_draft>", StringComparison.Ordinal)))).Value;
         Assert.Empty(third.Questions);
         Assert.Contains("Just me", third.ProjectRequest, StringComparison.Ordinal);
@@ -395,7 +395,7 @@ public class FakeAgentResponderTests
     [Fact]
     public void FR28_Fake_spec_has_all_eleven_sections_for_the_project()
     {
-        var spec = new FakeSpecGeneratorResponder().Respond(Request(AgentKind.SpecGenerator, "<project_request>\n# Demo: Todo API\n\n## Summary\nTodos.\n</project_request>"));
+        var spec = new FakeSpecGeneratorResponder().Respond(Request(SdlcAgents.SpecGenerator, "<project_request>\n# Demo: Todo API\n\n## Summary\nTodos.\n</project_request>"));
 
         Assert.Empty(SpecSections.Missing(spec));
         Assert.Contains("GET | /api/todos", spec, StringComparison.Ordinal);
@@ -404,7 +404,7 @@ public class FakeAgentResponderTests
     [Fact]
     public void FR29_Fake_plan_is_a_valid_plan_for_the_project()
     {
-        var reply = new FakePlanGeneratorResponder().Respond(Request(AgentKind.PlanGenerator, "<project_request>\n# Demo: Todo API\n</project_request>"));
+        var reply = new FakePlanGeneratorResponder().Respond(Request(SdlcAgents.PlanGenerator, "<project_request>\n# Demo: Todo API\n</project_request>"));
 
         var plan = PlanDocument.ParseAgentOutput(reply, maxFilesPerStep: 3);
 

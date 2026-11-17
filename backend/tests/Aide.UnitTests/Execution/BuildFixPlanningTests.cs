@@ -8,6 +8,7 @@ using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
 using Aide.UnitTests.Stack;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Execution;
@@ -321,15 +322,15 @@ public sealed class BuildFixPlanningTests
         var models = new Dictionary<string, string> { ["code_review"] = "review-model", ["build_fix"] = "ignored" };
 
         Assert.Equal("build_fix", BuildFixPlanning.AgentKey);
-        Assert.Equal("code_review", AgentRunRules.ModelKey(AgentKind.BuildFix));
-        Assert.Equal("review-model", AgentRunRules.ChooseModel(AgentKind.BuildFix, LlmProvider.Anthropic, "default", models).Model);
-        Assert.Equal("default", AgentRunRules.ChooseModel(AgentKind.BuildFix, LlmProvider.Anthropic, "default", null).Model);
+        Assert.Equal("code_review", AgentRunRules.ModelKey(SdlcAgents.BuildFix));
+        Assert.Equal("review-model", AgentRunRules.ChooseModel(SdlcAgents.BuildFix, LlmProvider.Anthropic, "default", models).Model);
+        Assert.Equal("default", AgentRunRules.ChooseModel(SdlcAgents.BuildFix, LlmProvider.Anthropic, "default", null).Model);
     }
 
     [Fact]
     public void FR256_The_build_fix_prompt_v1_has_the_inputs_rules_and_output_schema()
     {
-        var template = new EmbeddedPromptLibrary().Template(AgentKind.BuildFix);
+        var template = new EmbeddedPromptLibrary().Template(SdlcAgents.BuildFix);
         var rendered = template.Render(template.RequiredInputs.ToDictionary(n => n, n => (string?)$"<{n}>", StringComparer.Ordinal)).Value;
 
         Assert.Equal("1", template.Version);

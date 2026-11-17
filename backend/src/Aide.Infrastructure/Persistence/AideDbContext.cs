@@ -1,9 +1,6 @@
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Notifications;
 using Aide.Domain.Review;
@@ -110,13 +107,10 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<ProjectRole>(configurationBuilder);
         MapEnum<Phase>(configurationBuilder);
         MapEnum<ProjectStatus>(configurationBuilder);
-        MapEnum<ArtifactType>(configurationBuilder);
-        MapEnum<GateType>(configurationBuilder);
         MapEnum<StepStatus>(configurationBuilder);
         MapEnum<StepOrigin>(configurationBuilder);
         MapEnum<BuildCheckStatus>(configurationBuilder);
         MapEnum<BuildCheckEndReason>(configurationBuilder);
-        MapEnum<AgentKind>(configurationBuilder);
         MapEnum<LlmCredentialStatus>(configurationBuilder);
         MapEnum<GitProvider>(configurationBuilder);
         MapEnum<StackSource>(configurationBuilder);

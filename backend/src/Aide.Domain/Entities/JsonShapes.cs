@@ -1,4 +1,3 @@
-using Aide.Domain.Artifacts;
 using Aide.Domain.Execution;
 using Aide.Domain.Review;
 using Tevrin.Engine.Domain.Entities;
@@ -11,7 +10,7 @@ namespace Aide.Domain.Entities;
 public sealed record FileManifestEntry(string Path, FileAction Action, string ContentHash);
 
 /// <summary>An artifact version an agent run used as input (FR-23).</summary>
-public sealed record InputArtifactRef(Guid ArtifactId, ArtifactType Type, int Version);
+public sealed record InputArtifactRef(Guid ArtifactId, string Type, int Version);
 
 /// <summary>A compliance category score (FR-38, §4.7): the agent's 0–1 score, the deterministic penalty applied to it,
 /// the resulting <see cref="Score"/> (floored at 0) and the agent's evidence. Reports written before the breakdown existed

@@ -4,7 +4,6 @@ using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Infrastructure.Persistence;
@@ -12,6 +11,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Execution;
 
@@ -68,7 +68,7 @@ public sealed record ExecutionStateDto(
     ExecutionCountsDto Counts);
 
 /// <summary>The plan version the steps belong to.</summary>
-public sealed record ExecutionPlanDto(Guid ArtifactId, ArtifactType Type, int Version, ArtifactStatus Status);
+public sealed record ExecutionPlanDto(Guid ArtifactId, [WireEnum(typeof(SdlcArtifacts))] string Type, int Version, ArtifactStatus Status);
 
 /// <summary>A plan version's execution steps in step order (FR-30); <c>plan</c> is <c>null</c> (and no steps) before any plan is approved.</summary>
 public sealed record ExecutionStepsDto(ExecutionPlanDto? Plan, IReadOnlyList<ExecutionStepDto> Steps);
@@ -131,7 +131,7 @@ public static class ExecutionEndpoints
         AideDbContext db,
         CancellationToken cancellationToken,
         [Range(1, int.MaxValue)] int? planVersion = null,
-        [WireEnum(typeof(ArtifactType))] string? planType = null,
+        [WireEnum(typeof(SdlcArtifacts))] string? planType = null,
         Guid? releaseVersionId = null)
     {
         var grant = await access.CheckAsync(id, ProjectAction.View, cancellationToken);
@@ -156,8 +156,8 @@ public static class ExecutionEndpoints
                 : TypedResults.Ok(await StepsAsync(db, id, current, cancellationToken));
         }
 
-        var type = planType is null ? ArtifactType.ImplementationPlan : EnumStrings.Parse<ArtifactType>(planType);
-        if (type is not (ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan))
+        var type = planType is null ? SdlcArtifacts.ImplementationPlan : SdlcArtifacts.Parse(planType);
+        if (type is not (SdlcArtifacts.ImplementationPlan or SdlcArtifacts.OptimizationPlan))
         {
             return ApiProblems.Validation(new Dictionary<string, string[]> { ["planType"] = ["Steps belong to implementation_plan or optimization_plan versions."] });
         }
@@ -173,7 +173,7 @@ public static class ExecutionEndpoints
         {
             return planVersion is null
                 ? TypedResults.Ok(new ExecutionStepsDto(null, []))
-                : ApiProblems.NotFound($"Version {planVersion} of the {type.ToWire()} was not found.");
+                : ApiProblems.NotFound($"Version {planVersion} of the {type} was not found.");
         }
 
         return TypedResults.Ok(await StepsAsync(db, id, plan, cancellationToken));

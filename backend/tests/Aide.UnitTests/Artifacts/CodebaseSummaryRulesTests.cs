@@ -1,8 +1,8 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Artifacts;
 
@@ -30,30 +30,30 @@ public class CodebaseSummaryRulesTests
     [Fact]
     public void FR70_The_summary_is_auto_locked_produced_in_refinement_and_never_drafted()
     {
-        Assert.True(CodebaseSummaryRules.IsAutoLocked(ArtifactType.CodebaseSummary));
+        Assert.True(CodebaseSummaryRules.IsAutoLocked(SdlcArtifacts.CodebaseSummary));
         Assert.All(ArtifactRules.All, t => Assert.False(CodebaseSummaryRules.IsAutoLocked(t)));
-        Assert.DoesNotContain(ArtifactType.CodebaseSummary, ArtifactRules.All);
+        Assert.DoesNotContain(SdlcArtifacts.CodebaseSummary, ArtifactRules.All);
 
-        Assert.Equal(ArtifactStatus.Locked, ArtifactRules.InitialStatus(ArtifactType.CodebaseSummary));
-        Assert.Equal(ArtifactStatus.Draft, ArtifactRules.InitialStatus(ArtifactType.TechnicalSpecification));
-        Assert.Equal(Phase.Refinement, ArtifactRules.ProducingPhase(ArtifactType.CodebaseSummary));
-        Assert.Null(RestoreRules.RestorablePhase(ArtifactType.CodebaseSummary));
+        Assert.Equal(ArtifactStatus.Locked, ArtifactRules.InitialStatus(SdlcArtifacts.CodebaseSummary));
+        Assert.Equal(ArtifactStatus.Draft, ArtifactRules.InitialStatus(SdlcArtifacts.TechnicalSpecification));
+        Assert.Equal(Phase.Refinement, ArtifactRules.ProducingPhase(SdlcArtifacts.CodebaseSummary));
+        Assert.Null(RestoreRules.RestorablePhase(SdlcArtifacts.CodebaseSummary));
 
         foreach (var phase in Enum.GetValues<Phase>())
         {
-            Assert.Equal(ErrorCodes.ArtifactLocked, ArtifactRules.CanCreateDraft(ArtifactType.CodebaseSummary, phase, ProjectStatus.Active).Error!.Code);
+            Assert.Equal(ErrorCodes.ArtifactLocked, ArtifactRules.CanCreateDraft(SdlcArtifacts.CodebaseSummary, phase, ProjectStatus.Active).Error!.Code);
         }
     }
 
     [Fact]
     public void FR70_A_new_summary_invalidates_nothing_and_a_corrupted_one_reruns_no_agent_kind()
     {
-        var effect = InvalidationCascade.Effect(ArtifactType.CodebaseSummary, Phase.Planning);
+        var effect = InvalidationCascade.Effect(SdlcArtifacts.CodebaseSummary, Phase.Planning);
         Assert.Equal((0, StepReset.None, (Phase?)null), (effect.InvalidatedTypes.Count, effect.StepReset, effect.FallbackPhase));
 
-        var change = ArtifactRules.OnIntegrityCheck(ArtifactType.CodebaseSummary, ArtifactStatus.Locked, "changed", ContentHash.Compute("original"));
-        Assert.Equal((ArtifactStatus.Corrupted, true, (AgentKind?)null), (change.NewStatus, change.Changed, change.RerunAgent));
-        Assert.Null(ArtifactRules.RerunAgent(ArtifactType.CodebaseSummary));
-        Assert.Equal(AgentKind.SpecGenerator, ArtifactRules.RerunAgent(ArtifactType.TechnicalSpecification));
+        var change = ArtifactRules.OnIntegrityCheck(SdlcArtifacts.CodebaseSummary, ArtifactStatus.Locked, "changed", ContentHash.Compute("original"));
+        Assert.Equal((ArtifactStatus.Corrupted, true, (string?)null), (change.NewStatus, change.Changed, change.RerunAgent));
+        Assert.Null(ArtifactRules.RerunAgent(SdlcArtifacts.CodebaseSummary));
+        Assert.Equal(SdlcAgents.SpecGenerator, ArtifactRules.RerunAgent(SdlcArtifacts.TechnicalSpecification));
     }
 }

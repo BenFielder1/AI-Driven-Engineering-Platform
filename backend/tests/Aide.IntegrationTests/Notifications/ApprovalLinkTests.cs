@@ -3,13 +3,12 @@ using System.Net.Http.Json;
 using Aide.Api.Features.Approvals;
 using Aide.Api.Features.Gates;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Notifications;
 
@@ -29,9 +28,9 @@ public sealed class ApprovalLinkTests(AideApiFactory factory)
 
         var view = await ProjectApi.ReadAsync<ApprovalLinkViewDto>(await fixture.Owner.Client.GetAsync(Path(approve), Ct));
         Assert.Equal(
-            (gate.Id, fixture.Project.Id, GateType.SpecApproval, ApprovalLinkDecision.Approve, ApprovalLinkStatus.Valid),
+            (gate.Id, fixture.Project.Id, SdlcGates.SpecApproval, ApprovalLinkDecision.Approve, ApprovalLinkStatus.Valid),
             (view.GateId, view.ProjectId, view.GateType, view.Decision, view.Status));
-        Assert.Equal(ArtifactType.TechnicalSpecification, view.ArtifactSummary!.Type);
+        Assert.Equal(SdlcArtifacts.TechnicalSpecification, view.ArtifactSummary!.Type);
         Assert.Equal("TechnicalSpecification v1", view.ArtifactSummary.Title);
 
         // Reading never uses the link.
@@ -197,10 +196,10 @@ public sealed class ApprovalLinkTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         var slack = $"https://hooks.slack.com/services/T0/B0/{Guid.NewGuid():N}";
         await NotificationScenario.ConfigureChannelsAsync(fixture.Owner.Client, id, new { type = "slack", secret = slack, events = NotificationScenario.Ev("gate_required") });
-        var gate = await LifecycleSeed.AddGateAsync(test.Factory, id, GateType.Escalation);
+        var gate = await LifecycleSeed.AddGateAsync(test.Factory, id, EngineGates.Escalation);
         await ProjectApi.WithDbAsync(test.Factory, async db =>
         {
-            Aide.Infrastructure.Persistence.EventLog.AddEvent(db, EventTypes.GateCreated, id, new { gateId = gate.Id, type = GateType.Escalation }, SystemActor.Name, DateTimeOffset.UtcNow);
+            Aide.Infrastructure.Persistence.EventLog.AddEvent(db, EventTypes.GateCreated, id, new { gateId = gate.Id, type = EngineGates.Escalation }, SystemActor.Name, DateTimeOffset.UtcNow);
             await db.SaveChangesAsync(Ct);
         });
 

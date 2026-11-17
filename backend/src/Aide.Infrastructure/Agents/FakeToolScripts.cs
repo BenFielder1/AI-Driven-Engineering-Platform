@@ -1,5 +1,5 @@
-using Aide.Domain.Agents;
 using Aide.Domain.RepoTools;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Infrastructure.Agents;
 
@@ -13,15 +13,15 @@ public sealed record FakeToolCall(string Tool, string ArgumentsJson);
 /// </summary>
 public interface IFakeToolScript
 {
-    AgentKind Agent { get; }
+    string Agent { get; }
 
     IReadOnlyList<FakeToolCall> Calls { get; }
 }
 
 /// <summary>A fixed <see cref="IFakeToolScript"/>.</summary>
-public sealed class FakeToolScript(AgentKind agent, IReadOnlyList<FakeToolCall> calls) : IFakeToolScript
+public sealed class FakeToolScript(string agent, IReadOnlyList<FakeToolCall> calls) : IFakeToolScript
 {
-    public AgentKind Agent { get; } = agent;
+    public string Agent { get; } = agent;
 
     public IReadOnlyList<FakeToolCall> Calls { get; } = calls;
 }
@@ -48,5 +48,5 @@ public static class FakeToolScripts
 
     /// <summary>The default scripts: <see cref="Explore"/> for every agent.</summary>
     public static IEnumerable<IFakeToolScript> Defaults() =>
-        Enum.GetValues<AgentKind>().Select(agent => (IFakeToolScript)new FakeToolScript(agent, Explore));
+        SdlcAgents.All.Select(agent => (IFakeToolScript)new FakeToolScript(agent, Explore));
 }

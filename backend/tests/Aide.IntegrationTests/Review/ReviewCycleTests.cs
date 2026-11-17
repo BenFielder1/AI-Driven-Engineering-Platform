@@ -4,12 +4,9 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Review;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
@@ -19,6 +16,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Review;
 
@@ -42,9 +40,9 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: spec);
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: spec);
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.AddRange(Enumerable.Range(1, 2).Select(n => new ExecutionStep
@@ -83,7 +81,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Equal((Phase.Review, 1, 5), (project.CurrentPhase, project.ReviewCycle, project.Checkpoint));
         var report = Assert.Single(await ReportsAsync(app, id));
         Assert.Equal((1, 5, 0.860m, ReviewDecision.ReviewRequired, (EscalationReason?)null, 0.90m), (report.ReviewCycle, report.Checkpoint, report.Score, report.Decision, report.EscalationReason, report.Threshold));
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
         Assert.Equal((ArtifactStatus.Draft, (Guid?)draft.Id, (Guid?)report.AgentRunId), (draft.Status, report.OptimizationPlanArtifactId, draft.AgentRunId));
 
         var latest = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
@@ -119,9 +117,9 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var id = fixture.Project.Id;
 
         Assert.Equal(ReviewDecision.ReleaseEligible, Assert.Single(await ReportsAsync(app, id)).Decision);
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(app, id));
-        Assert.Equal((GateType.PreRelease, GateStatus.Pending), (gate.Type, gate.Status));
+        Assert.Equal((SdlcGates.PreRelease, GateStatus.Pending), (gate.Type, gate.Status));
 
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
         Assert.Equal(Phase.Release, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
@@ -138,7 +136,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Equal((ReviewDecision.EscalationRequired, (EscalationReason?)EscalationReason.LowScore), (report.Decision, report.EscalationReason));
         var gates = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates", UriKind.Relative), Ct));
         var gate = Assert.Single(gates);
-        Assert.Equal((GateType.Escalation, (EscalationReason?)EscalationReason.LowScore), (gate.Type, gate.EscalationReason));
+        Assert.Equal((EngineGates.Escalation, (EscalationReason?)EscalationReason.LowScore), (gate.Type, gate.EscalationReason));
         Assert.NotNull(report.OptimizationPlanArtifactId);
         var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReviewCompleted)).Payload);
         Assert.Equal("low_score", completed.GetProperty("decisionReason").GetString());
@@ -165,7 +163,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         const string reason = "The specification defers /api/gadgets to a later version.";
         var reply = System.Text.Json.Nodes.JsonNode.Parse(ReviewReply(0.82m, 1))!.AsObject();
         reply["waivedFindings"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["id"] = "finding:endpoint:api-gadgets", ["reason"] = reason });
-        var scripted = new ScriptedResponder(AgentKind.CodeReview, reply.ToJsonString());
+        var scripted = new ScriptedResponder(SdlcAgents.CodeReview, reply.ToJsonString());
         var app = AgentJobs.WithResponders(factory, scripted);
         using var fixture = await ReviewedAsync(app, Spec.Replace("No HTTP API.", "| GET | /api/widgets |\n| GET | /api/gadgets |", StringComparison.Ordinal));
         var id = fixture.Project.Id;
@@ -181,7 +179,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.All(latest.Violations.Where(v => v.Source == FindingSource.Agent), v => Assert.Null(v.Handling));
 
         // FR-248: the endpoint without a path is appended to step 1 of the stored plan; FR-249: the waiver is kept for later cycles.
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
         Assert.Contains("Also address finding:endpoint:api-widgets: `Endpoint '/api/widgets'", draft.Content, StringComparison.Ordinal);
         var report = Assert.Single(await ReportsAsync(app, id));
         using (var stored = System.Text.Json.JsonDocument.Parse(report.ExternalChecks!)) // jsonb reformats whitespace
@@ -198,14 +196,14 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.82m, 0.95m], OptimizationStepsByCycle = [3, 0] });
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
 
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal((Phase.Execution, 5), (project.CurrentPhase, project.Checkpoint)); // FR-39: re-entered, version kept
         var current = await GetAsync<ExecutionStepsDto>(fixture.Viewer.Client, $"{fixture.Path}/execution/steps");
-        Assert.Equal((ArtifactType.OptimizationPlan, 1, 3), (current.Plan!.Type, current.Plan.Version, current.Steps.Count));
+        Assert.Equal((SdlcArtifacts.OptimizationPlan, 1, 3), (current.Plan!.Type, current.Plan.Version, current.Steps.Count));
 
         await AgentJobs.RunQueuedAsync(app, id);
 
@@ -218,10 +216,10 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var trend = await GetAsync<ComplianceTrendDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/trend");
         Assert.Equal([0.820m, 0.950m], trend.Series.Select(p => p.OverallScore));
         Assert.Equal(2, (await LifecycleSeed.EventsAsync(app, id, EventTypes.PullRequestOpened)).Count); // one per plan, same branch
-        Assert.Equal(GateType.PreRelease, Assert.Single(await LifecycleSeed.GatesAsync(app, id), g => g.Status == GateStatus.Pending).Type);
+        Assert.Equal(SdlcGates.PreRelease, Assert.Single(await LifecycleSeed.GatesAsync(app, id), g => g.Status == GateStatus.Pending).Type);
 
         var implementation = await GetAsync<ExecutionStepsDto>(fixture.Viewer.Client, $"{fixture.Path}/execution/steps?planType=implementation_plan");
-        Assert.Equal(ArtifactType.ImplementationPlan, implementation.Plan!.Type);
+        Assert.Equal(SdlcArtifacts.ImplementationPlan, implementation.Plan!.Type);
     }
 
     [Fact]
@@ -230,7 +228,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var app = App(factory, new FakeCodeReviewScript { ScoresByCycle = [0.84m, 0.83m], OptimizationStepsByCycle = [1] });
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
         await AgentJobs.RunQueuedAsync(app, id);
@@ -250,7 +248,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "continue" }));
         Assert.Equal((Phase.Review, 1), ((await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase, (await LifecycleSeed.ProjectAsync(app, id)).ExtraReviewCycles));
 
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
 
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
@@ -307,7 +305,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
 
         var gates = await LifecycleSeed.GatesAsync(app, id);
         Assert.Equal(GateStatus.Cancelled, gates.Single(g => g.Id == oldGate.Id).Status);
-        Assert.Single(gates, g => g.Status == GateStatus.Pending && g.Type == GateType.PreRelease);
+        Assert.Single(gates, g => g.Status == GateStatus.Pending && g.Type == SdlcGates.PreRelease);
         Assert.Equal([1, 2], (await ReportsAsync(app, id)).Select(r => r.ReviewCycle));
         Assert.Equal(started.JobId, (await LifecycleSeed.JobsAsync(app, id)).Last(j => j.Type == JobTypes.Review).Id);
     }
@@ -338,7 +336,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
 
         Assert.Single(await ReportsAsync(app, id));
         Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.ReviewStarted));
-        Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
         Assert.Equal(1, (await LifecycleSeed.ProjectAsync(app, id)).ReviewCycle);
         Assert.Equal(1, counting.Calls);
     }
@@ -352,9 +350,9 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
             System = "s",
             Messages = [new LlmMessage(LlmRole.User, "<review_cycle>1</review_cycle>")],
             MaxTokens = 10,
-            Agent = AgentKind.CodeReview,
+            Agent = SdlcAgents.CodeReview,
         });
-        var scripted = new ScriptedResponder(AgentKind.CodeReview, """{"categoryScores": []}""", valid);
+        var scripted = new ScriptedResponder(SdlcAgents.CodeReview, """{"categoryScores": []}""", valid);
         var app = AgentJobs.WithResponders(factory, scripted);
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
@@ -362,7 +360,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Single(await ReportsAsync(app, id));
         Assert.Equal(2, scripted.Prompts.Count);
         Assert.Contains("INVALID_OUTPUT", scripted.Prompts[1], StringComparison.Ordinal);
-        Assert.Equal(2, (await AgentJobs.RunsAsync(app, id)).Count(r => r.Agent == AgentKind.CodeReview));
+        Assert.Equal(2, (await AgentJobs.RunsAsync(app, id)).Count(r => r.Agent == SdlcAgents.CodeReview));
     }
 
     [Fact]
@@ -397,13 +395,13 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var app = App(factory, FakeCodeReviewScript.Default);
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "reject", "Split it"));
         await AgentJobs.RunQueuedAsync(app, id);
 
         var report = Assert.Single(await ReportsAsync(app, id));
-        var versions = await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan);
+        var versions = await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan);
         Assert.Equal([ArtifactStatus.Rejected, ArtifactStatus.Draft], versions.Select(a => a.Status));
         Assert.Equal(versions[1].Id, report.OptimizationPlanArtifactId);
         Assert.Equal(1, (await LifecycleSeed.ProjectAsync(app, id)).ReviewCycle);
@@ -437,14 +435,14 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         for (var cycle = 1; cycle <= 2; cycle++)
         {
-            var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan), a => a.Status == ArtifactStatus.Draft);
+            var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan), a => a.Status == ArtifactStatus.Draft);
             await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
             await AgentJobs.RunQueuedAsync(app, id);
         }
 
         var last = (await ReportsAsync(app, id))[^1];
         Assert.Equal((3, ReviewDecision.EscalationRequired, (EscalationReason?)EscalationReason.MaxCycles), (last.ReviewCycle, last.Decision, last.EscalationReason));
-        var plans = (await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan)).OrderBy(p => p.Version).ToList();
+        var plans = (await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan)).OrderBy(p => p.Version).ToList();
         Assert.Equal((3, ArtifactStatus.Locked, ArtifactStatus.Draft), (plans.Count, plans[1].Status, plans[2].Status));
         return fixture;
     }
@@ -467,7 +465,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Equal((Phase.Review, 3, 1), (project.CurrentPhase, project.ReviewCycle, project.ExtraReviewCycles));
         Assert.DoesNotContain(await LifecycleSeed.JobsAsync(app, id), j => j.Status == JobStatus.Queued);
 
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan), a => a.Status == ArtifactStatus.Draft);
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan), a => a.Status == ArtifactStatus.Draft);
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
         await AgentJobs.RunQueuedAsync(app, id);
@@ -486,7 +484,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var app = MaxCyclesApp(factory);
         using var fixture = await EscalatedAtMaxCyclesAsync(app);
         var id = fixture.Project.Id;
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan), a => a.Status == ArtifactStatus.Draft);
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan), a => a.Status == ArtifactStatus.Draft);
 
         // Approved before the escalation is decided: no review_required decision and no continue yet, so it waits in review.
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
@@ -537,13 +535,13 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
             System = "s",
             Messages = [new LlmMessage(LlmRole.User, "<review_cycle>1</review_cycle>")],
             MaxTokens = 10,
-            Agent = AgentKind.CodeReview,
+            Agent = SdlcAgents.CodeReview,
         });
 
     [Fact]
     public async Task FR38_A_review_required_reply_without_optimisation_steps_is_re_run_with_the_reason_and_the_fixed_reply_drafts_the_plan()
     {
-        var scripted = new ScriptedResponder(AgentKind.CodeReview, ReviewReply(0.82m, 0), ReviewReply(0.82m, 2));
+        var scripted = new ScriptedResponder(SdlcAgents.CodeReview, ReviewReply(0.82m, 0), ReviewReply(0.82m, 2));
         var app = AgentJobs.WithResponders(factory, scripted);
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
@@ -552,14 +550,14 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Contains("\"optimizationPlan\" has no steps", scripted.Prompts[1], StringComparison.Ordinal);
         var report = Assert.Single(await ReportsAsync(app, id));
         Assert.Equal(ReviewDecision.ReviewRequired, report.Decision);
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
         Assert.Equal(draft.Id, report.OptimizationPlanArtifactId);
     }
 
     [Fact]
     public async Task FR39_A_review_required_reply_still_without_optimisation_steps_escalates_no_optimization_plan()
     {
-        var scripted = new ScriptedResponder(AgentKind.CodeReview, ReviewReply(0.82m, 0));
+        var scripted = new ScriptedResponder(SdlcAgents.CodeReview, ReviewReply(0.82m, 0));
         var app = AgentJobs.WithResponders(factory, scripted);
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
@@ -569,7 +567,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Equal((ReviewDecision.EscalationRequired, (EscalationReason?)EscalationReason.NoOptimizationPlan, (Guid?)null), (report.Decision, report.EscalationReason, report.OptimizationPlanArtifactId));
         var gates = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates", UriKind.Relative), Ct));
         var gate = Assert.Single(gates);
-        Assert.Equal((GateType.Escalation, (EscalationReason?)EscalationReason.NoOptimizationPlan), (gate.Type, gate.EscalationReason));
+        Assert.Equal((EngineGates.Escalation, (EscalationReason?)EscalationReason.NoOptimizationPlan), (gate.Type, gate.EscalationReason));
         var latest = await GetAsync<ComplianceReportDto>(fixture.Viewer.Client, $"{fixture.Path}/compliance/latest");
         Assert.Equal(EscalationReason.NoOptimizationPlan, latest.DecisionReason);
 
@@ -718,7 +716,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
 
-        public AgentKind Agent => inner.Agent;
+        public string Agent => inner.Agent;
 
         public IReadOnlyList<string> Prompts => [.. _prompts];
 

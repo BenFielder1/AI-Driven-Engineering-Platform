@@ -4,6 +4,7 @@ using Aide.Domain.Common;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Agents;
 
@@ -55,7 +56,7 @@ public static class AgentRunRules
     /// FR-22: the model for an agent under the given LLM settings: the agent's own model when set (keyed by
     /// <see cref="ModelKey"/>, the agent's wire name, e.g. <c>idea_refinement</c>), else the default model.
     /// </summary>
-    public static LlmChoice ChooseModel(AgentKind agent, LlmProvider provider, string defaultModel, IReadOnlyDictionary<string, string>? modelsByAgent)
+    public static LlmChoice ChooseModel(string agent, LlmProvider provider, string defaultModel, IReadOnlyDictionary<string, string>? modelsByAgent)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultModel);
         var model = modelsByAgent is not null && modelsByAgent.TryGetValue(ModelKey(agent), out var own) && !string.IsNullOrWhiteSpace(own)
@@ -68,7 +69,7 @@ public static class AgentRunRules
     /// The key an agent's model is configured under: its wire name, except <c>build_fix</c>, which uses the
     /// <c>code_review</c> settings (D-0.6.1-17).
     /// </summary>
-    public static string ModelKey(AgentKind agent) => agent == AgentKind.BuildFix ? AgentKind.CodeReview.ToWire() : agent.ToWire();
+    public static string ModelKey(string agent) => agent == SdlcAgents.BuildFix ? SdlcAgents.CodeReview : agent;
 
     /// <summary>
     /// FR-23: cost = input × input price + output × output price, per million tokens, rounded to 4 dp (the column's

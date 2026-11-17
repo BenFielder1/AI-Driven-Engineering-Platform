@@ -32,7 +32,7 @@ public sealed partial class PromptTemplate
 
     private readonly Regex? _closingDataTag;
 
-    private PromptTemplate(AgentKind agent, string version, string system, string user)
+    private PromptTemplate(string agent, string version, string system, string user)
     {
         Agent = agent;
         Version = version;
@@ -52,7 +52,7 @@ public sealed partial class PromptTemplate
                 TimeSpan.FromSeconds(1));
     }
 
-    public AgentKind Agent { get; }
+    public string Agent { get; }
 
     /// <summary>The template version from the front matter (stored as the run's <c>prompt_version</c>).</summary>
     public string Version { get; }
@@ -74,7 +74,7 @@ public sealed partial class PromptTemplate
         [.. Placeholders.Where(p => !p.Optional).Select(p => p.Name).Distinct(StringComparer.Ordinal)];
 
     /// <summary>Parses a template source. Fails with <c>VALIDATION</c> on malformed front matter or a missing marker.</summary>
-    public static Result<PromptTemplate> Parse(AgentKind agent, string source)
+    public static Result<PromptTemplate> Parse(string agent, string source)
     {
         ArgumentNullException.ThrowIfNull(source);
         var text = source.ReplaceLineEndings("\n").TrimStart('﻿');
@@ -106,7 +106,7 @@ public sealed partial class PromptTemplate
             return Invalid(agent, "The front matter needs a version (at most 50 characters).");
         }
 
-        if (fields.TryGetValue("agent", out var declared) && declared != agent.ToWire())
+        if (fields.TryGetValue("agent", out var declared) && declared != agent)
         {
             return Invalid(agent, $"The template is for agent '{declared}'.");
         }
@@ -137,7 +137,7 @@ public sealed partial class PromptTemplate
         {
             return Result.Failure<RenderedPrompt>(new DomainError(
                 ErrorCodes.MissingInput,
-                $"The {Agent.ToWire()} prompt is missing {string.Join(", ", missing)}.")
+                $"The {Agent} prompt is missing {string.Join(", ", missing)}.")
             {
                 Details = missing,
             });
@@ -160,8 +160,8 @@ public sealed partial class PromptTemplate
         return _closingDataTag is null ? value : _closingDataTag.Replace(value, @"<\/");
     }
 
-    private static Result<PromptTemplate> Invalid(AgentKind agent, string reason) =>
-        Result.Failure<PromptTemplate>(new DomainError(ErrorCodes.Validation, $"Invalid {agent.ToWire()} prompt template: {reason}"));
+    private static Result<PromptTemplate> Invalid(string agent, string reason) =>
+        Result.Failure<PromptTemplate>(new DomainError(ErrorCodes.Validation, $"Invalid {agent} prompt template: {reason}"));
 
     [GeneratedRegex(@"\{\{(?<name>[A-Z][A-Z0-9_]*)(?<optional>\?)?\}\}", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex PlaceholderPattern();

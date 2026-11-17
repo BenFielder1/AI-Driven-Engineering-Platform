@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
-using Aide.Domain.Agents;
 using Aide.Domain.Execution;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
+using Tevrin.Pack.Sdlc;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Stack;
@@ -146,7 +146,7 @@ public sealed class RequiredDeployFilesTests
     [Fact]
     public void FR242_plan_generator_v7_asks_for_a_step_for_each_missing_deployment_file()
     {
-        var template = new EmbeddedPromptLibrary().Template(AgentKind.PlanGenerator);
+        var template = new EmbeddedPromptLibrary().Template(SdlcAgents.PlanGenerator);
 
         Assert.Equal("7", template.Version);
         var rendered = template.Render(new Dictionary<string, string?>
@@ -170,7 +170,7 @@ public sealed class RequiredDeployFilesTests
     {
         var stack = Resolve(Sel(fe, be, data, "vcs-github", frontendHost: feHost, backendHost: beHost, databaseHost: dbHost));
         var empty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var system = new EmbeddedPromptLibrary().Template(AgentKind.PlanGenerator).Render(new Dictionary<string, string?>
+        var system = new EmbeddedPromptLibrary().Template(SdlcAgents.PlanGenerator).Render(new Dictionary<string, string?>
         {
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder",
             ["TECHNICAL_SPECIFICATION"] = "## 2. Functional Requirements\n- **FR-1** x. Given a, when b, then c.",
@@ -182,7 +182,7 @@ public sealed class RequiredDeployFilesTests
             Model = "fake-1",
             System = system.System,
             Messages = [new LlmMessage(LlmRole.User, system.User)],
-            Agent = AgentKind.PlanGenerator,
+            Agent = SdlcAgents.PlanGenerator,
         });
         var check = new DeployFileCheck(StackRequiredFiles.For(stack), empty, Optimisation: false);
 

@@ -2,12 +2,11 @@ using System.Net;
 using Aide.Api.Agents;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Runs;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.IntegrationTests.Support;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;
 
@@ -22,9 +21,9 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var now = DateTimeOffset.UtcNow;
-        var oldest = await AddRunAsync(fixture.Project.Id, AgentKind.IdeaRefinement, now.AddMinutes(-3));
-        var middle = await AddRunAsync(fixture.Project.Id, AgentKind.SpecGenerator, now.AddMinutes(-2));
-        var newest = await AddRunAsync(fixture.Project.Id, AgentKind.SpecGenerator, now.AddMinutes(-1), status: AgentRunStatus.Failed, error: "PROVIDER_ERROR: Ollama returned HTTP 503.");
+        var oldest = await AddRunAsync(fixture.Project.Id, SdlcAgents.IdeaRefinement, now.AddMinutes(-3));
+        var middle = await AddRunAsync(fixture.Project.Id, SdlcAgents.SpecGenerator, now.AddMinutes(-2));
+        var newest = await AddRunAsync(fixture.Project.Id, SdlcAgents.SpecGenerator, now.AddMinutes(-1), status: AgentRunStatus.Failed, error: "PROVIDER_ERROR: Ollama returned HTTP 503.");
 
         var all = await ProjectApi.ReadAsync<PagedResult<AgentRunDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/runs", UriKind.Relative), Ct));
         Assert.Equal([newest.Id, middle.Id, oldest.Id], all.Items.Select(r => r.Id));
@@ -38,9 +37,9 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
         Assert.Equal([newest.Id, middle.Id], specs.Items.Select(r => r.Id));
 
         var failed = specs.Items[0];
-        Assert.Equal((AgentKind.SpecGenerator, Phase.Specification, LlmProvider.Ollama, "qwen2.5-coder", "1"), (failed.Agent, failed.Phase, failed.Provider, failed.Model, failed.PromptVersion));
+        Assert.Equal((SdlcAgents.SpecGenerator, Phase.Specification, LlmProvider.Ollama, "qwen2.5-coder", "1"), (failed.Agent, failed.Phase, failed.Provider, failed.Model, failed.PromptVersion));
         Assert.Equal((AgentRunStatus.Failed, 4, "PROVIDER_ERROR: Ollama returned HTTP 503."), (failed.Status, failed.Attempts, failed.Error));
-        Assert.Equal([new RunInputArtifactDto(ArtifactType.ProjectRequest, 3)], failed.InputArtifacts);
+        Assert.Equal([new RunInputArtifactDto(SdlcArtifacts.ProjectRequest, 3)], failed.InputArtifacts);
         Assert.Equal((120, 45, 0.0012m, 900L), (failed.InputTokens, failed.OutputTokens, failed.CostEstimate, failed.DurationMs));
     }
 
@@ -48,7 +47,7 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
     public async Task FR23_Run_detail_includes_the_output_text()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        var run = await AddRunAsync(fixture.Project.Id, AgentKind.SpecGenerator, DateTimeOffset.UtcNow, output: new RunOutput("## 1. Overview", "end_turn"));
+        var run = await AddRunAsync(fixture.Project.Id, SdlcAgents.SpecGenerator, DateTimeOffset.UtcNow, output: new RunOutput("## 1. Overview", "end_turn"));
 
         var detail = await ProjectApi.ReadAsync<AgentRunDetailDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/runs/{run.Id}", UriKind.Relative), Ct));
 
@@ -59,7 +58,7 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
     public async Task FR23_Long_output_is_truncated()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        var run = await AddRunAsync(fixture.Project.Id, AgentKind.CodeGenerator, DateTimeOffset.UtcNow, output: new RunOutput(new string('x', RunEndpoints.MaxOutputLength + 10), "max_tokens"));
+        var run = await AddRunAsync(fixture.Project.Id, SdlcAgents.CodeGenerator, DateTimeOffset.UtcNow, output: new RunOutput(new string('x', RunEndpoints.MaxOutputLength + 10), "max_tokens"));
 
         var detail = await ProjectApi.ReadAsync<AgentRunDetailDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/runs/{run.Id}", UriKind.Relative), Ct));
 
@@ -71,7 +70,7 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         using var other = await ProjectApi.FixtureAsync(factory);
-        var foreign = await AddRunAsync(other.Project.Id, AgentKind.SpecGenerator, DateTimeOffset.UtcNow);
+        var foreign = await AddRunAsync(other.Project.Id, SdlcAgents.SpecGenerator, DateTimeOffset.UtcNow);
 
         await Problems.AssertAsync(await fixture.Owner.Client.GetAsync(new Uri($"{fixture.Path}/runs/{foreign.Id}", UriKind.Relative), Ct), HttpStatusCode.NotFound, "NOT_FOUND");
         await Problems.AssertAsync(await fixture.Owner.Client.GetAsync(new Uri($"{fixture.Path}/runs/{Guid.CreateVersion7()}", UriKind.Relative), Ct), HttpStatusCode.NotFound, "NOT_FOUND");
@@ -81,7 +80,7 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
     public async Task FR23_Outsiders_get_404_anonymous_callers_401_and_bad_filters_400()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        var run = await AddRunAsync(fixture.Project.Id, AgentKind.SpecGenerator, DateTimeOffset.UtcNow);
+        var run = await AddRunAsync(fixture.Project.Id, SdlcAgents.SpecGenerator, DateTimeOffset.UtcNow);
 
         await Problems.AssertAsync(await fixture.Outsider.Client.GetAsync(new Uri($"{fixture.Path}/runs", UriKind.Relative), Ct), HttpStatusCode.NotFound, "NOT_FOUND");
         await Problems.AssertAsync(await fixture.Outsider.Client.GetAsync(new Uri($"{fixture.Path}/runs/{run.Id}", UriKind.Relative), Ct), HttpStatusCode.NotFound, "NOT_FOUND");
@@ -93,7 +92,7 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
 
     private Task<AgentRun> AddRunAsync(
         Guid projectId,
-        AgentKind agent,
+        string agent,
         DateTimeOffset createdAt,
         AgentRunStatus status = AgentRunStatus.Succeeded,
         string? error = null,
@@ -108,7 +107,7 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
                 Provider = LlmProvider.Ollama,
                 Model = "qwen2.5-coder",
                 PromptVersion = "1",
-                InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), ArtifactType.ProjectRequest, 3)],
+                InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), SdlcArtifacts.ProjectRequest, 3)],
                 UserFeedback = "Answer: yes",
                 Output = output is null ? null : AideJson.Serialize(output),
                 Status = status,

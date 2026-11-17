@@ -1,4 +1,3 @@
-using Aide.Domain.Gates;
 using Aide.Domain.Review;
 using Tevrin.Engine.Domain.Gates;
 
@@ -99,7 +98,7 @@ public sealed record LifecycleSnapshot
     /// <summary>True when the gate guarding entry to the target phase has been approved (the approval is the trigger).</summary>
     public bool EntryGateApproved { get; init; }
 
-    public IReadOnlyCollection<GateType> PendingGates { get; init; } = [];
+    public IReadOnlyCollection<string> PendingGates { get; init; } = [];
 
     /// <summary>§4.10: a release version is <c>in_development</c> or <c>awaiting_merge</c> (blocks <see cref="TransitionKind.NewVersion"/>).</summary>
     public bool DevelopmentVersionExists { get; init; }
@@ -143,9 +142,9 @@ public sealed record PhaseTransition(
 }
 
 /// <summary>Result of "advance to next phase": either the move was applied, or a gate must be created first.</summary>
-public sealed record AdvanceOutcome(PhaseTransition? Transition, GateType? GateRequired)
+public sealed record AdvanceOutcome(PhaseTransition? Transition, string? GateRequired)
 {
     public static AdvanceOutcome Applied(PhaseTransition transition) => new(transition, null);
 
-    public static AdvanceOutcome NeedsGate(GateType gate) => new(null, gate);
+    public static AdvanceOutcome NeedsGate(string gate) => new(null, gate);
 }

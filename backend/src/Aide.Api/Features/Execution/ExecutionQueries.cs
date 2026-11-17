@@ -1,5 +1,4 @@
 using Aide.Api.Features.Projects;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -9,6 +8,7 @@ using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Execution;
 
@@ -25,7 +25,7 @@ public static class ExecutionQueries
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         return await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Status == ArtifactStatus.Locked
-                && (a.Type == ArtifactType.ImplementationPlan || a.Type == ArtifactType.OptimizationPlan))
+                && (a.Type == SdlcArtifacts.ImplementationPlan || a.Type == SdlcArtifacts.OptimizationPlan))
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)
             .Select(a => (Guid?)a.Id)

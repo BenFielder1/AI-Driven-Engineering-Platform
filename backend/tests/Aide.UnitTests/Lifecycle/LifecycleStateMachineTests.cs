@@ -1,8 +1,8 @@
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Lifecycle;
 
@@ -406,7 +406,7 @@ public class LifecycleStateMachineTests
         { Phase.Execution, "0 of 0", AllMet with { CurrentPlanStepCount = 0, CurrentPlanCompletedStepCount = 0 } },
         { Phase.Review, "release_eligible", AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired } },
         { Phase.Review, "pre_release", AllMet with { EntryGateApproved = false } },
-        { Phase.Review, "escalation", AllMet with { PendingGates = [GateType.Escalation] } },
+        { Phase.Review, "escalation", AllMet with { PendingGates = [EngineGates.Escalation] } },
     };
 
     [Theory]
@@ -433,7 +433,7 @@ public class LifecycleStateMachineTests
     [Fact]
     public void Release_entry_ignores_the_pre_release_gate_itself_in_pending_gates()
     {
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Advance(), AllMet with { PendingGates = [GateType.PreRelease] });
+        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Advance(), AllMet with { PendingGates = [SdlcGates.PreRelease] });
 
         Assert.True(result.IsSuccess);
     }
@@ -459,14 +459,14 @@ public class LifecycleStateMachineTests
         var result = LifecycleStateMachine.RequestAdvance(At(Phase.Specification), snapshot);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(GateType.SpecApproval, result.Value.GateRequired);
+        Assert.Equal(SdlcGates.SpecApproval, result.Value.GateRequired);
         Assert.Null(result.Value.Transition);
     }
 
     [Fact]
     public void FR12_Advance_with_the_required_gate_already_pending_is_gate_pending()
     {
-        var snapshot = new LifecycleSnapshot { Mode = ApprovalMode.Advisory, TechnicalSpecificationLocked = true, PendingGates = [GateType.SpecApproval] };
+        var snapshot = new LifecycleSnapshot { Mode = ApprovalMode.Advisory, TechnicalSpecificationLocked = true, PendingGates = [SdlcGates.SpecApproval] };
 
         var result = LifecycleStateMachine.RequestAdvance(At(Phase.Specification), snapshot);
 
@@ -491,7 +491,7 @@ public class LifecycleStateMachineTests
     {
         var snapshot = AllMet with { EntryGateApproved = false };
 
-        Assert.Equal(GateType.PlanApproval, LifecycleStateMachine.RequestAdvance(At(Phase.Planning), snapshot with { Mode = ApprovalMode.Strict }).Value.GateRequired);
+        Assert.Equal(SdlcGates.PlanApproval, LifecycleStateMachine.RequestAdvance(At(Phase.Planning), snapshot with { Mode = ApprovalMode.Strict }).Value.GateRequired);
         Assert.Equal(Phase.Execution, LifecycleStateMachine.RequestAdvance(At(Phase.Planning), snapshot with { Mode = ApprovalMode.Advisory }).Value.Transition!.To);
     }
 
@@ -502,7 +502,7 @@ public class LifecycleStateMachineTests
         {
             var result = LifecycleStateMachine.RequestAdvance(At(Phase.Review), AllMet with { Mode = mode, EntryGateApproved = false });
 
-            Assert.Equal(GateType.PreRelease, result.Value.GateRequired);
+            Assert.Equal(SdlcGates.PreRelease, result.Value.GateRequired);
         }
     }
 

@@ -4,6 +4,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
 using Aide.Infrastructure.Agents;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Specs;
 
@@ -15,7 +16,7 @@ public class FakeIterationResponderTests
 {
     private const string ProjectRequest = "<project_request>\n# Demo: Todo API\n\n## Summary\nAdd CSV export.\n</project_request>";
 
-    private static LlmRequest Request(AgentKind agent, string user) => new()
+    private static LlmRequest Request(string agent, string user) => new()
     {
         Model = "fake-1",
         System = "system",
@@ -25,7 +26,7 @@ public class FakeIterationResponderTests
 
     private static string Spec(string mode, string? baseline = null) =>
         new FakeSpecGeneratorResponder().Respond(Request(
-            AgentKind.SpecGenerator,
+            SdlcAgents.SpecGenerator,
             $"{ProjectRequest}\n\n<spec_mode>\n{mode}\n</spec_mode>\n\n<baseline_specification>\n{baseline}\n</baseline_specification>"));
 
     [Fact]
@@ -87,7 +88,7 @@ public class FakeIterationResponderTests
         var baseline = Spec(SpecValidationContext.FirstVersionMode);
         var spec = Spec(SpecValidationContext.NewVersionMode, baseline);
 
-        var reply = new FakePlanGeneratorResponder().Respond(Request(AgentKind.PlanGenerator, $"{ProjectRequest}\n\n<technical_specification>\n{spec}\n</technical_specification>"));
+        var reply = new FakePlanGeneratorResponder().Respond(Request(SdlcAgents.PlanGenerator, $"{ProjectRequest}\n\n<technical_specification>\n{spec}\n</technical_specification>"));
         var plan = PlanDocument.ParseAgentOutput(reply, maxFilesPerStep: 3);
 
         Assert.True(plan.IsSuccess, plan.Error?.Message);
@@ -101,7 +102,7 @@ public class FakeIterationResponderTests
     {
         var spec = Spec(SpecValidationContext.FirstVersionMode);
 
-        var reply = new FakePlanGeneratorResponder().Respond(Request(AgentKind.PlanGenerator, $"{ProjectRequest}\n\n<technical_specification>\n{spec}\n</technical_specification>"));
+        var reply = new FakePlanGeneratorResponder().Respond(Request(SdlcAgents.PlanGenerator, $"{ProjectRequest}\n\n<technical_specification>\n{spec}\n</technical_specification>"));
 
         var covered = PlanDocument.ParseAgentOutput(reply, maxFilesPerStep: 3).Value.SelectMany(s => s.Covers).Distinct().Order().ToList();
         Assert.Equal(["FR-1", "FR-2", "FR-3", "FR-4"], covered);
@@ -111,7 +112,7 @@ public class FakeIterationResponderTests
     public void FR70_The_Fake_codebase_summary_has_the_eight_sections()
     {
         var summary = new FakeRepositoryAnalystResponder().Respond(Request(
-            AgentKind.RepositoryAnalyst,
+            SdlcAgents.RepositoryAnalyst,
             "<project_name>\nLegacy\n</project_name>\n\n<version_request>\nAdd CSV export.\n</version_request>\n\n<base>\nv2.3.0 (abc)\n</base>"));
 
         Assert.True(CodebaseSummaryRules.Check(summary).IsSuccess);
@@ -122,7 +123,7 @@ public class FakeIterationResponderTests
     public void S4_13_The_Fake_review_reports_its_scripted_regressions()
     {
         var reply = new FakeCodeReviewResponder(FakeCodeReviewScript.Default with { Regressions = [("FR-2", "Listing is broken.")] })
-            .Respond(Request(AgentKind.CodeReview, "<review_cycle>\n1\n</review_cycle>\n\n<code>\n- src/a.js\n</code>"));
+            .Respond(Request(SdlcAgents.CodeReview, "<review_cycle>\n1\n</review_cycle>\n\n<code>\n- src/a.js\n</code>"));
 
         var parsed = CodeReviewOutput.Parse(reply, 5);
 

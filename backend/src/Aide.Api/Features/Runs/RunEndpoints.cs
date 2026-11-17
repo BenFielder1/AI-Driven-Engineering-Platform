@@ -7,13 +7,12 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
-using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Runs;
 
@@ -51,7 +50,7 @@ public static class RunEndpoints
         IProjectAccess access,
         AideDbContext db,
         CancellationToken cancellationToken,
-        [WireEnum(typeof(AgentKind))] string? agent = null,
+        [WireEnum(typeof(SdlcAgents))] string? agent = null,
         [Range(1, int.MaxValue)] int page = 1,
         [Range(1, ProjectLimits.MaxPageLimit)] int limit = 20,
         Guid? releaseVersionId = null)
@@ -73,7 +72,7 @@ public static class RunEndpoints
         var query = db.AgentRuns.AsNoTracking().Where(r => r.ProjectId == id && r.ReleaseVersionId == versionId);
         if (agent is not null)
         {
-            var wanted = EnumStrings.Parse<AgentKind>(agent);
+            var wanted = SdlcAgents.Parse(agent);
             query = query.Where(r => r.Agent == wanted);
         }
 

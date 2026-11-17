@@ -11,7 +11,6 @@ using Aide.Api.Features.Trackers;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -34,6 +33,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Seed;
 
@@ -581,8 +581,8 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         version.PresetId = DemoPresetId;
         version.PresetVersion = DemoPresetVersion;
         const int planningCheckpoint = 3;
-        AddLockedArtifact(db, project, versionId, ArtifactType.ProjectRequest, 1, PresetDemoRequest(), admin.Id, now);
-        AddLockedArtifact(db, project, versionId, ArtifactType.TechnicalSpecification, 2, PresetDemoSpecification(await SpecSectionsAsync(services, version, cancellationToken)), admin.Id, now);
+        AddLockedArtifact(db, project, versionId, SdlcArtifacts.ProjectRequest, 1, PresetDemoRequest(), admin.Id, now);
+        AddLockedArtifact(db, project, versionId, SdlcArtifacts.TechnicalSpecification, 2, PresetDemoSpecification(await SpecSectionsAsync(services, version, cancellationToken)), admin.Id, now);
         EnterPhase(db, project, versionId, Phase.Planning, planningCheckpoint, DemoPresetReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
             JobTypes.PlanGeneration,
@@ -638,7 +638,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
         var versionId = project.CurrentReleaseVersionId!.Value;
         const int specificationCheckpoint = 2;
-        AddLockedArtifact(db, project, versionId, ArtifactType.ProjectRequest, 1, BaasDemoRequest(), admin.Id, now);
+        AddLockedArtifact(db, project, versionId, SdlcArtifacts.ProjectRequest, 1, BaasDemoRequest(), admin.Id, now);
         EnterPhase(db, project, versionId, Phase.Specification, specificationCheckpoint, DemoBaasReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
             JobTypes.SpecGeneration,
@@ -715,7 +715,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         {
             ProjectId = projectId,
             ReleaseVersionId = versionId,
-            Type = ArtifactType.StackProfile,
+            Type = SdlcArtifacts.StackProfile,
             Version = 1,
             Content = profile,
             ContentHash = ContentHash.Compute(profile),
@@ -892,7 +892,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         return resolved.Stack is { } stack ? [.. StackGuidance.SpecSections(stack).Select(t => t.Title)] : [];
     }
 
-    private static void AddLockedArtifact(AideDbContext db, Project project, Guid versionId, ArtifactType type, int checkpoint, string content, Guid authorId, DateTimeOffset now) =>
+    private static void AddLockedArtifact(AideDbContext db, Project project, Guid versionId, string type, int checkpoint, string content, Guid authorId, DateTimeOffset now) =>
         db.Artifacts.Add(new Artifact
         {
             ProjectId = project.Id,

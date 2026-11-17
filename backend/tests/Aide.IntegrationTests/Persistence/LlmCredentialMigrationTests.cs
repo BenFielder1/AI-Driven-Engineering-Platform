@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Persistence;
 
@@ -81,7 +82,7 @@ public sealed class LlmCredentialMigrationTests(AideApiFactory factory)
         db.AgentRuns.Add(new AgentRun
         {
             ProjectId = WithKey,
-            Agent = Aide.Domain.Agents.AgentKind.IdeaRefinement,
+            Agent = SdlcAgents.IdeaRefinement,
             Phase = Aide.Domain.Lifecycle.Phase.Refinement,
             Provider = LlmProvider.Anthropic,
             Model = "claude-opus-5-5",

@@ -1,4 +1,5 @@
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -112,5 +113,5 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Project {ProjectId}: artifact {ArtifactId} ({ArtifactType} v{Version}) failed its integrity check and was marked corrupted (regenerate: {Regenerate})")]
-    private static partial void LogCorrupted(ILogger logger, Guid projectId, Guid artifactId, ArtifactType artifactType, int version, bool regenerate);
+    private static partial void LogCorrupted(ILogger logger, Guid projectId, Guid artifactId, LoggedKey artifactType, int version, bool regenerate);
 }

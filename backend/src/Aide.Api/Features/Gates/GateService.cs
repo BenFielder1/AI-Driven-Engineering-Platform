@@ -2,6 +2,7 @@ using System.Text.Json;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -14,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Gates;
 
@@ -42,7 +44,7 @@ public sealed partial class GateService(
             return NotFound();
         }
 
-        var stepBlocked = gate.Type == GateType.Escalation
+        var stepBlocked = gate.Type == EngineGates.Escalation
             && (await GateReader.BlockedStepsAsync(db, project.Id, [gate.Id], cancellationToken)).ContainsKey(gate.Id);
         var resolved = GateRules.Approve(gate.Type, gate.Status, request.Decision, request.TargetCheckpoint, stepBlocked);
         if (resolved.IsFailure)
@@ -71,7 +73,7 @@ public sealed partial class GateService(
                     {
                         return Result.Failure<ApprovalGate>(new DomainError(
                             ErrorCodes.WrongPhase,
-                            $"The project is in {project.CurrentPhase.ToWire()}; this {gate.Type.ToWire()} gate guards entry to {entry?.ToWire()}."));
+                            $"The project is in {project.CurrentPhase.ToWire()}; this {gate.Type} gate guards entry to {entry?.ToWire()}."));
                     }
 
                     bool? prepared = null;
@@ -142,11 +144,11 @@ public sealed partial class GateService(
                     // FR-14 accept: release-eligible with the comment recorded on the gate; release still needs the
                     // pre_release gate (§4.2, every mode).
                     var preReleasePending = await db.ApprovalGates.AnyAsync(
-                        g => g.ProjectId == project.Id && g.Type == GateType.PreRelease && g.Status == GateStatus.Pending,
+                        g => g.ProjectId == project.Id && g.Type == SdlcGates.PreRelease && g.Status == GateStatus.Pending,
                         cancellationToken);
                     if (project.CurrentPhase == Phase.Review && !preReleasePending)
                     {
-                        writer.AddGate(project, GateType.PreRelease, null, actor, now);
+                        writer.AddGate(project, SdlcGates.PreRelease, null, actor, now);
                     }
 
                     break;
@@ -269,7 +271,7 @@ public sealed partial class GateService(
         {
             return Result.Failure<ApprovalGate>(new DomainError(
                 ErrorCodes.InvalidDecision,
-                $"Rejecting a {gate.Type.ToWire()} gate takes no escalation decision or target version."));
+                $"Rejecting a {gate.Type} gate takes no escalation decision or target version."));
         }
 
         var resolution = resolved.Value;
@@ -324,9 +326,9 @@ public sealed partial class GateService(
     /// the gate's <c>GATE_CREATED</c> payload) comes first, then the approval: "<c>{reason} ({type} gate approved: {comment})</c>";
     /// either part is left out when it wasn't given, e.g. "<c>spec_approval gate approved</c>".
     /// </summary>
-    internal static string GatedAdvanceReason(GateType type, string? advanceReason, string? comment)
+    internal static string GatedAdvanceReason(string type, string? advanceReason, string? comment)
     {
-        var approval = comment is null ? $"{type.ToWire()} gate approved" : $"{type.ToWire()} gate approved: {comment}";
+        var approval = comment is null ? $"{type} gate approved" : $"{type} gate approved: {comment}";
         return advanceReason is null ? approval : $"{advanceReason} ({approval})";
     }
 
@@ -368,8 +370,8 @@ public sealed partial class GateService(
         Result.Failure<ApprovalGate>(new DomainError(ErrorCodes.NotFound, "The gate was not found."));
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: gate {GateId} ({GateType}) approved ({FollowUp})")]
-    private static partial void LogApproved(ILogger logger, Guid projectId, Guid gateId, GateType gateType, GateFollowUp followUp);
+    private static partial void LogApproved(ILogger logger, Guid projectId, Guid gateId, LoggedKey gateType, GateFollowUp followUp);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: gate {GateId} ({GateType}) rejected")]
-    private static partial void LogRejected(ILogger logger, Guid projectId, Guid gateId, GateType gateType);
+    private static partial void LogRejected(ILogger logger, Guid projectId, Guid gateId, LoggedKey gateType);
 }

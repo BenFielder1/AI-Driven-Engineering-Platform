@@ -1,12 +1,11 @@
 using System.Globalization;
-using Aide.Domain.Artifacts;
 using Tevrin.Engine.Domain.Artifacts;
-using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Execution;
 
 /// <summary>A plan version that produced execution steps (FR-57): its id, type, version, status and creation time.</summary>
-public sealed record RunPlan(Guid Id, ArtifactType Type, int Version, ArtifactStatus Status, DateTimeOffset CreatedAt);
+public sealed record RunPlan(Guid Id, string Type, int Version, ArtifactStatus Status, DateTimeOffset CreatedAt);
 
 /// <summary>
 /// A compliance report as far as runs care: its id, cycle, creation time and the optimisation plan it drafted. Cycle
@@ -15,7 +14,7 @@ public sealed record RunPlan(Guid Id, ArtifactType Type, int Version, ArtifactSt
 public sealed record RunReport(Guid Id, int Cycle, DateTimeOffset CreatedAt, Guid? OptimizationPlanId);
 
 /// <summary>Why a plan was invalidated (the <c>ARTIFACT_INVALIDATED</c> event): <c>cascade</c> with the approved artifact, or <c>rollback</c> with its target.</summary>
-public sealed record PlanInvalidation(string? Cause, ArtifactType? ApprovedType, int? ApprovedVersion, int? TargetCheckpoint);
+public sealed record PlanInvalidation(string? Cause, string? ApprovedType, int? ApprovedVersion, int? TargetCheckpoint);
 
 /// <summary>
 /// FR-57: execution runs. A run is the steps of one plan version: the development run (an implementation plan) and one
@@ -34,8 +33,8 @@ public static class ExecutionRunRules
         return
         [
             .. plans
-                .OrderBy(p => p.Type == ArtifactType.ImplementationPlan ? 0 : 1)
-                .ThenBy(p => p.Type == ArtifactType.ImplementationPlan ? DateTimeOffset.MinValue : reportOf(p)?.CreatedAt ?? DateTimeOffset.MaxValue)
+                .OrderBy(p => p.Type == SdlcArtifacts.ImplementationPlan ? 0 : 1)
+                .ThenBy(p => p.Type == SdlcArtifacts.ImplementationPlan ? DateTimeOffset.MinValue : reportOf(p)?.CreatedAt ?? DateTimeOffset.MaxValue)
                 .ThenBy(p => p.Version),
         ];
     }
@@ -49,7 +48,7 @@ public static class ExecutionRunRules
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(reports);
-        if (plan.Type != ArtifactType.OptimizationPlan)
+        if (plan.Type != SdlcArtifacts.OptimizationPlan)
         {
             return null;
         }
@@ -119,16 +118,16 @@ public static class ExecutionRunRules
     }
 
     /// <summary>The "Superseded" reason shown for a run whose plan was invalidated.</summary>
-    public static string SupersededReason(ArtifactType planType, int planVersion, PlanInvalidation? invalidation)
+    public static string SupersededReason(string planType, int planVersion, PlanInvalidation? invalidation)
     {
-        var plan = $"{planType.ToWire()} v{planVersion.ToString(CultureInfo.InvariantCulture)}";
+        var plan = $"{planType} v{planVersion.ToString(CultureInfo.InvariantCulture)}";
         return invalidation switch
         {
             { Cause: "rollback", TargetCheckpoint: { } target } =>
                 $"{plan} was invalidated by a rollback to checkpoint {target.ToString(CultureInfo.InvariantCulture)}.",
             { Cause: "rollback" } => $"{plan} was invalidated by a rollback.",
             { Cause: "cascade", ApprovedType: { } type, ApprovedVersion: { } version } =>
-                $"{plan} was invalidated when {type.ToWire()} v{version.ToString(CultureInfo.InvariantCulture)} was approved.",
+                $"{plan} was invalidated when {type} v{version.ToString(CultureInfo.InvariantCulture)} was approved.",
             _ => $"{plan} was invalidated.",
         };
     }

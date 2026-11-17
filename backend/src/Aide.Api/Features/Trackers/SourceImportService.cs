@@ -15,6 +15,7 @@ using Npgsql;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Trackers;
 
@@ -130,7 +131,7 @@ public sealed partial class SourceImportService(
             .ToListAsync(cancellationToken);
         var names = await ActorResolver.NamesAsync(db, imports.Select(i => i.CreatedBy).Distinct(), cancellationToken);
         var snapshot = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == ArtifactType.SourceItems && a.Status == ArtifactStatus.Locked)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.SourceItems && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => new SourceSnapshotDto(a.Id, a.Version, a.ContentHash, a.CreatedAt))
             .FirstOrDefaultAsync(cancellationToken);
@@ -327,7 +328,7 @@ public sealed partial class SourceImportService(
         }
 
         var hash = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == ArtifactType.SourceItems && a.Status == ArtifactStatus.Locked)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.SourceItems && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => a.ContentHash)
             .FirstOrDefaultAsync(cancellationToken);
@@ -392,7 +393,7 @@ public sealed partial class SourceImportService(
     private async Task<SourceDraftStateDto?> DraftStateAsync(Guid projectId, Guid? versionId, SourceSnapshotDto? snapshot, CancellationToken cancellationToken)
     {
         var draft = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == ArtifactType.ProjectRequest)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.ProjectRequest)
             .OrderByDescending(a => a.Version)
             .Select(a => new { a.Id, a.Version, a.AgentRunId, a.CreatedAt })
             .FirstOrDefaultAsync(cancellationToken);
@@ -405,7 +406,7 @@ public sealed partial class SourceImportService(
         if (draft.AgentRunId is { } runId)
         {
             var inputs = await db.AgentRuns.AsNoTracking().Where(r => r.Id == runId).Select(r => r.InputArtifacts).FirstOrDefaultAsync(cancellationToken);
-            builtFrom = inputs?.FirstOrDefault(i => i.Type == ArtifactType.SourceItems)?.Version;
+            builtFrom = inputs?.FirstOrDefault(i => i.Type == SdlcArtifacts.SourceItems)?.Version;
         }
 
         return new SourceDraftStateDto(
@@ -466,19 +467,19 @@ public sealed class SourceSnapshotWriter(AideDbContext db)
         ArgumentNullException.ThrowIfNull(project);
         project.UpdatedAt = now;
         var existing = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == project.Id && a.Type == ArtifactType.SourceItems)
+            .Where(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.SourceItems)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
         var plan = ArtifactRules.NewDraft(existing);
         var artifact = new Artifact
         {
             ProjectId = project.Id,
-            Type = ArtifactType.SourceItems,
+            Type = SdlcArtifacts.SourceItems,
             Version = plan.Version,
             ParentVersion = plan.ParentVersion,
             Content = markdown,
             ContentHash = ContentHash.Compute(markdown),
-            Status = ArtifactRules.InitialStatus(ArtifactType.SourceItems),
+            Status = ArtifactRules.InitialStatus(SdlcArtifacts.SourceItems),
             CheckpointAtCreation = project.Checkpoint,
             ReleaseVersionId = releaseVersionId,
             CreatedByUserId = userId,

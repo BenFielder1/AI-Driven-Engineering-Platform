@@ -5,7 +5,6 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
@@ -14,6 +13,7 @@ using Aide.Infrastructure.Stack;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Stack;
 
@@ -196,9 +196,9 @@ public sealed class ProjectStackTests(AideApiFactory factory)
         Assert.True(malformed.GetProperty("errors").TryGetProperty("frontend.pack", out _), malformed.ToString());
 
         // A draft plan doesn't lock it; the first locked implementation plan does.
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft);
         await ProjectApi.ReadAsync<ProjectStackDto>(await PutStackAsync(fixture.Owner.Client, id, Example1()));
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Locked, version: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Locked, version: 2);
 
         // Given a locked implementation plan, when an Owner changes the backend, then STACK_LOCKED.
         await Problems.AssertAsync(await PutStackAsync(fixture.Owner.Client, id, Example1("be-express")), HttpStatusCode.Conflict, ErrorCodes.StackLocked);

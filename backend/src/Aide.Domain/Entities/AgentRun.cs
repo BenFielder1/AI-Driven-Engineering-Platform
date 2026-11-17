@@ -1,4 +1,3 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Entities;
 
@@ -14,7 +13,7 @@ public sealed class AgentRun
     /// <summary>The release version the run belongs to (§4.10); null only for runs outside any version.</summary>
     public Guid? ReleaseVersionId { get; set; }
 
-    public AgentKind Agent { get; set; }
+    public string Agent { get; set; } = string.Empty;
 
     /// <summary>The specialist key of a plan step run (FR-121), e.g. <c>data-engineer</c> (0.2.0 keys such as <c>db-engineer</c> on runs before FR-129); null for base agents.</summary>
     public string? AgentKey { get; set; }

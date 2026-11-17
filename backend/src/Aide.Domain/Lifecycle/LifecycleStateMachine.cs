@@ -3,6 +3,7 @@ using Aide.Domain.Gates;
 using Aide.Domain.Review;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Lifecycle;
 
@@ -57,7 +58,7 @@ public static class LifecycleStateMachine
         if (GateRules.RequiredGate(snapshot.Mode, next) is { } gate && !snapshot.EntryGateApproved)
         {
             return snapshot.PendingGates.Contains(gate)
-                ? Result.Failure<AdvanceOutcome>(new DomainError(ErrorCodes.GatePending, $"A {gate.ToWire()} gate is already pending."))
+                ? Result.Failure<AdvanceOutcome>(new DomainError(ErrorCodes.GatePending, $"A {gate} gate is already pending."))
                 : Result.Success(AdvanceOutcome.NeedsGate(gate));
         }
 
@@ -111,8 +112,8 @@ public static class LifecycleStateMachine
                 Require(
                     decision == ReviewDecision.ReleaseEligible || escalation == EscalationDecision.Accept,
                     "The latest review decision for this project version is not release_eligible and no escalation was accepted.");
-                var otherPending = snapshot.PendingGates.Where(g => g != GateType.PreRelease).Distinct().ToList();
-                Require(otherPending.Count == 0, $"Other gates are pending: {string.Join(", ", otherPending.Select(g => g.ToWire()))}.");
+                var otherPending = snapshot.PendingGates.Where(g => g != SdlcGates.PreRelease).Distinct().ToList();
+                Require(otherPending.Count == 0, $"Other gates are pending: {string.Join(", ", otherPending)}.");
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(entering), entering, null);
@@ -120,7 +121,7 @@ public static class LifecycleStateMachine
 
         if (includeGate && GateRules.RequiredGate(snapshot.Mode, entering) is { } gate)
         {
-            Require(snapshot.EntryGateApproved, $"The {gate.ToWire()} gate is not approved.");
+            Require(snapshot.EntryGateApproved, $"The {gate} gate is not approved.");
         }
 
         return unmet;

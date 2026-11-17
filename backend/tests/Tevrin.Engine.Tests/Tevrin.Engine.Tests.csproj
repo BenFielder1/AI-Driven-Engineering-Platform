@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- FR-262, FR-263: engine tests (architecture rules now; fixture definitions from M57). Pure unit tests: no database,
-       no Docker. References only engine projects, never Aide.* or Tevrin.Pack.*. -->
+       no Docker. References the engine projects, and Tevrin.Pack.Sdlc only for the pack's architecture rule
+       (D-0.7.0-23); never Aide.*. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>Tevrin.Engine.Tests</RootNamespace>
@@ -15,6 +16,7 @@
     <ProjectReference Include="../../src/Tevrin.Engine.Domain/Tevrin.Engine.Domain.csproj" />
     <ProjectReference Include="../../src/Tevrin.Engine.Runtime/Tevrin.Engine.Runtime.csproj" />
     <ProjectReference Include="../../src/Tevrin.Engine.Api/Tevrin.Engine.Api.csproj" />
+    <ProjectReference Include="../../src/Tevrin.Pack.Sdlc/Tevrin.Pack.Sdlc.csproj" />
   </ItemGroup>
 
   <ItemGroup>

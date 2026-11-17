@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Infrastructure.Llm;
 
@@ -114,7 +115,8 @@ public sealed class LlmProviderOptions
 
     public string DefaultModel { get; set; } = string.Empty;
 
-    /// <summary>Default model per agent, keyed by <see cref="AgentKind"/> name (PascalCase or snake_case).</summary>
+    /// <summary>Default model per agent, keyed by the <see cref="SdlcAgents"/> key (snake_case) or its 0.6.1 enum member
+    /// name (PascalCase, any case; FR-274).</summary>
     public Dictionary<string, string> Models { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
@@ -174,7 +176,7 @@ internal sealed class LlmOptionsValidator : IValidateOptions<LlmOptions>
             {
                 if (!LlmProviderCatalog.TryParseAgent(agent, out _))
                 {
-                    failures.Add($"Llm:Providers:{provider}:Models:{agent} is not an agent ({string.Join(", ", Enum.GetNames<AgentKind>())}).");
+                    failures.Add($"Llm:Providers:{provider}:Models:{agent} is not an agent ({string.Join(", ", SdlcAgents.All.Select(KeyNames.ToPascalCase))}).");
                 }
             }
         }
@@ -386,9 +388,9 @@ internal sealed class LlmProviderCatalog(IOptions<LlmOptions> options) : ILlmPro
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (agent, model) in _options.Providers.For(provider).Models)
         {
-            if (TryParseAgent(agent, out var kind) && !string.IsNullOrWhiteSpace(model))
+            if (TryParseAgent(agent, out var key) && !string.IsNullOrWhiteSpace(model))
             {
-                result[kind.ToWire()] = model.Trim();
+                result[key] = model.Trim();
             }
         }
 
@@ -398,8 +400,9 @@ internal sealed class LlmProviderCatalog(IOptions<LlmOptions> options) : ILlmPro
     public static bool TryParseProvider(string? value, out LlmProvider provider) =>
         EnumStrings.TryParse(value?.Trim().ToLowerInvariant(), out provider);
 
-    public static bool TryParseAgent(string? value, out AgentKind agent) =>
-        Enum.TryParse(value, ignoreCase: true, out agent) && Enum.IsDefined(agent)
-            ? !int.TryParse(value, out _)
-            : EnumStrings.TryParse(value, out agent);
+    /// <summary>
+    /// FR-274: the agent key of a <c>Llm:Providers:&lt;P&gt;:Models:&lt;agent&gt;</c> name, which binds as in 0.6.1: the
+    /// 0.6.1 <c>AgentKind</c> member name in any case (<c>CodeReview</c>, <c>codereview</c>) or the key (<c>code_review</c>).
+    /// </summary>
+    public static bool TryParseAgent(string? value, out string agent) => SdlcAgents.TryParseConfigName(value, out agent);
 }

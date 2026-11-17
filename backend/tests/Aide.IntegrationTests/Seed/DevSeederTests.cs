@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Seed;
 
@@ -199,7 +200,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             Assert.Equal(LlmProvider.Fake, (await db.ProjectLlmSettings.SingleAsync(s => s.ProjectId == project.Id, Ct)).Provider);
             var artifacts = await db.Artifacts.Where(a => a.ProjectId == project.Id).OrderBy(a => a.Type).ToListAsync(Ct);
             Assert.All(artifacts, a => Assert.Equal(Tevrin.Engine.Domain.Artifacts.ArtifactStatus.Locked, a.Status));
-            Assert.Contains("## Routes & Rendering Strategy", artifacts.Single(a => a.Type == Domain.Artifacts.ArtifactType.TechnicalSpecification).Content, StringComparison.Ordinal);
+            Assert.Contains("## Routes & Rendering Strategy", artifacts.Single(a => a.Type == SdlcArtifacts.TechnicalSpecification).Content, StringComparison.Ordinal);
             Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoPresetProjectSeeded).ToListAsync(Ct));
             Assert.Equal(4, await db.Projects.CountAsync(Ct));
         });
@@ -209,7 +210,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
         Assert.Equal((Domain.Jobs.JobTypes.PlanGeneration, Tevrin.Engine.Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
         await WithDbAsync(app, async db =>
         {
-            var plan = await db.Artifacts.SingleAsync(a => a.ProjectId == projectId && a.Type == Domain.Artifacts.ArtifactType.ImplementationPlan, Ct);
+            var plan = await db.Artifacts.SingleAsync(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.ImplementationPlan, Ct);
             Assert.Contains("**Agent:** scaffolder", plan.Content, StringComparison.Ordinal);
         });
     }
@@ -267,7 +268,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var transition = await db.StateTransitions.SingleAsync(t => t.ProjectId == project.Id, Ct);
             Assert.Equal(((Phase?)null, Phase.Analysis), (transition.FromPhase, transition.ToPhase));
 
-            var profile = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == Domain.Artifacts.ArtifactType.StackProfile, Ct);
+            var profile = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.StackProfile, Ct);
             Assert.Equal((1, Tevrin.Engine.Domain.Artifacts.ArtifactStatus.Draft), (profile.Version, profile.Status));
             var parsed = Domain.Stack.StackProfile.Parse(profile.Content);
             Assert.True(parsed.IsSuccess);
@@ -275,7 +276,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
 
             var import = await db.TrackerImports.SingleAsync(i => i.ProjectId == project.Id, Ct);
             Assert.Equal((Domain.Trackers.TrackerProvider.Jira, Domain.Trackers.TrackerImportStatus.Completed, DevSeeder.DemoImportKeys.Count), (import.Provider, import.Status, import.ItemCount));
-            var snapshot = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == Domain.Artifacts.ArtifactType.SourceItems, Ct);
+            var snapshot = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.SourceItems, Ct);
             Assert.Equal((import.SourceArtifactId, 1, Tevrin.Engine.Domain.Artifacts.ArtifactStatus.Locked), ((Guid?)snapshot.Id, snapshot.Version, snapshot.Status));
             Assert.Contains("FAKE-1", snapshot.Content, StringComparison.Ordinal);
 

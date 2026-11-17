@@ -1,10 +1,10 @@
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Llm;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Projects;
 
@@ -106,27 +106,27 @@ internal static class ProjectMapping
     /// <summary>Stored map (agent wire name → model) → DTO.</summary>
     public static AgentModelsDto ToAgentModels(IReadOnlyDictionary<string, string> models)
     {
-        string? Get(AgentKind agent) => models.TryGetValue(agent.ToWire(), out var model) ? model : null;
+        string? Get(string agent) => models.TryGetValue(agent, out var model) ? model : null;
         return new AgentModelsDto
         {
-            IdeaRefinement = Get(AgentKind.IdeaRefinement),
-            SpecGenerator = Get(AgentKind.SpecGenerator),
-            PlanGenerator = Get(AgentKind.PlanGenerator),
-            CodeGenerator = Get(AgentKind.CodeGenerator),
-            CodeReview = Get(AgentKind.CodeReview),
-            StackAnalyst = Get(AgentKind.StackAnalyst),
+            IdeaRefinement = Get(SdlcAgents.IdeaRefinement),
+            SpecGenerator = Get(SdlcAgents.SpecGenerator),
+            PlanGenerator = Get(SdlcAgents.PlanGenerator),
+            CodeGenerator = Get(SdlcAgents.CodeGenerator),
+            CodeReview = Get(SdlcAgents.CodeReview),
+            StackAnalyst = Get(SdlcAgents.StackAnalyst),
         };
     }
 
     /// <summary>DTO → (agent, sent value) pairs, including blank values so they can be rejected.</summary>
-    public static IReadOnlyList<(AgentKind Agent, string FieldName, string? Model)> FromAgentModels(AgentModelsDto dto) =>
+    public static IReadOnlyList<(string Agent, string FieldName, string? Model)> FromAgentModels(AgentModelsDto dto) =>
     [
-        (AgentKind.IdeaRefinement, "ideaRefinement", dto.IdeaRefinement),
-        (AgentKind.SpecGenerator, "specGenerator", dto.SpecGenerator),
-        (AgentKind.PlanGenerator, "planGenerator", dto.PlanGenerator),
-        (AgentKind.CodeGenerator, "codeGenerator", dto.CodeGenerator),
-        (AgentKind.CodeReview, "codeReview", dto.CodeReview),
-        (AgentKind.StackAnalyst, "stackAnalyst", dto.StackAnalyst),
+        (SdlcAgents.IdeaRefinement, "ideaRefinement", dto.IdeaRefinement),
+        (SdlcAgents.SpecGenerator, "specGenerator", dto.SpecGenerator),
+        (SdlcAgents.PlanGenerator, "planGenerator", dto.PlanGenerator),
+        (SdlcAgents.CodeGenerator, "codeGenerator", dto.CodeGenerator),
+        (SdlcAgents.CodeReview, "codeReview", dto.CodeReview),
+        (SdlcAgents.StackAnalyst, "stackAnalyst", dto.StackAnalyst),
     ];
 }
 

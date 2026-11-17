@@ -1,12 +1,12 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;
 
@@ -18,7 +18,7 @@ public class LlmProviderTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static LlmRequest Request(string model = "m-1", string? apiKey = "sk-test-key", AgentKind? agent = AgentKind.SpecGenerator) => new()
+    private static LlmRequest Request(string model = "m-1", string? apiKey = "sk-test-key", string? agent = SdlcAgents.SpecGenerator) => new()
     {
         Model = model,
         System = "You are a test.",
@@ -289,10 +289,10 @@ public class LlmProviderTests
     [Fact]
     public async Task FR22_Fake_uses_the_last_registered_responder_for_the_agent()
     {
-        var provider = new FakeLlmProvider([new FixedResponder(AgentKind.SpecGenerator, "first"), new FixedResponder(AgentKind.SpecGenerator, "## 1. Overview")]);
+        var provider = new FakeLlmProvider([new FixedResponder(SdlcAgents.SpecGenerator, "first"), new FixedResponder(SdlcAgents.SpecGenerator, "## 1. Overview")]);
 
         Assert.Equal("## 1. Overview", (await provider.CompleteAsync(Request(), Ct)).Text);
-        Assert.StartsWith("# Fake plan_generator output", (await provider.CompleteAsync(Request(agent: AgentKind.PlanGenerator), Ct)).Text, StringComparison.Ordinal);
+        Assert.StartsWith("# Fake plan_generator output", (await provider.CompleteAsync(Request(agent: SdlcAgents.PlanGenerator), Ct)).Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -311,9 +311,9 @@ public class LlmProviderTests
     public void FR22_Anthropic_and_OpenAI_need_a_key(LlmProvider provider, string? key, bool configured) =>
         Assert.Equal(configured, new ResolvedLlm(provider, "m", key).IsConfigured);
 
-    private sealed class FixedResponder(AgentKind agent, string text) : IFakeAgentResponder
+    private sealed class FixedResponder(string agent, string text) : IFakeAgentResponder
     {
-        public AgentKind Agent => agent;
+        public string Agent => agent;
 
         public string Respond(LlmRequest request) => text;
     }

@@ -4,11 +4,9 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
@@ -18,11 +16,11 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Agents;
-using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Agents;
 
@@ -239,7 +237,7 @@ public sealed partial class ExecutionJobHandler(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 project.Id,
-                new { agent = AgentKind.CodeGenerator.ToWire(), tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, stepNumber = number },
+                new { agent = SdlcAgents.CodeGenerator, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, stepNumber = number },
                 SystemActor.Name,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -301,9 +299,9 @@ public sealed partial class ExecutionJobHandler(
     private async Task<AgentRunRequest> RequestAsync(
         JobExecution job, Project project, Guid planId, ExecutionStep step, List<ExecutionStep> steps, CancellationToken cancellationToken)
     {
-        var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
-        var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
-        var summary = await inputs.CurrentAsync(project.Id, ArtifactType.CodebaseSummary, cancellationToken);
+        var projectRequest = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var summary = await inputs.CurrentAsync(project.Id, SdlcArtifacts.CodebaseSummary, cancellationToken);
         var plan = await db.Artifacts.AsNoTracking().FirstAsync(a => a.Id == planId, cancellationToken);
         var files = await Git(() => workingCopies.ReadAsync(project.Id, step.DeclaredFiles.Select(f => f.Path), cancellationToken));
         var rules = await Git(() => workingCopies.ReadRulesAsync(project.Id, cancellationToken));
@@ -311,7 +309,7 @@ public sealed partial class ExecutionJobHandler(
         return new AgentRunRequest
         {
             ProjectId = project.Id,
-            Agent = AgentKind.CodeGenerator,
+            Agent = SdlcAgents.CodeGenerator,
             Job = job,
             StepId = step.Id,
             RunKey = StepAttemptRecorder.RunKey(step.Id, step.Attempt),
@@ -446,7 +444,7 @@ public sealed partial class ExecutionJobHandler(
                 SystemActor.Name,
                 now);
             var escalationPending = await db.ApprovalGates.AnyAsync(
-                g => g.ProjectId == projectId && g.Type == GateType.Escalation && g.Status == GateStatus.Pending,
+                g => g.ProjectId == projectId && g.Type == EngineGates.Escalation && g.Status == GateStatus.Pending,
                 cancellationToken);
             if (!escalationPending)
             {
@@ -454,7 +452,7 @@ public sealed partial class ExecutionJobHandler(
                 var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
                 writer.AddGate(
                     project,
-                    GateType.Escalation,
+                    EngineGates.Escalation,
                     null,
                     SystemActor.Name,
                     now,

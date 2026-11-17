@@ -1,4 +1,3 @@
-using Aide.Domain.Gates;
 using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.Domain.Entities;
@@ -13,7 +12,7 @@ public sealed class ApprovalGate
     /// <summary>The release version the gate belongs to (§4.10).</summary>
     public Guid ReleaseVersionId { get; set; }
 
-    public GateType Type { get; set; }
+    public string Type { get; set; } = string.Empty;
 
     public Guid? ArtifactId { get; set; }
 

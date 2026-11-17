@@ -1,12 +1,11 @@
 using System.Net;
 using Aide.Api.Features.Lifecycle;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Lifecycle;
 
@@ -41,7 +40,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
 
         var result = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id, "Request looks good"));
 
@@ -70,7 +69,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
 
         // Hold the project row so both requests read the same version, then both try to write it.
         await using var connection = new NpgsqlConnection(factory.ConnectionString);
@@ -107,13 +106,13 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
-        var spec = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 2, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
+        var spec = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 2, projectVersionAtCreation: 2);
 
         var result = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
         var gate = Assert.IsType<Aide.Api.Features.Gates.GateDto>(result.Gate);
-        Assert.Equal((GateType.SpecApproval, GateStatus.Pending, (Guid?)spec.Id, (ArtifactType?)ArtifactType.TechnicalSpecification, (int?)2),
+        Assert.Equal((SdlcGates.SpecApproval, GateStatus.Pending, (Guid?)spec.Id, (string?)SdlcArtifacts.TechnicalSpecification, (int?)2),
             (gate.Type, gate.Status, gate.ArtifactId, gate.ArtifactType, gate.ArtifactVersion));
         Assert.Equal((Phase.Specification, 2), (result.State.Phase, result.State.Checkpoint));
         Assert.Equal([gate.Id], result.State.PendingGates.Select(g => g.Id));
@@ -129,7 +128,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Autonomous);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
 
         var result = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Owner.Client, id));
 
@@ -145,7 +144,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Strict);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
         var again = await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id);
@@ -162,7 +161,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         await SeedReadyForExecutionAsync(id, ApprovalMode.Strict);
 
         var strict = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
-        Assert.Equal(GateType.PlanApproval, strict.Gate?.Type);
+        Assert.Equal(SdlcGates.PlanApproval, strict.Gate?.Type);
         Assert.Equal(Phase.Planning, strict.State.Phase);
 
         using var other = await ProjectApi.FixtureAsync(factory);
@@ -177,7 +176,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
     public async Task FR12_Viewers_get_403_and_non_members_404()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, ArtifactType.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, fixture.Project.Id, SdlcArtifacts.ProjectRequest);
 
         await Problems.AssertAsync(await LifecycleSeed.AdvanceAsync(fixture.Viewer.Client, fixture.Project.Id), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
         await Problems.AssertAsync(await LifecycleSeed.AdvanceAsync(fixture.Outsider.Client, fixture.Project.Id), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -198,7 +197,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
 
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
@@ -211,8 +210,8 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
     private async Task SeedReadyForExecutionAsync(Guid id, ApprovalMode mode)
     {
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, mode);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
         await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 2);
         await LifecycleSeed.PrepareWorkingCopyAsync(factory, id);
     }

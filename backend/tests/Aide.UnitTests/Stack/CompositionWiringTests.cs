@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
@@ -8,6 +7,7 @@ using Aide.Domain.Specs;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Stack;
@@ -28,7 +28,7 @@ public sealed class CompositionWiringTests
     private static Result<IReadOnlyList<PlanStep>> Generated(PlanAgents agents, params PlanStep[] steps) =>
         PlanValidator.Validate(steps, maxFilesPerStep: 20, allowProtectedPaths: false, agents);
 
-    private static LlmRequest Rendered(AgentKind agent, Dictionary<string, string?> values)
+    private static LlmRequest Rendered(string agent, Dictionary<string, string?> values)
     {
         var rendered = new EmbeddedPromptLibrary().Template(agent).Render(values).Value;
         return new LlmRequest { Model = "fake-1", System = rendered.System, Messages = [new LlmMessage(LlmRole.User, rendered.User)], Agent = agent };
@@ -54,7 +54,7 @@ public sealed class CompositionWiringTests
     public void FR124_The_Fake_plan_for_a_composition_is_valid_with_its_specialists_and_composed_rules(string fe, string be, string data, string? feHost, string? beHost)
     {
         var stack = Of(fe, be, data, feHost, beHost);
-        var reply = new FakePlanGeneratorResponder().Respond(Rendered(AgentKind.PlanGenerator, new()
+        var reply = new FakePlanGeneratorResponder().Respond(Rendered(SdlcAgents.PlanGenerator, new()
         {
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder\n\n## Summary\nRecipes.",
             ["TECHNICAL_SPECIFICATION"] = "## 2. Functional Requirements\n- **FR-1** x. Given a, when b, then c.",
@@ -69,14 +69,14 @@ public sealed class CompositionWiringTests
         Assert.Equal(StackAgents.Scaffolder, plan.Value[0].Agent);
         Assert.All(plan.Value, s => Assert.Contains(s.Agent!, stack.AgentKeys));
         Assert.DoesNotContain(CompositionPlanValidator.Warnings(plan.Value, stack), w => w.Code is ErrorCodes.PlanOrder or ErrorCodes.UndeclaredGeneratedFile);
-        Assert.True(PlanDocument.RenderChecked(ArtifactType.ImplementationPlan, plan.Value, 20, agents).IsSuccess);
+        Assert.True(PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, plan.Value, 20, agents).IsSuccess);
     }
 
     [Fact]
     public void FR124_The_Fake_iteration_plan_of_a_stack_change_has_a_step_for_the_changed_layer()
     {
         var stack = Aspnet(new StackChange(true, [StackLayers.Frontend, StackLayers.Deploy]));
-        var reply = new FakePlanGeneratorResponder().Respond(Rendered(AgentKind.PlanGenerator, new()
+        var reply = new FakePlanGeneratorResponder().Respond(Rendered(SdlcAgents.PlanGenerator, new()
         {
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder",
             ["TECHNICAL_SPECIFICATION"] = "## 2. Functional Requirements\n- **FR-5** [new] x. Given a, when b, then c.",
@@ -215,7 +215,7 @@ public sealed class CompositionWiringTests
 
         Assert.All(titles, t => Assert.Contains($"#### {t}", guidance, StringComparison.Ordinal));
         Assert.Contains("API Contract & Error Codes", titles);
-        var reply = new FakeSpecGeneratorResponder().Respond(Rendered(AgentKind.SpecGenerator, new()
+        var reply = new FakeSpecGeneratorResponder().Respond(Rendered(SdlcAgents.SpecGenerator, new()
         {
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder\n\n## Summary\nRecipes.",
             ["STACK_GUIDANCE"] = guidance,
@@ -294,7 +294,7 @@ public sealed class CompositionWiringTests
     public void FR126_FR129_The_Fake_Next_js_full_stack_plan_writes_route_handlers_that_cover_the_specs_endpoints()
     {
         var stack = Of("fe-nextjs", "none", "none", null, null);
-        var reply = new FakePlanGeneratorResponder().Respond(Rendered(AgentKind.PlanGenerator, new()
+        var reply = new FakePlanGeneratorResponder().Respond(Rendered(SdlcAgents.PlanGenerator, new()
         {
             ["PROJECT_REQUEST"] = "# Demo: Recipe Finder\n\n## Summary\nRecipes.",
             ["TECHNICAL_SPECIFICATION"] = "## 2. Functional Requirements\n- **FR-1** x. Given a, when b, then c.",
@@ -349,7 +349,7 @@ public sealed class CompositionWiringTests
         Assert.Contains(failed.Error!.Details, d => d.Contains("`fe-vue`", StringComparison.Ordinal));
         Assert.Contains("\"Stack & Dependencies\" section must", StackAnalysis.CorrectiveFeedback(failed.Error), StringComparison.Ordinal);
 
-        var reply = new FakeRepositoryAnalystResponder().Respond(Rendered(AgentKind.RepositoryAnalyst, new()
+        var reply = new FakeRepositoryAnalystResponder().Respond(Rendered(SdlcAgents.RepositoryAnalyst, new()
         {
             ["PROJECT_NAME"] = "Demo",
             ["STACK_GUIDANCE"] = StackGuidance.Analysis(stack, report),
@@ -376,13 +376,13 @@ public sealed class CompositionWiringTests
     public void FR121_The_Fake_code_generator_reads_the_composed_role_and_writes_a_non_root_Dockerfile()
     {
         var stack = Aspnet();
-        var template = new EmbeddedPromptLibrary().Template(AgentKind.CodeGenerator);
+        var template = new EmbeddedPromptLibrary().Template(SdlcAgents.CodeGenerator);
         var values = template.RequiredInputs.ToDictionary(n => n, n => (string?)n, StringComparer.Ordinal);
         values["STEP_NUMBER"] = "7";
         values["DECLARED_FILES"] = "- backend/Dockerfile (create)\n- package.json (create)";
         var rendered = StackPrompt.Compose(template.Render(values).Value, stack, StackAgents.DeployEngineer).Value;
 
-        var reply = new FakeCodeGeneratorResponder().Respond(new LlmRequest { Model = "fake-1", System = rendered.System, Messages = [new LlmMessage(LlmRole.User, rendered.User)], Agent = AgentKind.CodeGenerator });
+        var reply = new FakeCodeGeneratorResponder().Respond(new LlmRequest { Model = "fake-1", System = rendered.System, Messages = [new LlmMessage(LlmRole.User, rendered.User)], Agent = SdlcAgents.CodeGenerator });
 
         var files = CodeGeneration.Parse(reply).Value.Files.ToDictionary(f => f.Path, f => f.Content, StringComparer.Ordinal);
         Assert.Contains("USER $APP_UID", files["backend/Dockerfile"], StringComparison.Ordinal);

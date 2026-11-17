@@ -1,6 +1,5 @@
 using System.Net;
 using Aide.Api.Features.Execution;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
@@ -8,6 +7,7 @@ using Aide.Domain.Review;
 using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Execution;
 
@@ -25,12 +25,12 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(12), projectVersionAtCreation: 3);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(12), projectVersionAtCreation: 3);
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, plan.Id, "approve"));
         var listed = await StepsAsync(fixture.Viewer.Client, id);
 
-        Assert.Equal(new ExecutionPlanDto(plan.Id, ArtifactType.ImplementationPlan, 1, ArtifactStatus.Locked), listed.Plan);
+        Assert.Equal(new ExecutionPlanDto(plan.Id, SdlcArtifacts.ImplementationPlan, 1, ArtifactStatus.Locked), listed.Plan);
         Assert.Equal(12, listed.Steps.Count);
         Assert.All(listed.Steps, s => Assert.Equal((StepStatus.Pending, 0), (s.Status, s.Attempt)));
         Assert.Equal(Enumerable.Range(1, 12), listed.Steps.Select(s => s.Number));
@@ -53,7 +53,7 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var v1 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(2), projectVersionAtCreation: 3);
+        var v1 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(2), projectVersionAtCreation: 3);
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, v1.Id, "approve"));
 
         var v2 = await ArtifactApi.ReadAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Plan, AgentJobs.PlanMarkdown(3)), HttpStatusCode.Created);
@@ -73,7 +73,7 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft, content: "# Plan\n\n1. Build it");
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, content: "# Plan\n\n1. Build it");
 
         await Problems.AssertAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, plan.Id, "approve"), HttpStatusCode.BadRequest, ErrorCodes.InvalidPlan);
 
@@ -90,12 +90,12 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         await LifecycleSeed.AddReportAsync(factory, id, 5, ReviewDecision.ReviewRequired);
         await LifecycleSeed.PrepareWorkingCopyAsync(factory, id);
         var optimisation = await LifecycleSeed.AddArtifactAsync(
-            factory, id, ArtifactType.OptimizationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(3, ArtifactType.OptimizationPlan), projectVersionAtCreation: 5);
+            factory, id, SdlcArtifacts.OptimizationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(3, SdlcArtifacts.OptimizationPlan), projectVersionAtCreation: 5);
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, optimisation.Id, "approve"));
 
         var steps = await StepsAsync(fixture.Viewer.Client, id, "?planType=optimization_plan");
-        Assert.Equal((ArtifactType.OptimizationPlan, 3), (steps.Plan!.Type, steps.Steps.Count));
+        Assert.Equal((SdlcArtifacts.OptimizationPlan, 3), (steps.Plan!.Type, steps.Steps.Count));
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase);
     }
 
@@ -146,7 +146,7 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         var body = await Problems.AssertAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Plan, content), HttpStatusCode.BadRequest, ErrorCodes.InvalidPlan);
 
         Assert.NotEmpty(body.GetProperty("details").EnumerateArray());
-        Assert.Empty(await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.ImplementationPlan));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.ImplementationPlan));
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
         await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.MaxFilesPerStep, 1), Ct));
-        var twoFiles = PlanDocument.Render(ArtifactType.ImplementationPlan, [new PlanStep(1, "A", "B", [new DeclaredFile("a.js", FileAction.Create), new DeclaredFile("b.js", FileAction.Create)], [])]);
+        var twoFiles = PlanDocument.Render(SdlcArtifacts.ImplementationPlan, [new PlanStep(1, "A", "B", [new DeclaredFile("a.js", FileAction.Create), new DeclaredFile("b.js", FileAction.Create)], [])]);
 
         await Problems.AssertAsync(await ArtifactApi.CreateDraftAsync(fixture.Contributor.Client, id, Plan, twoFiles), HttpStatusCode.BadRequest, ErrorCodes.InvalidPlan);
     }
@@ -167,7 +167,7 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var content = PlanDocument.Render(ArtifactType.ImplementationPlan, [new PlanStep(
+        var content = PlanDocument.Render(SdlcArtifacts.ImplementationPlan, [new PlanStep(
             1,
             "CI",
             "Add the CI workflow.",
@@ -207,8 +207,8 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var twoFiles = PlanDocument.Render(ArtifactType.ImplementationPlan, [new PlanStep(1, "A", "B", [new DeclaredFile("a.js", FileAction.Create), new DeclaredFile("b.js", FileAction.Create)], [])]);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft, content: twoFiles, projectVersionAtCreation: 3);
+        var twoFiles = PlanDocument.Render(SdlcArtifacts.ImplementationPlan, [new PlanStep(1, "A", "B", [new DeclaredFile("a.js", FileAction.Create), new DeclaredFile("b.js", FileAction.Create)], [])]);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, content: twoFiles, projectVersionAtCreation: 3);
         await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.MaxFilesPerStep, 1), Ct));
 
         var body = await Problems.AssertAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, plan.Id, "approve"), HttpStatusCode.BadRequest, ErrorCodes.InvalidPlan);
@@ -223,7 +223,7 @@ public sealed class ExecutionStepsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
-        var stale = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(1), projectVersionAtCreation: 4);
+        var stale = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, content: AgentJobs.PlanMarkdown(1), projectVersionAtCreation: 4);
 
         await Problems.AssertAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, stale.Id, "approve"), HttpStatusCode.Conflict, ErrorCodes.ArtifactNotDraft);
 

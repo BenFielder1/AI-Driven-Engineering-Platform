@@ -1,11 +1,8 @@
 using System.Reflection;
 using Aide.Domain;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Review;
@@ -13,6 +10,7 @@ using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Common;
 
@@ -30,7 +28,7 @@ public class EnumStringsTests
     [Fact]
     public void S5_Gate_values()
     {
-        Assert.Equal(["spec_approval", "plan_approval", "pre_release", "escalation"], EnumStrings.Values<GateType>());
+        Assert.Equal(["spec_approval", "plan_approval", "pre_release", "escalation"], SdlcGates.All);
         Assert.Equal(["pending", "approved", "rejected", "cancelled"], EnumStrings.Values<GateStatus>());
         Assert.Equal(["continue", "rollback", "accept"], EnumStrings.Values<EscalationDecision>());
         Assert.Equal(["strict", "advisory", "autonomous"], EnumStrings.Values<ApprovalMode>());
@@ -41,7 +39,7 @@ public class EnumStringsTests
     {
         // 0.2.0 SPEC §5 amends the type list: + codebase_summary (FR-70).
         // 0.5.0 §5: + source_items (FR-170) and stack_profile (FR-180).
-        Assert.Equal(["project_request", "technical_specification", "implementation_plan", "optimization_plan", "codebase_summary", "source_items", "stack_profile"], EnumStrings.Values<ArtifactType>());
+        Assert.Equal(["project_request", "technical_specification", "implementation_plan", "optimization_plan", "codebase_summary", "source_items", "stack_profile"], SdlcArtifacts.All);
         Assert.Equal(["draft", "locked", "rejected", "superseded", "invalidated", "corrupted"], EnumStrings.Values<ArtifactStatus>());
     }
 
@@ -56,7 +54,7 @@ public class EnumStringsTests
         Assert.Equal(["feature_coverage", "api_contracts", "data_model", "architecture", "security", "testing"], EnumStrings.Values<ReviewCategory>());
         Assert.Equal(["viewer", "contributor", "owner"], EnumStrings.Values<ProjectRole>());
         Assert.Equal(["user", "admin"], EnumStrings.Values<SystemRole>());
-        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review", "repository_analyst", "stack_analyst", "build_fix"], EnumStrings.Values<AgentKind>());
+        Assert.Equal(["idea_refinement", "spec_generator", "plan_generator", "code_generator", "code_review", "repository_analyst", "stack_analyst", "build_fix"], SdlcAgents.All);
         Assert.Equal(["create", "modify"], EnumStrings.Values<FileAction>());
     }
 

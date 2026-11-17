@@ -6,8 +6,6 @@ using Aide.Api.Features.Connections;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Runs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
@@ -16,6 +14,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Connections;
 
@@ -421,10 +420,10 @@ public sealed class LlmBindingTests(AideApiFactory factory) : IDisposable
     private static AgentRunRequest Spec(Guid projectId, JobExecution job) => new()
     {
         ProjectId = projectId,
-        Agent = AgentKind.SpecGenerator,
+        Agent = SdlcAgents.SpecGenerator,
         Job = job,
         Inputs = new Dictionary<string, string?> { ["PROJECT_REQUEST"] = ProjectRequest },
-        InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), ArtifactType.ProjectRequest, 1)],
+        InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), SdlcArtifacts.ProjectRequest, 1)],
     };
 
     private static async Task<AgentRunOutcome> RunAsync(WebApplicationFactory<Program> app, AgentRunRequest request)

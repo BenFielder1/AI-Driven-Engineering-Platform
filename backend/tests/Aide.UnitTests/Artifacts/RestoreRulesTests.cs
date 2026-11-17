@@ -3,6 +3,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Artifacts;
 
@@ -20,7 +21,7 @@ public class RestoreRulesTests
         Guid? chosenIn = null,
         ArtifactIntegrity integrity = ArtifactIntegrity.Ok,
         bool inDevelopment = true,
-        ArtifactType type = ArtifactType.TechnicalSpecification) =>
+        string type = SdlcArtifacts.TechnicalSpecification) =>
         new(type, phase, status, inDevelopment ? Development : null, chosenIn ?? Development, chosen, integrity, latest);
 
     [Fact]
@@ -41,11 +42,11 @@ public class RestoreRulesTests
     }
 
     [Theory]
-    [InlineData(ArtifactType.ProjectRequest, Phase.Refinement)]
-    [InlineData(ArtifactType.TechnicalSpecification, Phase.Specification)]
-    [InlineData(ArtifactType.ImplementationPlan, Phase.Planning)]
-    [InlineData(ArtifactType.OptimizationPlan, Phase.Review)]
-    public void FR58_Each_type_is_restorable_only_in_its_producing_phase(ArtifactType type, Phase producing)
+    [InlineData(SdlcArtifacts.ProjectRequest, Phase.Refinement)]
+    [InlineData(SdlcArtifacts.TechnicalSpecification, Phase.Specification)]
+    [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Planning)]
+    [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Review)]
+    public void FR58_Each_type_is_restorable_only_in_its_producing_phase(string type, Phase producing)
     {
         foreach (var phase in Enum.GetValues<Phase>())
         {
@@ -64,7 +65,7 @@ public class RestoreRulesTests
     [Fact]
     public void FR58_After_a_rollback_to_specification_restoring_implementation_plan_v1_is_stage_not_reached()
     {
-        var result = RestoreRules.Check(Spec(type: ArtifactType.ImplementationPlan, phase: Phase.Specification, chosen: 1, latest: 2));
+        var result = RestoreRules.Check(Spec(type: SdlcArtifacts.ImplementationPlan, phase: Phase.Specification, chosen: 1, latest: 2));
 
         AssertNotAllowed(result, RestoreReasons.StageNotReached);
     }
@@ -72,16 +73,16 @@ public class RestoreRulesTests
     [Fact]
     public void FR58_After_planning_restoring_the_request_is_stage_completed()
     {
-        AssertNotAllowed(RestoreRules.Check(Spec(type: ArtifactType.ProjectRequest, phase: Phase.Planning)), RestoreReasons.StageCompleted);
+        AssertNotAllowed(RestoreRules.Check(Spec(type: SdlcArtifacts.ProjectRequest, phase: Phase.Planning)), RestoreReasons.StageCompleted);
     }
 
     [Fact]
     public void FR58_The_codebase_summary_is_automatic_and_never_restorable()
     {
-        Assert.Null(RestoreRules.RestorablePhase(ArtifactType.CodebaseSummary));
+        Assert.Null(RestoreRules.RestorablePhase(SdlcArtifacts.CodebaseSummary));
         foreach (var phase in Enum.GetValues<Phase>())
         {
-            AssertNotAllowed(RestoreRules.Check(Spec(type: ArtifactType.CodebaseSummary, phase: phase)), RestoreReasons.StageCompleted);
+            AssertNotAllowed(RestoreRules.Check(Spec(type: SdlcArtifacts.CodebaseSummary, phase: phase)), RestoreReasons.StageCompleted);
         }
     }
 

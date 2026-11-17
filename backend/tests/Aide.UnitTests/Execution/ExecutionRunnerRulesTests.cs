@@ -1,10 +1,10 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Execution;
 
@@ -256,7 +256,7 @@ public class ExecutionRunnerRulesTests
             </declared_files>
             </step>
             """;
-        var request = new LlmRequest { Model = "fake-1", System = "s", Messages = [new LlmMessage(LlmRole.User, prompt)], MaxTokens = 100, Agent = AgentKind.CodeGenerator };
+        var request = new LlmRequest { Model = "fake-1", System = "s", Messages = [new LlmMessage(LlmRole.User, prompt)], MaxTokens = 100, Agent = SdlcAgents.CodeGenerator };
         var responder = new FakeCodeGeneratorResponder();
 
         var text = responder.Respond(request);

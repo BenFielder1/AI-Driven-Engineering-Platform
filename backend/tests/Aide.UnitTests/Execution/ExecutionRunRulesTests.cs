@@ -1,6 +1,6 @@
-using Aide.Domain.Artifacts;
 using Aide.Domain.Execution;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Execution;
 
@@ -9,15 +9,15 @@ public class ExecutionRunRulesTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
 
-    private static RunPlan Plan(ArtifactType type, int version, int minutes, ArtifactStatus status = ArtifactStatus.Locked) =>
+    private static RunPlan Plan(string type, int version, int minutes, ArtifactStatus status = ArtifactStatus.Locked) =>
         new(Guid.CreateVersion7(), type, version, status, T0.AddMinutes(minutes));
 
     [Fact]
     public void FR57_The_development_run_comes_first_then_one_review_fix_run_per_cycle_in_cycle_order()
     {
-        var development = Plan(ArtifactType.ImplementationPlan, 1, 0);
-        var fix1 = Plan(ArtifactType.OptimizationPlan, 1, 10);
-        var fix2 = Plan(ArtifactType.OptimizationPlan, 2, 20);
+        var development = Plan(SdlcArtifacts.ImplementationPlan, 1, 0);
+        var fix1 = Plan(SdlcArtifacts.OptimizationPlan, 1, 10);
+        var fix2 = Plan(SdlcArtifacts.OptimizationPlan, 2, 20);
         var reports = new List<RunReport> { new(Guid.CreateVersion7(), 1, T0.AddMinutes(9), fix1.Id), new(Guid.CreateVersion7(), 2, T0.AddMinutes(19), fix2.Id) };
 
         var ordered = ExecutionRunRules.Order([fix2, development, fix1], p => ExecutionRunRules.ReportOf(p, reports));
@@ -29,20 +29,20 @@ public class ExecutionRunRulesTests
     [Fact]
     public void FR57_An_edited_optimisation_plan_belongs_to_the_latest_cycle_reported_before_it()
     {
-        var drafted = Plan(ArtifactType.OptimizationPlan, 1, 10, ArtifactStatus.Superseded);
-        var edited = Plan(ArtifactType.OptimizationPlan, 2, 12);
+        var drafted = Plan(SdlcArtifacts.OptimizationPlan, 1, 10, ArtifactStatus.Superseded);
+        var edited = Plan(SdlcArtifacts.OptimizationPlan, 2, 12);
         var reports = new List<RunReport> { new(Guid.CreateVersion7(), 1, T0.AddMinutes(1), null), new(Guid.CreateVersion7(), 2, T0.AddMinutes(10), drafted.Id), new(Guid.CreateVersion7(), 3, T0.AddMinutes(30), null) };
 
         Assert.Equal(2, ExecutionRunRules.CycleOf(edited, reports));
-        Assert.Null(ExecutionRunRules.CycleOf(Plan(ArtifactType.OptimizationPlan, 1, 0), [new(Guid.CreateVersion7(), 1, T0.AddMinutes(5), null)]));
-        Assert.Null(ExecutionRunRules.CycleOf(Plan(ArtifactType.ImplementationPlan, 1, 50), reports));
+        Assert.Null(ExecutionRunRules.CycleOf(Plan(SdlcArtifacts.OptimizationPlan, 1, 0), [new(Guid.CreateVersion7(), 1, T0.AddMinutes(5), null)]));
+        Assert.Null(ExecutionRunRules.CycleOf(Plan(SdlcArtifacts.ImplementationPlan, 1, 50), reports));
     }
 
     [Fact]
     public void FR56_Two_cycle_1_reports_after_a_rollback_each_link_to_their_own_run_and_order_by_report()
     {
-        var first = Plan(ArtifactType.OptimizationPlan, 1, 10, ArtifactStatus.Invalidated);
-        var second = Plan(ArtifactType.OptimizationPlan, 2, 40);
+        var first = Plan(SdlcArtifacts.OptimizationPlan, 1, 10, ArtifactStatus.Invalidated);
+        var second = Plan(SdlcArtifacts.OptimizationPlan, 2, 40);
         var before = new RunReport(Guid.CreateVersion7(), 1, T0.AddMinutes(9), first.Id);
         var after = new RunReport(Guid.CreateVersion7(), 1, T0.AddMinutes(39), second.Id);
         RunReport[] reports = [before, after];
@@ -76,11 +76,11 @@ public class ExecutionRunRulesTests
     {
         Assert.Equal(
             "implementation_plan v2 was invalidated when technical_specification v4 was approved.",
-            ExecutionRunRules.SupersededReason(ArtifactType.ImplementationPlan, 2, new PlanInvalidation("cascade", ArtifactType.TechnicalSpecification, 4, null)));
+            ExecutionRunRules.SupersededReason(SdlcArtifacts.ImplementationPlan, 2, new PlanInvalidation("cascade", SdlcArtifacts.TechnicalSpecification, 4, null)));
         Assert.Equal(
             "implementation_plan v2 was invalidated by a rollback to checkpoint 3.",
-            ExecutionRunRules.SupersededReason(ArtifactType.ImplementationPlan, 2, new PlanInvalidation("rollback", null, null, 3)));
-        Assert.Equal("optimization_plan v5 was invalidated.", ExecutionRunRules.SupersededReason(ArtifactType.OptimizationPlan, 5, null));
+            ExecutionRunRules.SupersededReason(SdlcArtifacts.ImplementationPlan, 2, new PlanInvalidation("rollback", null, null, 3)));
+        Assert.Equal("optimization_plan v5 was invalidated.", ExecutionRunRules.SupersededReason(SdlcArtifacts.OptimizationPlan, 5, null));
     }
 
     [Fact]

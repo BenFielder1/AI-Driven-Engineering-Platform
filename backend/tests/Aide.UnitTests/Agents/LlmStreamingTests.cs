@@ -2,11 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.Options;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;
 
@@ -26,7 +26,7 @@ public sealed class LlmStreamingTests
         System = "You are a test.",
         Messages = [new LlmMessage(LlmRole.User, "Hello")],
         MaxTokens = 1234,
-        Agent = AgentKind.SpecGenerator,
+        Agent = SdlcAgents.SpecGenerator,
         ApiKey = apiKey,
     };
 

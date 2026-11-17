@@ -1,4 +1,3 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
@@ -41,12 +40,12 @@ public sealed class LlmRequest
     /// </summary>
     public int? ContextTokens { get; init; }
 
-    public AgentKind? Agent { get; init; }
+    public string? Agent { get; init; }
 
     /// <summary>Anthropic/OpenAI credential. Never logged or persisted.</summary>
     public string? ApiKey { get; init; }
 
-    public override string ToString() => $"LlmRequest {{ Model = {Model}, Agent = {Agent?.ToWire()}, Messages = {Messages.Count}, MaxTokens = {MaxTokens}, ContextTokens = {ContextTokens} }}";
+    public override string ToString() => $"LlmRequest {{ Model = {Model}, Agent = {Agent}, Messages = {Messages.Count}, MaxTokens = {MaxTokens}, ContextTokens = {ContextTokens} }}";
 }
 
 /// <summary>A provider's answer: the text and the token usage it reported.</summary>

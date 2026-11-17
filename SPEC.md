@@ -115,12 +115,13 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 | FR-271 | `GateType` is replaced by a string gate key. The engine owns `escalation` (every pipeline can escalate); `SdlcGates` holds `spec_approval`, `plan_approval`, `pre_release` | backend |
 | FR-272 | Job types are engine constants `stage.run`, `agent.run`, `gate.timer`, `trigger.fire`, plus types a pack registers. The SDLC pack registers every 0.6.1 job type string unchanged (`idea_refinement`, `execution`, `review`, `build_check`, …). A job whose type has no registered handler fails at enqueue with an error in the log, not at claim | backend |
 | FR-273 | `AgentJobTrigger` is replaced by trigger strings: `user_requested`, `stage_entered`, `gate_rejected`, `artifact_rejected`, `artifact_corrupted`, `validation_failed`. New payloads write `stage_entered`. Payloads that say `phase_entered` read as `stage_entered` | backend |
-| FR-274 | The database keeps the same stored values. EF enum-to-string conversions become plain string columns. Any migration is limited to column types or lengths, and is reviewed for zero data change. API DTOs keep the same JSON values; the OpenAPI schemas change from enums to strings with the known values listed in the description (D-0.7.0-7) | backend + data + frontend |
+| FR-274 | The database keeps the same stored values. EF enum-to-string conversions become plain string columns. Any migration is limited to column types or lengths, and is reviewed for zero data change. API DTOs keep the same JSON values, and `openapi/api.json` stays byte-identical: a schema transformer still emits the SDLC enum components (D-0.7.0-24, amending D-0.7.0-7). Config keyed by agent name keeps binding | backend + data |
 
 **FR-269–FR-274 acceptance**
 - Given the characterisation suite after M56, then every snapshot is unchanged.
 - Given a 0.6.1 database with queued and dead-lettered jobs and agent runs, when M56's build starts on it, then every row reads back and every queued job runs (integration test seeded with 0.6.1-shaped rows, including a `phase_entered` payload).
-- Given the regenerated client, then the frontend keeps narrow TypeScript unions for the SDLC keys (in `src/features/…` constants), so its type checks still catch typos.
+- Given `dotnet build src/Aide.Api`, then `openapi/api.json` is unchanged, so the generated client and the frontend are unchanged (D-0.7.0-24).
+- Given `Models__CodeReview` (or `Models:codeReview`) in configuration, then it binds to the `code_review` agent exactly as in 0.6.1.
 
 ### 3.4 Pipeline definitions and packs (step 4, part 1)
 
@@ -505,7 +506,7 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 | D-0.7.0-4 | Generic API is read-only plus gate decisions; SDLC runs start and move through the existing project endpoints | Ben (interview) | agreed |
 | D-0.7.0-5 | Generic UI is added beside the SDLC pages (Pipeline tab, replay, gate inbox); the SDLC stepper reads the definition; no SDLC page is rebuilt | Ben (interview) | agreed |
 | D-0.7.0-6 | After parity, the old state machine is removed in 0.7.0; parity cases live on as definition tests | Ben (interview) | agreed |
-| D-0.7.0-7 | String keys keep every stored and wire value. OpenAPI enums become strings with known values documented; the frontend keeps SDLC unions as constants | Claude | assumed |
+| D-0.7.0-7 | String keys keep every stored and wire value. *Amended by D-0.7.0-24: the OpenAPI enum components are kept, so the contract is unchanged* | Claude | assumed |
 | D-0.7.0-8 | `pipeline_runs` is the source of truth; `projects.current_phase/status/checkpoint` stay as a same-transaction copy so 0.6.1 queries, DTOs and a deploy rollback still work. Dropping them is a later contract step | Claude | assumed |
 | D-0.7.0-9 | The engine's "run" is called a **pipeline run** (`pipeline_runs`, `/api/pipeline-runs`) because "runs" already means agent runs (`/api/projects/{id}/runs`, Runs page) | Claude | assumed |
 | D-0.7.0-10 | One SDLC pipeline run per release version; "new version" starts a new run, and the old run ends `completed` | Claude | assumed |

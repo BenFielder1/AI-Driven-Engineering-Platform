@@ -15,6 +15,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Refinement;
 
@@ -68,7 +69,7 @@ public sealed partial class RefinementService(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 projectId,
-                new { agent = AgentKind.IdeaRefinement.ToWire(), tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
+                new { agent = SdlcAgents.IdeaRefinement, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
                 actor,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -125,7 +126,7 @@ public sealed partial class RefinementService(
     public async Task<RefinementDto> GetAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
         var versionId = releaseVersionId ?? await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-        var latestDraft = await artifacts.LatestSummaryAsync(projectId, ArtifactType.ProjectRequest, versionId, cancellationToken);
+        var latestDraft = await artifacts.LatestSummaryAsync(projectId, SdlcArtifacts.ProjectRequest, versionId, cancellationToken);
         var rounds = await LoadRoundsAsync(projectId, cancellationToken, versionId);
         var latest = rounds.Count == 0 ? null : rounds[0];
         var completed = LatestCompleted(rounds);
@@ -210,7 +211,7 @@ public sealed partial class RefinementService(
         }
 
         var summary = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == ArtifactType.CodebaseSummary)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.CodebaseSummary)
             .OrderByDescending(a => a.Version)
             .Select(a => new { a.Id, a.Version, a.AgentRunId })
             .FirstOrDefaultAsync(cancellationToken);
@@ -268,7 +269,7 @@ public sealed partial class RefinementService(
             .Where(r => r.ProjectId == projectId && runIds.Contains(r.Id))
             .ToDictionaryAsync(r => r.Id, cancellationToken);
         var drafts = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == ArtifactType.ProjectRequest && a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))
+            .Where(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.ProjectRequest && a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))
             .Select(a => new { a.Id, a.Version, RunId = a.AgentRunId!.Value })
             .ToListAsync(cancellationToken);
 

@@ -1,9 +1,8 @@
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Jobs;
 
@@ -21,28 +20,28 @@ public class JobTypesTests
         Assert.Equal(expected, JobTypes.OnEnter(entered));
 
     [Theory]
-    [InlineData(AgentKind.IdeaRefinement, JobTypes.IdeaRefinement)]
-    [InlineData(AgentKind.SpecGenerator, JobTypes.SpecGeneration)]
-    [InlineData(AgentKind.PlanGenerator, JobTypes.PlanGeneration)]
-    [InlineData(AgentKind.CodeGenerator, JobTypes.Execution)]
-    [InlineData(AgentKind.CodeReview, JobTypes.Review)]
-    [InlineData(AgentKind.BuildFix, JobTypes.BuildFix)] // FR-256
-    public void FR13_Each_agent_runs_as_a_job_type(AgentKind agent, string expected) =>
+    [InlineData(SdlcAgents.IdeaRefinement, JobTypes.IdeaRefinement)]
+    [InlineData(SdlcAgents.SpecGenerator, JobTypes.SpecGeneration)]
+    [InlineData(SdlcAgents.PlanGenerator, JobTypes.PlanGeneration)]
+    [InlineData(SdlcAgents.CodeGenerator, JobTypes.Execution)]
+    [InlineData(SdlcAgents.CodeReview, JobTypes.Review)]
+    [InlineData(SdlcAgents.BuildFix, JobTypes.BuildFix)] // FR-256
+    public void FR13_Each_agent_runs_as_a_job_type(string agent, string expected) =>
         Assert.Equal(expected, JobTypes.ForAgent(agent));
 
     [Fact]
     public void FR13_Rejected_spec_and_plan_gates_requeue_their_generators_D16()
     {
-        Assert.Equal(JobTypes.SpecGeneration, JobTypes.ForAgent(GateRules.AgentToRerunOnReject(GateType.SpecApproval)!.Value));
-        Assert.Equal(JobTypes.PlanGeneration, JobTypes.ForAgent(GateRules.AgentToRerunOnReject(GateType.PlanApproval)!.Value));
+        Assert.Equal(JobTypes.SpecGeneration, JobTypes.ForAgent(GateRules.AgentToRerunOnReject(SdlcGates.SpecApproval)!));
+        Assert.Equal(JobTypes.PlanGeneration, JobTypes.ForAgent(GateRules.AgentToRerunOnReject(SdlcGates.PlanApproval)!));
     }
 
     [Theory]
-    [InlineData(GateType.SpecApproval, Phase.Planning, ArtifactType.TechnicalSpecification)]
-    [InlineData(GateType.PlanApproval, Phase.Execution, ArtifactType.ImplementationPlan)]
-    [InlineData(GateType.PreRelease, Phase.Release, null)]
-    [InlineData(GateType.Escalation, null, null)]
-    public void FR12_Gates_guard_one_entry_and_approve_one_artifact(GateType gate, Phase? entry, ArtifactType? artifact)
+    [InlineData(SdlcGates.SpecApproval, Phase.Planning, SdlcArtifacts.TechnicalSpecification)]
+    [InlineData(SdlcGates.PlanApproval, Phase.Execution, SdlcArtifacts.ImplementationPlan)]
+    [InlineData(SdlcGates.PreRelease, Phase.Release, null)]
+    [InlineData(EngineGates.Escalation, null, null)]
+    public void FR12_Gates_guard_one_entry_and_approve_one_artifact(string gate, Phase? entry, string? artifact)
     {
         Assert.Equal(entry, GateRules.GuardedEntry(gate));
         Assert.Equal(artifact, GateRules.GatedArtifact(gate));

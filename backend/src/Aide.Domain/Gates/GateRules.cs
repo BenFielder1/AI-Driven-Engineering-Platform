@@ -1,9 +1,8 @@
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Gates;
 
@@ -30,13 +29,13 @@ public enum GateFollowUp
 }
 
 /// <summary>A pending gate as the artifact-approval rules see it.</summary>
-public sealed record PendingGateRef(Guid Id, GateType Type, Guid? ArtifactId);
+public sealed record PendingGateRef(Guid Id, string Type, Guid? ArtifactId);
 
 /// <summary>The outcome of deciding a gate.</summary>
 public sealed record GateResolution(
     GateStatus NewStatus,
     GateFollowUp FollowUp,
-    AgentKind? RerunAgent = null,
+    string? RerunAgent = null,
     EscalationDecision? Decision = null,
     int? TargetVersion = null);
 
@@ -48,13 +47,13 @@ public static class GateRules
 
     /// <summary>
     /// The gate required to enter <paramref name="entering"/>, or <c>null</c> when the transition applies directly.
-    /// Escalations (§4.5) always create an <see cref="GateType.Escalation"/> gate, in every mode.
+    /// Escalations (§4.5) always create an <see cref="EngineGates.Escalation"/> gate, in every mode.
     /// </summary>
-    public static GateType? RequiredGate(ApprovalMode mode, Phase entering) => (entering, mode) switch
+    public static string? RequiredGate(ApprovalMode mode, Phase entering) => (entering, mode) switch
     {
-        (Phase.Planning, ApprovalMode.Strict or ApprovalMode.Advisory) => GateType.SpecApproval,
-        (Phase.Execution, ApprovalMode.Strict) => GateType.PlanApproval,
-        (Phase.Release, _) => GateType.PreRelease,
+        (Phase.Planning, ApprovalMode.Strict or ApprovalMode.Advisory) => SdlcGates.SpecApproval,
+        (Phase.Execution, ApprovalMode.Strict) => SdlcGates.PlanApproval,
+        (Phase.Release, _) => SdlcGates.PreRelease,
         _ => null,
     };
 
@@ -62,30 +61,30 @@ public static class GateRules
     /// FR-48: one-click approve/reject links exist for spec_approval, plan_approval and pre_release gates.
     /// Escalation decisions need a choice (and maybe a version), so their notifications link to the project page.
     /// </summary>
-    public static bool SupportsApprovalLinks(GateType type) => type is GateType.SpecApproval or GateType.PlanApproval or GateType.PreRelease;
+    public static bool SupportsApprovalLinks(string type) => type is SdlcGates.SpecApproval or SdlcGates.PlanApproval or SdlcGates.PreRelease;
 
     /// <summary>The phase whose entry a gate guards; <c>null</c> for escalation gates, which guard no single entry.</summary>
-    public static Phase? GuardedEntry(GateType type) => type switch
+    public static Phase? GuardedEntry(string type) => type switch
     {
-        GateType.SpecApproval => Phase.Planning,
-        GateType.PlanApproval => Phase.Execution,
-        GateType.PreRelease => Phase.Release,
+        SdlcGates.SpecApproval => Phase.Planning,
+        SdlcGates.PlanApproval => Phase.Execution,
+        SdlcGates.PreRelease => Phase.Release,
         _ => null,
     };
 
     /// <summary>The artifact a gate approves (the latest locked version is attached to the gate); <c>null</c> for pre_release and escalation.</summary>
-    public static ArtifactType? GatedArtifact(GateType type) => type switch
+    public static string? GatedArtifact(string type) => type switch
     {
-        GateType.SpecApproval => ArtifactType.TechnicalSpecification,
-        GateType.PlanApproval => ArtifactType.ImplementationPlan,
+        SdlcGates.SpecApproval => SdlcArtifacts.TechnicalSpecification,
+        SdlcGates.PlanApproval => SdlcArtifacts.ImplementationPlan,
         _ => null,
     };
 
     /// <summary>The agent re-run when a gate is rejected (D16: spec gate → spec generator).</summary>
-    public static AgentKind? AgentToRerunOnReject(GateType type) => type switch
+    public static string? AgentToRerunOnReject(string type) => type switch
     {
-        GateType.SpecApproval => AgentKind.SpecGenerator,
-        GateType.PlanApproval => AgentKind.PlanGenerator,
+        SdlcGates.SpecApproval => SdlcAgents.SpecGenerator,
+        SdlcGates.PlanApproval => SdlcAgents.PlanGenerator,
         _ => null,
     };
 
@@ -96,17 +95,17 @@ public static class GateRules
     /// stay blocked, so only <c>continue</c> (retry the step) and <c>rollback</c> are valid (<c>INVALID_DECISION</c>).
     /// </summary>
     public static Result<GateResolution> Approve(
-        GateType type, GateStatus status, EscalationDecision? decision = null, int? targetVersion = null, bool stepBlocked = false)
+        string type, GateStatus status, EscalationDecision? decision = null, int? targetVersion = null, bool stepBlocked = false)
     {
         if (status != GateStatus.Pending)
         {
             return NotPending(status);
         }
 
-        if (type != GateType.Escalation)
+        if (type != EngineGates.Escalation)
         {
             return decision is not null || targetVersion is not null
-                ? InvalidDecision($"A {type.ToWire()} gate takes no escalation decision or target version.")
+                ? InvalidDecision($"A {type} gate takes no escalation decision or target version.")
                 : Result.Success(new GateResolution(GateStatus.Approved, GateFollowUp.ApplyTransition));
         }
 
@@ -129,14 +128,14 @@ public static class GateRules
     }
 
     /// <summary>Reject a gate. The phase is unchanged; spec/plan gates re-run their generator.</summary>
-    public static Result<GateResolution> Reject(GateType type, GateStatus status)
+    public static Result<GateResolution> Reject(string type, GateStatus status)
     {
         if (status != GateStatus.Pending)
         {
             return NotPending(status);
         }
 
-        if (type == GateType.Escalation)
+        if (type == EngineGates.Escalation)
         {
             return InvalidDecision("An escalation gate is decided with continue, rollback or accept, not rejected.");
         }
@@ -160,7 +159,7 @@ public static class GateRules
     /// </summary>
     public static IReadOnlyList<Guid> StaleAfterArtifactApproval(
         Guid approvedArtifactId,
-        ArtifactType approvedType,
+        string approvedType,
         IReadOnlyCollection<Guid> invalidatedArtifactIds,
         bool phaseFellBack,
         IEnumerable<PendingGateRef> pendingGates)

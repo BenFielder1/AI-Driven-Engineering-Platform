@@ -1,7 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Aide.Api.Features.Activity;
-using Aide.Domain.Artifacts;
+using Aide.Api.Features.Projects;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Artifacts;
 
@@ -19,7 +20,7 @@ public sealed record ArtifactAuthorDto(ActorDto? User, Guid? AgentRunId);
 /// </summary>
 public sealed record ArtifactSummaryDto(
     Guid Id,
-    ArtifactType Type,
+    [WireEnum(typeof(SdlcArtifacts))] string Type,
     int Version,
     ArtifactStatus Status,
     Guid ReleaseVersionId,
@@ -42,7 +43,7 @@ public sealed record ArtifactSummaryDto(
 /// </summary>
 public sealed record ArtifactDto(
     Guid Id,
-    ArtifactType Type,
+    [WireEnum(typeof(SdlcArtifacts))] string Type,
     int Version,
     int? ParentVersion,
     string Content,

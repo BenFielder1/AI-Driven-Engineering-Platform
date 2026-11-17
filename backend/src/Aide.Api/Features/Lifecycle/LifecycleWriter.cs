@@ -1,13 +1,13 @@
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Lifecycle;
 
@@ -105,7 +105,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
     /// </remarks>
     public ApprovalGate AddGate(
         Project project,
-        GateType type,
+        string type,
         Guid? artifactId,
         string actor,
         DateTimeOffset now,
@@ -141,7 +141,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
                 stepNumber = blockedStep.StepNumber,
             };
         db.AddEvent(EventTypes.GateCreated, project.Id, payload, actor, now);
-        if (type == GateType.PreRelease)
+        if (type == SdlcGates.PreRelease)
         {
             // FR-84: merge readiness is checked when the pre-release gate is created (stored for the gate and Release page).
             jobs.Enqueue(JobTypes.MergeReadiness, new Features.Git.MergeReadinessJobPayload(project.Id, gate.Id), project.Id, now);

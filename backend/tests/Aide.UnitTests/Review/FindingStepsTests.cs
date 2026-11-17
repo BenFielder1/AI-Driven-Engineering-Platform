@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
@@ -9,6 +8,7 @@ using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.UnitTests.Stack;
+using Tevrin.Pack.Sdlc;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Review;
@@ -379,7 +379,7 @@ public sealed class FindingStepsTests
     [Fact]
     public void FR247_The_code_review_prompt_v10_has_the_step_or_waiver_rule_and_the_waivedFindings_field()
     {
-        var template = new EmbeddedPromptLibrary().Template(AgentKind.CodeReview);
+        var template = new EmbeddedPromptLibrary().Template(SdlcAgents.CodeReview);
 
         Assert.Equal("10", template.Version);
         Assert.Contains("For every finding id, either:", template.System, StringComparison.Ordinal);

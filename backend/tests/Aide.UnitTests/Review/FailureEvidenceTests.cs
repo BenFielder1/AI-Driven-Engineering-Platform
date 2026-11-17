@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -12,6 +11,7 @@ using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Bitbucket;
 using Aide.UnitTests.Stack;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Review;
@@ -354,7 +354,7 @@ public sealed class FailureEvidenceTests
     [Fact]
     public void FR238_The_code_review_prompt_v9_has_the_failure_step_rules()
     {
-        var template = new EmbeddedPromptLibrary().Template(AgentKind.CodeReview);
+        var template = new EmbeddedPromptLibrary().Template(SdlcAgents.CodeReview);
 
         Assert.Equal("10", template.Version); // FR-247: v10 keeps the v9 failure rules
         Assert.Contains("failure id", template.System, StringComparison.Ordinal);

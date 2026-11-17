@@ -4,11 +4,10 @@ using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Artifacts;
 
@@ -158,7 +157,7 @@ public static class ArtifactEndpoints
 
     private static async Task<Results<Ok<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> GetLatestArtifact(
         Guid id,
-        [WireEnum(typeof(ArtifactType))] string type,
+        [WireEnum(typeof(SdlcArtifacts))] string type,
         IProjectAccess access,
         ArtifactReader reader,
         AideDbContext db,
@@ -177,7 +176,7 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(scope.Error!);
         }
 
-        var artifactType = EnumStrings.Parse<ArtifactType>(type);
+        var artifactType = SdlcArtifacts.Parse(type);
         return await reader.LatestAsync(id, artifactType, scope.Value, cancellationToken) is { } artifact
             ? TypedResults.Ok(artifact)
             : ApiProblems.NotFound($"No version of the {type} exists yet.");
@@ -185,7 +184,7 @@ public static class ArtifactEndpoints
 
     private static async Task<Results<Ok<IReadOnlyList<ArtifactSummaryDto>>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> GetArtifactHistory(
         Guid id,
-        [WireEnum(typeof(ArtifactType))] string type,
+        [WireEnum(typeof(SdlcArtifacts))] string type,
         IProjectAccess access,
         ArtifactReader reader,
         AideDbContext db,
@@ -205,7 +204,7 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(scope.Error!);
         }
 
-        var artifactType = EnumStrings.Parse<ArtifactType>(type);
+        var artifactType = SdlcArtifacts.Parse(type);
         return TypedResults.Ok(allReleaseVersions
             ? await reader.HistoryAcrossReleaseVersionsAsync(id, artifactType, cancellationToken)
             : await reader.HistoryAsync(id, artifactType, scope.Value, cancellationToken));
@@ -213,7 +212,7 @@ public static class ArtifactEndpoints
 
     private static async Task<Results<Ok<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> GetArtifactVersion(
         Guid id,
-        [WireEnum(typeof(ArtifactType))] string type,
+        [WireEnum(typeof(SdlcArtifacts))] string type,
         [Range(1, int.MaxValue)] int version,
         IProjectAccess access,
         ArtifactReader reader,
@@ -225,14 +224,14 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        return await reader.VersionAsync(id, EnumStrings.Parse<ArtifactType>(type), version, cancellationToken) is { } artifact
+        return await reader.VersionAsync(id, SdlcArtifacts.Parse(type), version, cancellationToken) is { } artifact
             ? TypedResults.Ok(artifact)
             : ApiProblems.NotFound($"Version {version} of the {type} was not found.");
     }
 
     private static async Task<Results<Ok<ArtifactDiffDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> GetArtifactDiff(
         Guid id,
-        [WireEnum(typeof(ArtifactType))] string type,
+        [WireEnum(typeof(SdlcArtifacts))] string type,
         [Range(1, int.MaxValue)] int from,
         [Range(1, int.MaxValue)] int to,
         IProjectAccess access,
@@ -245,7 +244,7 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var diff = await reader.DiffAsync(id, EnumStrings.Parse<ArtifactType>(type), from, to, cancellationToken);
+        var diff = await reader.DiffAsync(id, SdlcArtifacts.Parse(type), from, to, cancellationToken);
         if (diff.IsSuccess)
         {
             return TypedResults.Ok(diff.Value);
@@ -256,7 +255,7 @@ public static class ArtifactEndpoints
 
     private static async Task<Results<Created<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> CreateArtifactDraft(
         Guid id,
-        [WireEnum(typeof(ArtifactType))] string type,
+        [WireEnum(typeof(SdlcArtifacts))] string type,
         CreateArtifactDraftRequest request,
         IProjectAccess access,
         ICurrentUser currentUser,
@@ -276,7 +275,7 @@ public static class ArtifactEndpoints
         }
 
         var created = await service.CreateDraftAsync(
-            id, EnumStrings.Parse<ArtifactType>(type), request.Content, request.BaseVersion, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
+            id, SdlcArtifacts.Parse(type), request.Content, request.BaseVersion, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
         if (created.IsFailure)
         {
             // FR-183: a stack_profile edit's field errors ("layers.backend.option": …) as a VALIDATION errors map.
@@ -292,7 +291,7 @@ public static class ArtifactEndpoints
     /// <summary>FR-58: writers only; <see cref="ArtifactService.RestoreAsync"/> decides and writes.</summary>
     private static async Task<Results<Created<ArtifactDto>, ValidationProblem, ProblemHttpResult, StatusCodeHttpResult>> RestoreArtifactVersion(
         Guid id,
-        [WireEnum(typeof(ArtifactType))] string type,
+        [WireEnum(typeof(SdlcArtifacts))] string type,
         [Range(1, int.MaxValue)] int version,
         IProjectAccess access,
         ICurrentUser currentUser,
@@ -306,7 +305,7 @@ public static class ArtifactEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var restored = await service.RestoreAsync(id, EnumStrings.Parse<ArtifactType>(type), version, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
+        var restored = await service.RestoreAsync(id, SdlcArtifacts.Parse(type), version, currentUser.RequiredUserId, currentUser.Actor, cancellationToken);
         if (restored.IsFailure)
         {
             return restored.Error!.Code == ErrorCodes.Validation ? ApiProblems.Validation(restored.Error) : ApiProblems.FromError(restored.Error);

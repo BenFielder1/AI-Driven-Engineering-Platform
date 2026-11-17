@@ -296,7 +296,7 @@ public sealed partial class ProjectCreator(
         }
 
         var modelsByAgent = sentModels is not null
-            ? sentModels.Where(m => m.Model is not null).ToDictionary(m => m.Agent.ToWire(), m => m.Model!.Trim(), StringComparer.Ordinal)
+            ? sentModels.Where(m => m.Model is not null).ToDictionary(m => m.Agent, m => m.Model!.Trim(), StringComparer.Ordinal)
             : new Dictionary<string, string>(llm.DefaultAgentModels(choice.Provider), StringComparer.Ordinal);
         return Result.Success(new LlmPlan(choice.Provider, choice.DefaultModel.Trim(), modelsByAgent, binding, Defaulted: false));
     }

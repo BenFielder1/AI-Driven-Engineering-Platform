@@ -1,5 +1,6 @@
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Git;
+using Aide.Api.Logging;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Gates;
@@ -106,7 +107,7 @@ public sealed partial class LifecycleService(
     }
 
     /// <summary>The latest locked version of the artifact a gate approves (spec or plan), if any.</summary>
-    internal async Task<Guid?> GatedArtifactIdAsync(Guid projectId, GateType type, CancellationToken cancellationToken)
+    internal async Task<Guid?> GatedArtifactIdAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
         if (GateRules.GatedArtifact(type) is not { } artifactType)
         {
@@ -125,7 +126,7 @@ public sealed partial class LifecycleService(
     private static partial void LogAdvanceRefused(ILogger logger, Guid projectId, string errorCode);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} needs a {GateType} gate before advancing; gate created")]
-    private static partial void LogGateCreated(ILogger logger, Guid projectId, GateType gateType);
+    private static partial void LogGateCreated(ILogger logger, Guid projectId, LoggedKey gateType);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} moved {FromPhase} → {ToPhase} (checkpoint {Checkpoint})")]
     private static partial void LogAdvanced(ILogger logger, Guid projectId, Phase fromPhase, Phase toPhase, int checkpoint);

@@ -1,4 +1,3 @@
-using Aide.Domain.Artifacts;
 using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.Domain.Entities;
@@ -14,7 +13,7 @@ public sealed class Artifact
 
     public Guid ProjectId { get; init; }
 
-    public ArtifactType Type { get; init; }
+    public string Type { get; init; } = string.Empty;
 
     public int Version { get; init; }
 

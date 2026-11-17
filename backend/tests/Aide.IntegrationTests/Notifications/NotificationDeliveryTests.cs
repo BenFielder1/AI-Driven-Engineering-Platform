@@ -6,10 +6,8 @@ using System.Text.Json;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
@@ -18,6 +16,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Notifications;
 
@@ -441,9 +440,9 @@ internal static class NotificationScenario
     {
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Specification, 2, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
         var result = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
-        Assert.Equal(GateType.SpecApproval, result.Gate!.Type);
+        Assert.Equal(SdlcGates.SpecApproval, result.Gate!.Type);
         return result.Gate;
     }
 

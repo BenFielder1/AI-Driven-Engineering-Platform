@@ -2,16 +2,15 @@ using System.Net;
 using System.Net.Http.Json;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Versions;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Rollback;
 
@@ -57,15 +56,15 @@ public sealed class RollbackEndpointTests(AideApiFactory factory)
             await LifecycleSeed.AddTransitionAsync(factory, id, history[i].From, history[i].To, history[i].Version, t0.AddMinutes(i));
         }
 
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, projectVersionAtCreation: 1);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
-        var plan4 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 4);
-        var spec5 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 5);
-        var optimisation6 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.OptimizationPlan, projectVersionAtCreation: 6);
-        var optimisation7 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.OptimizationPlan, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 7);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, projectVersionAtCreation: 1);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
+        var plan4 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 4);
+        var spec5 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 5);
+        var optimisation6 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, projectVersionAtCreation: 6);
+        var optimisation7 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 7);
         var planSteps = await LifecycleSeed.AddStepsAsync(factory, id, plan4.Id, 2, StepStatus.Completed);
         var optimisationSteps = await LifecycleSeed.AddStepsAsync(factory, id, optimisation6.Id, 2, StepStatus.Completed);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.Escalation);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, EngineGates.Escalation);
         var job = await ProjectApi.WithDbAsync(factory, async db =>
         {
             var queued = new Job { ProjectId = id, Type = JobTypes.Review, Payload = "{}", RunAfter = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow };

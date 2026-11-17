@@ -17,6 +17,9 @@ internal sealed class ArtifactConfiguration : IEntityTypeConfiguration<Artifact>
         builder.ToTable("artifacts");
         builder.HasKey(a => a.Id);
         builder.Property(a => a.Id).ValueGeneratedNever();
+
+        // FR-270, FR-274: the artifact key (SdlcArtifacts), the same column as the 0.6.1 enum.
+        builder.Property(a => a.Type).HasMaxLength(AideDbContext.EnumMaxLength);
         builder.Property(a => a.Content).IsRequired();
         builder.Property(a => a.ContentHash).HasMaxLength(64).IsRequired();
         builder.Property(a => a.RowVersion).IsXminRowVersion();
@@ -42,6 +45,9 @@ internal sealed class ApprovalGateConfiguration : IEntityTypeConfiguration<Appro
         builder.ToTable("approval_gates");
         builder.HasKey(g => g.Id);
         builder.Property(g => g.Id).ValueGeneratedNever();
+
+        // FR-271, FR-274: the gate key (SdlcGates, EngineGates), the same column as the 0.6.1 enum.
+        builder.Property(g => g.Type).HasMaxLength(AideDbContext.EnumMaxLength);
         builder.Property(g => g.RowVersion).IsXminRowVersion();
 
         builder.HasOne<Project>().WithMany().HasForeignKey(g => g.ProjectId).OnDelete(DeleteBehavior.Cascade);
@@ -145,6 +151,9 @@ internal sealed class AgentRunConfiguration : IEntityTypeConfiguration<AgentRun>
         builder.ToTable("agent_runs");
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id).ValueGeneratedNever();
+
+        // FR-269, FR-274: the agent key (SdlcAgents), the same column as the 0.6.1 enum.
+        builder.Property(r => r.Agent).HasMaxLength(AideDbContext.EnumMaxLength);
         builder.Property(r => r.Model).HasMaxLength(100).IsRequired();
         builder.Property(r => r.PromptVersion).HasMaxLength(50).IsRequired();
         builder.Property(r => r.InputArtifacts).HasJsonbConversion().IsRequired();

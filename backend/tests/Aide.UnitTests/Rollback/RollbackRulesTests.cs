@@ -4,6 +4,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Rollback;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Rollback;
 
@@ -45,12 +46,12 @@ public class RollbackRulesTests
     [Fact]
     public void FR44_Version7_in_review_rolled_back_to_version4_restores_planning_and_invalidates_v5_to_v7()
     {
-        var request4 = new ArtifactRef(Guid.NewGuid(), ArtifactType.ProjectRequest, ArtifactStatus.Locked, 1);
-        var plan4 = new ArtifactRef(Guid.NewGuid(), ArtifactType.ImplementationPlan, ArtifactStatus.Locked, 4);
-        var optimisation6 = new ArtifactRef(Guid.NewGuid(), ArtifactType.OptimizationPlan, ArtifactStatus.Locked, 6);
-        var spec5 = new ArtifactRef(Guid.NewGuid(), ArtifactType.TechnicalSpecification, ArtifactStatus.Draft, 5);
-        var optimisation7 = new ArtifactRef(Guid.NewGuid(), ArtifactType.OptimizationPlan, ArtifactStatus.Draft, 7);
-        var rejected7 = new ArtifactRef(Guid.NewGuid(), ArtifactType.OptimizationPlan, ArtifactStatus.Rejected, 7);
+        var request4 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.ProjectRequest, ArtifactStatus.Locked, 1);
+        var plan4 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.ImplementationPlan, ArtifactStatus.Locked, 4);
+        var optimisation6 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.OptimizationPlan, ArtifactStatus.Locked, 6);
+        var spec5 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, 5);
+        var optimisation7 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.OptimizationPlan, ArtifactStatus.Draft, 7);
+        var rejected7 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.OptimizationPlan, ArtifactStatus.Rejected, 7);
         var planStep = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Completed);
         var optimisationStep = new StepRef(Guid.NewGuid(), optimisation6.Id, StepStatus.Completed);
 
@@ -73,12 +74,12 @@ public class RollbackRulesTests
     [Fact]
     public void S4_8_Rollback_keeping_the_plan_requeues_its_blocked_and_rejected_steps_but_not_completed_ones()
     {
-        var plan4 = new ArtifactRef(Guid.NewGuid(), ArtifactType.ImplementationPlan, ArtifactStatus.Locked, 4);
+        var plan4 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.ImplementationPlan, ArtifactStatus.Locked, 4);
         var completed = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Completed);
         var blocked = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Blocked);
         var rejected = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Rejected);
         var pending = new StepRef(Guid.NewGuid(), plan4.Id, StepStatus.Pending);
-        var optimisation6 = new ArtifactRef(Guid.NewGuid(), ArtifactType.OptimizationPlan, ArtifactStatus.Locked, 6);
+        var optimisation6 = new ArtifactRef(Guid.NewGuid(), SdlcArtifacts.OptimizationPlan, ArtifactStatus.Locked, 6);
         var blockedOptimisation = new StepRef(Guid.NewGuid(), optimisation6.Id, StepStatus.Blocked);
 
         var plan = RollbackRules.Plan(Request(artifacts: [plan4, optimisation6], steps: [completed, blocked, rejected, pending, blockedOptimisation])).Value;

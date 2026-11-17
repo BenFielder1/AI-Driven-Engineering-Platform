@@ -1,8 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using Aide.Domain.Agents;
 using Aide.Domain.RepoTools;
-using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Agents;
@@ -14,7 +12,7 @@ namespace Aide.Infrastructure.Agents;
 /// </summary>
 public interface IFakeAgentResponder
 {
-    AgentKind Agent { get; }
+    string Agent { get; }
 
     string Respond(LlmRequest request);
 }
@@ -34,8 +32,8 @@ public sealed class FakeLlmProvider : ILlmProvider, IToolCallingLlmProvider
     public const string StopReason = "end_turn";
     public const string ToolUseStopReason = "tool_use";
 
-    private readonly Dictionary<AgentKind, IFakeAgentResponder> _responders;
-    private readonly Dictionary<AgentKind, IFakeToolScript> _scripts;
+    private readonly Dictionary<string, IFakeAgentResponder> _responders;
+    private readonly Dictionary<string, IFakeToolScript> _scripts;
 
     public FakeLlmProvider(IEnumerable<IFakeAgentResponder> responders)
         : this(responders, [])
@@ -106,7 +104,7 @@ public sealed class FakeLlmProvider : ILlmProvider, IToolCallingLlmProvider
 
     private static string GenericReply(LlmRequest request, string prompt)
     {
-        var agent = request.Agent?.ToWire() ?? "unknown";
+        var agent = request.Agent ?? "unknown";
         return $"""
             # Fake {agent} output
 

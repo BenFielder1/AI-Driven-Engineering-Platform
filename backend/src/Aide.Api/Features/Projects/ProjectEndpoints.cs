@@ -24,6 +24,7 @@ using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Projects;
 
@@ -578,7 +579,7 @@ public static partial class ProjectEndpoints
         // The current plan: the most recently created locked plan (implementation plan, or the optimisation plan of
         // a review cycle). An approved new implementation plan invalidates the optimisation plan (§4.4).
         var currentPlanId = artifacts
-            .Where(a => a.Status == ArtifactStatus.Locked && a.Type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan)
+            .Where(a => a.Status == ArtifactStatus.Locked && a.Type is SdlcArtifacts.ImplementationPlan or SdlcArtifacts.OptimizationPlan)
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)
             .Select(a => (Guid?)a.Id)

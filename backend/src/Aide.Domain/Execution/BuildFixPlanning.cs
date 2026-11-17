@@ -7,6 +7,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Review;
 using Aide.Domain.Stack;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Execution;
 
@@ -53,7 +54,7 @@ public sealed record BuildFixPlan(IReadOnlyList<PlanStep> Steps, IReadOnlyList<P
 public static class BuildFixPlanning
 {
     /// <summary>The agent key and prompt name (§4.48).</summary>
-    public static string AgentKey => AgentKind.BuildFix.ToWire();
+    public static string AgentKey => SdlcAgents.BuildFix;
 
     /// <summary>The fewest steps a fix plan has.</summary>
     public const int MinSteps = 1;

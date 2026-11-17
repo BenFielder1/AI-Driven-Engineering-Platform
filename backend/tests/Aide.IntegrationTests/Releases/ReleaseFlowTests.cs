@@ -8,11 +8,9 @@ using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Versions;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
@@ -21,6 +19,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Releases;
 
@@ -208,7 +207,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         Assert.Equal((ReleaseVersionStatus.Released, "v1.0.0", 6, 6), (released.Status, released.Tag, released.Checkpoints.Current, released.Checkpoints.Max));
         var baseline = await ProjectApi.ReadAsync<List<Aide.Api.Features.Artifacts.ArtifactSummaryDto>>(
             await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/artifacts?releaseVersionId={released.Id}", UriKind.Relative), Ct));
-        Assert.Contains(baseline, a => a.Type == ArtifactType.ImplementationPlan && a.Status == ArtifactStatus.Locked);
+        Assert.Contains(baseline, a => a.Type == SdlcArtifacts.ImplementationPlan && a.Status == ArtifactStatus.Locked);
         Assert.Empty(await ProjectApi.ReadAsync<List<Aide.Api.Features.Artifacts.ArtifactSummaryDto>>(
             await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/artifacts", UriKind.Relative), Ct)));
         var oldReleases = await ProjectApi.ReadAsync<List<ReleaseDto>>(
@@ -300,7 +299,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 1);
         await LifecycleSeed.AddReportAsync(factory, id, 5, Domain.Review.ReviewDecision.ReleaseEligible);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
 
         await Problems.AssertAsync(await RetryAsync(fixture.Owner.Client, id), HttpStatusCode.Conflict, ErrorCodes.ReleaseInProgress);
@@ -322,7 +321,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Execution, Phase.Review, 5, DateTimeOffset.UtcNow.AddMinutes(-10));
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Planning, Phase.Execution, 4, DateTimeOffset.UtcNow.AddMinutes(-20));
         await LifecycleSeed.AddReportAsync(factory, id, 5, Domain.Review.ReviewDecision.ReleaseEligible);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.Release);
 
@@ -590,7 +589,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Execution, Phase.Review, 5, DateTimeOffset.UtcNow.AddMinutes(-10));
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Planning, Phase.Execution, 4, DateTimeOffset.UtcNow.AddMinutes(-20));
         await LifecycleSeed.AddReportAsync(factory, id, 5, Domain.Review.ReviewDecision.ReleaseEligible);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
     }
 
@@ -631,9 +630,9 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     {
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.AddRange(Enumerable.Range(1, 2).Select(n => new ExecutionStep
@@ -655,7 +654,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     internal static async Task ApproveReleaseGateAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
     {
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(app, fixture.Project.Id), g => g.Status == GateStatus.Pending);
-        Assert.Equal(GateType.PreRelease, gate.Type);
+        Assert.Equal(SdlcGates.PreRelease, gate.Type);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, fixture.Project.Id, gate.Id, "approve"));
         var project = await LifecycleSeed.ProjectAsync(app, fixture.Project.Id);
         Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));

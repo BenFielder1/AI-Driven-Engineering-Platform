@@ -1,8 +1,8 @@
 using System.Data.Common;
+using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
@@ -93,10 +93,10 @@ public sealed partial class GateTimerService(AideDbContext db, JobEnqueuer jobs,
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Gate {GateId} ({GateType}) of project {ProjectId} is overdue (72 h).")]
-    private static partial void LogOverdue(ILogger logger, Guid projectId, Guid gateId, GateType gateType);
+    private static partial void LogOverdue(ILogger logger, Guid projectId, Guid gateId, LoggedKey gateType);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Gate {GateId} ({GateType}) of project {ProjectId}: 24-hour reminder queued.")]
-    private static partial void LogReminded(ILogger logger, Guid projectId, Guid gateId, GateType gateType);
+    private static partial void LogReminded(ILogger logger, Guid projectId, Guid gateId, LoggedKey gateType);
 }
 
 /// <summary>

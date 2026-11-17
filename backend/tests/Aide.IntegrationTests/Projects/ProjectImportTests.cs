@@ -5,7 +5,6 @@ using Aide.Api.Features.Projects;
 using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Versions;
-using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -18,6 +17,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Projects;
 
@@ -196,13 +196,13 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
 
         await AgentJobs.RunQueuedAsync(app, project.Id);
 
-        var summary = Assert.Single(await AgentJobs.ArtifactsAsync(app, project.Id, ArtifactType.CodebaseSummary));
+        var summary = Assert.Single(await AgentJobs.ArtifactsAsync(app, project.Id, SdlcArtifacts.CodebaseSummary));
         Assert.Equal((1, ArtifactStatus.Locked, project.ReleaseVersionId), (summary.Version, summary.Status, (Guid?)summary.ReleaseVersionId));
         Assert.True(CodebaseSummaryRules.Check(summary.Content).IsSuccess);
         Assert.Empty(await LifecycleSeed.GatesAsync(app, project.Id)); // auto-locked: no approval gate
         Assert.Single(await LifecycleSeed.EventsAsync(app, project.Id, EventTypes.CodebaseSummaryCreated));
         var analyst = Assert.Single(await AgentJobs.RunsAsync(app, project.Id));
-        Assert.Equal(AgentKind.RepositoryAnalyst, analyst.Agent);
+        Assert.Equal(SdlcAgents.RepositoryAnalyst, analyst.Agent);
         var analystCalls = Aide.Api.Features.Execution.ExecutionRunReader.ToolCalls(analyst.ToolCalls);
         Assert.Equal([RepoToolNames.ListFiles, RepoToolNames.ReadFile], analystCalls.Select(c => c.Tool)); // explored the snapshot at v2.3.0
         Assert.True(analystCalls[1].Bytes > 0);
@@ -212,7 +212,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         await AgentJobs.RunQueuedAsync(app, project.Id);
 
         var refinement = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Id == round.RunId);
-        Assert.Contains(new InputArtifactRef(summary.Id, ArtifactType.CodebaseSummary, 1), refinement.InputArtifacts);
+        Assert.Contains(new InputArtifactRef(summary.Id, SdlcArtifacts.CodebaseSummary, 1), refinement.InputArtifacts);
         var after = await ProjectApi.ReadAsync<RefinementDto>(await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/refinement", UriKind.Relative), Ct));
         Assert.Equal(new CodebaseSummaryStatusDto(CodebaseSummaryState.Completed, analyst.Id, summary.Id, 1), after.CodebaseSummary);
         Assert.NotNull(after.LatestDraft);
@@ -242,8 +242,8 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         Assert.False(await AgentJobs.RunCoreAsync(app, waiting));
 
         var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id));
-        Assert.Equal((AgentKind.IdeaRefinement, AgentRunStatus.Succeeded), (run.Agent, run.Status));
-        Assert.DoesNotContain(run.InputArtifacts, a => a.Type == ArtifactType.CodebaseSummary);
+        Assert.Equal((SdlcAgents.IdeaRefinement, AgentRunStatus.Succeeded), (run.Agent, run.Status));
+        Assert.DoesNotContain(run.InputArtifacts, a => a.Type == SdlcArtifacts.CodebaseSummary);
         Assert.Equal([AgentRunWarnings.SummaryWaitTimeout], AgentRunner.ReadOutput(run.Output)!.Warnings);
         var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, project.Id, EventTypes.RunCompleted)).Payload);
         Assert.Equal(AgentRunWarnings.SummaryWaitTimeout, Assert.Single(completed.GetProperty("warnings").EnumerateArray()).GetString());
@@ -258,7 +258,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
     [Fact]
     public async Task FR71_Given_a_refinement_run_on_an_imported_repo_when_the_agent_reads_etc_passwd_then_the_tool_returns_UNSAFE_PATH_and_nothing_is_read()
     {
-        await using var app = App(new FakeToolScript(AgentKind.IdeaRefinement, FakeToolScripts.PathEscape));
+        await using var app = App(new FakeToolScript(SdlcAgents.IdeaRefinement, FakeToolScripts.PathEscape));
         var run = await RefinementRunAsync(app);
 
         var call = Assert.Single(Aide.Api.Features.Execution.ExecutionRunReader.ToolCalls(run.ToolCalls));
@@ -270,7 +270,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
     [Fact]
     public async Task FR71_Given_the_26th_tool_call_in_a_run_then_the_tool_returns_TOOL_LIMIT_and_the_agent_answers_with_what_it_has()
     {
-        await using var app = App(new FakeToolScript(AgentKind.IdeaRefinement, FakeToolScripts.Many(30)));
+        await using var app = App(new FakeToolScript(SdlcAgents.IdeaRefinement, FakeToolScripts.Many(30)));
         var run = await RefinementRunAsync(app);
 
         var calls = Aide.Api.Features.Execution.ExecutionRunReader.ToolCalls(run.ToolCalls);
@@ -278,7 +278,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         Assert.All(calls.Take(25), c => Assert.Null(c.Error));
         Assert.Equal("TOOL_LIMIT", calls[25].Error);
         Assert.Equal(AgentRunStatus.Succeeded, run.Status);
-        Assert.NotEmpty(await AgentJobs.ArtifactsAsync(app, run.ProjectId, ArtifactType.ProjectRequest));
+        Assert.NotEmpty(await AgentJobs.ArtifactsAsync(app, run.ProjectId, SdlcArtifacts.ProjectRequest));
     }
 
     // ---------- FR-26 with tool loops ----------
@@ -286,7 +286,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
     [Fact]
     public async Task FR26_A_tool_loop_stops_with_BUDGET_EXCEEDED_once_its_turns_use_up_the_budget_and_counts_the_turns_made()
     {
-        await using var app = App(new FakeToolScript(AgentKind.IdeaRefinement, FakeToolScripts.Many(30)));
+        await using var app = App(new FakeToolScript(SdlcAgents.IdeaRefinement, FakeToolScripts.Many(30)));
         using var owner = await ApiSession.RegisterAsync(app);
         var project = await ProjectApi.ReadAsync<ProjectDto>(await ImportAsync(owner.Client, "v2.3.0", "2.4.0"), HttpStatusCode.Created);
         await AgentJobs.RunQueuedAsync(app, project.Id);
@@ -299,7 +299,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
 
         Assert.Equal(JobStatus.Failed, job.Status);
         Assert.StartsWith(ErrorCodes.BudgetExceeded, job.LastError, StringComparison.Ordinal);
-        var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Agent == AgentKind.IdeaRefinement);
+        var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Agent == SdlcAgents.IdeaRefinement);
         Assert.Equal(AgentRunStatus.Failed, run.Status);
         Assert.StartsWith(ErrorCodes.BudgetExceeded, run.Error, StringComparison.Ordinal);
         Assert.True(run.InputTokens > 0 && run.OutputTokens > 0);
@@ -312,7 +312,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
     public async Task FR26_Turns_paid_before_a_transient_provider_failure_are_counted_and_the_retry_adds_up()
     {
         var flaky = new FlakyRefinementResponder();
-        await using var app = App(new FakeToolScript(AgentKind.IdeaRefinement, FakeToolScripts.Explore));
+        await using var app = App(new FakeToolScript(SdlcAgents.IdeaRefinement, FakeToolScripts.Explore));
         await using var flakyApp = app.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddSingleton<IFakeAgentResponder>(flaky)));
         using var owner = await ApiSession.RegisterAsync(flakyApp);
         var project = await ProjectApi.ReadAsync<ProjectDto>(await ImportAsync(owner.Client, "v2.3.0", "2.4.0"), HttpStatusCode.Created);
@@ -323,7 +323,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
 
         // Attempt 1: two tool turns, then the final turn fails transiently: the run stays running, the turns are counted.
         await AgentJobs.RunCoreAsync(flakyApp, job);
-        var failed = Assert.Single(await AgentJobs.RunsAsync(flakyApp, project.Id), r => r.Agent == AgentKind.IdeaRefinement);
+        var failed = Assert.Single(await AgentJobs.RunsAsync(flakyApp, project.Id), r => r.Agent == SdlcAgents.IdeaRefinement);
         Assert.Equal(AgentRunStatus.Running, failed.Status);
         Assert.True(failed.InputTokens > 0);
         var afterFailure = (await LifecycleSeed.ProjectAsync(flakyApp, project.Id)).TokensUsed;
@@ -332,7 +332,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         // Attempt 2 succeeds: the run holds both attempts' tokens, and so does the project.
         await ProjectApi.WithDbAsync(flakyApp, db => db.Jobs.Where(j => j.Id == job.Id).ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued), Ct));
         await AgentJobs.RunQueuedAsync(flakyApp, project.Id);
-        var run = Assert.Single(await AgentJobs.RunsAsync(flakyApp, project.Id), r => r.Agent == AgentKind.IdeaRefinement);
+        var run = Assert.Single(await AgentJobs.RunsAsync(flakyApp, project.Id), r => r.Agent == SdlcAgents.IdeaRefinement);
         Assert.Equal((AgentRunStatus.Succeeded, 2), (run.Status, run.Attempts));
         Assert.True(run.InputTokens > 2 * failed.InputTokens - 1);
         Assert.Equal(before + run.InputTokens + run.OutputTokens, (await LifecycleSeed.ProjectAsync(flakyApp, project.Id)).TokensUsed);
@@ -344,7 +344,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         private readonly FakeIdeaRefinementResponder _inner = new();
         private int _calls;
 
-        public AgentKind Agent => AgentKind.IdeaRefinement;
+        public string Agent => SdlcAgents.IdeaRefinement;
 
         public string Respond(LlmRequest request) =>
             Interlocked.Increment(ref _calls) == 1

@@ -12,6 +12,7 @@ using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Characterisation;
 
@@ -121,7 +122,7 @@ internal sealed class SdlcFlow : IDisposable
         await RunJobsAsync();
     }
 
-    public async Task<Artifact> DraftAsync(ArtifactType type)
+    public async Task<Artifact> DraftAsync(string type)
     {
         var drafts = (await AgentJobs.ArtifactsAsync(App, Id, type)).Where(a => a.Status == ArtifactStatus.Draft).ToList();
         Assert.True(drafts.Count == 1, $"Expected one {type} draft. {await DescribeAsync()}");
@@ -129,11 +130,11 @@ internal sealed class SdlcFlow : IDisposable
     }
 
     /// <summary>FR-17: the Owner approves the open draft of <paramref name="type"/>.</summary>
-    public async Task ApproveDraftAsync(ArtifactType type) =>
+    public async Task ApproveDraftAsync(string type) =>
         await ExpectAsync(await ArtifactApi.DecideAsync(Fixture.Owner.Client, Id, (await DraftAsync(type)).Id, "approve"), HttpStatusCode.OK);
 
     /// <summary>FR-17: the Owner rejects the open draft of <paramref name="type"/> with <paramref name="comment"/>.</summary>
-    public async Task RejectDraftAsync(ArtifactType type, string comment) =>
+    public async Task RejectDraftAsync(string type, string comment) =>
         await ExpectAsync(await ArtifactApi.DecideAsync(Fixture.Owner.Client, Id, (await DraftAsync(type)).Id, "reject", comment), HttpStatusCode.OK);
 
     /// <summary>FR-18: a Contributor saves a draft of <paramref name="type"/> (wire value).</summary>
@@ -147,7 +148,7 @@ internal sealed class SdlcFlow : IDisposable
         return result.TryGetProperty("gate", out var gate) && gate.ValueKind == JsonValueKind.Object;
     }
 
-    public async Task<ApprovalGate> PendingGateAsync(GateType type)
+    public async Task<ApprovalGate> PendingGateAsync(string type)
     {
         var pending = (await LifecycleSeed.GatesAsync(App, Id)).Where(g => g.Status == GateStatus.Pending && g.Type == type).ToList();
         Assert.True(pending.Count == 1, $"Expected one pending {type} gate. {await DescribeAsync()}");
@@ -155,7 +156,7 @@ internal sealed class SdlcFlow : IDisposable
     }
 
     /// <summary>FR-13, FR-14: the Owner decides the pending gate of <paramref name="type"/>.</summary>
-    public async Task DecideGateAsync(GateType type, string action, object? body = null) =>
+    public async Task DecideGateAsync(string type, string action, object? body = null) =>
         await ExpectAsync(await LifecycleSeed.DecideAsync(Fixture.Owner.Client, Id, (await PendingGateAsync(type)).Id, action, body), HttpStatusCode.OK);
 
     public async Task ExpectPhaseAsync(Phase phase, ProjectStatus? status = null)
@@ -172,7 +173,7 @@ internal sealed class SdlcFlow : IDisposable
     public async Task ToSpecificationAsync()
     {
         await RefineAsync();
-        await ApproveDraftAsync(ArtifactType.ProjectRequest);
+        await ApproveDraftAsync(SdlcArtifacts.ProjectRequest);
         Assert.False(await AdvanceAsync(), "Entering specification needs no gate.");
         await ExpectPhaseAsync(Phase.Specification);
         await RunJobsAsync();
@@ -184,10 +185,10 @@ internal sealed class SdlcFlow : IDisposable
     /// </summary>
     public async Task ToPlanningAsync()
     {
-        await ApproveDraftAsync(ArtifactType.TechnicalSpecification);
+        await ApproveDraftAsync(SdlcArtifacts.TechnicalSpecification);
         if (await AdvanceAsync())
         {
-            await DecideGateAsync(GateType.SpecApproval, "approve");
+            await DecideGateAsync(SdlcGates.SpecApproval, "approve");
         }
 
         await ExpectPhaseAsync(Phase.Planning);
@@ -197,10 +198,10 @@ internal sealed class SdlcFlow : IDisposable
     /// <summary>Planning → Execution: the plan draft approved, advance, the plan_approval gate approved (strict).</summary>
     public async Task ToExecutionAsync()
     {
-        await ApproveDraftAsync(ArtifactType.ImplementationPlan);
+        await ApproveDraftAsync(SdlcArtifacts.ImplementationPlan);
         if (await AdvanceAsync())
         {
-            await DecideGateAsync(GateType.PlanApproval, "approve");
+            await DecideGateAsync(SdlcGates.PlanApproval, "approve");
         }
 
         await ExpectPhaseAsync(Phase.Execution);
@@ -230,7 +231,7 @@ internal sealed class SdlcFlow : IDisposable
     /// <summary>The pending pre_release gate approved and the release job run to <c>released</c> (Local merges and tags).</summary>
     public async Task ReleaseAsync()
     {
-        await DecideGateAsync(GateType.PreRelease, "approve");
+        await DecideGateAsync(SdlcGates.PreRelease, "approve");
         await ExpectPhaseAsync(Phase.Release);
         await RunJobsAsync();
         await ExpectPhaseAsync(Phase.Release, ProjectStatus.Released);
@@ -249,7 +250,7 @@ internal sealed class SdlcFlow : IDisposable
         await ExpectAsync(await ProjectApi.PatchAsync(Fixture.Owner.Client, $"{ProjectPath}/settings/git", new { mergeStrategy = strategy }), HttpStatusCode.OK);
 
     /// <summary>FR-20: changes the open draft's stored content behind the API's back.</summary>
-    public async Task TamperDraftAsync(ArtifactType type, string content) =>
+    public async Task TamperDraftAsync(string type, string content) =>
         await ArtifactApi.TamperAsync(App, (await DraftAsync(type)).Id, content);
 
     /// <summary>A read of <paramref name="path"/> (relative to the project's artifacts) by the Viewer.</summary>

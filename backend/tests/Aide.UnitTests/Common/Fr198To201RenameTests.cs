@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -14,6 +13,7 @@ using Aide.Infrastructure.Security;
 using Aide.UnitTests.Stack;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Common;
 
@@ -78,15 +78,15 @@ public sealed partial class Fr198To201RenameTests
     // ---------- FR-199: agent prompts ----------
 
     [Theory]
-    [InlineData(AgentKind.IdeaRefinement, "6")]
-    [InlineData(AgentKind.SpecGenerator, "7")]
-    [InlineData(AgentKind.PlanGenerator, "7")] // FR-242: v7 (deployment files)
-    [InlineData(AgentKind.CodeGenerator, "5")]
-    [InlineData(AgentKind.CodeReview, "10")] // FR-247: v10 (finding ids, waivers)
-    [InlineData(AgentKind.RepositoryAnalyst, "3")]
-    [InlineData(AgentKind.StackAnalyst, "3")]
-    [InlineData(AgentKind.BuildFix, "1")] // FR-256: build_fix v1
-    public void FR199_Each_rendered_system_prompt_names_Tevrin_not_AIDE_at_the_new_version(AgentKind agent, string version)
+    [InlineData(SdlcAgents.IdeaRefinement, "6")]
+    [InlineData(SdlcAgents.SpecGenerator, "7")]
+    [InlineData(SdlcAgents.PlanGenerator, "7")] // FR-242: v7 (deployment files)
+    [InlineData(SdlcAgents.CodeGenerator, "5")]
+    [InlineData(SdlcAgents.CodeReview, "10")] // FR-247: v10 (finding ids, waivers)
+    [InlineData(SdlcAgents.RepositoryAnalyst, "3")]
+    [InlineData(SdlcAgents.StackAnalyst, "3")]
+    [InlineData(SdlcAgents.BuildFix, "1")] // FR-256: build_fix v1
+    public void FR199_Each_rendered_system_prompt_names_Tevrin_not_AIDE_at_the_new_version(string agent, string version)
     {
         var template = new EmbeddedPromptLibrary().Template(agent);
         var rendered = template.Render(template.RequiredInputs.ToDictionary(n => n, n => (string?)$"<{n}>", StringComparer.Ordinal)).Value;
@@ -100,7 +100,7 @@ public sealed partial class Fr198To201RenameTests
     [Fact]
     public void FR199_A_specialist_prompt_composed_from_the_stack_catalog_names_Tevrin_not_AIDE()
     {
-        var template = new EmbeddedPromptLibrary().Template(AgentKind.CodeGenerator);
+        var template = new EmbeddedPromptLibrary().Template(SdlcAgents.CodeGenerator);
         var basePrompt = template.Render(template.RequiredInputs.ToDictionary(n => n, n => (string?)$"<{n}>", StringComparer.Ordinal)).Value;
         var resolution = StackResolverTests.Resolve(StackResolverTests.AspnetSpa(frontendHost: "deploy-netlify", backendHost: "deploy-render", databaseHost: "render-postgres"));
 

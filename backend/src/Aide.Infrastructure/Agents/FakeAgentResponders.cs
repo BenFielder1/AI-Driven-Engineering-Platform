@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Aide.Domain.Agents;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Infrastructure.Agents;
 
@@ -115,7 +115,7 @@ internal static partial class FakePrompt
 /// </summary>
 public sealed partial class FakeIdeaRefinementResponder : IFakeAgentResponder
 {
-    public AgentKind Agent => AgentKind.IdeaRefinement;
+    public string Agent => SdlcAgents.IdeaRefinement;
 
     public string Respond(LlmRequest request)
     {
@@ -206,7 +206,7 @@ public sealed partial class FakeIdeaRefinementResponder : IFakeAgentResponder
 /// </summary>
 public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
 {
-    public AgentKind Agent => AgentKind.SpecGenerator;
+    public string Agent => SdlcAgents.SpecGenerator;
 
     public string Respond(LlmRequest request)
     {
@@ -297,7 +297,7 @@ public sealed class FakeSpecGeneratorResponder : IFakeAgentResponder
 /// </summary>
 public sealed class FakePlanGeneratorResponder : IFakeAgentResponder
 {
-    public AgentKind Agent => AgentKind.PlanGenerator;
+    public string Agent => SdlcAgents.PlanGenerator;
 
     public string Respond(LlmRequest request)
     {
@@ -348,7 +348,7 @@ public sealed partial class FakeCodeGeneratorResponder : IFakeAgentResponder
 {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
-    public AgentKind Agent => AgentKind.CodeGenerator;
+    public string Agent => SdlcAgents.CodeGenerator;
 
     public string Respond(LlmRequest request)
     {
@@ -449,7 +449,7 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
     {
     }
 
-    public AgentKind Agent => AgentKind.CodeReview;
+    public string Agent => SdlcAgents.CodeReview;
 
     public string Respond(LlmRequest request)
     {
@@ -520,7 +520,7 @@ public sealed partial class FakeCodeReviewResponder(FakeCodeReviewScript script)
 /// </summary>
 public sealed partial class FakeBuildFixResponder : IFakeAgentResponder
 {
-    public AgentKind Agent => AgentKind.BuildFix;
+    public string Agent => SdlcAgents.BuildFix;
 
     public string Respond(LlmRequest request)
     {
@@ -558,7 +558,7 @@ public sealed partial class FakeBuildFixResponder : IFakeAgentResponder
 /// </summary>
 public sealed class FakeRepositoryAnalystResponder : IFakeAgentResponder
 {
-    public AgentKind Agent => AgentKind.RepositoryAnalyst;
+    public string Agent => SdlcAgents.RepositoryAnalyst;
 
     public string Respond(LlmRequest request)
     {
@@ -624,7 +624,7 @@ public sealed class FakeStackAnalystResponder : IFakeAgentResponder
     public const string DjangoMarker = "[fake-stack:django]";
     public const string InvalidMarker = "[fake-stack:invalid]";
 
-    public AgentKind Agent => AgentKind.StackAnalyst;
+    public string Agent => SdlcAgents.StackAnalyst;
 
     public string Respond(LlmRequest request)
     {

@@ -3,7 +3,6 @@ using Aide.Api.Agents;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -18,6 +17,7 @@ using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Git;
 
@@ -353,7 +353,7 @@ public sealed partial class PullRequestJobHandler(
 
     private async Task<PullRequestInput> DescriptionInputAsync(Project project, Guid planId, List<ExecutionStep> steps, CancellationToken cancellationToken)
     {
-        var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
         var plan = await db.Artifacts.AsNoTracking()
             .Where(a => a.Id == planId)
             .Select(a => new { a.Type, a.Version })

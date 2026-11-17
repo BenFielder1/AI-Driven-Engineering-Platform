@@ -10,6 +10,7 @@ using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Releases;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Characterisation;
 
@@ -38,7 +39,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
     private static async Task HappyPathAsync(SdlcFlow flow)
     {
         await flow.ToReviewAsync();
-        await flow.PendingGateAsync(GateType.PreRelease);
+        await flow.PendingGateAsync(SdlcGates.PreRelease);
         await flow.ReleaseAsync();
     }
 
@@ -58,7 +59,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         Assert.Equal((Phase.Release, 6), (transitions[^1].ToPhase, transitions[^1].Checkpoint));
         var gates = await LifecycleSeed.GatesAsync(flow.App, flow.Id);
         Assert.Equal(
-            [(GateType.SpecApproval, GateStatus.Approved), (GateType.PlanApproval, GateStatus.Approved), (GateType.PreRelease, GateStatus.Approved)],
+            [(SdlcGates.SpecApproval, GateStatus.Approved), (SdlcGates.PlanApproval, GateStatus.Approved), (SdlcGates.PreRelease, GateStatus.Approved)],
             gates.Select(g => (g.Type, g.Status)));
         await AssertSnapshotAsync(flow, "strict_happy_path");
     }
@@ -111,11 +112,11 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
     {
         using var flow = await SdlcFlow.CreateAsync(factory, factory, "advisory");
         await flow.ToSpecificationAsync();
-        await flow.ApproveDraftAsync(ArtifactType.TechnicalSpecification);
+        await flow.ApproveDraftAsync(SdlcArtifacts.TechnicalSpecification);
         Assert.True(await flow.AdvanceAsync(), "Advisory mode gates the entry to planning.");
 
         // FR-13: the rejection re-runs the spec generator with the comment; the new draft goes through the gate again.
-        await flow.DecideGateAsync(GateType.SpecApproval, "reject", new { comment = "Add rate limits to every endpoint." });
+        await flow.DecideGateAsync(SdlcGates.SpecApproval, "reject", new { comment = "Add rate limits to every endpoint." });
         await flow.RunJobsAsync();
         await flow.ToPlanningAsync();
 
@@ -129,7 +130,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         await flow.ToSpecificationAsync();
 
         // FR-17: rejecting the agent's draft re-runs it with the comment.
-        await flow.RejectDraftAsync(ArtifactType.TechnicalSpecification, "Add authentication to every endpoint.");
+        await flow.RejectDraftAsync(SdlcArtifacts.TechnicalSpecification, "Add authentication to every endpoint.");
         await flow.RunJobsAsync();
         await flow.ToPlanningAsync();
 
@@ -145,11 +146,11 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         using var flow = await SdlcFlow.CreateAsync(factory, factory, "advisory");
         await flow.ToReviewAsync();
 
-        await flow.ApproveDraftAsync(ArtifactType.OptimizationPlan);
+        await flow.ApproveDraftAsync(SdlcArtifacts.OptimizationPlan);
         await flow.RunJobsAsync();
 
         await flow.ExpectPhaseAsync(Phase.Review);
-        await flow.PendingGateAsync(GateType.PreRelease);
+        await flow.PendingGateAsync(SdlcGates.PreRelease);
         await AssertSnapshotAsync(flow, "two_review_cycles_then_release_eligible");
     }
 
@@ -161,11 +162,11 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         await flow.ToReviewAsync();
 
         // FR-14: continue allows one more cycle; the optimisation plan re-enters execution, and cycle 2 is release-eligible.
-        await flow.DecideGateAsync(GateType.Escalation, "approve", new { decision = "continue" });
-        await flow.ApproveDraftAsync(ArtifactType.OptimizationPlan);
+        await flow.DecideGateAsync(EngineGates.Escalation, "approve", new { decision = "continue" });
+        await flow.ApproveDraftAsync(SdlcArtifacts.OptimizationPlan);
         await flow.RunJobsAsync();
 
-        await flow.PendingGateAsync(GateType.PreRelease);
+        await flow.PendingGateAsync(SdlcGates.PreRelease);
         await AssertSnapshotAsync(flow, "escalation_continue");
     }
 
@@ -177,7 +178,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         await flow.ToReviewAsync();
 
         // FR-14: rollback to checkpoint 3 (planning).
-        await flow.DecideGateAsync(GateType.Escalation, "approve", new { decision = "rollback", targetCheckpoint = 3, comment = "Re-plan the API." });
+        await flow.DecideGateAsync(EngineGates.Escalation, "approve", new { decision = "rollback", targetCheckpoint = 3, comment = "Re-plan the API." });
         await flow.RunJobsAsync();
 
         await flow.ExpectPhaseAsync(Phase.Planning);
@@ -192,7 +193,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         await flow.ToReviewAsync();
 
         // FR-14: accept makes the project release-eligible through the pre_release gate.
-        await flow.DecideGateAsync(GateType.Escalation, "approve", new { decision = "accept", comment = "Good enough for a first release." });
+        await flow.DecideGateAsync(EngineGates.Escalation, "approve", new { decision = "accept", comment = "Good enough for a first release." });
         await flow.ReleaseAsync();
 
         await AssertSnapshotAsync(flow, "escalation_accept");
@@ -214,12 +215,12 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
 
         // FR-19: a new request version is approved: the cascade invalidates the downstream work and falls back.
         await flow.SaveDraftAsync("project_request", "# Todo API\n\n## Summary\nA todo API for small teams, with due dates and reminders.\n");
-        await flow.ApproveDraftAsync(ArtifactType.ProjectRequest);
+        await flow.ApproveDraftAsync(SdlcArtifacts.ProjectRequest);
 
         // §4.4: the spec and plan are invalidated and the project falls back to specification (their producing phase).
         await flow.ExpectPhaseAsync(Phase.Specification);
-        Assert.All(await AgentJobs.ArtifactsAsync(factory, flow.Id, ArtifactType.TechnicalSpecification), a => Assert.Equal(ArtifactStatus.Invalidated, a.Status));
-        Assert.All(await AgentJobs.ArtifactsAsync(factory, flow.Id, ArtifactType.ImplementationPlan), a => Assert.Equal(ArtifactStatus.Invalidated, a.Status));
+        Assert.All(await AgentJobs.ArtifactsAsync(factory, flow.Id, SdlcArtifacts.TechnicalSpecification), a => Assert.Equal(ArtifactStatus.Invalidated, a.Status));
+        Assert.All(await AgentJobs.ArtifactsAsync(factory, flow.Id, SdlcArtifacts.ImplementationPlan), a => Assert.Equal(ArtifactStatus.Invalidated, a.Status));
         await flow.RunJobsAsync();
 
         await AssertSnapshotAsync(flow, "new_project_request_approved_mid_execution");
@@ -231,7 +232,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         await using var app = Reviewing(0.93m);
         using var flow = await SdlcFlow.CreateAsync(factory, app, "advisory");
         await flow.ToReviewAsync();
-        await flow.PendingGateAsync(GateType.PreRelease);
+        await flow.PendingGateAsync(SdlcGates.PreRelease);
 
         // FR-44: from review (checkpoint 5) back to specification (checkpoint 2).
         await flow.RollbackAsync(2, "Back to the specification.");
@@ -331,7 +332,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
 
             // FR-180–FR-185: the Repository Analyst, then the Stack Analyst's profile draft; approved, then on to refinement.
             await flow.RunJobsAsync();
-            await flow.ApproveDraftAsync(ArtifactType.StackProfile);
+            await flow.ApproveDraftAsync(SdlcArtifacts.StackProfile);
             Assert.False(await flow.AdvanceAsync(), "Entering refinement needs no gate.");
             await flow.ExpectPhaseAsync(Phase.Refinement);
             await flow.RunJobsAsync();
@@ -380,10 +381,10 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         await flow.ToSpecificationAsync();
 
         // FR-20: the spec draft is altered behind the API's back; the next read finds it corrupted and regenerates it.
-        await flow.TamperDraftAsync(ArtifactType.TechnicalSpecification, "## 1. Overview\nEdited behind the API's back.");
+        await flow.TamperDraftAsync(SdlcArtifacts.TechnicalSpecification, "## 1. Overview\nEdited behind the API's back.");
         await flow.ReadArtifactAsync("/technical_specification/latest");
         await flow.RunJobsAsync();
-        var versions = await AgentJobs.ArtifactsAsync(factory, flow.Id, ArtifactType.TechnicalSpecification);
+        var versions = await AgentJobs.ArtifactsAsync(factory, flow.Id, SdlcArtifacts.TechnicalSpecification);
         Assert.Equal([(1, ArtifactStatus.Corrupted), (2, ArtifactStatus.Draft)], versions.Select(v => (v.Version, v.Status)));
         await flow.ToPlanningAsync();
 
@@ -426,9 +427,9 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
     private static async Task SeedExecutionAsync(WebApplicationFactory<Program> app, Guid id, string extraFile)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory, maxBuildFixAttempts: 5);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.AddRange(Enumerable.Range(1, 2).Select(n => new ExecutionStep

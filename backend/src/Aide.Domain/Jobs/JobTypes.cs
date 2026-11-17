@@ -1,6 +1,6 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Jobs;
 
@@ -123,16 +123,16 @@ public static class JobTypes
     public const string BuildFix = "build_fix";
 
     /// <summary>The job that runs <paramref name="agent"/>.</summary>
-    public static string ForAgent(AgentKind agent) => agent switch
+    public static string ForAgent(string agent) => agent switch
     {
-        AgentKind.IdeaRefinement => IdeaRefinement,
-        AgentKind.SpecGenerator => SpecGeneration,
-        AgentKind.PlanGenerator => PlanGeneration,
-        AgentKind.CodeGenerator => Execution,
-        AgentKind.CodeReview => Review,
-        AgentKind.RepositoryAnalyst => RepositoryAnalysis,
-        AgentKind.StackAnalyst => StackAnalysis,
-        AgentKind.BuildFix => BuildFix,
+        SdlcAgents.IdeaRefinement => IdeaRefinement,
+        SdlcAgents.SpecGenerator => SpecGeneration,
+        SdlcAgents.PlanGenerator => PlanGeneration,
+        SdlcAgents.CodeGenerator => Execution,
+        SdlcAgents.CodeReview => Review,
+        SdlcAgents.RepositoryAnalyst => RepositoryAnalysis,
+        SdlcAgents.StackAnalyst => StackAnalysis,
+        SdlcAgents.BuildFix => BuildFix,
         _ => throw new ArgumentOutOfRangeException(nameof(agent), agent, null),
     };
 

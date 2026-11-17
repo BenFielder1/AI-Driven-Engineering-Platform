@@ -3,6 +3,7 @@ using System.Xml.Linq;
 using Tevrin.Engine.Api;
 using Tevrin.Engine.Domain;
 using Tevrin.Engine.Runtime;
+using Tevrin.Pack.Sdlc;
 
 namespace Tevrin.Engine.Tests.Architecture;
 
@@ -62,6 +63,20 @@ public class EngineDependencyTests
             .ToList();
 
         Assert.Empty(offending);
+    }
+
+    [Fact]
+    public void D_0_7_0_23_the_sdlc_pack_references_only_the_engine_domain()
+    {
+        // The pack is the bottom of the SDLC side: it references only the engine domain, and Aide.* references it.
+        var offending = References("Tevrin.Pack.Sdlc", typeof(SdlcPack).Assembly)
+            .Where(name => name.Equals("Aide", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("Aide.", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("tevrin", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Empty(offending);
+        Assert.Equal(["project:Tevrin.Engine.Domain"], ProjectItems("Tevrin.Pack.Sdlc"));
     }
 
     [Fact]

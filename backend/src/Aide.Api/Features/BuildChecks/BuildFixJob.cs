@@ -3,8 +3,6 @@ using Aide.Api.Agents;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Stack;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
@@ -17,6 +15,7 @@ using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.BuildChecks;
 
@@ -114,7 +113,7 @@ public sealed partial class BuildFixJobHandler(
         var planCheck = new BuildFixPlanCheck(
             highest,
             project.MaxFilesPerStep,
-            version.PlanAgents(ArtifactType.OptimizationPlan),
+            version.PlanAgents(SdlcArtifacts.OptimizationPlan),
             check.Failures,
             repoFiles,
             version.Stack is { } composed ? new DeployFileCheck(StackRequiredFiles.For(composed), repoFiles, Optimisation: true) : null);
@@ -122,7 +121,7 @@ public sealed partial class BuildFixJobHandler(
         AgentRunRequest Request(int attempt, string? feedback) => new()
         {
             ProjectId = project.Id,
-            Agent = AgentKind.BuildFix,
+            Agent = SdlcAgents.BuildFix,
             Job = job,
             RunKey = string.Create(CultureInfo.InvariantCulture, $"build-fix-{check.Id:N}-{attempt}"),
             Stack = version.Stack,

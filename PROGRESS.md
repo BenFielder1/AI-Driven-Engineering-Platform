@@ -15,15 +15,15 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Requirements
 | ID | Summary | Spec § | Layer(s) | Phase | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| FR-260 | SDLC characterisation snapshots (Fake providers) | 3.1, 4.58 | backend | M54 | todo | |
-| FR-261 | Snapshot freeze: diff on change, CI check from M54 | 3.1 | backend + CI | M54 | todo | |
-| FR-262 | `Tevrin.Engine.*`, `Tevrin.Pack.Sdlc`, `Tevrin.Engine.Tests` projects | 3.2 | backend | M55 | todo | |
-| FR-263 | Architecture tests (engine never references Aide/Pack) | 3.2 | backend | M55 | todo | |
-| FR-264 | Job queue moved to the engine | 3.2 | backend | M55 | todo | |
-| FR-265 | LLM layer + Fake provider moved | 3.2 | backend | M55 | todo | |
-| FR-266 | Generic artifact rules moved | 3.2 | backend | M55 | todo | |
-| FR-267 | Gate mechanics, notifications, audit, redaction, prompt template moved | 3.2 | backend | M55 | todo | |
-| FR-268 | AgentRun and rules moved to run log | 3.2 | backend | M55 | todo | |
+| FR-260 | SDLC characterisation snapshots (Fake providers) | 3.1, 4.58 | backend | M54 | done | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
+| FR-261 | Snapshot freeze: diff on change, CI check from M54 | 3.1 | backend + CI | M54 | done | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
+| FR-262 | `Tevrin.Engine.*`, `Tevrin.Pack.Sdlc`, `Tevrin.Engine.Tests` projects | 3.2 | backend | M55 | done | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
+| FR-263 | Architecture tests (engine never references Aide/Pack) | 3.2 | backend | M55 | done | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
+| FR-264 | Job queue moved to the engine | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
+| FR-265 | LLM layer + Fake provider moved | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
+| FR-266 | Generic artifact rules moved | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
+| FR-267 | Gate mechanics, notifications, audit, redaction, prompt template moved | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
+| FR-268 | AgentRun and rules moved to run log | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
 | FR-269 | Agent string keys (`SdlcAgents`) | 3.3 | backend | M56 | todo | |
 | FR-270 | Artifact string keys (`SdlcArtifacts`) | 3.3 | backend | M56 | todo | |
 | FR-271 | Gate string keys (`SdlcGates`, engine `escalation`) | 3.3 | backend | M56 | todo | |
@@ -64,11 +64,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | todo | |
 | FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | todo | |
 | FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | todo | |
-| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | todo | |
+| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump: [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
 
 ## Phases
-- [ ] M54 Version and characterisation (FR-260, FR-261, FR-309 bump)
-- [ ] M55 Engine projects and the lift (FR-262–FR-268)
+- [x] M54 Version and characterisation (FR-260, FR-261, FR-309 bump): snapshots 8dce91a, re-sorted d4d84f8 (D-0.7.0-22); freeze step in CI
+- [x] M55 Engine projects and the lift (FR-262–FR-268): a483584, 2312ec8, CI green [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760). Types keyed by SDLC enums finish in M56/M58 (D-0.7.0-21)
 - [ ] M56 String keys (FR-269–FR-274)
 - [ ] M57 Definitions and packs (FR-275–FR-286, FR-290)
 - [ ] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294)
@@ -91,6 +91,9 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
 - **D-0.7.0-21** (Build, M55, Claude, assumed): the LLM layer, `PromptTemplate`, `AgentRunRules`, `Artifact`/`ArtifactRules`/`RestoreRules`, `ApprovalGate`/`GateRules`/`GateFollowUp`/`GateResolution` and the `AgentRun` entity are keyed by SDLC enums. They move in M56 (string keys) or M58 (`Phase`), not M55. FR-264–FR-268 are completed across M55–M56.
 
 - **D-0.7.0-22** (Build, M55, Claude, assumed): the characterisation recorder now treats arrays made only of id labels as sets, sorted by kind and then number. CI run [44125867549](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44125867549) on the namespace-only commit a483584 returned `resetStepIds` in a different order (an unordered query), with no behaviour change. This is a one-time normalisation change: those arrays in the committed snapshots are re-sorted, nothing else in them changes, and the freeze base in `scripts/ci/check-snapshots-frozen.sh` moves to that commit. This is the only allowed snapshot edit in 0.7.0.
+
+- **D-0.7.0-23** (Build, M56, Claude, assumed): `Tevrin.Pack.Sdlc` is the bottom of the SDLC side. It references only the engine, and `Aide.*` references it. The SDLC key constants live there: `SdlcAgents`, `SdlcArtifacts`, `SdlcGates`, `SdlcJobTypes`. The engine owns `EngineGates.Escalation` and `EngineJobTypes`. An architecture test checks that the pack references no `Aide.*`. Where the SDLC guards and handlers in M57 need `Aide.Domain` rules, the host composes them.
+- **D-0.7.0-24** (Build, M56, Claude, assumed; amends D-0.7.0-7): the OpenAPI contract stays byte-identical. DTO fields become strings, but a schema transformer still emits the SDLC enum values, so the generated client and the frontend's types don't change. Config keyed by agent keeps binding as it does today.
 
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).

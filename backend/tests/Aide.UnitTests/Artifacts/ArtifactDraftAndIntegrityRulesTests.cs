@@ -3,6 +3,8 @@ using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Artifacts;
 
@@ -10,25 +12,25 @@ namespace Aide.UnitTests.Artifacts;
 public class ArtifactDraftAndIntegrityRulesTests
 {
     [Theory]
-    [InlineData(ArtifactType.ProjectRequest, Phase.Refinement)]
-    [InlineData(ArtifactType.ProjectRequest, Phase.Review)]
-    [InlineData(ArtifactType.TechnicalSpecification, Phase.Specification)]
-    [InlineData(ArtifactType.TechnicalSpecification, Phase.Planning)]
-    [InlineData(ArtifactType.TechnicalSpecification, Phase.Review)]
-    [InlineData(ArtifactType.ImplementationPlan, Phase.Planning)]
-    [InlineData(ArtifactType.ImplementationPlan, Phase.Execution)]
-    [InlineData(ArtifactType.OptimizationPlan, Phase.Review)]
-    public void FR18_A_type_can_be_drafted_from_its_producing_phase_onwards(ArtifactType type, Phase phase) =>
+    [InlineData(SdlcArtifacts.ProjectRequest, Phase.Refinement)]
+    [InlineData(SdlcArtifacts.ProjectRequest, Phase.Review)]
+    [InlineData(SdlcArtifacts.TechnicalSpecification, Phase.Specification)]
+    [InlineData(SdlcArtifacts.TechnicalSpecification, Phase.Planning)]
+    [InlineData(SdlcArtifacts.TechnicalSpecification, Phase.Review)]
+    [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Planning)]
+    [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Execution)]
+    [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Review)]
+    public void FR18_A_type_can_be_drafted_from_its_producing_phase_onwards(string type, Phase phase) =>
         Assert.True(ArtifactRules.CanCreateDraft(type, phase, PhaseOrder.StatusFor(phase)).IsSuccess);
 
     [Theory]
-    [InlineData(ArtifactType.TechnicalSpecification, Phase.Refinement)]
-    [InlineData(ArtifactType.ImplementationPlan, Phase.Refinement)]
-    [InlineData(ArtifactType.ImplementationPlan, Phase.Specification)]
-    [InlineData(ArtifactType.OptimizationPlan, Phase.Planning)]
-    [InlineData(ArtifactType.OptimizationPlan, Phase.Execution)]
-    [InlineData(ArtifactType.OptimizationPlan, Phase.Release)]
-    public void FR18_A_type_can_not_be_drafted_before_its_producing_phase_and_the_optimisation_plan_only_in_review(ArtifactType type, Phase phase)
+    [InlineData(SdlcArtifacts.TechnicalSpecification, Phase.Refinement)]
+    [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Refinement)]
+    [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Specification)]
+    [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Planning)]
+    [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Execution)]
+    [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Release)]
+    public void FR18_A_type_can_not_be_drafted_before_its_producing_phase_and_the_optimisation_plan_only_in_review(string type, Phase phase)
     {
         var result = ArtifactRules.CanCreateDraft(type, phase, ProjectStatus.Active);
 
@@ -38,13 +40,13 @@ public class ArtifactDraftAndIntegrityRulesTests
     [Fact]
     public void FR18_Nothing_can_be_drafted_while_a_release_is_in_progress()
     {
-        Assert.Equal(ErrorCodes.WrongPhase, ArtifactRules.CanCreateDraft(ArtifactType.TechnicalSpecification, Phase.Release, ProjectStatus.Releasing).Error?.Code);
-        Assert.True(ArtifactRules.CanCreateDraft(ArtifactType.TechnicalSpecification, Phase.Release, ProjectStatus.Released).IsSuccess);
+        Assert.Equal(ErrorCodes.WrongPhase, ArtifactRules.CanCreateDraft(SdlcArtifacts.TechnicalSpecification, Phase.Release, ProjectStatus.Releasing).Error?.Code);
+        Assert.True(ArtifactRules.CanCreateDraft(SdlcArtifacts.TechnicalSpecification, Phase.Release, ProjectStatus.Released).IsSuccess);
     }
 
     [Fact]
     public void FR18_A_rolled_back_project_can_be_edited_in_its_phase() =>
-        Assert.True(ArtifactRules.CanCreateDraft(ArtifactType.ImplementationPlan, Phase.Planning, ProjectStatus.RolledBack).IsSuccess);
+        Assert.True(ArtifactRules.CanCreateDraft(SdlcArtifacts.ImplementationPlan, Phase.Planning, ProjectStatus.RolledBack).IsSuccess);
 
     [Fact]
     public void FR20_Integrity_is_ok_when_the_hash_matches_and_corrupted_otherwise()
@@ -67,7 +69,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     public void FR20_A_corrupted_human_authored_artifact_is_marked_but_no_agent_reruns()
     {
         var change = ArtifactRules.OnIntegrityCheck(
-            ArtifactType.TechnicalSpecification, ArtifactStatus.Locked, "altered", ContentHash.Compute("original"), authoredByAgent: false);
+            SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, "altered", ContentHash.Compute("original"), authoredByAgent: false);
 
         Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, null), change);
     }
@@ -76,7 +78,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     public void FR20_A_corrupted_version_that_is_not_current_is_marked_but_no_agent_reruns()
     {
         var change = ArtifactRules.OnIntegrityCheck(
-            ArtifactType.TechnicalSpecification, ArtifactStatus.Superseded, "altered", ContentHash.Compute("original"), authoredByAgent: true, isCurrentVersion: false);
+            SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Superseded, "altered", ContentHash.Compute("original"), authoredByAgent: true, isCurrentVersion: false);
 
         Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, null), change);
     }
@@ -85,9 +87,9 @@ public class ArtifactDraftAndIntegrityRulesTests
     public void FR20_A_corrupted_current_agent_version_reruns_its_producing_agent()
     {
         var change = ArtifactRules.OnIntegrityCheck(
-            ArtifactType.ImplementationPlan, ArtifactStatus.Draft, "altered", ContentHash.Compute("original"), authoredByAgent: true, isCurrentVersion: true);
+            SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, "altered", ContentHash.Compute("original"), authoredByAgent: true, isCurrentVersion: true);
 
-        Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, Aide.Domain.Agents.AgentKind.PlanGenerator), change);
+        Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, SdlcAgents.PlanGenerator), change);
     }
 
     [Theory]
@@ -160,11 +162,11 @@ public class ArtifactDraftAndIntegrityRulesTests
     public void FR19_A_pending_gate_for_an_older_version_of_the_approved_type_is_stale()
     {
         var approved = Guid.NewGuid();
-        var older = new PendingGateRef(Guid.NewGuid(), GateType.SpecApproval, Guid.NewGuid());
-        var current = new PendingGateRef(Guid.NewGuid(), GateType.SpecApproval, approved);
-        var preRelease = new PendingGateRef(Guid.NewGuid(), GateType.PreRelease, null);
+        var older = new PendingGateRef(Guid.NewGuid(), SdlcGates.SpecApproval, Guid.NewGuid());
+        var current = new PendingGateRef(Guid.NewGuid(), SdlcGates.SpecApproval, approved);
+        var preRelease = new PendingGateRef(Guid.NewGuid(), SdlcGates.PreRelease, null);
 
-        var stale = GateRules.StaleAfterArtifactApproval(approved, ArtifactType.TechnicalSpecification, [], phaseFellBack: false, [older, current, preRelease]);
+        var stale = GateRules.StaleAfterArtifactApproval(approved, SdlcArtifacts.TechnicalSpecification, [], phaseFellBack: false, [older, current, preRelease]);
 
         Assert.Equal([older.Id], stale);
     }
@@ -173,9 +175,9 @@ public class ArtifactDraftAndIntegrityRulesTests
     public void FR19_A_pending_gate_whose_artifact_was_invalidated_is_stale()
     {
         var plan = Guid.NewGuid();
-        var planGate = new PendingGateRef(Guid.NewGuid(), GateType.PlanApproval, plan);
+        var planGate = new PendingGateRef(Guid.NewGuid(), SdlcGates.PlanApproval, plan);
 
-        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), ArtifactType.TechnicalSpecification, [plan], phaseFellBack: false, [planGate]);
+        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), SdlcArtifacts.TechnicalSpecification, [plan], phaseFellBack: false, [planGate]);
 
         Assert.Equal([planGate.Id], stale);
     }
@@ -183,10 +185,10 @@ public class ArtifactDraftAndIntegrityRulesTests
     [Fact]
     public void FR19_A_phase_fallback_makes_every_pending_gate_stale()
     {
-        var escalation = new PendingGateRef(Guid.NewGuid(), GateType.Escalation, null);
-        var preRelease = new PendingGateRef(Guid.NewGuid(), GateType.PreRelease, null);
+        var escalation = new PendingGateRef(Guid.NewGuid(), EngineGates.Escalation, null);
+        var preRelease = new PendingGateRef(Guid.NewGuid(), SdlcGates.PreRelease, null);
 
-        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), ArtifactType.TechnicalSpecification, [], phaseFellBack: true, [escalation, preRelease]);
+        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), SdlcArtifacts.TechnicalSpecification, [], phaseFellBack: true, [escalation, preRelease]);
 
         Assert.Equal([escalation.Id, preRelease.Id], stale);
     }
@@ -194,10 +196,10 @@ public class ArtifactDraftAndIntegrityRulesTests
     [Fact]
     public void FR19_Gates_unrelated_to_the_approval_stay_pending()
     {
-        var specGate = new PendingGateRef(Guid.NewGuid(), GateType.SpecApproval, Guid.NewGuid());
-        var escalation = new PendingGateRef(Guid.NewGuid(), GateType.Escalation, null);
+        var specGate = new PendingGateRef(Guid.NewGuid(), SdlcGates.SpecApproval, Guid.NewGuid());
+        var escalation = new PendingGateRef(Guid.NewGuid(), EngineGates.Escalation, null);
 
-        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), ArtifactType.OptimizationPlan, [], phaseFellBack: false, [specGate, escalation]);
+        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), SdlcArtifacts.OptimizationPlan, [], phaseFellBack: false, [specGate, escalation]);
 
         Assert.Empty(stale);
     }
