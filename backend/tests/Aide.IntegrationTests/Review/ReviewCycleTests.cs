@@ -516,7 +516,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<Aide.Infrastructure.Persistence.AideDbContext>();
-            await scope.ServiceProvider.GetRequiredService<Aide.Api.Jobs.JobEnqueuer>()
+            await scope.ServiceProvider.GetRequiredService<Tevrin.Engine.Runtime.Jobs.JobEnqueuer>()
                 .EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(id, ExecutionJobPayload.ReviewCycle), id, Ct);
             await db.SaveChangesAsync(Ct);
         }

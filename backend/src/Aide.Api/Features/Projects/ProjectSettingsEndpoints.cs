@@ -12,11 +12,11 @@ using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Api.Features.Projects;
 

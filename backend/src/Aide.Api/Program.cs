@@ -44,6 +44,7 @@ using Npgsql;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Tevrin.Engine.Runtime.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);
 

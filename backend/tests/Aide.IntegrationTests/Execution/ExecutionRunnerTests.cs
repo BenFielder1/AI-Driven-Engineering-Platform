@@ -5,7 +5,6 @@ using System.Text.Json;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Projects;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;

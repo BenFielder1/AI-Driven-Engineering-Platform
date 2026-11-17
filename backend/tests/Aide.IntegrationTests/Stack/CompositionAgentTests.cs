@@ -5,7 +5,6 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Review;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -320,7 +319,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
             var versionId = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.Id).SingleAsync(Ct));
             await ProjectApi.WithDbAsync(app, async db =>
             {
-                await new JobEnqueuer(db, TimeProvider.System).EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(id, versionId), id, Ct);
+                await new JobEnqueuer(db, TimeProvider.System, Aide.Api.Jobs.AideJobPayloadSerializer.Instance).EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(id, versionId), id, Ct);
                 await db.SaveChangesAsync(Ct);
             });
         }

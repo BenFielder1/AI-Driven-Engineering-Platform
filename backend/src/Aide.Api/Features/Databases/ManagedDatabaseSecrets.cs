@@ -4,6 +4,7 @@ using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Security;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Api.Features.Databases;
 

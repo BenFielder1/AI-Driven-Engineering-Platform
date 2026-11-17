@@ -2,7 +2,6 @@ using System.Text.Json;
 using Aide.Api.Agents;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -18,6 +17,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Features.Git;
 
@@ -436,8 +436,9 @@ public sealed partial class PullRequestJobHandler(
 /// <summary>A pull request job that ended without succeeding records <c>PULL_REQUEST_FAILED</c> with its last (token-free) error.</summary>
 public sealed class PullRequestJobEndedHook(TimeProvider time) : IJobEndedHook
 {
-    public Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.JobType == JobTypes.PullRequest && job.ProjectId is { } projectId)

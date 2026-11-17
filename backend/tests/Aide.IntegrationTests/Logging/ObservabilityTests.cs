@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Aide.Api.Agents;
-using Aide.Api.Jobs;
 using Aide.Api.Logging;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;

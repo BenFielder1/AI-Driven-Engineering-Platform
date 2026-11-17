@@ -20,6 +20,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Agents;
 
@@ -221,14 +222,16 @@ public sealed partial class StackAnalysisJobHandler(
 /// </summary>
 public sealed class StackAnalysisTrigger(TimeProvider time) : IJobSucceededHook, IJobEndedHook
 {
-    public Task OnJobSucceededAsync(AideDbContext db, JobExecution job, CancellationToken cancellationToken)
+    public Task OnJobSucceededAsync(IEngineDbContext engineDb, JobExecution job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(job);
         return job.Type == JobTypes.RepositoryAnalysis ? QueueAsync(db, job.Payload, cancellationToken) : Task.CompletedTask;
     }
 
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.JobType != JobTypes.RepositoryAnalysis)

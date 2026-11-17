@@ -20,7 +20,7 @@ namespace Aide.Infrastructure.Persistence;
 /// <see cref="IEntityTypeConfiguration{TEntity}"/> classes in this assembly; Identity tables are renamed to
 /// <c>users</c>, <c>roles</c>, <c>user_claims</c>, … in <see cref="OnModelCreating"/>.</summary>
 public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
-    : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
+    : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options), IEngineDbContext
 {
     /// <summary>Max length of enum wire-value columns (the engine's, D-0.7.0-12).</summary>
     public const int EnumMaxLength = TevrinEngineModel.EnumMaxLength;

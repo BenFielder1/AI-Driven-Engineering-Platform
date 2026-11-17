@@ -19,7 +19,7 @@ public static class AideTelemetry
     public const string AgentTag = "aide.agent";
     public const string UserIdTag = "aide.user_id";
 
-    /// <summary>How a job attempt ended: one of <see cref="JobOutcomes"/>.</summary>
+    /// <summary>How a job attempt ended: one of <see cref="Tevrin.Engine.Runtime.Jobs.JobOutcomes"/>.</summary>
     public const string JobOutcomeTag = "aide.job_outcome";
 
     /// <summary>The run's status when the runner returned or threw (<c>running</c> while a transient failure is retried,
@@ -45,14 +45,4 @@ public static class AideTelemetry
         activity.SetTag(ErrorCodeTag, errorCode);
         activity.SetStatus(ActivityStatusCode.Error, errorCode);
     }
-}
-
-/// <summary>NFR-OBS: the values of <see cref="AideTelemetry.JobOutcomeTag"/>.</summary>
-public static class JobOutcomes
-{
-    public const string Succeeded = "succeeded";
-    public const string Retry = "retry";
-    public const string Failed = "failed";
-    public const string Dead = "dead";
-    public const string Cancelled = "cancelled";
 }

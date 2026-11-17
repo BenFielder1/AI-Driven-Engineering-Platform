@@ -10,6 +10,7 @@ using Aide.Infrastructure.Security;
 using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Api.Features.Connections;
 

@@ -1,4 +1,3 @@
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
@@ -11,6 +10,7 @@ using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -269,8 +269,9 @@ public sealed partial class DeploymentSetupJobHandler(
 /// <summary>A setup job that ended without succeeding (retries used up) leaves its target <c>error</c> instead of <c>configuring</c>.</summary>
 public sealed class DeploymentSetupJobEndedHook(Databases.ManagedDatabaseSecrets secrets, TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.JobType != JobTypes.DeploymentSetup || job.ProjectId is not { } projectId)

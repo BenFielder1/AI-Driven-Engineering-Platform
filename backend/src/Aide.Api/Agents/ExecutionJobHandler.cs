@@ -2,7 +2,6 @@ using System.Globalization;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
@@ -23,6 +22,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Agents;
 
@@ -547,8 +547,9 @@ public sealed partial class ExecutionJobHandler(
 /// </summary>
 public sealed class ExecutionContinuationHook(JobEnqueuer jobs) : IJobSucceededHook
 {
-    public async Task OnJobSucceededAsync(AideDbContext db, JobExecution job, CancellationToken cancellationToken)
+    public async Task OnJobSucceededAsync(IEngineDbContext engineDb, JobExecution job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.Type != JobTypes.Execution || job.ProjectId is not { } projectId)
@@ -583,8 +584,9 @@ public sealed class ExecutionContinuationHook(JobEnqueuer jobs) : IJobSucceededH
 /// </summary>
 public sealed partial class ExecutionJobEndedHook(TimeProvider time, ILogger<ExecutionJobEndedHook> logger) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.JobType != JobTypes.Execution || job.ProjectId is not { } projectId)

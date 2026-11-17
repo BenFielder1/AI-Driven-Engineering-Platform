@@ -1,6 +1,5 @@
 using Aide.Api.Features.Git;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;

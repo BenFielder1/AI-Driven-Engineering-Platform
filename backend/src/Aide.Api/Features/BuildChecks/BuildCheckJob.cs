@@ -2,7 +2,6 @@ using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Review;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
@@ -15,6 +14,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Features.BuildChecks;
 
@@ -269,8 +269,9 @@ public sealed partial class BuildCheckJobHandler(
 /// </summary>
 public sealed class BuildCheckJobEndedHook(BuildCheckService buildChecks, TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.JobType is not (JobTypes.BuildCheck or JobTypes.BuildFix) || job.ProjectId is not { } projectId)

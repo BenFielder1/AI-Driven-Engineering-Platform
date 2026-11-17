@@ -84,6 +84,19 @@ public static class JobServiceCollectionExtensions
         services.AddSingleton(new JobHandlerRegistration(jobType, sp => sp.GetRequiredService<THandler>()));
         return services;
     }
+
+    /// <summary>
+    /// The job queue (outbox <see cref="JobEnqueuer"/>, scoped) and the background <see cref="JobWorker"/> (§4.9). The host
+    /// registers its <see cref="Persistence.IEngineDbContext"/>, <see cref="IJobPayloadSerializer"/>,
+    /// <see cref="JobTelemetry"/>, any <see cref="IJobExceptionClassifier"/>s and the <see cref="JobOptions"/> binding.
+    /// </summary>
+    public static IServiceCollection AddTevrinJobQueue(this IServiceCollection services)
+    {
+        services.AddScoped<JobEnqueuer>();
+        services.AddSingleton<JobWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<JobWorker>());
+        return services;
+    }
 }
 
 /// <summary>NFR-OBS: the log scope keys every log entry written while a job runs carries (plus <c>ProjectId</c> for

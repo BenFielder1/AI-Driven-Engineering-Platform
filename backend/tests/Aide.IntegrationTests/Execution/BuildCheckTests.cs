@@ -822,7 +822,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<Aide.Infrastructure.Persistence.AideDbContext>();
-            foreach (var hook in scope.ServiceProvider.GetServices<Aide.Api.Jobs.IJobEndedHook>())
+            foreach (var hook in scope.ServiceProvider.GetServices<Tevrin.Engine.Runtime.Jobs.IJobEndedHook>())
             {
                 await hook.OnJobEndedAsync(db, new Tevrin.Engine.Runtime.Jobs.JobEnded(job.Id, jobType, id, DeadLettered: true, "boom"), Ct);
             }

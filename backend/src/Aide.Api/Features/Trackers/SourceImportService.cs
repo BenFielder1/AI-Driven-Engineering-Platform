@@ -1,7 +1,6 @@
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -15,6 +14,7 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Trackers;
 

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Infrastructure.GitLab;
 

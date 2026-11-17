@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Jobs;

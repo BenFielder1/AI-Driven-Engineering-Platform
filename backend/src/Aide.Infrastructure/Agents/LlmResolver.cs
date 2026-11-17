@@ -3,10 +3,10 @@ using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Infrastructure.Agents;
 

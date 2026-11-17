@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Infrastructure.Security;
 

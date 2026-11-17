@@ -8,7 +8,6 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
-using Aide.Infrastructure.Security;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;

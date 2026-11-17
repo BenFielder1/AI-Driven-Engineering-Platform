@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
@@ -7,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Agents;
 
@@ -22,8 +22,9 @@ namespace Aide.Api.Agents;
 /// </summary>
 public sealed partial class AgentRunJobEndedHook(TimeProvider time, ILogger<AgentRunJobEndedHook> logger) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         var ids = new HashSet<Guid> { job.JobId };

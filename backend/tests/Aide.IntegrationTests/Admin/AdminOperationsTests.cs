@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Http.Json;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Tokens;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;

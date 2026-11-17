@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;

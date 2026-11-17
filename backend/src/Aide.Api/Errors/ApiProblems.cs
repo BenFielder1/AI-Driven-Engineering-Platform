@@ -71,9 +71,12 @@ public static class ApiProblems
             extensions[UnverifiableScopesKey] = error.UnverifiableScopes;
         }
 
-        if (error.Violations.Count > 0)
+        // DomainError.Violations holds pack-defined records (FR-262); the SDLC's are StackViolations. The key is only
+        // written when there are some, as before the engine lift.
+        var violations = error.Violations.OfType<StackViolation>().Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList();
+        if (violations.Count > 0)
         {
-            extensions[ViolationsKey] = error.Violations.OfType<StackViolation>().Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList();
+            extensions[ViolationsKey] = violations;
         }
 
         return TypedResults.Problem(

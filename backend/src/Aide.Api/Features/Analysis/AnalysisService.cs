@@ -18,6 +18,7 @@ using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Analysis;
 

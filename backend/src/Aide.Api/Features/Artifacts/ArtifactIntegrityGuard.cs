@@ -7,6 +7,7 @@ using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Artifacts;
 

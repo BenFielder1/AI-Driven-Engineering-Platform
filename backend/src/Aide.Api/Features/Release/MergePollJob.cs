@@ -16,6 +16,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Features.Release;
 
@@ -376,8 +377,9 @@ public sealed partial class MergePollJobHandler(
 /// </summary>
 public sealed class MergePollJobEndedHook(TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.JobType != JobTypes.MergePoll || job.ProjectId is not { } projectId)
@@ -401,7 +403,7 @@ public sealed class MergePollJobEndedHook(TimeProvider time) : IJobEndedHook
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
         if (project is not null)
         {
-            var writer = new LifecycleWriter(db, new JobEnqueuer(db, time));
+            var writer = new LifecycleWriter(db, new JobEnqueuer(db, time, AideJobPayloadSerializer.Instance));
             await ReleaseCompletion.BackToReleasingAsync(db, writer, project, $"Release failed: {ErrorCodes.GitError}", now, cancellationToken);
         }
     }

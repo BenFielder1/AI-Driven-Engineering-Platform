@@ -270,7 +270,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
             row.Status = JobStatus.Dead;
             row.LastError = "UPSTREAM_ERROR: the provider failed";
             row.CompletedAt = DateTimeOffset.UtcNow;
-            foreach (var hook in scope.ServiceProvider.GetServices<Aide.Api.Jobs.IJobEndedHook>())
+            foreach (var hook in scope.ServiceProvider.GetServices<Tevrin.Engine.Runtime.Jobs.IJobEndedHook>())
             {
                 await hook.OnJobEndedAsync(db, new Tevrin.Engine.Runtime.Jobs.JobEnded(analyst.Id, analyst.Type, project.Id, DeadLettered: true, row.LastError), Ct);
             }

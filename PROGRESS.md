@@ -85,8 +85,8 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
 - **D-0.7.0-20** (Build, M55, Claude, assumed): seams for moving the job worker, enqueuer, sweeper and channel senders into `Tevrin.Engine.Runtime` (M55 part 2):
   - **DbContext:** the engine defines `IEngineDbContext`, which exposes the engine's `DbSet`s (jobs, events, notifications, deliveries, approval links) and `Database`. `AideDbContext` implements it, and DI registers it as the same scoped instance.
   - **Job failure classification:** `IJobExceptionClassifier`, which returns a deferral or retry hint for an exception. The Aide side registers one for the GitHub, GitLab and Bitbucket rate-limit exceptions.
-  - **Telemetry and log scopes:** the engine takes an `ActivitySource` and a scope factory through DI. The Aide registrations pass the existing source name and scope keys, so traces and logs stay the same.
-  - **Secrets:** `ISecretProtector` moves to the engine as an interface. Its Data Protection implementation stays in `Aide.Api`.
+  - **Telemetry and log scopes:** the engine takes an `ActivitySource` and a scope factory through DI. The Aide registrations pass the existing source name and scope keys, so traces, tags and log messages stay the same. The one visible difference is the worker's log `Category`, which becomes `Tevrin.Engine.Runtime.Jobs.JobWorker` (no filter or test uses it).
+  - **Secrets:** `ISecretProtector` moves to the engine as an interface. Its Data Protection implementation stays in `Aide.Infrastructure/Security/SecretProtector.cs`.
   - **Rule:** nothing that holds SDLC values moves (`NotificationType`, `EventTypes`, notification messages); those wait for M56.
 - **D-0.7.0-21** (Build, M55, Claude, assumed): the LLM layer, `PromptTemplate`, `AgentRunRules`, `Artifact`/`ArtifactRules`/`RestoreRules`, `ApprovalGate`/`GateRules`/`GateFollowUp`/`GateResolution` and the `AgentRun` entity are keyed by SDLC enums. They move in M56 (string keys) or M58 (`Phase`), not M55. FR-264–FR-268 are completed across M55–M56.
 

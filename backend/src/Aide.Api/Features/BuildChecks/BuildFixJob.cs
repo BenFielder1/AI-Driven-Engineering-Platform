@@ -2,7 +2,6 @@ using System.Globalization;
 using Aide.Api.Agents;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Stack;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;

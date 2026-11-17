@@ -30,6 +30,8 @@
     <Using Include="Tevrin.Engine.Domain.Notifications" />
     <Using Include="Tevrin.Engine.Runtime.Jobs" />
     <Using Include="Tevrin.Engine.Runtime.Notifications" />
+    <Using Include="Tevrin.Engine.Runtime.Persistence" />
+    <Using Include="Tevrin.Engine.Runtime.Security" />
   </ItemGroup>
 
 </Project>

@@ -16,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Infrastructure;
 
@@ -62,6 +63,9 @@ public static class DependencyInjection
             // §4.10: new projects get their first release version; version-scoped rows left unstamped get the current one.
             options.AddInterceptors(sp.GetRequiredService<ReleaseVersionStampingInterceptor>());
         });
+
+        // D-0.7.0-20: the engine reaches its tables through the same scoped context (one unit of work).
+        services.AddScoped<IEngineDbContext>(sp => sp.GetRequiredService<AideDbContext>());
         services.TryAddSingleton<IProjectEventPublisher, NullProjectEventPublisher>();
         services.TryAddSingleton<ProjectEventPublishingInterceptor>();
         services.TryAddSingleton(TimeProvider.System);

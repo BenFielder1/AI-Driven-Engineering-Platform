@@ -1,15 +1,15 @@
 using System.Data.Common;
 using System.Diagnostics;
-using Aide.Api.Logging;
-using Aide.Domain.Common;
-using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
-using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
-namespace Aide.Api.Jobs;
+namespace Tevrin.Engine.Runtime.Jobs;
 
 /// <summary>
 /// The work-queue side of §4.9 (D1, NFR-REL). The worker keeps up to <see cref="JobOptions.Concurrency"/> jobs in flight and,
@@ -28,6 +28,9 @@ namespace Aide.Api.Jobs;
 /// the registered <see cref="IJobEndedHook"/>s in the same transaction as its final status (e.g. failing agent runs the job
 /// left <c>running</c>, FR-25).
 /// Time comes from the injected <see cref="TimeProvider"/>; <see cref="RunOnceAsync"/> lets tests drive it deterministically.
+/// The jobs table is reached through the host's <see cref="IEngineDbContext"/>; the host's <see cref="JobTelemetry"/> (span
+/// source, tags, log scope key) and <see cref="IJobExceptionClassifier"/>s (e.g. Git host rate limits, which defer the
+/// job without counting the attempt) are resolved from its container (D-0.7.0-20).
 /// </summary>
 public sealed partial class JobWorker : BackgroundService
 {
@@ -42,6 +45,8 @@ public sealed partial class JobWorker : BackgroundService
     private readonly TimeProvider _time;
     private readonly ILogger<JobWorker> _logger;
     private readonly Dictionary<string, JobHandlerRegistration> _handlers;
+    private readonly JobTelemetry _telemetry;
+    private readonly IJobExceptionClassifier[] _classifiers;
 
     public JobWorker(
         IServiceScopeFactory scopes,
@@ -63,6 +68,12 @@ public sealed partial class JobWorker : BackgroundService
             {
                 throw new InvalidOperationException($"More than one handler is registered for job type '{registration.JobType}'.");
             }
+        }
+
+        using (var scope = scopes.CreateScope())
+        {
+            _telemetry = scope.ServiceProvider.GetRequiredService<JobTelemetry>();
+            _classifiers = [.. scope.ServiceProvider.GetServices<IJobExceptionClassifier>()];
         }
 
         WorkerId = $"{Environment.MachineName}/{Guid.NewGuid():N}";
@@ -168,7 +179,7 @@ public sealed partial class JobWorker : BackgroundService
     private async Task RequeueExpiredAsync(string[] types, CancellationToken cancellationToken)
     {
         await using var scope = _scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<IEngineDbContext>();
         var now = _time.GetUtcNow();
         var cutoff = now - _options.LeaseDuration;
 
@@ -205,7 +216,7 @@ public sealed partial class JobWorker : BackgroundService
 
     /// <summary>Runs the <see cref="IJobEndedHook"/>s for a job that ended without succeeding; they add their changes to
     /// <paramref name="db"/>, which the caller saves with the job's final status.</summary>
-    private static async Task NotifyEndedAsync(IServiceProvider services, AideDbContext db, Job job, bool deadLettered, string? error, CancellationToken cancellationToken)
+    private static async Task NotifyEndedAsync(IServiceProvider services, IEngineDbContext db, Job job, bool deadLettered, string? error, CancellationToken cancellationToken)
     {
         var ended = new JobEnded(job.Id, job.Type, job.ProjectId, deadLettered, error);
         foreach (var hook in services.GetServices<IJobEndedHook>())
@@ -217,7 +228,7 @@ public sealed partial class JobWorker : BackgroundService
     private async Task<List<Job>> ClaimAsync(string[] types, int limit, CancellationToken cancellationToken)
     {
         await using var scope = _scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<IEngineDbContext>();
         var now = _time.GetUtcNow();
         var workerId = WorkerId;
 
@@ -275,29 +286,14 @@ public sealed partial class JobWorker : BackgroundService
         {
             // The lease was lost (reaped or claimed elsewhere): the outcome is no longer ours to record.
         }
-        catch (Infrastructure.GitHub.GitHubRateLimitedException ex)
+        catch (Exception ex) when (TryClassify(ex, out var hint))
         {
-            // §4.14, NFR-REL: a rate limit isn't a failure: wait for the reset without counting the attempt.
-            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.ResetAt);
-            error = $"{ErrorCodes.GitHubRateLimited}: GitHub's rate limit is exhausted; the job waits until {deferredUntil:u}.";
-            spanError = ErrorCodes.GitHubRateLimited;
-            LogRateLimited(_logger, deferredUntil.Value);
-        }
-        catch (Infrastructure.GitLab.GitLabRateLimitedException ex)
-        {
-            // FR-136, §4.19: a GitLab rate limit re-queues the job for the reset without counting the attempt.
-            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.ResetAt);
-            error = $"{ErrorCodes.GitLabRateLimited}: GitLab is rate limiting requests; the job waits until {deferredUntil:u}.";
-            spanError = ErrorCodes.GitLabRateLimited;
-            LogHostRateLimited(_logger, "GitLab", deferredUntil.Value);
-        }
-        catch (Infrastructure.Bitbucket.BitbucketRateLimitedException ex)
-        {
-            // FR-136, §4.19: Bitbucket's 429 or the connection's 900-an-hour budget re-queues the job without counting the attempt.
-            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), ex.ResetAt);
-            error = $"{ErrorCodes.BitbucketRateLimited}: Bitbucket is rate limiting requests; the job waits until {deferredUntil:u}.";
-            spanError = ErrorCodes.BitbucketRateLimited;
-            LogHostRateLimited(_logger, "Bitbucket", deferredUntil.Value);
+            // §4.14, FR-136, NFR-REL: a host's classifier recognised the failure (e.g. a Git host rate limit): it isn't a
+            // failure, so wait for the reset without counting the attempt.
+            deferredUntil = JobPolicy.DeferUntil(_time.GetUtcNow(), hint.RetryAt);
+            error = hint.Describe(deferredUntil.Value);
+            spanError = hint.ErrorCode;
+            hint.Log(_logger, deferredUntil.Value);
         }
         catch (JobDeferredException ex)
         {
@@ -331,8 +327,8 @@ public sealed partial class JobWorker : BackgroundService
         if (leaseLost.IsCancellationRequested && !released)
         {
             LogLeaseLost(_logger);
-            activity?.SetTag(AideTelemetry.JobOutcomeTag, JobOutcomes.Cancelled);
-            AideTelemetry.SetError(activity, LeaseLostError);
+            activity?.SetTag(_telemetry.JobOutcomeTag, JobOutcomes.Cancelled);
+            _telemetry.SetError(activity, LeaseLostError);
             return;
         }
 
@@ -347,13 +343,13 @@ public sealed partial class JobWorker : BackgroundService
         {
             // The job stays running until its lease expires; then the reaper re-queues it.
             LogCompleteFailed(_logger, ex);
-            AideTelemetry.SetError(activity, spanError ?? ex.GetType().Name);
+            _telemetry.SetError(activity, spanError ?? ex.GetType().Name);
         }
     }
 
     /// <summary>NFR-OBS: tags the job's span with how the attempt ended; anything but success (or a shutdown hand-back)
     /// is an error span. <paramref name="outcome"/> is <c>null</c> when the lease was lost before the outcome was saved.</summary>
-    private static void TagOutcome(Activity? activity, string? outcome, string? spanError)
+    private void TagOutcome(Activity? activity, string? outcome, string? spanError)
     {
         if (activity is null)
         {
@@ -362,15 +358,15 @@ public sealed partial class JobWorker : BackgroundService
 
         if (outcome is null)
         {
-            activity.SetTag(AideTelemetry.JobOutcomeTag, JobOutcomes.Cancelled);
-            AideTelemetry.SetError(activity, LeaseLostError);
+            activity.SetTag(_telemetry.JobOutcomeTag, JobOutcomes.Cancelled);
+            _telemetry.SetError(activity, LeaseLostError);
             return;
         }
 
-        activity.SetTag(AideTelemetry.JobOutcomeTag, outcome);
+        activity.SetTag(_telemetry.JobOutcomeTag, outcome);
         if (outcome is JobOutcomes.Retry or JobOutcomes.Failed or JobOutcomes.Dead)
         {
-            AideTelemetry.SetError(activity, spanError ?? outcome);
+            _telemetry.SetError(activity, spanError ?? outcome);
         }
         else if (outcome == JobOutcomes.Succeeded)
         {
@@ -394,7 +390,7 @@ public sealed partial class JobWorker : BackgroundService
                 try
                 {
                     await using var scope = _scopes.CreateAsyncScope();
-                    var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+                    var db = scope.ServiceProvider.GetRequiredService<IEngineDbContext>();
                     var now = _time.GetUtcNow();
                     renewed = await db.Jobs
                         .Where(j => j.Id == jobId && j.Status == JobStatus.Running && j.LockedBy == WorkerId)
@@ -428,7 +424,7 @@ public sealed partial class JobWorker : BackgroundService
     private async Task<string?> DeferAsync(Job job, DateTimeOffset runAfter, string? error, string? payload)
     {
         await using var scope = _scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<IEngineDbContext>();
         var lastError = Truncate(error);
         var nextPayload = payload ?? job.Payload;
         var updated = await db.Jobs
@@ -457,7 +453,7 @@ public sealed partial class JobWorker : BackgroundService
     {
         // The outcome is recorded even while shutting down, so the job isn't left running until its lease expires.
         await using var scope = _scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<IEngineDbContext>();
         var now = _time.GetUtcNow();
         var mine = db.Jobs.Where(j => j.Id == job.Id && j.Status == JobStatus.Running && j.LockedBy == WorkerId);
 
@@ -531,7 +527,7 @@ public sealed partial class JobWorker : BackgroundService
     /// Marks the job succeeded and, in the same transaction, runs the <see cref="IJobSucceededHook"/>s. If their changes
     /// can't be saved, the job is marked succeeded without them (a clash means the follow-up already exists).
     /// </summary>
-    private async Task<int> MarkSucceededAsync(IServiceProvider services, AideDbContext db, Job job, DateTimeOffset now, bool withHooks)
+    private async Task<int> MarkSucceededAsync(IServiceProvider services, IEngineDbContext db, Job job, DateTimeOffset now, bool withHooks)
     {
         List<IJobSucceededHook> hooks = withHooks ? [.. services.GetServices<IJobSucceededHook>()] : [];
         await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
@@ -581,30 +577,46 @@ public sealed partial class JobWorker : BackgroundService
         };
         if (job.ProjectId is { } projectId)
         {
-            values[ProjectLogScope.ProjectIdKey] = projectId;
+            values[_telemetry.ProjectIdScopeKey] = projectId;
         }
 
         return _logger.BeginScope(values);
     }
 
     /// <summary>NFR-OBS: the job's span, tagged with the same ids as its log scope.</summary>
-    private static Activity? StartJobActivity(Job job)
+    private Activity? StartJobActivity(Job job)
     {
-        var activity = AideTelemetry.Source.StartActivity($"job {job.Type}", ActivityKind.Internal);
+        var activity = _telemetry.Source.StartActivity($"job {job.Type}", ActivityKind.Internal);
         if (activity is null)
         {
             return null;
         }
 
-        activity.SetTag(AideTelemetry.JobIdTag, job.Id.ToString());
-        activity.SetTag(AideTelemetry.JobTypeTag, job.Type);
-        activity.SetTag(AideTelemetry.JobAttemptTag, job.Attempts);
+        activity.SetTag(_telemetry.JobIdTag, job.Id.ToString());
+        activity.SetTag(_telemetry.JobTypeTag, job.Type);
+        activity.SetTag(_telemetry.JobAttemptTag, job.Attempts);
         if (job.ProjectId is { } projectId)
         {
-            activity.SetTag(AideTelemetry.ProjectIdTag, projectId.ToString());
+            activity.SetTag(_telemetry.ProjectIdTag, projectId.ToString());
         }
 
         return activity;
+    }
+
+    /// <summary>The first registered classifier's deferral hint for <paramref name="exception"/>, if any.</summary>
+    private bool TryClassify(Exception exception, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out JobDeferralHint? hint)
+    {
+        foreach (var classifier in _classifiers)
+        {
+            if (classifier.Classify(exception) is { } found)
+            {
+                hint = found;
+                return true;
+            }
+        }
+
+        hint = null;
+        return false;
     }
 
     private static string? Truncate(string? value) =>
@@ -630,12 +642,6 @@ public sealed partial class JobWorker : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Job succeeded")]
     private static partial void LogSucceeded(ILogger logger);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by GitHub's rate limit; deferred until {RunAfter} without counting the attempt")]
-    private static partial void LogRateLimited(ILogger logger, DateTimeOffset runAfter);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by {Host}'s rate limit; deferred until {RunAfter} without counting the attempt")]
-    private static partial void LogHostRateLimited(ILogger logger, string host, DateTimeOffset runAfter);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Job is waiting; deferred until {RunAfter} without counting the attempt")]
     private static partial void LogDeferred(ILogger logger, DateTimeOffset runAfter);

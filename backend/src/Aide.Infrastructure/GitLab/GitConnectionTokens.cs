@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Infrastructure.GitLab;
 

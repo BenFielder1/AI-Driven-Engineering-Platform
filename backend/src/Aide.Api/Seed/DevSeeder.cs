@@ -33,6 +33,7 @@ using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Seed;
 

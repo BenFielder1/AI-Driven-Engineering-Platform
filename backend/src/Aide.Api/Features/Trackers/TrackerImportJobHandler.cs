@@ -1,4 +1,3 @@
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
@@ -15,6 +14,7 @@ using Npgsql;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Features.Trackers;
 
@@ -274,8 +274,9 @@ internal static class TrackerImportFailure
 /// <summary>A job that ended without succeeding (retries used up, or the lease expired): its import becomes <c>failed</c> if it hasn't already.</summary>
 public sealed class TrackerImportJobEndedHook(TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         if (job.JobType != JobTypes.TrackerImport)

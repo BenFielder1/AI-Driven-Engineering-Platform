@@ -1,7 +1,6 @@
 using Aide.Api.Features.GitHub;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -15,11 +14,12 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Api.Features.Projects;
 
