@@ -1,0 +1,5 @@
+# M55 (FR-264–FR-268): the characterisation suite is frozen (FR-261) and keeps its 0.6.1 using directives byte for byte.
+# Some of the types it names moved to Tevrin.Engine.* (imported project-wide in Aide.IntegrationTests.csproj), which
+# leaves a using in it unnecessary; IDE0005 is off for those files only.
+[Characterisation/*.cs]
+dotnet_diagnostic.IDE0005.severity = none

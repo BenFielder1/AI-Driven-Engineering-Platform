@@ -4,15 +4,15 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Notifications;
 using Aide.Domain.Review;
-using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Infrastructure.Persistence;
 
@@ -22,8 +22,8 @@ namespace Aide.Infrastructure.Persistence;
 public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
     : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
 {
-    /// <summary>Max length of enum wire-value columns.</summary>
-    public const int EnumMaxLength = 32;
+    /// <summary>Max length of enum wire-value columns (the engine's, D-0.7.0-12).</summary>
+    public const int EnumMaxLength = TevrinEngineModel.EnumMaxLength;
 
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
 
@@ -103,24 +103,20 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
     {
         ArgumentNullException.ThrowIfNull(configurationBuilder);
 
-        // Every stored enum is a snake_case string (CLAUDE.md Conventions → Data).
+        // Every stored enum is a snake_case string (CLAUDE.md Conventions → Data). The engine maps its own enums
+        // (approval mode, artifact, gate, agent run, job and notification statuses, LLM provider; FR-262).
+        configurationBuilder.ApplyTevrinEngineConventions();
         MapEnum<SystemRole>(configurationBuilder);
         MapEnum<ProjectRole>(configurationBuilder);
         MapEnum<Phase>(configurationBuilder);
         MapEnum<ProjectStatus>(configurationBuilder);
-        MapEnum<ApprovalMode>(configurationBuilder);
         MapEnum<ArtifactType>(configurationBuilder);
-        MapEnum<ArtifactStatus>(configurationBuilder);
         MapEnum<GateType>(configurationBuilder);
-        MapEnum<GateStatus>(configurationBuilder);
-        MapEnum<EscalationDecision>(configurationBuilder);
         MapEnum<StepStatus>(configurationBuilder);
         MapEnum<StepOrigin>(configurationBuilder);
         MapEnum<BuildCheckStatus>(configurationBuilder);
         MapEnum<BuildCheckEndReason>(configurationBuilder);
         MapEnum<AgentKind>(configurationBuilder);
-        MapEnum<AgentRunStatus>(configurationBuilder);
-        MapEnum<LlmProvider>(configurationBuilder);
         MapEnum<LlmCredentialStatus>(configurationBuilder);
         MapEnum<GitProvider>(configurationBuilder);
         MapEnum<StackSource>(configurationBuilder);
@@ -151,9 +147,6 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         MapEnum<ReleaseVersionStatus>(configurationBuilder);
         MapEnum<MergeStrategy>(configurationBuilder);
         MapEnum<StepAttemptOutcome>(configurationBuilder);
-        MapEnum<JobStatus>(configurationBuilder);
-        MapEnum<NotificationDeliveryStatus>(configurationBuilder);
-        MapEnum<ApprovalLinkDecision>(configurationBuilder);
         MapEnum<NotificationType>(configurationBuilder);
         MapEnum<Domain.Trackers.TrackerProvider>(configurationBuilder);
         MapEnum<Domain.Trackers.TrackerImportStatus>(configurationBuilder);
@@ -172,6 +165,10 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
         // Rename the Identity principal tables first so dependent FK names use the final table names.
         builder.Entity<AppUser>().ToTable("users");
         builder.Entity<IdentityRole<Guid>>().ToTable("roles");
+
+        // D-0.7.0-12: the engine's tables first (Tevrin.Engine.Runtime), then this assembly's configurations, which add
+        // their relationships to Tevrin tables (projects, users, gates).
+        builder.ApplyTevrinEngineModel();
         builder.ApplyConfigurationsFromAssembly(typeof(AideDbContext).Assembly);
     }
 

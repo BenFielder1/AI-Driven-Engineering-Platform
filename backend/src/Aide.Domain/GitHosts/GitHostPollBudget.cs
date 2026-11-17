@@ -28,7 +28,7 @@ public sealed record TokenBucketDecision(bool Allowed, TokenBucketState State, D
 /// <item><b>Bitbucket:</b> 1,000 requests per hour per user and no remaining-count headers, so each connection has a token
 /// bucket of 900 per hour for background work (refilled continuously), and a PR is polled at most once a minute.</item>
 /// </list>
-/// Rate-limited jobs are re-queued without counting an attempt (<see cref="Jobs.JobPolicy"/>).
+/// Rate-limited jobs are re-queued without counting an attempt (<see cref="Tevrin.Engine.Domain.Jobs.JobPolicy"/>).
 /// </summary>
 public static class GitHostPollBudget
 {

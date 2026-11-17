@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Domain.Projects;
 
@@ -324,7 +326,7 @@ public static partial class ProjectSettingsRules
     public static bool IsWellFormedApiKey(string apiKey)
     {
         ArgumentNullException.ThrowIfNull(apiKey);
-        return !Agents.SecretRedaction.HasWhitespaceOrControl(apiKey);
+        return !Tevrin.Engine.Domain.Agents.SecretRedaction.HasWhitespaceOrControl(apiKey);
     }
 
     /// <summary>

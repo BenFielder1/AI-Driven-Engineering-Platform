@@ -1,4 +1,5 @@
 using Aide.Domain.Artifacts;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.Domain.Entities;
 

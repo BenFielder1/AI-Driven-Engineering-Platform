@@ -2,9 +2,9 @@ using System.Text.Json.Nodes;
 using Aide.Api.Features.Activity;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Api.Features.Admin;
 

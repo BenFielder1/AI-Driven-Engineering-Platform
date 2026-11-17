@@ -8,6 +8,7 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Artifacts;
 

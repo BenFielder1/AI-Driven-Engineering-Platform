@@ -1,6 +1,6 @@
-using Aide.Domain.Jobs;
+using Tevrin.Engine.Domain.Jobs;
 
-namespace Aide.Domain.Entities;
+namespace Tevrin.Engine.Domain.Entities;
 
 /// <summary>Outbox + work-queue row (§4.9, D1). Retry and lease policy live in <c>JobPolicy</c>.</summary>
 public sealed class Job

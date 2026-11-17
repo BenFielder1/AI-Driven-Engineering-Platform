@@ -9,6 +9,8 @@ using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Api.Features.Notifications;
 

@@ -1,6 +1,7 @@
-using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Domain.Jobs;
+namespace Tevrin.Engine.Domain.Jobs;
 
 /// <summary>Retry with exponential backoff: delay before retry n (1-based) = BaseDelay × Factor^(n−1).</summary>
 public sealed record RetryPolicy(int MaxRetries, TimeSpan BaseDelay, int Factor)
@@ -97,13 +98,13 @@ public static class JobPolicy
         ArgumentNullException.ThrowIfNull(deadJob);
         if (deadJob.Status != JobStatus.Dead)
         {
-            return Result.Failure<DeadLetterRetry>(new DomainError(ErrorCodes.Conflict, $"Only dead jobs can be retried; this one is {deadJob.Status.ToWire()}."));
+            return Result.Failure<DeadLetterRetry>(new DomainError(EngineErrorCodes.Conflict, $"Only dead jobs can be retried; this one is {deadJob.Status.ToWire()}."));
         }
 
-        if (executionJobActive && deadJob.Type == JobTypes.Execution)
+        if (executionJobActive && deadJob.Type == Job.ExecutionType)
         {
             return Result.Failure<DeadLetterRetry>(new DomainError(
-                ErrorCodes.Conflict,
+                EngineErrorCodes.Conflict,
                 "An execution job is already queued or running for this project; retry this dead letter after it finishes."));
         }
 

@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace Aide.Domain.Notifications;
+namespace Tevrin.Engine.Domain.Notifications;
 
 /// <summary>
 /// NFR-SEC (SSRF): the addresses a notification channel may connect to. Channel URLs are entered by project Owners, so

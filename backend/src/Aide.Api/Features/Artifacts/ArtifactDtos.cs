@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Aide.Api.Features.Activity;
 using Aide.Domain.Artifacts;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.Api.Features.Artifacts;
 

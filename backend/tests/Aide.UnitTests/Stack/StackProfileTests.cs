@@ -2,6 +2,7 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.UnitTests.Stack;
 
@@ -376,7 +377,7 @@ public class StackProfileTests
         var approved = StackProfile.Approve(document, StackTestCatalog.Catalog, new StackVcsPick(StackPinning.GitHubVcs));
 
         Assert.Equal(ErrorCodes.StackIncompatible, approved.Error!.Code);
-        Assert.Contains(approved.Error.Violations, v => v.Rule == "R1");
+        Assert.Contains(approved.Error.Violations.OfType<StackViolation>(), v => v.Rule == "R1");
     }
 
     [Fact]
@@ -420,7 +421,7 @@ public class StackProfileTests
         var approved = StackProfile.Approve(document, StackTestCatalog.Catalog, new StackVcsPick(StackPinning.GitHubVcs));
 
         Assert.Equal(ErrorCodes.StackIncompatible, approved.Error!.Code);
-        Assert.Contains(approved.Error.Violations, v => v.Rule == "R3");
+        Assert.Contains(approved.Error.Violations.OfType<StackViolation>(), v => v.Rule == "R3");
     }
 
     [Fact]

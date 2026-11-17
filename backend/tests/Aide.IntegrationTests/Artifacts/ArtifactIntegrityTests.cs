@@ -3,7 +3,6 @@ using Aide.Api.Features.Artifacts;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;

@@ -1,9 +1,9 @@
 using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Stack;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.Api.Features.Analysis;
 

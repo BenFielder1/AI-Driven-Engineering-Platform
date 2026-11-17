@@ -1,7 +1,7 @@
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.UnitTests.Agents;
 

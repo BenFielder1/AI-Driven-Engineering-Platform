@@ -16,6 +16,8 @@ using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.BuildChecks;
 

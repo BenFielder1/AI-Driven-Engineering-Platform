@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- FR-262: the SDLC pack (from M56/M57: key constants, sdlc.pipeline.yaml, guards, handlers and the IPipelinePack
+       class). Depends on the engine; the engine never depends on it (FR-263). -->
+  <PropertyGroup>
+    <RootNamespace>Tevrin.Pack.Sdlc</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tevrin.Engine.Domain\Tevrin.Engine.Domain.csproj" />
+    <ProjectReference Include="..\Tevrin.Engine.Runtime\Tevrin.Engine.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>

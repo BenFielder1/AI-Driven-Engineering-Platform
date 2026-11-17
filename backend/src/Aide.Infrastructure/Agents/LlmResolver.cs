@@ -6,6 +6,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Agents;
 

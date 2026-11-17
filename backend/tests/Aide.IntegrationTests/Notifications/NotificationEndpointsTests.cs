@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using Aide.Api.Features.Notifications;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Notifications;
 using Aide.IntegrationTests.Support;
 

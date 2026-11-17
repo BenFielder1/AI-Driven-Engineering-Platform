@@ -3,7 +3,6 @@ using Aide.Api.Features.Execution;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.IntegrationTests.Artifacts;

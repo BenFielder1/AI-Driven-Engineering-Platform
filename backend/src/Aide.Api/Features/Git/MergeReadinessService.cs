@@ -10,6 +10,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Git;
 

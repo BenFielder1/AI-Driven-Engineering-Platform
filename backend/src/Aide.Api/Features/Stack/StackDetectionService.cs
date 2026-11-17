@@ -8,6 +8,7 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Stack;
 

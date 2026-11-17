@@ -14,6 +14,10 @@ using Aide.Domain.Releases;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Api.Features.Analysis;
 

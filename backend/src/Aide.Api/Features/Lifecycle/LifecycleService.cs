@@ -1,6 +1,5 @@
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Git;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Gates;
@@ -8,6 +7,8 @@ using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Lifecycle;
 

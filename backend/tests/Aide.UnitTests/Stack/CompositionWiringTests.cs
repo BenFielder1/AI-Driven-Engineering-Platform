@@ -7,6 +7,7 @@ using Aide.Domain.Review;
 using Aide.Domain.Specs;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Domain.Common;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Stack;

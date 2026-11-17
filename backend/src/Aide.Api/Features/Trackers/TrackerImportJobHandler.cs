@@ -12,6 +12,9 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Trackers;
 

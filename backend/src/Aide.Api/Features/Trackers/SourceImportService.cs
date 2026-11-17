@@ -13,6 +13,8 @@ using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Trackers;
 

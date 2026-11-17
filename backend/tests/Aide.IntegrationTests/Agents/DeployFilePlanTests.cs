@@ -6,7 +6,6 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;

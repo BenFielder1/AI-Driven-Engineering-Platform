@@ -1,5 +1,5 @@
 using Aide.Domain.Agents;
-using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Infrastructure.Agents;
 

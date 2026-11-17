@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using Aide.Domain.Agents;
-using Aide.Domain.Entities;
 using Aide.Infrastructure.Agents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Llm;
 

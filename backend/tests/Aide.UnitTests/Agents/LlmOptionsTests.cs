@@ -1,10 +1,10 @@
-using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.UnitTests.Agents;
 
@@ -168,8 +168,8 @@ public sealed class LlmOptionsTests
 
         Assert.Equal(
             [
-                new Aide.Domain.Agents.LlmCatalogModel("claude-opus-5-5", "Claude Opus 5.5", 128_000, 1_000_000, true),
-                new Aide.Domain.Agents.LlmCatalogModel("claude-haiku-4-5", "claude-haiku-4-5", 64_000, 200_000, false),
+                new Tevrin.Engine.Domain.Agents.LlmCatalogModel("claude-opus-5-5", "Claude Opus 5.5", 128_000, 1_000_000, true),
+                new Tevrin.Engine.Domain.Agents.LlmCatalogModel("claude-haiku-4-5", "claude-haiku-4-5", 64_000, 200_000, false),
             ],
             catalog);
     }

@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
-using Aide.Domain.Notifications;
+using Tevrin.Engine.Domain.Notifications;
 
-namespace Aide.Infrastructure.Notifications;
+namespace Tevrin.Engine.Runtime.Notifications;
 
 /// <summary>A notification target resolved only to addresses the API must not reach (NFR-SEC, SSRF).</summary>
 public sealed class BlockedTargetException : IOException

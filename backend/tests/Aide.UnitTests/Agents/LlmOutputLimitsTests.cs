@@ -1,5 +1,5 @@
-using Aide.Domain.Agents;
-using Aide.Domain.Entities;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.UnitTests.Agents;
 

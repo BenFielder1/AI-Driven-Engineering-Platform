@@ -7,6 +7,7 @@ using Aide.Domain.GitHub;
 using Aide.Infrastructure.GitHub;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Admin;
 

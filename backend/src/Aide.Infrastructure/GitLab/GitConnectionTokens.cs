@@ -8,6 +8,8 @@ using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.GitLab;
 

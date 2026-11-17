@@ -1,5 +1,6 @@
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
+using Tevrin.Engine.Domain.Entities;
 using static Aide.UnitTests.Projects.ProjectRulesTests;
 
 namespace Aide.UnitTests.Projects;
@@ -270,9 +271,9 @@ public class ProjectSettingsRulesTests
         Assert.Single(result.Error!.Details);
     }
 
-    private static Aide.Domain.Common.Result Channels(params ChannelCandidate[] channels) => ProjectSettingsRules.ValidateChannels(channels);
+    private static Tevrin.Engine.Domain.Common.Result Channels(params ChannelCandidate[] channels) => ProjectSettingsRules.ValidateChannels(channels);
 
-    private static Aide.Domain.Common.Result Llm(
+    private static Tevrin.Engine.Domain.Common.Result Llm(
         LlmProvider provider,
         string? defaultModel,
         IReadOnlyDictionary<string, string?>? models = null,

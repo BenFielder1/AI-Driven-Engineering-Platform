@@ -6,6 +6,7 @@ using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.Api.Features.Lifecycle;
 

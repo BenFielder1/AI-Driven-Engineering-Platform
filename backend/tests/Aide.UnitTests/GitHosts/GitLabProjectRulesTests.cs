@@ -5,6 +5,7 @@ using Aide.Domain.GitHosts;
 using Aide.Domain.Notifications;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.GitLab;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.GitHosts;
 

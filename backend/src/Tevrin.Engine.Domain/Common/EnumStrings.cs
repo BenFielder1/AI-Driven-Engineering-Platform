@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Aide.Domain.Common;
+namespace Tevrin.Engine.Domain.Common;
 
 /// <summary>
 /// Stable string form of domain enums: the snake_case names used in SPEC.md, the database and the API

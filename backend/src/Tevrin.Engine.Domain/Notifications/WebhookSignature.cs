@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Aide.Domain.Notifications;
+namespace Tevrin.Engine.Domain.Notifications;
 
 /// <summary>
 /// FR-47, NFR-SEC: generic webhook bodies are signed with the channel's secret. The <c>X-AIDE-Signature</c> header is

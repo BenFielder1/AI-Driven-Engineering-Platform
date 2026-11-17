@@ -19,6 +19,17 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- M55 (FR-264–FR-268): types moved from Aide.* to the engine are imported project-wide, so the frozen
+         characterisation suite (Characterisation/, FR-261) compiles unchanged. -->
+    <Using Include="Tevrin.Engine.Domain.Agents" />
+    <Using Include="Tevrin.Engine.Domain.Artifacts" />
+    <Using Include="Tevrin.Engine.Domain.Common" />
+    <Using Include="Tevrin.Engine.Domain.Entities" />
+    <Using Include="Tevrin.Engine.Domain.Gates" />
+    <Using Include="Tevrin.Engine.Domain.Jobs" />
+    <Using Include="Tevrin.Engine.Domain.Notifications" />
+    <Using Include="Tevrin.Engine.Runtime.Jobs" />
+    <Using Include="Tevrin.Engine.Runtime.Notifications" />
   </ItemGroup>
 
 </Project>

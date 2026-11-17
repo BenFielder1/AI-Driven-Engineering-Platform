@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Aide.Domain.Agents;
+namespace Tevrin.Engine.Domain.Agents;
 
 /// <summary>
 /// NFR-SEC: provider error text is stored on runs, pushed live in <c>RUN_FAILED</c> events and logged, so anything that

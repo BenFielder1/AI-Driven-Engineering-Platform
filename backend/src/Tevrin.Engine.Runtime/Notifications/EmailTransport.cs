@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Options;
 
-namespace Aide.Infrastructure.Notifications;
+namespace Tevrin.Engine.Runtime.Notifications;
 
 /// <summary>
 /// SMTP settings for the email channel (section <c>Smtp</c>; env <c>Smtp__Host</c>, <c>Smtp__Port</c>, <c>Smtp__Username</c>,
@@ -26,7 +26,7 @@ public sealed class SmtpOptions
     public bool EnableSsl { get; set; } = true;
 
     /// <summary>
-    /// Bound on one whole send (connect, TLS, auth, data). At most <see cref="Aide.Domain.Notifications.DeliveryPolicy.MaxSendTimeout"/>,
+    /// Bound on one whole send (connect, TLS, auth, data). At most <see cref="Tevrin.Engine.Domain.Notifications.DeliveryPolicy.MaxSendTimeout"/>,
     /// so a send always ends well inside the delivery's claim lease.
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(15);

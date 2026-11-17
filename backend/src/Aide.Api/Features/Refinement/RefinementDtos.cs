@@ -2,8 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Features.Artifacts;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
-using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Refinement;
 

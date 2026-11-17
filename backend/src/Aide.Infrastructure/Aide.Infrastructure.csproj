@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aide.Domain\Aide.Domain.csproj" />
+    <!-- FR-262, D-0.7.0-12: the engine runtime and its entity configurations, applied by AideDbContext. -->
+    <ProjectReference Include="..\Tevrin.Engine.Runtime\Tevrin.Engine.Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>

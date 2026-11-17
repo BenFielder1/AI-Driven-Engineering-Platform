@@ -45,6 +45,9 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v7
+      - name: Characterisation snapshots unchanged since M54 (FR-261)
+        working-directory: .
+        run: bash scripts/ci/check-snapshots-frozen.sh
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: backend/global.json
@@ -68,6 +71,7 @@ jobs:
         timeout-minutes: 10
         run: |
           dotnet test --project tests/Aide.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+          dotnet test --project tests/Tevrin.Engine.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
           dotnet test --project tests/Aide.Cli.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
       - name: Format
         run: dotnet format --verify-no-changes --no-restore

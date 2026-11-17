@@ -6,6 +6,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Execution;
 

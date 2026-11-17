@@ -6,6 +6,7 @@ using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.Api.Features.Git;
 

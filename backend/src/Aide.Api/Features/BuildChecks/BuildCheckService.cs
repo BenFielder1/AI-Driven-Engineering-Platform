@@ -7,6 +7,8 @@ using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.BuildChecks;
 

@@ -7,7 +7,6 @@ using Aide.Api.Features.Projects;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Security;
 using Aide.IntegrationTests.Support;

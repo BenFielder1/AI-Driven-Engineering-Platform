@@ -2,7 +2,7 @@ using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Aide.Domain.Notifications;
+namespace Tevrin.Engine.Domain.Notifications;
 
 /// <summary>Why an approval link can or can't be used now.</summary>
 public enum ApprovalLinkState

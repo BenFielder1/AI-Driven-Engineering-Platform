@@ -7,6 +7,7 @@ using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Api.Features.Deployments;
 

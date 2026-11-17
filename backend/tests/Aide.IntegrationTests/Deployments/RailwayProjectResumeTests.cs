@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using Aide.Api.Features.Deployments;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Platforms;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;

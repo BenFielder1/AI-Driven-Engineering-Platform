@@ -1,5 +1,6 @@
 using Aide.Domain.Artifacts;
 using Aide.Domain.Execution;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.UnitTests.Execution;
 

@@ -18,7 +18,7 @@
     <Version>0.7.0</Version>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aide.UnitTests' Or '$(MSBuildProjectName)' == 'Aide.IntegrationTests' Or '$(MSBuildProjectName)' == 'Aide.Cli.Tests'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aide.UnitTests' Or '$(MSBuildProjectName)' == 'Aide.IntegrationTests' Or '$(MSBuildProjectName)' == 'Aide.Cli.Tests' Or '$(MSBuildProjectName)' == 'Tevrin.Engine.Tests'">
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <!-- Test names follow the requirement-ID convention (FR3_locking_a_shipped_order_fails);

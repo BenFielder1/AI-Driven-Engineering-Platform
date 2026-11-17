@@ -7,6 +7,7 @@ using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.GitLab;
 

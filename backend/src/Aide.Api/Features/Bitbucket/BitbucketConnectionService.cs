@@ -9,6 +9,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Bitbucket;
 

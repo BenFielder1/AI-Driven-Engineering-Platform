@@ -3,6 +3,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.Releases;
 

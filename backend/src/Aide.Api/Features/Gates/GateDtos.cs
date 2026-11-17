@@ -3,6 +3,7 @@ using Aide.Api.Features.Activity;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Gates;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.Api.Features.Gates;
 

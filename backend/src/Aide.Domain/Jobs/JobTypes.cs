@@ -1,6 +1,6 @@
 using Aide.Domain.Agents;
-using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Domain.Jobs;
 

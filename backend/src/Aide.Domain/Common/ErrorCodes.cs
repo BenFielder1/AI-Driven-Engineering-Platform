@@ -1,3 +1,5 @@
+using Tevrin.Engine.Domain.Common;
+
 namespace Aide.Domain.Common;
 
 /// <summary>
@@ -8,11 +10,11 @@ namespace Aide.Domain.Common;
 public static class ErrorCodes
 {
     // Common (every route)
-    public const string Validation = "VALIDATION";
+    public const string Validation = EngineErrorCodes.Validation;
     public const string Unauthenticated = "UNAUTHENTICATED";
     public const string Forbidden = "FORBIDDEN";
     public const string NotFound = "NOT_FOUND";
-    public const string Conflict = "CONFLICT";
+    public const string Conflict = EngineErrorCodes.Conflict;
 
     /// <summary>A cookie-authenticated mutation without a valid <c>X-XSRF-TOKEN</c> header (§8 antiforgery).</summary>
     public const string Antiforgery = "ANTIFORGERY";

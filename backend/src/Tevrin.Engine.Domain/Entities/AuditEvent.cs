@@ -1,4 +1,4 @@
-namespace Aide.Domain.Entities;
+namespace Tevrin.Engine.Domain.Entities;
 
 /// <summary>Append-only audit event, table <c>events</c> (FR-11, FR-50, FR-51); the source of the live and activity feeds.</summary>
 public sealed class AuditEvent

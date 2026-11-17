@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Aide.Domain.Artifacts;
+namespace Tevrin.Engine.Domain.Artifacts;
 
 /// <summary>§4.3: SHA-256 of the UTF-8 content with line endings normalised to <c>\n</c>, as lowercase hex.</summary>
 public static class ContentHash

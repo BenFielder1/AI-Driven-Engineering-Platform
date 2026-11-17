@@ -2,6 +2,8 @@ using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.Domain.Gates;
 

@@ -8,6 +8,11 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Rollback;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Api.Features.Lifecycle;
 

@@ -581,7 +581,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var run = await RefineAsync(fixture.Owner, fixture.Project.Id);
 
         Assert.Equal(AgentRunStatus.Succeeded, run.Status);
-        Assert.Contains(Aide.Domain.Agents.AgentRunWarnings.SourceItemsUnavailable, await WarningsOfAsync(fixture.Owner, fixture.Project.Id, run.Id));
+        Assert.Contains(Tevrin.Engine.Domain.Agents.AgentRunWarnings.SourceItemsUnavailable, await WarningsOfAsync(fixture.Owner, fixture.Project.Id, run.Id));
     }
 
     private static async Task<IReadOnlyList<string>> WarningsOfAsync(ApiSession user, Guid projectId, Guid runId)

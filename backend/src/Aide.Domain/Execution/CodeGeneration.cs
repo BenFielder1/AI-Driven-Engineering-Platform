@@ -2,9 +2,10 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Execution;
 

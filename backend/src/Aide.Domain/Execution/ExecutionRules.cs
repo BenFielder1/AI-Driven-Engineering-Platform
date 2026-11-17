@@ -2,6 +2,7 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Execution;
 

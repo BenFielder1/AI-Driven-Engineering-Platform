@@ -1,7 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
 using Aide.Domain.Common;
-using Aide.Domain.Notifications;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Notifications;
 
 namespace Aide.Domain.GitHosts;
 

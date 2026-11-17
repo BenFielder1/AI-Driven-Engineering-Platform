@@ -96,5 +96,5 @@ public static class GitLabReaders
         return list;
     }
 
-    private static string ToWireName(this GitLabOwnerKind kind) => Domain.Common.EnumStrings.ToWire(kind);
+    private static string ToWireName(this GitLabOwnerKind kind) => Tevrin.Engine.Domain.Common.EnumStrings.ToWire(kind);
 }

@@ -1,11 +1,12 @@
 using System.Text.Json;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Infrastructure.Persistence;
 

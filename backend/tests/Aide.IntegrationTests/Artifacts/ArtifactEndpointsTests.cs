@@ -338,7 +338,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         var escalation = await LifecycleSeed.AddGateAsync(factory, id, GateType.Escalation);
         await ProjectApi.WithDbAsync(factory, async db =>
         {
-            db.Jobs.Add(new Aide.Domain.Entities.Job { Type = JobTypes.Execution, Payload = "{}", ProjectId = id, Status = JobStatus.Queued, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
+            db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = JobTypes.Execution, Payload = "{}", ProjectId = id, Status = JobStatus.Queued, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync(Ct);
         });
 

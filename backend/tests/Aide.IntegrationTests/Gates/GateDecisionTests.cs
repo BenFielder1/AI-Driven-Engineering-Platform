@@ -312,7 +312,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.ExtraReviewCycles, 2), Ct));
         await ProjectApi.WithDbAsync(factory, async db =>
         {
-            db.Jobs.Add(new Aide.Domain.Entities.Job { Type = JobTypes.Review, ProjectId = id, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
+            db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = JobTypes.Review, ProjectId = id, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync(Ct);
         });
 

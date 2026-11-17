@@ -1,7 +1,6 @@
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
@@ -11,6 +10,8 @@ using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Agents;
 

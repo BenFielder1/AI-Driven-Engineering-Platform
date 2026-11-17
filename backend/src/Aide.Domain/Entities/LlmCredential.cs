@@ -1,3 +1,5 @@
+using Tevrin.Engine.Domain.Entities;
+
 namespace Aide.Domain.Entities;
 
 /// <summary>A user's LLM provider key (FR-78, D-V2-5); table <c>llm_credentials</c>. Projects bind one through

@@ -1,5 +1,6 @@
 using Aide.Domain.Agents;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Domain.Entities;
 

@@ -1,5 +1,5 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
+using Tevrin.Engine.Domain.Agents;
 
 namespace Aide.UnitTests.Artifacts;
 

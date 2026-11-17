@@ -2,8 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Aide.Api.Features.Gates;
 using Aide.Domain.Artifacts;
-using Aide.Domain.Entities;
 using Aide.Domain.Gates;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Approvals;
 

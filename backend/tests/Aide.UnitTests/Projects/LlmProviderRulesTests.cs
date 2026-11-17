@@ -1,6 +1,6 @@
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Projects;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.UnitTests.Projects;
 

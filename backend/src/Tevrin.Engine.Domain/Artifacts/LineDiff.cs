@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text;
-using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
 
-namespace Aide.Domain.Artifacts;
+namespace Tevrin.Engine.Domain.Artifacts;
 
 /// <summary>
 /// One line of a diff (FR-21). <see cref="OldLine"/> is the 1-based line number in the older version (null for
@@ -54,7 +54,7 @@ public static class LineDiff
             var message = string.Create(
                 CultureInfo.InvariantCulture,
                 $"The two versions have {total} lines together; diffs are limited to {MaxTotalLines} lines.");
-            return Result.Failure<DiffResult>(new DomainError(ErrorCodes.Validation, message) { Details = [$"to: {message}"] });
+            return Result.Failure<DiffResult>(new DomainError(EngineErrorCodes.Validation, message) { Details = [$"to: {message}"] });
         }
 
         var lines = Compute(from, to);

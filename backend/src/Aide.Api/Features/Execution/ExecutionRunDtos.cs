@@ -3,6 +3,7 @@ using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Execution;
 

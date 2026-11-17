@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.Agents;
 

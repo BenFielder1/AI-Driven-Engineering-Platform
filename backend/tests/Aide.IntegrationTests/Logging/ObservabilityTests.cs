@@ -5,7 +5,6 @@ using Aide.Api.Jobs;
 using Aide.Api.Logging;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Builder;

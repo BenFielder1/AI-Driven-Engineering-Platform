@@ -9,6 +9,8 @@ using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Api.Features.Deployments;
 

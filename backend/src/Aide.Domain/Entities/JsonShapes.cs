@@ -1,6 +1,7 @@
 using Aide.Domain.Artifacts;
 using Aide.Domain.Execution;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Domain.Entities;
 

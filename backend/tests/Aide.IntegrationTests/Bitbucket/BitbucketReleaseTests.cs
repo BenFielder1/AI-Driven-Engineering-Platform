@@ -6,7 +6,6 @@ using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;

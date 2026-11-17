@@ -2,8 +2,6 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;

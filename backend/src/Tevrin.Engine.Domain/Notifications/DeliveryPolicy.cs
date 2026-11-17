@@ -1,6 +1,6 @@
-using Aide.Domain.Entities;
+using Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Domain.Notifications;
+namespace Tevrin.Engine.Domain.Notifications;
 
 /// <summary>How one delivery attempt to a channel ended.</summary>
 public enum DeliveryAttemptResult

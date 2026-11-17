@@ -4,6 +4,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.GitHosts;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Infrastructure.Git;
 

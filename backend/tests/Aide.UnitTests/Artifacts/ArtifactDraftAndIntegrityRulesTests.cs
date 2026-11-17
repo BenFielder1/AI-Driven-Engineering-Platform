@@ -2,6 +2,7 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.UnitTests.Artifacts;
 

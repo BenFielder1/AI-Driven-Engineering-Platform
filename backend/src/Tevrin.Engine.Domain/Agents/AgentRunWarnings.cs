@@ -1,4 +1,4 @@
-namespace Aide.Domain.Agents;
+namespace Tevrin.Engine.Domain.Agents;
 
 /// <summary>
 /// Non-blocking conditions recorded on an agent run (FR-70, FR-71): stored with the run's output and in its

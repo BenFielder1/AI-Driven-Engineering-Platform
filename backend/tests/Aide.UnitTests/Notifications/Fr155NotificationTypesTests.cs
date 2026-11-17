@@ -3,6 +3,7 @@ using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Notifications;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.Notifications;
 

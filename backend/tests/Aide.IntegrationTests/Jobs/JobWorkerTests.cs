@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using Aide.Api.Jobs;
-using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;

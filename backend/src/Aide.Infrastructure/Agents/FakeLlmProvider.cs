@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using Aide.Domain.Agents;
-using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.RepoTools;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Agents;
 

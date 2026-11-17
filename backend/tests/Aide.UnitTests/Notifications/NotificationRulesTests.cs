@@ -2,10 +2,12 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Gates;
 using Aide.Domain.Notifications;
-using Aide.Infrastructure.Notifications;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Engine.Runtime.Notifications;
 
 namespace Aide.UnitTests.Notifications;
 

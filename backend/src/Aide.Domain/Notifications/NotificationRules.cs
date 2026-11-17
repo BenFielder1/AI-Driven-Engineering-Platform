@@ -1,6 +1,7 @@
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Gates;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Notifications;
 

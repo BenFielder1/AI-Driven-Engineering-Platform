@@ -1,3 +1,5 @@
+using Tevrin.Engine.Domain.Entities;
+
 namespace Aide.Domain.Entities;
 
 /// <summary>Git settings of a project (FR-9, FR-35). The token is encrypted with Data Protection.</summary>

@@ -12,7 +12,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
@@ -825,7 +824,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             var db = scope.ServiceProvider.GetRequiredService<Aide.Infrastructure.Persistence.AideDbContext>();
             foreach (var hook in scope.ServiceProvider.GetServices<Aide.Api.Jobs.IJobEndedHook>())
             {
-                await hook.OnJobEndedAsync(db, new Aide.Api.Jobs.JobEnded(job.Id, jobType, id, DeadLettered: true, "boom"), Ct);
+                await hook.OnJobEndedAsync(db, new Tevrin.Engine.Runtime.Jobs.JobEnded(job.Id, jobType, id, DeadLettered: true, "boom"), Ct);
             }
 
             await db.SaveChangesAsync(Ct);

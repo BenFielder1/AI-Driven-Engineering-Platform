@@ -80,6 +80,16 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Decisions
 See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
 
+- **M54 build note (orchestrator):** the snapshots were produced by CI run [44108300811](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44108300811) on 645bc4f (every other job green; the characterisation shard failed only because no snapshots were committed yet) and committed in 8dce91a. That commit also swept in 21 renames M55 had staged with `git mv`, so its CI run ([44111802972](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44111802972)) fails to build. No amend or force-push (CLAUDE.md): the M55 commit repairs it, and its CI run is the first to compare against the snapshots. From now on the orchestrator commits with explicit pathspecs while an agent is working.
+
+- **D-0.7.0-20** (Build, M55, Claude, assumed): seams for moving the job worker, enqueuer, sweeper and channel senders into `Tevrin.Engine.Runtime` (M55 part 2):
+  - **DbContext:** the engine defines `IEngineDbContext`, which exposes the engine's `DbSet`s (jobs, events, notifications, deliveries, approval links) and `Database`. `AideDbContext` implements it, and DI registers it as the same scoped instance.
+  - **Job failure classification:** `IJobExceptionClassifier`, which returns a deferral or retry hint for an exception. The Aide side registers one for the GitHub, GitLab and Bitbucket rate-limit exceptions.
+  - **Telemetry and log scopes:** the engine takes an `ActivitySource` and a scope factory through DI. The Aide registrations pass the existing source name and scope keys, so traces and logs stay the same.
+  - **Secrets:** `ISecretProtector` moves to the engine as an interface. Its Data Protection implementation stays in `Aide.Api`.
+  - **Rule:** nothing that holds SDLC values moves (`NotificationType`, `EventTypes`, notification messages); those wait for M56.
+- **D-0.7.0-21** (Build, M55, Claude, assumed): the LLM layer, `PromptTemplate`, `AgentRunRules`, `Artifact`/`ArtifactRules`/`RestoreRules`, `ApprovalGate`/`GateRules`/`GateFollowUp`/`GateResolution` and the `AgentRun` entity are keyed by SDLC enums. They move in M56 (string keys) or M58 (`Phase`), not M55. FR-264–FR-268 are completed across M55–M56.
+
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.

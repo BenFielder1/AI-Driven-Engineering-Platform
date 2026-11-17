@@ -1,7 +1,5 @@
 using Aide.Api.Features.Databases;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
@@ -9,6 +7,10 @@ using Aide.Domain.Entities;
 using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Deployments;
 

@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Execution;
 

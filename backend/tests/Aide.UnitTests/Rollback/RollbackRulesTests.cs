@@ -3,6 +3,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Rollback;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.UnitTests.Rollback;
 
@@ -223,7 +224,7 @@ public class RollbackRulesTests
         var rolledBack = RollbackRules.Plan(Request()).Value.Transition.NewState;
         var snapshot = new LifecycleSnapshot
         {
-            Mode = Aide.Domain.Gates.ApprovalMode.Autonomous,
+            Mode = Tevrin.Engine.Domain.Gates.ApprovalMode.Autonomous,
             TechnicalSpecificationLocked = true,
             ImplementationPlanLocked = true,
             CurrentPlanStepCount = 2,

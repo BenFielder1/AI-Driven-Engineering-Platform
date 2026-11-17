@@ -1,8 +1,8 @@
 using Aide.Api.Features.Approvals;
-using Aide.Api.Jobs;
 using Aide.Domain.Jobs;
-using Aide.Domain.Notifications;
-using Aide.Infrastructure.Notifications;
+using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Notifications;
 
 namespace Aide.Api.Features.Notifications;
 

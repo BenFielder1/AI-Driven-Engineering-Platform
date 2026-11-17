@@ -7,6 +7,8 @@ using Aide.Domain.GitHub;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.UnitTests.Trackers;
 

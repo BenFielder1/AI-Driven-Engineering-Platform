@@ -53,13 +53,13 @@ public static class CodebaseSummaryWait
 
         if (analysis is AnalysisJobState.None or AnalysisJobState.Succeeded or AnalysisJobState.Failed)
         {
-            return SummaryWaitDecision.Proceed(Agents.AgentRunWarnings.SummaryUnavailable);
+            return SummaryWaitDecision.Proceed(Tevrin.Engine.Domain.Agents.AgentRunWarnings.SummaryUnavailable);
         }
 
         var deadline = versionStartedAt + MaxWait;
         if (now >= deadline)
         {
-            return SummaryWaitDecision.Proceed(Agents.AgentRunWarnings.SummaryWaitTimeout);
+            return SummaryWaitDecision.Proceed(Tevrin.Engine.Domain.Agents.AgentRunWarnings.SummaryWaitTimeout);
         }
 
         var next = now + PollInterval;

@@ -566,7 +566,7 @@ public sealed class LlmToolLoopTests : IDisposable
 
         public List<LlmToolRequest> ToolRequests { get; } = [];
 
-        public Aide.Domain.Entities.LlmProvider Kind => Aide.Domain.Entities.LlmProvider.Fake;
+        public Tevrin.Engine.Domain.Entities.LlmProvider Kind => Tevrin.Engine.Domain.Entities.LlmProvider.Fake;
 
         public Task<LlmCompletion> CompleteAsync(LlmRequest request, CancellationToken cancellationToken)
         {
@@ -596,7 +596,7 @@ public sealed class LlmToolLoopTests : IDisposable
     {
         public bool LastForced { get; private set; }
 
-        public Aide.Domain.Entities.LlmProvider Kind => Aide.Domain.Entities.LlmProvider.Fake;
+        public Tevrin.Engine.Domain.Entities.LlmProvider Kind => Tevrin.Engine.Domain.Entities.LlmProvider.Fake;
 
         public Task<LlmCompletion> CompleteAsync(LlmRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 

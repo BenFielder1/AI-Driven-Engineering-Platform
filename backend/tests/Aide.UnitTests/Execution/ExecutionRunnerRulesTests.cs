@@ -1,10 +1,10 @@
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Domain.Artifacts;
 
 namespace Aide.UnitTests.Execution;
 

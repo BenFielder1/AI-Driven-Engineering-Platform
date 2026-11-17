@@ -8,6 +8,7 @@ using Aide.Domain.GitHub;
 using Aide.Infrastructure.GitHub;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.GitHub;
 

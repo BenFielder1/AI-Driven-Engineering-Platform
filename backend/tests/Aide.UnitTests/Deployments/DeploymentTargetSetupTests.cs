@@ -3,6 +3,7 @@ using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Stack;
 using Aide.UnitTests.Stack;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.Deployments;
 

@@ -380,7 +380,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(app, async db =>
         {
             await new ReviewJobEndedHook(TimeProvider.System).OnJobEndedAsync(
-                db, new Aide.Api.Jobs.JobEnded(job.Id, job.Type, id, DeadLettered: false, "INVALID_OUTPUT: The review is invalid: sk-ant-api03-SECRETSECRETSECRETSECRET"), Ct);
+                db, new Tevrin.Engine.Runtime.Jobs.JobEnded(job.Id, job.Type, id, DeadLettered: false, "INVALID_OUTPUT: The review is invalid: sk-ant-api03-SECRETSECRETSECRETSECRET"), Ct);
             await db.SaveChangesAsync(Ct);
         });
 

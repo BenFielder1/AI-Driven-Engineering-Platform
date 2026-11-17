@@ -2,10 +2,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Aide.Domain.Agents;
-using Aide.Domain.Entities;
 using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Agents;
 

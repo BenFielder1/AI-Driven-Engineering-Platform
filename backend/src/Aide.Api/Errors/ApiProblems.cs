@@ -1,5 +1,7 @@
 using Aide.Domain.Common;
+using Aide.Domain.Stack;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Errors;
 
@@ -71,7 +73,7 @@ public static class ApiProblems
 
         if (error.Violations.Count > 0)
         {
-            extensions[ViolationsKey] = error.Violations.Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList();
+            extensions[ViolationsKey] = error.Violations.OfType<StackViolation>().Select(v => new Features.Stack.StackViolationDto(v.Layer, v.Option, v.Rule, v.Reason)).ToList();
         }
 
         return TypedResults.Problem(
@@ -112,7 +114,7 @@ public static class ApiProblems
         var extensions = new Dictionary<string, object?>
         {
             [ErrorCodeKey] = error.Code,
-            [PlatformKey] = Domain.Common.EnumStrings.ToWire(platform),
+            [PlatformKey] = Tevrin.Engine.Domain.Common.EnumStrings.ToWire(platform),
         };
         if (error.Reason is { } link && error.Code is ErrorCodes.PlatformGitNotConnected or ErrorCodes.PlatformPermissionMissing)
         {

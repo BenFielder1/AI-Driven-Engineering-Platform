@@ -1,8 +1,8 @@
 using System.Data.Common;
 using System.Runtime.CompilerServices;
-using Aide.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Persistence;
 

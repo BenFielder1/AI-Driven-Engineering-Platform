@@ -7,6 +7,8 @@ using Aide.Domain.Specs;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.Api.Agents;
 

@@ -1,6 +1,8 @@
 using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.Domain.Lifecycle;
 

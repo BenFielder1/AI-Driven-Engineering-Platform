@@ -272,7 +272,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
             row.CompletedAt = DateTimeOffset.UtcNow;
             foreach (var hook in scope.ServiceProvider.GetServices<Aide.Api.Jobs.IJobEndedHook>())
             {
-                await hook.OnJobEndedAsync(db, new Aide.Api.Jobs.JobEnded(analyst.Id, analyst.Type, project.Id, DeadLettered: true, row.LastError), Ct);
+                await hook.OnJobEndedAsync(db, new Tevrin.Engine.Runtime.Jobs.JobEnded(analyst.Id, analyst.Type, project.Id, DeadLettered: true, row.LastError), Ct);
             }
 
             await db.SaveChangesAsync(Ct);

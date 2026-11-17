@@ -1,5 +1,6 @@
 using Aide.Domain.Common;
 using Aide.Domain.Jobs;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.UnitTests.Jobs;
 

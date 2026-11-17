@@ -11,6 +11,9 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.Api.Features.Projects;
 

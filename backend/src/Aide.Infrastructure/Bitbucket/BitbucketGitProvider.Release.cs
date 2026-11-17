@@ -4,6 +4,7 @@ using Aide.Domain.GitHosts;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Git;
 using Microsoft.Extensions.Logging;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Infrastructure.Bitbucket;
 

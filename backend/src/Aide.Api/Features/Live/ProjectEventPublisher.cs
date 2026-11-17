@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Live;
 

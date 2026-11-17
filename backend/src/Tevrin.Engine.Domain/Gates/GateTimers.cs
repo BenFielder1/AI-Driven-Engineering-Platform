@@ -1,4 +1,4 @@
-namespace Aide.Domain.Gates;
+namespace Tevrin.Engine.Domain.Gates;
 
 /// <summary>What the gate-reminder worker should do for a gate right now.</summary>
 public sealed record GateTimerActions(bool SendReminder, bool MarkOverdue)

@@ -1,4 +1,4 @@
-namespace Aide.Domain.Artifacts;
+namespace Tevrin.Engine.Domain.Artifacts;
 
 /// <summary>
 /// Result of re-checking an artifact's content hash on read (FR-20). <c>corrupted</c> means the stored content no

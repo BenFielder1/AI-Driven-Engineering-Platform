@@ -1,15 +1,5 @@
 namespace Aide.Domain.Entities;
 
-/// <summary>Status of an agent run (FR-23, FR-25).</summary>
-public enum AgentRunStatus
-{
-    Queued = 0,
-    Running = 1,
-    Succeeded = 2,
-    Failed = 3,
-    Cancelled = 4,
-}
-
 /// <summary>Git provider of a project (FR-35, FR-82, FR-136). Wire values: <c>github_pat</c> (0.1.0 <c>github</c>), <c>local</c>,
 /// <c>github_app</c>, <c>gitlab</c>, <c>bitbucket</c>.</summary>
 public enum GitProvider
@@ -19,15 +9,6 @@ public enum GitProvider
     GithubApp = 2,
     Gitlab = 3,
     Bitbucket = 4,
-}
-
-/// <summary>LLM provider (FR-22). Wire values: <c>anthropic</c>, <c>openai</c>, <c>ollama</c>, <c>fake</c>.</summary>
-public enum LlmProvider
-{
-    Anthropic = 0,
-    Openai = 1,
-    Ollama = 2,
-    Fake = 3,
 }
 
 /// <summary>Outcome of a release attempt (FR-42, FR-43).</summary>
@@ -87,32 +68,4 @@ public enum StepAttemptOutcome
     Accepted = 0,
     Rejected = 1,
     Error = 2,
-}
-
-/// <summary>Per-channel delivery state of a notification (FR-49).</summary>
-public enum NotificationDeliveryStatus
-{
-    Pending = 0,
-    Sent = 1,
-    Failed = 2,
-    Dead = 3,
-
-    /// <summary>Not attempted: the channel can't send in this deployment (e.g. email without SMTP settings). Never retried.</summary>
-    Skipped = 4,
-}
-
-/// <summary>Project notification channel types (FR-47).</summary>
-public enum NotificationChannelType
-{
-    Email = 0,
-    Slack = 1,
-    Teams = 2,
-    Webhook = 3,
-}
-
-/// <summary>The decision a one-click approval link carries (FR-48).</summary>
-public enum ApprovalLinkDecision
-{
-    Approve = 0,
-    Reject = 1,
 }

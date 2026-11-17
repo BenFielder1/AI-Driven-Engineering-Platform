@@ -12,6 +12,7 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Runtime.Jobs;
 using ReleaseEntity = Aide.Domain.Entities.Release;
 
 namespace Aide.Api.Features.Release;

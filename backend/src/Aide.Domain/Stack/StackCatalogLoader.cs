@@ -4,8 +4,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using Aide.Domain.Common;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Stack;
 
@@ -1388,7 +1388,7 @@ public static partial class StackCatalogLoader
         return result;
     }
 
-    private static string Text(string text) => Artifacts.ContentHash.NormaliseLineEndings(text).TrimStart('﻿');
+    private static string Text(string text) => Tevrin.Engine.Domain.Artifacts.ContentHash.NormaliseLineEndings(text).TrimStart('﻿');
 
     private static string NormalisePath(string path) => path.Replace('\\', '/').TrimStart('/');
 

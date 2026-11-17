@@ -134,7 +134,7 @@ public static class LlmToolLoop
     public const string ToolsUnsupportedWarning = "tools_unsupported";
 
     /// <summary>The final answer still hit the output cap after <see cref="MaxContinuations"/> continuations.</summary>
-    public const string OutputTruncatedWarning = Aide.Domain.Agents.AgentRunWarnings.OutputTruncated;
+    public const string OutputTruncatedWarning = Tevrin.Engine.Domain.Agents.AgentRunWarnings.OutputTruncated;
 
     /// <summary>Model turns per loop: the 25 calls (one per turn at worst), the refused one, and the forced final answer.</summary>
     public const int MaxTurns = 28;

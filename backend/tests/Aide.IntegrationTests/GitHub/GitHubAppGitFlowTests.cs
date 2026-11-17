@@ -8,7 +8,6 @@ using Aide.Api.Features.Projects;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;

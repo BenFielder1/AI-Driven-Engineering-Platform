@@ -1,4 +1,4 @@
-namespace Aide.Domain.Notifications;
+namespace Tevrin.Engine.Domain.Notifications;
 
 /// <summary>
 /// FR-198: the product-facing text the email, Slack and Teams channels share. Notifications already sent are not rewritten.

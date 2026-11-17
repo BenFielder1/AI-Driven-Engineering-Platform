@@ -16,6 +16,10 @@ COPY global.json Directory.Build.props Directory.Packages.props dotnet-tools.jso
 COPY src/Aide.Api/Aide.Api.csproj src/Aide.Api/
 COPY src/Aide.Domain/Aide.Domain.csproj src/Aide.Domain/
 COPY src/Aide.Infrastructure/Aide.Infrastructure.csproj src/Aide.Infrastructure/
+COPY src/Tevrin.Engine.Domain/Tevrin.Engine.Domain.csproj src/Tevrin.Engine.Domain/
+COPY src/Tevrin.Engine.Runtime/Tevrin.Engine.Runtime.csproj src/Tevrin.Engine.Runtime/
+COPY src/Tevrin.Engine.Api/Tevrin.Engine.Api.csproj src/Tevrin.Engine.Api/
+COPY src/Tevrin.Pack.Sdlc/Tevrin.Pack.Sdlc.csproj src/Tevrin.Pack.Sdlc/
 RUN dotnet tool restore
 RUN RID="linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
  && dotnet restore src/Aide.Api/Aide.Api.csproj \

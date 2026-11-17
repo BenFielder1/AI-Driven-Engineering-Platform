@@ -10,6 +10,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Connections;
 

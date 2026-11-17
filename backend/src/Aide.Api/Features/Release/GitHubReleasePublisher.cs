@@ -1,6 +1,5 @@
 using Aide.Api.Features.Git;
 using Aide.Api.Features.Notifications;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -10,6 +9,8 @@ using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Runtime.Jobs;
 using ReleaseEntity = Aide.Domain.Entities.Release;
 
 namespace Aide.Api.Features.Release;

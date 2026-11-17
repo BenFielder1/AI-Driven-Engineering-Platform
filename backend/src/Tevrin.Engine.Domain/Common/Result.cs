@@ -1,4 +1,4 @@
-namespace Aide.Domain.Common;
+namespace Tevrin.Engine.Domain.Common;
 
 /// <summary>Outcome of a domain rule: success, or a <see cref="DomainError"/>.</summary>
 public class Result

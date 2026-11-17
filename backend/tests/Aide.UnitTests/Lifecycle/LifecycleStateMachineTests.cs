@@ -2,6 +2,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.UnitTests.Lifecycle;
 

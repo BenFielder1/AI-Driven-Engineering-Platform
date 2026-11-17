@@ -1,6 +1,6 @@
-using Aide.Domain.Entities;
+using Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Domain.Agents;
+namespace Tevrin.Engine.Domain.Agents;
 
 /// <summary>
 /// One model of a provider's catalog (FR-158, §4.24, <c>Llm:Providers:&lt;P&gt;:Catalog:&lt;n&gt;</c>): its id, display name,

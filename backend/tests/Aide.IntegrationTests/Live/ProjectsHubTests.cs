@@ -6,7 +6,6 @@ using Aide.Api.Features.Tokens;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Artifacts;

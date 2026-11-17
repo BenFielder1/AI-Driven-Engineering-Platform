@@ -1,4 +1,4 @@
-using Aide.Domain.Agents;
+using Tevrin.Engine.Domain.Agents;
 
 namespace Aide.UnitTests.Agents;
 

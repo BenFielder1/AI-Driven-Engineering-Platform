@@ -3,6 +3,7 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Gates;
 
 namespace Aide.UnitTests.Jobs;
 
