@@ -22,6 +22,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Persistence;

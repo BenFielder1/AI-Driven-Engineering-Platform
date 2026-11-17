@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Aide.Api.Agents;
 using Aide.Api.Logging;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Builder;

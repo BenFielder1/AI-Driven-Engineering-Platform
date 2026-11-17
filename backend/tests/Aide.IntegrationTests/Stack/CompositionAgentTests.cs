@@ -21,6 +21,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Stack;

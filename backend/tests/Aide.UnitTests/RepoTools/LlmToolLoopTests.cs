@@ -3,10 +3,10 @@ using System.Text;
 using System.Text.Json;
 using Aide.Domain.RepoTools;
 using Aide.Infrastructure.Agents;
-using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.RepoTools;
 using Aide.UnitTests.Agents;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.RepoTools;

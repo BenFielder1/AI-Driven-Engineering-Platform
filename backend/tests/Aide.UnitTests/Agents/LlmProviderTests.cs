@@ -2,10 +2,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Aide.Domain.Common;
-using Aide.Infrastructure.Agents;
-using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;

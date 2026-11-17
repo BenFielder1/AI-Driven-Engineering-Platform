@@ -39,7 +39,7 @@ public static class RestoreRules
     /// <c>codebase_summary</c>, which is produced automatically in refinement and is never restorable.
     /// </summary>
     public static Phase? RestorablePhase(string type) =>
-        CodebaseSummaryRules.IsAutoLocked(type) ? null : ArtifactRules.ProducingPhase(type);
+        CodebaseSummaryRules.IsAutoLocked(type) ? null : SdlcArtifactRules.ProducingPhase(type);
 
     /// <summary>
     /// Allowed only while the project is not <c>releasing</c> (<c>releasing</c>), is in the phase that produces the type

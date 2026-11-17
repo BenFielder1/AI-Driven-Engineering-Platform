@@ -1,6 +1,5 @@
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Agents;
-using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;

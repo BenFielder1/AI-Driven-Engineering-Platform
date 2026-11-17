@@ -4,65 +4,37 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Infrastructure.Persistence.Configurations;
 
 // References between rows of the same project use NO ACTION: they all disappear together through the project
 // cascade (FR-7), and NO ACTION is checked at the end of the statement, so the cascade order doesn't matter.
 
+/// <summary>D-0.7.0-12: <c>artifacts</c> is configured by the engine (<see cref="TevrinEngineModel"/>); the host adds the
+/// relationships to its tables.</summary>
 internal sealed class ArtifactConfiguration : IEntityTypeConfiguration<Artifact>
 {
     public void Configure(EntityTypeBuilder<Artifact> builder)
     {
-        builder.ToTable("artifacts");
-        builder.HasKey(a => a.Id);
-        builder.Property(a => a.Id).ValueGeneratedNever();
-
-        // FR-270, FR-274: the artifact key (SdlcArtifacts), the same column as the 0.6.1 enum.
-        builder.Property(a => a.Type).HasMaxLength(AideDbContext.EnumMaxLength);
-        builder.Property(a => a.Content).IsRequired();
-        builder.Property(a => a.ContentHash).HasMaxLength(64).IsRequired();
-        builder.Property(a => a.RowVersion).IsXminRowVersion();
-
         builder.HasOne<Project>().WithMany().HasForeignKey(a => a.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(a => a.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(a => a.ApprovedBy).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<AgentRun>().WithMany().HasForeignKey(a => a.AgentRunId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(a => a.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
-
-        // Artifact versions keep counting across release versions (FR-58, FR-59), so uniqueness stays per project.
-        builder.HasIndex(a => new { a.ProjectId, a.Type, a.Version }).IsUnique();
-        builder.HasIndex(a => new { a.ProjectId, a.Type, a.Status });
-        builder.HasIndex(a => new { a.ProjectId, a.ReleaseVersionId });
-        builder.HasIndex(a => a.ReleaseVersionId);
     }
 }
 
+/// <summary>D-0.7.0-12: <c>approval_gates</c> is configured by the engine (<see cref="TevrinEngineModel"/>); the host adds
+/// the relationships to its tables.</summary>
 internal sealed class ApprovalGateConfiguration : IEntityTypeConfiguration<ApprovalGate>
 {
     public void Configure(EntityTypeBuilder<ApprovalGate> builder)
     {
-        builder.ToTable("approval_gates");
-        builder.HasKey(g => g.Id);
-        builder.Property(g => g.Id).ValueGeneratedNever();
-
-        // FR-271, FR-274: the gate key (SdlcGates, EngineGates), the same column as the 0.6.1 enum.
-        builder.Property(g => g.Type).HasMaxLength(AideDbContext.EnumMaxLength);
-        builder.Property(g => g.RowVersion).IsXminRowVersion();
-
         builder.HasOne<Project>().WithMany().HasForeignKey(g => g.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne<Artifact>().WithMany().HasForeignKey(g => g.ArtifactId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<AppUser>().WithMany().HasForeignKey(g => g.ReviewerId).OnDelete(DeleteBehavior.SetNull);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(g => g.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
-
-        // At most one pending gate per (project, type) — enforced by the database (§4.2).
-        builder.HasIndex(g => new { g.ProjectId, g.Type })
-            .IsUnique()
-            .HasFilter("status = 'pending'")
-            .HasDatabaseName("ux_approval_gates_project_id_type_pending");
-        builder.HasIndex(g => new { g.ProjectId, g.Status });
-        builder.HasIndex(g => new { g.ProjectId, g.ReleaseVersionId });
-        builder.HasIndex(g => g.ReleaseVersionId);
     }
 }
 

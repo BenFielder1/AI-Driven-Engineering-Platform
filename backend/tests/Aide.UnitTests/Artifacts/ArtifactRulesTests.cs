@@ -37,8 +37,8 @@ public class ArtifactRulesTests
     {
         var hash = ContentHash.Compute("# Spec v3");
 
-        var intact = ArtifactRules.OnIntegrityCheck(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, "# Spec v3", hash);
-        var altered = ArtifactRules.OnIntegrityCheck(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, "# Spec v3 (edited in DB)", hash);
+        var intact = SdlcArtifactRules.OnIntegrityCheck(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, "# Spec v3", hash);
+        var altered = SdlcArtifactRules.OnIntegrityCheck(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, "# Spec v3 (edited in DB)", hash);
 
         Assert.False(intact.Changed);
         Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, SdlcAgents.SpecGenerator), altered);
@@ -47,7 +47,7 @@ public class ArtifactRulesTests
     [Fact]
     public void FR20_An_already_corrupted_artifact_is_not_reported_again()
     {
-        var result = ArtifactRules.OnIntegrityCheck(SdlcArtifacts.ImplementationPlan, ArtifactStatus.Corrupted, "x", "bad");
+        var result = SdlcArtifactRules.OnIntegrityCheck(SdlcArtifacts.ImplementationPlan, ArtifactStatus.Corrupted, "x", "bad");
 
         Assert.False(result.Changed);
     }
@@ -115,7 +115,7 @@ public class ArtifactRulesTests
     public void FR17_Approving_or_rejecting_a_non_draft_is_artifact_not_draft(ArtifactStatus status)
     {
         Assert.Equal(ErrorCodes.ArtifactNotDraft, ArtifactRules.Approve(status).Error!.Code);
-        Assert.Equal(ErrorCodes.ArtifactNotDraft, ArtifactRules.Reject(SdlcArtifacts.ProjectRequest, status, true).Error!.Code);
+        Assert.Equal(ErrorCodes.ArtifactNotDraft, SdlcArtifactRules.Reject(SdlcArtifacts.ProjectRequest, status, true).Error!.Code);
     }
 
     [Theory]
@@ -133,7 +133,7 @@ public class ArtifactRulesTests
     [Fact]
     public void FR17_Changing_a_locked_artifact_is_artifact_locked()
     {
-        Assert.Equal(ErrorCodes.ArtifactLocked, ArtifactRules.Reject(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, true).Error!.Code);
+        Assert.Equal(ErrorCodes.ArtifactLocked, SdlcArtifactRules.Reject(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, true).Error!.Code);
         Assert.Equal(ErrorCodes.ArtifactLocked, ArtifactRules.EnsureEditable(ArtifactStatus.Locked).Error!.Code);
     }
 
@@ -144,7 +144,7 @@ public class ArtifactRulesTests
     [InlineData(SdlcArtifacts.OptimizationPlan, SdlcAgents.CodeReview)]
     public void FR17_Rejecting_an_agent_draft_reruns_its_producing_agent(string type, string agent)
     {
-        var result = ArtifactRules.Reject(type, ArtifactStatus.Draft, authoredByAgent: true);
+        var result = SdlcArtifactRules.Reject(type, ArtifactStatus.Draft, authoredByAgent: true);
 
         Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Rejected, true, agent), result.Value);
     }
@@ -152,7 +152,7 @@ public class ArtifactRulesTests
     [Fact]
     public void FR17_Rejecting_a_human_edited_draft_reruns_no_agent()
     {
-        var result = ArtifactRules.Reject(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, authoredByAgent: false);
+        var result = SdlcArtifactRules.Reject(SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, authoredByAgent: false);
 
         Assert.Equal(ArtifactStatus.Rejected, result.Value.NewStatus);
         Assert.Null(result.Value.RerunAgent);
@@ -164,7 +164,7 @@ public class ArtifactRulesTests
     [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Planning)]
     [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Review)]
     public void Producing_phase_per_type(string type, Phase phase) =>
-        Assert.Equal(phase, ArtifactRules.ProducingPhase(type));
+        Assert.Equal(phase, SdlcArtifactRules.ProducingPhase(type));
 
     public static TheoryData<ArtifactStatus, ArtifactStatus> AllStatusPairs()
     {

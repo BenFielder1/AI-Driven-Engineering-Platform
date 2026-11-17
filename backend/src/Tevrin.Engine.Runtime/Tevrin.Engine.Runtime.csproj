@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- FR-262: the engine runtime (job queue, notification channels, EF Core entity configurations of the engine's tables;
-       later the LLM layer, artifact store, gates and run log). May use EF Core, Npgsql and Microsoft.Extensions.*, never
+  <!-- FR-262: the engine runtime (job queue, LLM layer, notification channels, EF Core entity configurations of the
+       engine's tables; later the artifact store, gates and run log). May use EF Core, Npgsql and Microsoft.Extensions.*, never
        ASP.NET Core, Aide.* or Tevrin.Pack.* (FR-263). Migrations stay in Aide.Infrastructure (D-0.7.0-12). -->
   <PropertyGroup>
     <RootNamespace>Tevrin.Engine.Runtime</RootNamespace>
@@ -15,6 +15,8 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <!-- The job worker is a hosted BackgroundService (FR-264). -->
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <!-- The LLM layer's HTTP providers and model lookups (FR-265): IHttpClientFactory, outside ASP.NET Core. -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,3 @@
-using Aide.Api.Features.Approvals;
-using Aide.Domain.Entities;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +6,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Engine.Runtime.Notifications;
 
 namespace Aide.Api.Features.Notifications;
 
@@ -152,7 +151,7 @@ public sealed partial class NotificationDispatcher(
         var message = new ChannelMessage(
             delivery.Id,
             delivery.NotificationKey,
-            type,
+            type.ToWire(),
             composed.ProjectId,
             composed.ProjectName,
             composed.Text.Title,

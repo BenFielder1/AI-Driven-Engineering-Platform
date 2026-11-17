@@ -471,13 +471,13 @@ public class StackProfileTests
     [Fact]
     public void FR183_S4_27_A_stack_profile_is_drafted_only_in_analysis_by_the_Stack_Analyst()
     {
-        Assert.Equal(Phase.Analysis, ArtifactRules.ProducingPhase(SdlcArtifacts.StackProfile));
-        Assert.Equal(SdlcAgents.StackAnalyst, ArtifactRules.RerunAgent(SdlcArtifacts.StackProfile));
-        Assert.Equal(ArtifactStatus.Draft, ArtifactRules.InitialStatus(SdlcArtifacts.StackProfile));
+        Assert.Equal(Phase.Analysis, SdlcArtifactRules.ProducingPhase(SdlcArtifacts.StackProfile));
+        Assert.Equal(SdlcAgents.StackAnalyst, SdlcArtifactRules.RerunAgent(SdlcArtifacts.StackProfile));
+        Assert.Equal(ArtifactStatus.Draft, SdlcArtifactRules.InitialStatus(SdlcArtifacts.StackProfile));
         Assert.Equal(Phase.Analysis, RestoreRules.RestorablePhase(SdlcArtifacts.StackProfile));
         foreach (var phase in Enum.GetValues<Phase>())
         {
-            var allowed = ArtifactRules.CanCreateDraft(SdlcArtifacts.StackProfile, phase, ProjectStatus.Active);
+            var allowed = SdlcArtifactRules.CanCreateDraft(SdlcArtifacts.StackProfile, phase, ProjectStatus.Active);
             Assert.Equal(phase == Phase.Analysis, allowed.IsSuccess);
             if (phase != Phase.Analysis)
             {
@@ -491,12 +491,12 @@ public class StackProfileTests
     [InlineData(false)]
     public void FR183_Rejecting_a_stack_profile_always_re_runs_the_Stack_Analyst_even_a_human_edit(bool authoredByAgent)
     {
-        var rejected = ArtifactRules.Reject(SdlcArtifacts.StackProfile, ArtifactStatus.Draft, authoredByAgent);
+        var rejected = SdlcArtifactRules.Reject(SdlcArtifacts.StackProfile, ArtifactStatus.Draft, authoredByAgent);
 
         Assert.Equal((ArtifactStatus.Rejected, SdlcAgents.StackAnalyst), (rejected.Value.NewStatus, rejected.Value.RerunAgent));
 
         // FR-17 still holds for the other types: a human edit re-runs nothing.
-        Assert.Null(ArtifactRules.Reject(SdlcArtifacts.ProjectRequest, ArtifactStatus.Draft, authoredByAgent: false).Value.RerunAgent);
+        Assert.Null(SdlcArtifactRules.Reject(SdlcArtifacts.ProjectRequest, ArtifactStatus.Draft, authoredByAgent: false).Value.RerunAgent);
     }
 
     [Theory]

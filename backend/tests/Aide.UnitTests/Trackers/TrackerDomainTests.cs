@@ -388,14 +388,14 @@ public class TrackerDomainTests
     public void FR170_Source_items_are_auto_locked_never_drafted_or_restored_and_invalidate_nothing()
     {
         Assert.True(CodebaseSummaryRules.IsAutoLocked(SdlcArtifacts.SourceItems));
-        Assert.DoesNotContain(SdlcArtifacts.SourceItems, ArtifactRules.All);
-        Assert.Equal(ArtifactStatus.Locked, ArtifactRules.InitialStatus(SdlcArtifacts.SourceItems));
-        Assert.Equal(Phase.Refinement, ArtifactRules.ProducingPhase(SdlcArtifacts.SourceItems));
+        Assert.DoesNotContain(SdlcArtifacts.SourceItems, SdlcArtifactRules.All);
+        Assert.Equal(ArtifactStatus.Locked, SdlcArtifactRules.InitialStatus(SdlcArtifacts.SourceItems));
+        Assert.Equal(Phase.Refinement, SdlcArtifactRules.ProducingPhase(SdlcArtifacts.SourceItems));
         Assert.Null(RestoreRules.RestorablePhase(SdlcArtifacts.SourceItems));
-        Assert.Null(ArtifactRules.RerunAgent(SdlcArtifacts.SourceItems));
+        Assert.Null(SdlcArtifactRules.RerunAgent(SdlcArtifacts.SourceItems));
         foreach (var phase in Enum.GetValues<Phase>())
         {
-            Assert.Equal(ErrorCodes.ArtifactLocked, ArtifactRules.CanCreateDraft(SdlcArtifacts.SourceItems, phase, ProjectStatus.Active).Error!.Code);
+            Assert.Equal(ErrorCodes.ArtifactLocked, SdlcArtifactRules.CanCreateDraft(SdlcArtifacts.SourceItems, phase, ProjectStatus.Active).Error!.Code);
             var effect = InvalidationCascade.Effect(SdlcArtifacts.SourceItems, phase);
             Assert.Equal((0, StepReset.None, (Phase?)null), (effect.InvalidatedTypes.Count, effect.StepReset, effect.FallbackPhase));
         }

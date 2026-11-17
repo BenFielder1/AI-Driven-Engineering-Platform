@@ -3,6 +3,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Pack.Sdlc;
 

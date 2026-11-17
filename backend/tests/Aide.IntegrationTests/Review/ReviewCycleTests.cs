@@ -15,6 +15,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Review;

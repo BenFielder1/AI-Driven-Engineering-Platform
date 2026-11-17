@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using Aide.Domain.RepoTools;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.RepoTools;
+using Tevrin.Engine.Runtime.Llm;
 
 namespace Aide.UnitTests.RepoTools;
 

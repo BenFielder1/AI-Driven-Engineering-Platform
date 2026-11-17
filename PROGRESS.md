@@ -97,6 +97,14 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
 
 - **M56 build notes (orchestrator):** M56 was split into M56a (agent, artifact and gate keys), M56b (job types and triggers) and M56c (the remaining lift) after an agent stalled. CI run [44152885599](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44152885599) on 39b7f24 failed on two things. Test seeds that printed enum names now use `KeyNames.ToPascalCase`; an audit found that no production text had changed. The snapshot normaliser missed an all-digit SHA prefix, and now labels it. Review also caught the `REVIEW_STARTED`/`RELEASE_STARTED` event payloads switching to `stage_entered`; they keep `phase_entered`. Logs keep the 0.6.1 PascalCase values (`LoggedKey`). Unknown stored key values now load instead of throwing, which only matters for corrupt data.
 
+- **D-0.7.0-25** (Build, M56c, Claude, assumed): more seams and a dependency for the engine lift.
+  - **New seams:** `ILlmCatalog`, the engine's view of the SDLC provider catalogue, registered as the same singleton. `IApprovalLinkPolicy`, which says which gates get one-click links; `SdlcApprovalLinkPolicy` implements it.
+  - **`NotificationOptions` split:** the engine's `NotificationChannelOptions` binds the same section, so channel settings are configured as before. The SDLC sweep settings stay on the Aide side.
+  - **Dependency:** `Microsoft.Extensions.Http` is added to `Tevrin.Engine.Runtime`, giving it `IHttpClientFactory` without ASP.NET Core.
+  - **Log categories:** they now follow the moved types (`ApprovalLinkService`, `EmailChannelSender`, `AnthropicModelInfo`), as with the worker in D-0.7.0-20.
+  - **Architecture test:** a new test fails if an engine source file contains an SDLC key literal.
+- **M58 scope (from M56c):** blocked by `Phase`: the `AgentRun` entity, `RestoreRules`, `GateRules` (`RequiredGate`, `GuardedEntry`, approve/reject/cancel) and `SdlcArtifactRules` (producing phase, `CanCreateDraft`). Staying on the SDLC side because they hold SDLC values or project rules: `AgentModelRules`, `PromptLibrary`, the fake responders, `LlmOptionsValidator`, `LlmProviderCatalog`, `LlmResolver`, `NotificationDispatcher`, `NotificationComposer`, `NotificationJobHandler`, `GateTimerService` and `NotificationSweeper`. The sweeper's single loop mixes delivery retries with the SDLC sweeps; splitting it would change timing.
+
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.

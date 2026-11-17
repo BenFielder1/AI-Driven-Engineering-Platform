@@ -562,7 +562,7 @@ public static partial class ProjectEndpoints
             .Where(a => a.ProjectId == id && a.ReleaseVersionId == versionId)
             .Select(a => new { a.Id, a.Type, a.Version, a.Status, a.CreatedAt })
             .ToListAsync(cancellationToken);
-        var artifactStates = ArtifactRules.All
+        var artifactStates = SdlcArtifactRules.All
             .Select(type =>
             {
                 var versions = artifacts.Where(a => a.Type == type).ToList();

@@ -421,7 +421,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
     }
 
     /// <summary>Review at version 5, cycle 3 of 3, an escalating (max cycles) report and its pending escalation gate.</summary>
-    private async Task<Aide.Domain.Entities.ApprovalGate> EscalatedReviewAsync(Guid id)
+    private async Task<Tevrin.Engine.Domain.Entities.ApprovalGate> EscalatedReviewAsync(Guid id)
     {
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 3);
         await LifecycleSeed.AddReportAsync(factory, id, 5, ReviewDecision.EscalationRequired, EscalationReason.MaxCycles, DateTimeOffset.UtcNow.AddMinutes(-10));

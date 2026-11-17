@@ -1,6 +1,6 @@
 using Tevrin.Engine.Domain.Gates;
 
-namespace Aide.Domain.Entities;
+namespace Tevrin.Engine.Domain.Entities;
 
 /// <summary>An approval gate (§4.2, FR-12–FR-15). At most one pending gate per (project, type).</summary>
 public sealed class ApprovalGate

@@ -1,8 +1,8 @@
-using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Infrastructure.Agents;
+namespace Tevrin.Engine.Runtime.Llm;
 
 public enum LlmRole
 {
@@ -28,7 +28,7 @@ public sealed class LlmRequest
 
     /// <summary>
     /// FR-160: the call's output token limit (<c>max_tokens</c>, <c>max_completion_tokens</c>, <c>num_predict</c>), resolved
-    /// per provider and model by the agent runner (<see cref="Llm.ILlmOutputLimits"/>). Unset: the provider uses
+    /// per provider and model by the agent runner (<see cref="ILlmOutputLimits"/>). Unset: the provider uses
     /// <c>Llm:MaxOutputTokens</c>.
     /// </summary>
     public int? MaxTokens { get; init; }
@@ -72,7 +72,7 @@ public sealed class LlmProviderException : Exception
         : base(message, innerException)
     {
         Transient = true;
-        ErrorCode = ErrorCodes.ProviderError;
+        ErrorCode = EngineErrorCodes.ProviderError;
     }
 
     public LlmProviderException(string message, bool transient, int? statusCode = null, string? errorCode = null, Exception? innerException = null)
@@ -80,7 +80,7 @@ public sealed class LlmProviderException : Exception
     {
         Transient = transient;
         StatusCode = statusCode;
-        ErrorCode = errorCode ?? ErrorCodes.ProviderError;
+        ErrorCode = errorCode ?? EngineErrorCodes.ProviderError;
     }
 
     public bool Transient { get; }
@@ -108,7 +108,7 @@ public interface ILlmProvider
 public sealed record ResolvedLlm(LlmProvider Provider, string Model, string? ApiKey, Guid? CredentialId = null)
 {
     /// <summary>Anthropic and OpenAI need a key; without one the run fails as <c>PROVIDER_NOT_CONFIGURED</c>.</summary>
-    public bool IsConfigured => !Aide.Domain.Projects.ProjectSettingsRules.RequiresApiKey(Provider) || !string.IsNullOrWhiteSpace(ApiKey);
+    public bool IsConfigured => !LlmProviderKeys.Required(Provider) || !string.IsNullOrWhiteSpace(ApiKey);
 
     public override string ToString() => $"ResolvedLlm {{ Provider = {Provider.ToWire()}, Model = {Model}, HasApiKey = {ApiKey is not null}, CredentialId = {CredentialId} }}";
 }

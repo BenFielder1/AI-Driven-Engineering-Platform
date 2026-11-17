@@ -1,26 +1,32 @@
-using Aide.Api.Features.Notifications;
-using Aide.Domain.Entities;
-using Aide.Domain.Notifications;
-using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Engine.Runtime.Persistence;
 
-namespace Aide.Api.Features.Approvals;
+namespace Tevrin.Engine.Runtime.Notifications;
 
 /// <summary>The approve and reject URLs of a gate's one-click links (absolute, for channel messages only).</summary>
 public sealed record ApprovalLinkUrls(string ApproveUrl, string RejectUrl);
 
+/// <summary>FR-48: which gate types get one-click approval links. The pack decides (the SDLC: spec, plan and
+/// pre-release gates).</summary>
+public interface IApprovalLinkPolicy
+{
+    bool OffersApprovalLinks(string gateType);
+}
+
 /// <summary>
 /// FR-48: creates and resolves one-click approval links (<see cref="ApprovalTokens"/>). Links are created as an approve +
-/// reject pair when a spec, plan or pre-release gate is announced; only the nonce hash is stored. The URLs go into
+/// reject pair when a gate the <see cref="IApprovalLinkPolicy"/> offers links for is announced; only the nonce hash is stored. The URLs go into
 /// channel messages only — in-app notifications link to the project page, so a token never sits in the database.
 /// Without a usable <c>Approvals:SigningKey</c> nothing is created and every token is unknown (fail closed).
 /// </summary>
 public sealed partial class ApprovalLinkService(
-    AideDbContext db,
+    IEngineDbContext db,
+    IApprovalLinkPolicy policy,
     IOptions<ApprovalOptions> approvals,
     IOptions<AppOptions> app,
     ILogger<ApprovalLinkService> logger)
@@ -33,7 +39,7 @@ public sealed partial class ApprovalLinkService(
     public async Task EnsureLinksAsync(ApprovalGate gate, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gate);
-        if (!NotificationRules.OffersApprovalLinks(gate.Type) || gate.Status != GateStatus.Pending)
+        if (!policy.OffersApprovalLinks(gate.Type) || gate.Status != GateStatus.Pending)
         {
             return;
         }
@@ -67,7 +73,7 @@ public sealed partial class ApprovalLinkService(
     public async Task<ApprovalLinkUrls?> UrlsAsync(ApprovalGate gate, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gate);
-        if (_key is null || gate.Status != GateStatus.Pending || !NotificationRules.OffersApprovalLinks(gate.Type))
+        if (_key is null || gate.Status != GateStatus.Pending || !policy.OffersApprovalLinks(gate.Type))
         {
             return null;
         }

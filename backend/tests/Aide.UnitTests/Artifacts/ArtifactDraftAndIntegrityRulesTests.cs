@@ -21,7 +21,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Execution)]
     [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Review)]
     public void FR18_A_type_can_be_drafted_from_its_producing_phase_onwards(string type, Phase phase) =>
-        Assert.True(ArtifactRules.CanCreateDraft(type, phase, PhaseOrder.StatusFor(phase)).IsSuccess);
+        Assert.True(SdlcArtifactRules.CanCreateDraft(type, phase, PhaseOrder.StatusFor(phase)).IsSuccess);
 
     [Theory]
     [InlineData(SdlcArtifacts.TechnicalSpecification, Phase.Refinement)]
@@ -32,7 +32,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Release)]
     public void FR18_A_type_can_not_be_drafted_before_its_producing_phase_and_the_optimisation_plan_only_in_review(string type, Phase phase)
     {
-        var result = ArtifactRules.CanCreateDraft(type, phase, ProjectStatus.Active);
+        var result = SdlcArtifactRules.CanCreateDraft(type, phase, ProjectStatus.Active);
 
         Assert.Equal(ErrorCodes.WrongPhase, result.Error?.Code);
     }
@@ -40,13 +40,13 @@ public class ArtifactDraftAndIntegrityRulesTests
     [Fact]
     public void FR18_Nothing_can_be_drafted_while_a_release_is_in_progress()
     {
-        Assert.Equal(ErrorCodes.WrongPhase, ArtifactRules.CanCreateDraft(SdlcArtifacts.TechnicalSpecification, Phase.Release, ProjectStatus.Releasing).Error?.Code);
-        Assert.True(ArtifactRules.CanCreateDraft(SdlcArtifacts.TechnicalSpecification, Phase.Release, ProjectStatus.Released).IsSuccess);
+        Assert.Equal(ErrorCodes.WrongPhase, SdlcArtifactRules.CanCreateDraft(SdlcArtifacts.TechnicalSpecification, Phase.Release, ProjectStatus.Releasing).Error?.Code);
+        Assert.True(SdlcArtifactRules.CanCreateDraft(SdlcArtifacts.TechnicalSpecification, Phase.Release, ProjectStatus.Released).IsSuccess);
     }
 
     [Fact]
     public void FR18_A_rolled_back_project_can_be_edited_in_its_phase() =>
-        Assert.True(ArtifactRules.CanCreateDraft(SdlcArtifacts.ImplementationPlan, Phase.Planning, ProjectStatus.RolledBack).IsSuccess);
+        Assert.True(SdlcArtifactRules.CanCreateDraft(SdlcArtifacts.ImplementationPlan, Phase.Planning, ProjectStatus.RolledBack).IsSuccess);
 
     [Fact]
     public void FR20_Integrity_is_ok_when_the_hash_matches_and_corrupted_otherwise()
@@ -68,7 +68,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     [Fact]
     public void FR20_A_corrupted_human_authored_artifact_is_marked_but_no_agent_reruns()
     {
-        var change = ArtifactRules.OnIntegrityCheck(
+        var change = SdlcArtifactRules.OnIntegrityCheck(
             SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Locked, "altered", ContentHash.Compute("original"), authoredByAgent: false);
 
         Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, null), change);
@@ -77,7 +77,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     [Fact]
     public void FR20_A_corrupted_version_that_is_not_current_is_marked_but_no_agent_reruns()
     {
-        var change = ArtifactRules.OnIntegrityCheck(
+        var change = SdlcArtifactRules.OnIntegrityCheck(
             SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Superseded, "altered", ContentHash.Compute("original"), authoredByAgent: true, isCurrentVersion: false);
 
         Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, null), change);
@@ -86,7 +86,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     [Fact]
     public void FR20_A_corrupted_current_agent_version_reruns_its_producing_agent()
     {
-        var change = ArtifactRules.OnIntegrityCheck(
+        var change = SdlcArtifactRules.OnIntegrityCheck(
             SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, "altered", ContentHash.Compute("original"), authoredByAgent: true, isCurrentVersion: true);
 
         Assert.Equal(new ArtifactStatusChange(ArtifactStatus.Corrupted, true, SdlcAgents.PlanGenerator), change);

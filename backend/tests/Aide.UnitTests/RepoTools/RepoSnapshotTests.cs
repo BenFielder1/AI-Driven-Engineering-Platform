@@ -1,11 +1,11 @@
 using System.Text;
 using Aide.Domain.RepoTools;
 using Aide.Infrastructure;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.RepoTools;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Engine.Runtime.Llm;
 
 namespace Aide.UnitTests.RepoTools;
 

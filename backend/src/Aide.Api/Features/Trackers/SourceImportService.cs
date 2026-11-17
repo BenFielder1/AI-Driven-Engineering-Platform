@@ -13,6 +13,7 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Pack.Sdlc;
 
@@ -478,7 +479,7 @@ public sealed class SourceSnapshotWriter(AideDbContext db)
             ParentVersion = plan.ParentVersion,
             Content = markdown,
             ContentHash = ContentHash.Compute(markdown),
-            Status = ArtifactRules.InitialStatus(SdlcArtifacts.SourceItems),
+            Status = SdlcArtifactRules.InitialStatus(SdlcArtifacts.SourceItems),
             CheckpointAtCreation = project.Checkpoint,
             ReleaseVersionId = releaseVersionId,
             CreatedByUserId = userId,

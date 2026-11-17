@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Text.Json;
 using Aide.Api.Logging;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
@@ -15,6 +14,7 @@ using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Llm;
 
 namespace Aide.Api.Agents;
 

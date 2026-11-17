@@ -120,7 +120,7 @@ public sealed partial class PullRequestJobHandler(
     LifecycleService lifecycle,
     Deployments.RolloutScheduler rollouts,
     BuildChecks.BuildCheckService buildChecks,
-    Microsoft.Extensions.Options.IOptions<Notifications.AppOptions> appOptions,
+    Microsoft.Extensions.Options.IOptions<Tevrin.Engine.Runtime.Notifications.AppOptions> appOptions,
     TimeProvider time,
     ILogger<PullRequestJobHandler> logger) : IJobHandler
 {

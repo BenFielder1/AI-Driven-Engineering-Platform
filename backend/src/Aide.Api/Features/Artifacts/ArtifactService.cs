@@ -15,6 +15,7 @@ using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
@@ -56,7 +57,7 @@ public sealed partial class ArtifactService(
             return ProjectNotFound<Artifact>();
         }
 
-        var allowed = ArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status);
+        var allowed = SdlcArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status);
         if (allowed.IsFailure)
         {
             return Result.Failure<Artifact>(allowed.Error!);
@@ -480,7 +481,7 @@ public sealed partial class ArtifactService(
         }
 
         var authoredByAgent = ArtifactRules.IsAuthoredByAgent(checkedArtifact.CreatedByUserId);
-        var decided = ArtifactRules.Reject(checkedArtifact.Type, checkedArtifact.Status, authoredByAgent);
+        var decided = SdlcArtifactRules.Reject(checkedArtifact.Type, checkedArtifact.Status, authoredByAgent);
         if (decided.IsFailure)
         {
             return Result.Failure<Artifact>(decided.Error!);
@@ -493,7 +494,7 @@ public sealed partial class ArtifactService(
         }
 
         var artifact = await db.Artifacts.FirstAsync(a => a.Id == artifactId, cancellationToken);
-        decided = ArtifactRules.Reject(artifact.Type, artifact.Status, authoredByAgent);
+        decided = SdlcArtifactRules.Reject(artifact.Type, artifact.Status, authoredByAgent);
         if (decided.IsFailure)
         {
             return Result.Failure<Artifact>(decided.Error!);

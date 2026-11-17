@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.Infrastructure.Agents;

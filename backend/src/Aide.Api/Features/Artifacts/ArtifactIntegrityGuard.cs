@@ -3,10 +3,10 @@ using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Pack.Sdlc;
 
@@ -75,7 +75,7 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(token);
         var isCurrent = ArtifactRules.IsCurrentVersion(new ArtifactVersion(artifact.Version, artifact.Status), others);
-        var change = ArtifactRules.OnIntegrityCheck(artifact.Type, artifact.Status, artifact.Content, artifact.ContentHash, authoredByAgent, isCurrent);
+        var change = SdlcArtifactRules.OnIntegrityCheck(artifact.Type, artifact.Status, artifact.Content, artifact.ContentHash, authoredByAgent, isCurrent);
         var projectVersion = await db.Projects.AsNoTracking()
             .Where(p => p.Id == artifact.ProjectId)
             .Select(p => p.Checkpoint)

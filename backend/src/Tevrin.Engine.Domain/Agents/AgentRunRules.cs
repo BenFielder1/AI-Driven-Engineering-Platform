@@ -1,12 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
-using Aide.Domain.Common;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
-using Tevrin.Pack.Sdlc;
 
-namespace Aide.Domain.Agents;
+namespace Tevrin.Engine.Domain.Agents;
 
 /// <summary>Price of a model in USD per million tokens (FR-23 cost estimate, D15).</summary>
 public sealed record ModelPrice(decimal InputPerMTok, decimal OutputPerMTok);
@@ -33,7 +31,7 @@ public static class TokenBudget
     public static Result CheckCanStart(long? budget, long tokensUsed) =>
         IsExhausted(budget, tokensUsed)
             ? Result.Failure(new DomainError(
-                ErrorCodes.BudgetExceeded,
+                EngineErrorCodes.BudgetExceeded,
                 $"The project's token budget of {budget!.Value:N0} tokens is used up ({tokensUsed:N0} used). An Owner can raise the budget."))
             : Result.Success();
 
@@ -46,30 +44,12 @@ public static class TokenBudget
         CheckCanStart(budget, tokensUsedBeforeRun + runTokensSoFar);
 }
 
-/// <summary>FR-22–FR-25: model choice, cost estimates, failure classification and run identity.</summary>
+/// <summary>FR-23–FR-25: cost estimates, failure classification and run identity. The model choice per agent is the
+/// host's (<c>AgentModelRules</c>).</summary>
 public static class AgentRunRules
 {
     /// <summary>The largest value <c>agent_runs.cost_estimate numeric(10,4)</c> can hold.</summary>
     public const decimal MaxCostEstimate = 999_999.9999m;
-
-    /// <summary>
-    /// FR-22: the model for an agent under the given LLM settings: the agent's own model when set (keyed by
-    /// <see cref="ModelKey"/>, the agent's wire name, e.g. <c>idea_refinement</c>), else the default model.
-    /// </summary>
-    public static LlmChoice ChooseModel(string agent, LlmProvider provider, string defaultModel, IReadOnlyDictionary<string, string>? modelsByAgent)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(defaultModel);
-        var model = modelsByAgent is not null && modelsByAgent.TryGetValue(ModelKey(agent), out var own) && !string.IsNullOrWhiteSpace(own)
-            ? own.Trim()
-            : defaultModel.Trim();
-        return new LlmChoice(provider, model);
-    }
-
-    /// <summary>
-    /// The key an agent's model is configured under: its wire name, except <c>build_fix</c>, which uses the
-    /// <c>code_review</c> settings (D-0.6.1-17).
-    /// </summary>
-    public static string ModelKey(string agent) => agent == SdlcAgents.BuildFix ? SdlcAgents.CodeReview : agent;
 
     /// <summary>
     /// FR-23: cost = input × input price + output × output price, per million tokens, rounded to 4 dp (the column's

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;

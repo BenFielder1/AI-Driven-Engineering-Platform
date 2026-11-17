@@ -5,10 +5,8 @@ using System.Text.Json;
 using Aide.Api.Agents;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Runs;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -16,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;
@@ -576,7 +575,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             {
                 services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => _ollama);
                 services.AddHttpClient<AnthropicLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => _anthropic);
-                services.AddHttpClient(Aide.Infrastructure.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _anthropic);
+                services.AddHttpClient(Tevrin.Engine.Runtime.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _anthropic);
                 services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new ScriptedHandler());
                 services.AddSingleton<IFakeAgentResponder>(_spec);
             });

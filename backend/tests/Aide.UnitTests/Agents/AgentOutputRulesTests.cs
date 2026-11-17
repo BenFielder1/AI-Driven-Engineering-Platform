@@ -3,6 +3,7 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;

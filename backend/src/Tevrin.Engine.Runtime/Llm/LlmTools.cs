@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Aide.Infrastructure.Agents;
+namespace Tevrin.Engine.Runtime.Llm;
 
 /// <summary>A tool the model may call (FR-71): its name, what it does and its arguments as a JSON Schema object.</summary>
 public sealed record LlmToolDefinition(string Name, string Description, JsonElement InputSchema);
@@ -56,7 +56,7 @@ public interface IToolCallingLlmProvider
     Task<LlmToolTurn> CompleteTurnAsync(LlmToolRequest toolRequest, CancellationToken cancellationToken);
 }
 
-/// <summary>Runs the tools a model calls in a tool loop (the repo tools: <c>Aide.Infrastructure.RepoTools.RepoToolSession</c>).</summary>
+/// <summary>Runs the tools a model calls in a tool loop (e.g. the SDLC repo tools).</summary>
 public interface ILlmToolExecutor
 {
     IReadOnlyList<LlmToolDefinition> Definitions { get; }

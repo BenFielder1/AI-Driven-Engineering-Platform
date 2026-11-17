@@ -1,19 +1,14 @@
-using Aide.Api.Features.Approvals;
 using Tevrin.Engine.Domain.Notifications;
 using Tevrin.Engine.Runtime.Notifications;
 
 namespace Aide.Api.Features.Notifications;
 
-/// <summary>Notification delivery settings (section <c>Notifications</c>, FR-47, FR-49, FR-15).</summary>
+/// <summary>Notification sweep settings (section <c>Notifications</c>, FR-49, FR-15, FR-155, FR-165). The channel settings
+/// of the same section (<c>AllowPrivateTargets</c>, <c>RequestTimeout</c>) are the engine's
+/// <see cref="NotificationChannelOptions"/>.</summary>
 public sealed class NotificationOptions
 {
     public const string SectionName = "Notifications";
-
-    /// <summary>
-    /// Lets Slack, Teams and webhook channels reach private, loopback and link-local addresses. Off by default and in every
-    /// deployment (NFR-SEC, SSRF); only tests that stand up a local receiver turn it on.
-    /// </summary>
-    public bool AllowPrivateTargets { get; set; }
 
     /// <summary>Run the background sweep (delivery retries and gate reminders). Tests turn it off and drive it directly.</summary>
     public bool SweepEnabled { get; set; } = true;
@@ -30,35 +25,8 @@ public sealed class NotificationOptions
     /// <summary>How often Jira and Linear connections are checked for a user-entered expiry within 14 days (FR-165: hourly; no provider calls).</summary>
     public TimeSpan ConnectionExpirySweepInterval { get; set; } = TimeSpan.FromHours(1);
 
-    /// <summary>Timeout of one Slack, Teams or webhook request (at most <see cref="DeliveryPolicy.MaxSendTimeout"/>).</summary>
-    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(10);
-
     /// <summary>Deliveries retried per sweep.</summary>
     public int SweepBatchSize { get; set; } = 50;
-}
-
-/// <summary>App-wide settings (section <c>App</c>).</summary>
-public sealed class AppOptions
-{
-    public const string SectionName = "App";
-
-    /// <summary>The browser-facing base URL, used for absolute links in channel messages (env <c>App__PublicBaseUrl</c>).</summary>
-    public string PublicBaseUrl { get; set; } = "http://localhost:8080";
-
-    /// <summary><see cref="PublicBaseUrl"/> + <paramref name="path"/> (a path starting with <c>/</c>).</summary>
-    public string Absolute(string path) => PublicBaseUrl.TrimEnd('/') + path;
-}
-
-/// <summary>
-/// One-click approval links (section <c>Approvals</c>, FR-48). <c>SigningKey</c> (env <c>Approvals__SigningKey</c>, at least
-/// 32 characters) signs the link tokens; without it no links are created (fail closed) and gate notifications link to the
-/// project page only.
-/// </summary>
-public sealed class ApprovalOptions
-{
-    public const string SectionName = "Approvals";
-
-    public string? SigningKey { get; set; }
 }
 
 public static class NotificationServiceCollectionExtensions
@@ -71,8 +39,11 @@ public static class NotificationServiceCollectionExtensions
             .Validate(
                 o => o.DeliverySweepInterval > TimeSpan.Zero && o.GateSweepInterval > TimeSpan.Zero && o.DatabaseExpirySweepInterval > TimeSpan.Zero && o.ConnectionExpirySweepInterval > TimeSpan.Zero,
                 "Notifications sweep intervals must be positive.")
-            .Validate(o => DeliveryPolicy.IsValidSendTimeout(o.RequestTimeout), "Notifications:RequestTimeout must be positive and at most 60 seconds (well inside the delivery claim lease).")
             .Validate(o => o.SweepBatchSize >= 1, "Notifications:SweepBatchSize must be at least 1.")
+            .ValidateOnStart();
+        services.AddOptions<NotificationChannelOptions>()
+            .BindConfiguration(NotificationChannelOptions.SectionName)
+            .Validate(o => DeliveryPolicy.IsValidSendTimeout(o.RequestTimeout), "Notifications:RequestTimeout must be positive and at most 60 seconds (well inside the delivery claim lease).")
             .ValidateOnStart();
         services.AddOptions<AppOptions>()
             .BindConfiguration(AppOptions.SectionName)
@@ -91,6 +62,7 @@ public static class NotificationServiceCollectionExtensions
         services.AddScoped<INotificationChannelSender, TeamsChannelSender>();
         services.AddScoped<INotificationChannelSender, WebhookChannelSender>();
 
+        services.AddSingleton<IApprovalLinkPolicy, SdlcApprovalLinkPolicy>();
         services.AddScoped<ApprovalLinkService>();
         services.AddScoped<NotificationComposer>();
         services.AddScoped<NotificationDispatcher>();

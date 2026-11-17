@@ -1,5 +1,4 @@
 using Aide.Api.Features.Git;
-using Aide.Api.Features.Notifications;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
@@ -10,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Notifications;
 using Tevrin.Pack.Sdlc;
 using ReleaseEntity = Aide.Domain.Entities.Release;
 

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;
@@ -140,7 +141,7 @@ public sealed class LlmOptionsTests
         var factory = services.GetRequiredService<IHttpClientFactory>();
 
         using var modelInfo = factory.CreateClient(IAnthropicModelInfo.HttpClientName);
-        using var anthropic = factory.CreateClient(nameof(Aide.Infrastructure.Agents.AnthropicLlmProvider));
+        using var anthropic = factory.CreateClient(nameof(Tevrin.Engine.Runtime.Llm.AnthropicLlmProvider));
 
         Assert.Equal(Timeout.InfiniteTimeSpan, modelInfo.Timeout);
         Assert.Equal(Timeout.InfiniteTimeSpan, anthropic.Timeout);

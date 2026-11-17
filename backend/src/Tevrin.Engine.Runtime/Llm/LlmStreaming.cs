@@ -1,9 +1,8 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using Aide.Infrastructure.Llm;
 
-namespace Aide.Infrastructure.Agents;
+namespace Tevrin.Engine.Runtime.Llm;
 
 /// <summary>
 /// One provider reply assembled from a stream (FR-161), or from a whole JSON body: the text, the tool calls (arguments as

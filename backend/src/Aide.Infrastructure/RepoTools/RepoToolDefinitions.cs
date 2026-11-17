@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Aide.Domain.RepoTools;
-using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Runtime.Llm;
 
 namespace Aide.Infrastructure.RepoTools;
 

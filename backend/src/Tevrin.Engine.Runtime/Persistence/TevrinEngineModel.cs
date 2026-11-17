@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
@@ -34,8 +35,8 @@ public static class TevrinEngineModel
         return configurationBuilder;
     }
 
-    /// <summary>The engine's tables: <c>events</c>, <c>jobs</c>, <c>notifications</c>, <c>notification_deliveries</c> and
-    /// <c>approval_links</c>.</summary>
+    /// <summary>The engine's tables: <c>events</c>, <c>jobs</c>, <c>notifications</c>, <c>notification_deliveries</c>,
+    /// <c>approval_links</c>, <c>artifacts</c> and <c>approval_gates</c>.</summary>
     public static ModelBuilder ApplyTevrinEngineModel(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -123,8 +124,54 @@ public static class TevrinEngineModel
             b.HasIndex(l => l.NonceHash).IsUnique();
         });
 
+        builder.Entity<Artifact>(b =>
+        {
+            b.ToTable("artifacts");
+            b.HasKey(a => a.Id);
+            b.Property(a => a.Id).ValueGeneratedNever();
+
+            // FR-270, FR-274: the artifact key (a pack's artifact keys), the same column as the 0.6.1 enum.
+            b.Property(a => a.Type).HasMaxLength(EnumMaxLength);
+            b.Property(a => a.Content).IsRequired();
+            b.Property(a => a.ContentHash).HasMaxLength(64).IsRequired();
+            XminRowVersion(b.Property(a => a.RowVersion));
+
+            // Artifact versions keep counting across release versions (FR-58, FR-59), so uniqueness stays per project.
+            b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }).IsUnique();
+            b.HasIndex(a => new { a.ProjectId, a.Type, a.Status });
+            b.HasIndex(a => new { a.ProjectId, a.ReleaseVersionId });
+            b.HasIndex(a => a.ReleaseVersionId);
+        });
+
+        builder.Entity<ApprovalGate>(b =>
+        {
+            b.ToTable("approval_gates");
+            b.HasKey(g => g.Id);
+            b.Property(g => g.Id).ValueGeneratedNever();
+
+            // FR-271, FR-274: the gate key (EngineGates and a pack's gate keys), the same column as the 0.6.1 enum.
+            b.Property(g => g.Type).HasMaxLength(EnumMaxLength);
+            XminRowVersion(b.Property(g => g.RowVersion));
+
+            b.HasOne<Artifact>().WithMany().HasForeignKey(g => g.ArtifactId).OnDelete(DeleteBehavior.NoAction);
+
+            // At most one pending gate per (project, type) — enforced by the database (§4.2).
+            b.HasIndex(g => new { g.ProjectId, g.Type })
+                .IsUnique()
+                .HasFilter("status = 'pending'")
+                .HasDatabaseName("ux_approval_gates_project_id_type_pending");
+            b.HasIndex(g => new { g.ProjectId, g.Status });
+            b.HasIndex(g => new { g.ProjectId, g.ReleaseVersionId });
+            b.HasIndex(g => g.ReleaseVersionId);
+        });
+
         return builder;
     }
+
+    /// <summary>Maps the property to PostgreSQL's <c>xmin</c> system column as an optimistic concurrency token (no physical
+    /// column is created).</summary>
+    private static void XminRowVersion(PropertyBuilder<uint> property) =>
+        property.HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
 
     private static void MapEnum<TEnum>(ModelConfigurationBuilder configurationBuilder)
         where TEnum : struct, Enum =>

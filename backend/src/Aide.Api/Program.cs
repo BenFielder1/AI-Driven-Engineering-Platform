@@ -45,6 +45,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Notifications;
 
 var builder = WebApplication.CreateBuilder(args);
 

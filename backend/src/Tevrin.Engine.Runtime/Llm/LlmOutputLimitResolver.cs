@@ -1,12 +1,11 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using Aide.Infrastructure.Agents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Infrastructure.Llm;
+namespace Tevrin.Engine.Runtime.Llm;
 
 /// <summary>FR-160: the effective output token limit of an agent's LLM calls, per provider and model (§4.24).</summary>
 public interface ILlmOutputLimits
@@ -31,7 +30,7 @@ public interface IAnthropicModelInfo
     Task<int?> MaxOutputTokensAsync(string model, string apiKey, CancellationToken cancellationToken);
 }
 
-internal sealed class LlmOutputLimitResolver(ILlmProviderCatalog catalog, IAnthropicModelInfo anthropic, IOptions<LlmOptions> options) : ILlmOutputLimits
+public sealed class LlmOutputLimitResolver(ILlmCatalog catalog, IAnthropicModelInfo anthropic, IOptions<LlmOptions> options) : ILlmOutputLimits
 {
     public async Task<int> ResolveAsync(LlmProvider provider, string model, string? apiKey, CancellationToken cancellationToken)
     {
@@ -49,7 +48,7 @@ internal sealed class LlmOutputLimitResolver(ILlmProviderCatalog catalog, IAnthr
 }
 
 /// <summary>FR-160: discovered Anthropic model limits, kept 24 hours per model id (process-wide).</summary>
-internal sealed class AnthropicModelInfoCache(TimeProvider time)
+public sealed class AnthropicModelInfoCache(TimeProvider time)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
 
@@ -75,7 +74,7 @@ internal sealed class AnthropicModelInfoCache(TimeProvider time)
 /// for 24 hours per model; failures (network, timeout, any non-2xx, an unreadable body) return <c>null</c> and aren't cached.
 /// The key is never logged.
 /// </summary>
-internal sealed partial class AnthropicModelInfo(
+public sealed partial class AnthropicModelInfo(
     IHttpClientFactory httpClients,
     IOptions<LlmOptions> options,
     AnthropicModelInfoCache cache,

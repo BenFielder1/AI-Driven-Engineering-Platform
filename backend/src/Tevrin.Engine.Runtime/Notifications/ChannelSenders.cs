@@ -2,25 +2,24 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Aide.Domain.Entities;
-using Aide.Domain.Notifications;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Notifications;
-using Tevrin.Engine.Runtime.Notifications;
 using Tevrin.Engine.Runtime.Security;
 
-namespace Aide.Api.Features.Notifications;
+namespace Tevrin.Engine.Runtime.Notifications;
 
 /// <summary>
 /// A notification as a channel sends it: absolute links, and the gate's one-click approve/reject URLs when it has them
 /// (FR-48). <see cref="DeliveryId"/> is the delivery row's id: stable across retries, so receivers can de-duplicate.
+/// <see cref="Type"/> is the notification type's wire value, as sent in webhook bodies and the event header.
 /// </summary>
 public sealed record ChannelMessage(
     Guid DeliveryId,
     string Key,
-    NotificationType Type,
+    string Type,
     Guid? ProjectId,
     string ProjectName,
     string Title,
@@ -34,6 +33,24 @@ public sealed record ChannelMessage(
 public sealed record ChannelSendResult(DeliveryAttemptResult Result, string? Error)
 {
     public static ChannelSendResult Sent { get; } = new(DeliveryAttemptResult.Sent, null);
+}
+
+/// <summary>
+/// The channel settings of section <c>Notifications</c> (FR-47, NFR-SEC). The host binds its sweep settings from the same
+/// section.
+/// </summary>
+public sealed class NotificationChannelOptions
+{
+    public const string SectionName = "Notifications";
+
+    /// <summary>
+    /// Lets Slack, Teams and webhook channels reach private, loopback and link-local addresses. Off by default and in every
+    /// deployment (NFR-SEC, SSRF); only tests that stand up a local receiver turn it on.
+    /// </summary>
+    public bool AllowPrivateTargets { get; set; }
+
+    /// <summary>Timeout of one Slack, Teams or webhook request (at most <see cref="DeliveryPolicy.MaxSendTimeout"/>).</summary>
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(10);
 }
 
 /// <summary>Sends to one kind of project channel (FR-47).</summary>
@@ -58,17 +75,18 @@ public static class NotificationHttp
     public static bool IsNotificationRequest(HttpRequestMessage request) =>
         request is not null && request.Options.TryGetValue(NotTraced, out var marked) && marked;
 
-    internal static void AddClient(IServiceCollection services)
+    /// <summary>Registers the client; its timeout and private-target rule come from <see cref="NotificationChannelOptions"/>.</summary>
+    public static void AddClient(IServiceCollection services)
     {
         services.AddHttpClient(ClientName, (sp, client) =>
             {
-                client.Timeout = sp.GetRequiredService<IOptions<NotificationOptions>>().Value.RequestTimeout;
+                client.Timeout = sp.GetRequiredService<IOptions<NotificationChannelOptions>>().Value.RequestTimeout;
                 client.MaxResponseContentBufferSize = MaxResponseBytes;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
             })
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {
-                var options = sp.GetRequiredService<IOptions<NotificationOptions>>().Value;
+                var options = sp.GetRequiredService<IOptions<NotificationChannelOptions>>().Value;
                 var handler = new SocketsHttpHandler
                 {
                     AllowAutoRedirect = false,
@@ -299,7 +317,7 @@ public sealed class WebhookChannelSender(IHttpClientFactory clients, ISecretProt
             {
                 id = message.DeliveryId,
                 key = message.Key,
-                type = message.Type.ToWire(),
+                type = message.Type,
                 timestamp = message.Timestamp,
                 project = new { id = message.ProjectId, name = message.ProjectName },
                 title = message.Title,
@@ -317,7 +335,7 @@ public sealed class WebhookChannelSender(IHttpClientFactory clients, ISecretProt
                 headers.Add(WebhookSignature.TimestampHeaderName, timestamp);
                 headers.Add(WebhookSignature.DeliveryHeaderName, message.DeliveryId.ToString("D"));
                 headers.Add(WebhookSignature.IdempotencyHeaderName, message.DeliveryId.ToString("D"));
-                headers.Add(WebhookSignature.EventHeaderName, message.Type.ToWire());
+                headers.Add(WebhookSignature.EventHeaderName, message.Type);
                 headers.Add(WebhookSignature.HeaderName, WebhookSignature.Compute(secret, body));
             },
             cancellationToken);

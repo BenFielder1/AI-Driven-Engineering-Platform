@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using Aide.Api.Features.Artifacts;
-using Aide.Domain.Entities;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;

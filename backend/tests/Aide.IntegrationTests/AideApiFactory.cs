@@ -1,6 +1,5 @@
 using Aide.Domain.Access;
 using Aide.Infrastructure;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Identity;
 using Aide.Infrastructure.Security;
@@ -14,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Testcontainers.PostgreSql;
+using Tevrin.Engine.Runtime.Llm;
 
 namespace Aide.IntegrationTests;
 
@@ -83,7 +83,7 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddHttpClient<AnthropicLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
             services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
-            services.AddHttpClient(Aide.Infrastructure.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
+            services.AddHttpClient(Tevrin.Engine.Runtime.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());
 
             // §8, CLAUDE.md rule 11 for deployments: no test reaches api.vercel.com; Vercel tests swap in a stub handler.
             services.AddHttpClient(Aide.Infrastructure.Deployments.VercelDeploymentProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new NoNetworkHandler());

@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Api.Features.Projects;

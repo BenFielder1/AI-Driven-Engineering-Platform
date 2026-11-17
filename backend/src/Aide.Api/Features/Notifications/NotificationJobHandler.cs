@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Aide.Api.Features.Approvals;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Notifications;
@@ -10,6 +9,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Notifications;
 
 namespace Aide.Api.Features.Notifications;
 

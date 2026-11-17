@@ -31,17 +31,17 @@ public class CodebaseSummaryRulesTests
     public void FR70_The_summary_is_auto_locked_produced_in_refinement_and_never_drafted()
     {
         Assert.True(CodebaseSummaryRules.IsAutoLocked(SdlcArtifacts.CodebaseSummary));
-        Assert.All(ArtifactRules.All, t => Assert.False(CodebaseSummaryRules.IsAutoLocked(t)));
-        Assert.DoesNotContain(SdlcArtifacts.CodebaseSummary, ArtifactRules.All);
+        Assert.All(SdlcArtifactRules.All, t => Assert.False(CodebaseSummaryRules.IsAutoLocked(t)));
+        Assert.DoesNotContain(SdlcArtifacts.CodebaseSummary, SdlcArtifactRules.All);
 
-        Assert.Equal(ArtifactStatus.Locked, ArtifactRules.InitialStatus(SdlcArtifacts.CodebaseSummary));
-        Assert.Equal(ArtifactStatus.Draft, ArtifactRules.InitialStatus(SdlcArtifacts.TechnicalSpecification));
-        Assert.Equal(Phase.Refinement, ArtifactRules.ProducingPhase(SdlcArtifacts.CodebaseSummary));
+        Assert.Equal(ArtifactStatus.Locked, SdlcArtifactRules.InitialStatus(SdlcArtifacts.CodebaseSummary));
+        Assert.Equal(ArtifactStatus.Draft, SdlcArtifactRules.InitialStatus(SdlcArtifacts.TechnicalSpecification));
+        Assert.Equal(Phase.Refinement, SdlcArtifactRules.ProducingPhase(SdlcArtifacts.CodebaseSummary));
         Assert.Null(RestoreRules.RestorablePhase(SdlcArtifacts.CodebaseSummary));
 
         foreach (var phase in Enum.GetValues<Phase>())
         {
-            Assert.Equal(ErrorCodes.ArtifactLocked, ArtifactRules.CanCreateDraft(SdlcArtifacts.CodebaseSummary, phase, ProjectStatus.Active).Error!.Code);
+            Assert.Equal(ErrorCodes.ArtifactLocked, SdlcArtifactRules.CanCreateDraft(SdlcArtifacts.CodebaseSummary, phase, ProjectStatus.Active).Error!.Code);
         }
     }
 
@@ -51,9 +51,9 @@ public class CodebaseSummaryRulesTests
         var effect = InvalidationCascade.Effect(SdlcArtifacts.CodebaseSummary, Phase.Planning);
         Assert.Equal((0, StepReset.None, (Phase?)null), (effect.InvalidatedTypes.Count, effect.StepReset, effect.FallbackPhase));
 
-        var change = ArtifactRules.OnIntegrityCheck(SdlcArtifacts.CodebaseSummary, ArtifactStatus.Locked, "changed", ContentHash.Compute("original"));
+        var change = SdlcArtifactRules.OnIntegrityCheck(SdlcArtifacts.CodebaseSummary, ArtifactStatus.Locked, "changed", ContentHash.Compute("original"));
         Assert.Equal((ArtifactStatus.Corrupted, true, (string?)null), (change.NewStatus, change.Changed, change.RerunAgent));
-        Assert.Null(ArtifactRules.RerunAgent(SdlcArtifacts.CodebaseSummary));
-        Assert.Equal(SdlcAgents.SpecGenerator, ArtifactRules.RerunAgent(SdlcArtifacts.TechnicalSpecification));
+        Assert.Null(SdlcArtifactRules.RerunAgent(SdlcArtifacts.CodebaseSummary));
+        Assert.Equal(SdlcAgents.SpecGenerator, SdlcArtifactRules.RerunAgent(SdlcArtifacts.TechnicalSpecification));
     }
 }

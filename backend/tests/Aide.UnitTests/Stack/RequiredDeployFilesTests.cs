@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Aide.Domain.Execution;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 

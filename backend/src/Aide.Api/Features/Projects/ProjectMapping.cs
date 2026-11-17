@@ -4,6 +4,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Llm;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Projects;

@@ -1,6 +1,6 @@
 using Tevrin.Engine.Domain.Artifacts;
 
-namespace Aide.Domain.Entities;
+namespace Tevrin.Engine.Domain.Entities;
 
 /// <summary>
 /// A versioned artifact (FR-16, §4.3). Identity and content (<see cref="Content"/>, <see cref="ContentHash"/>,

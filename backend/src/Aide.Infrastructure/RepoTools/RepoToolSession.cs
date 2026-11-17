@@ -4,9 +4,9 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Aide.Domain.Execution;
 using Aide.Domain.RepoTools;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Git;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Llm;
 
 namespace Aide.Infrastructure.RepoTools;
 

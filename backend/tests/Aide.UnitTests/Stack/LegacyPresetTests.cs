@@ -96,7 +96,7 @@ public sealed class LegacyPresetTests
         var mapped = Legacy.MapInPlay("db-engineer", ["supabase/migrations/0004_tags.sql"], stack.AgentKeys)!;
 
         var specialist = stack.Specialist(mapped.AgentKey)!;
-        var prompt = StackPrompt.Compose(new Domain.Agents.RenderedPrompt("You are the Code Generator agent.", "Step 4"), stack, mapped.AgentKey);
+        var prompt = StackPrompt.Compose(new Tevrin.Engine.Domain.Agents.RenderedPrompt("You are the Code Generator agent.", "Step 4"), stack, mapped.AgentKey);
 
         Assert.Equal(("data-engineer", "db-engineer"), (mapped.AgentKey, mapped.LegacyAgentKey));
         Assert.Contains(specialist.Packs, p => p.Id == "data-supabase");

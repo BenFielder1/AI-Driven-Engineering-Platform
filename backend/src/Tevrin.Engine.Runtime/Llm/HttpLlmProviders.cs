@@ -1,14 +1,13 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Aide.Domain.Agents;
-using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Infrastructure.Agents;
+namespace Tevrin.Engine.Runtime.Llm;
 
 /// <summary>
 /// Shared HTTP plumbing for the real providers (FR-22, FR-25): JSON in and out, and one failure classification —
@@ -327,7 +326,7 @@ public sealed class AnthropicLlmProvider(HttpClient http, IOptions<LlmOptions> o
 
     internal static string RequireKey(LlmRequest request, string providerName) =>
         string.IsNullOrWhiteSpace(request.ApiKey)
-            ? throw new LlmProviderException($"{providerName} is not configured: no API key.", transient: false, errorCode: Aide.Domain.Common.ErrorCodes.ProviderNotConfigured)
+            ? throw new LlmProviderException($"{providerName} is not configured: no API key.", transient: false, errorCode: EngineErrorCodes.ProviderNotConfigured)
             : request.ApiKey.Trim();
 
     private static string Role(LlmRole role) => role == LlmRole.Assistant ? "assistant" : "user";
@@ -472,7 +471,7 @@ public sealed class OpenAiLlmProvider(HttpClient http, IOptions<LlmOptions> opti
 }
 
 /// <summary>FR-78: <see cref="ILlmKeyValidator"/> over the Anthropic and OpenAI providers' typed HttpClients.</summary>
-internal sealed class LlmKeyValidator(IServiceProvider services) : ILlmKeyValidator
+public sealed class LlmKeyValidator(IServiceProvider services) : ILlmKeyValidator
 {
     public Task<LlmKeyCheck> CheckAsync(LlmProvider provider, string apiKey, CancellationToken cancellationToken) => provider switch
     {

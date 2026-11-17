@@ -9,6 +9,7 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Support;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;

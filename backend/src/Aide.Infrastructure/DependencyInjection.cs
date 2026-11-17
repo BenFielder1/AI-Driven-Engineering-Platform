@@ -16,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Infrastructure;
@@ -81,6 +82,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
         services.AddSingleton<ILlmProviderCatalog, LlmProviderCatalog>();
+        services.AddSingleton<ILlmCatalog>(sp => sp.GetRequiredService<ILlmProviderCatalog>());
 
         // The one LLM abstraction (FR-22, CLAUDE.md rule 11): typed HttpClients for the real providers, an offline Fake,
         // versioned prompt templates (FR-24) and the resolver that picks provider, model and key per project and agent.

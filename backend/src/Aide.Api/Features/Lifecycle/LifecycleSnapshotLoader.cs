@@ -6,6 +6,7 @@ using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Pack.Sdlc;
 

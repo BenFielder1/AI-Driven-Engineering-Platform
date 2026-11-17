@@ -1,6 +1,5 @@
 using Aide.Domain.Execution;
 using Aide.Domain.Review;
-using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Domain.Entities;
 
@@ -37,17 +36,6 @@ public sealed record RegressionEntry(string RequirementId, ReviewCategory Catego
 
 /// <summary>A drift area reported by the review agent (§4.7).</summary>
 public sealed record DriftAreaEntry(string Area, Severity Severity, string Description);
-
-/// <summary>A configured project notification channel (FR-47). The secret is encrypted with Data Protection: the
-/// HMAC signing key of a webhook, or the incoming-webhook URL of a Slack or Teams channel (a bearer credential), whose
-/// <see cref="Target"/> then only holds the masked display form (<c>hooks.slack.com/…</c>). <see cref="Id"/>
-/// identifies the channel across settings updates (a kept channel keeps its secret).</summary>
-public sealed record NotificationChannelConfig(
-    Guid Id,
-    NotificationChannelType Type,
-    string Target,
-    string? SecretEncrypted,
-    IReadOnlyList<string> Events);
 
 /// <summary>A source a build check read (§5, FR-255): the preview rollout or a CI check, its conclusion
 /// (e.g. <c>success</c>, <c>failure</c>, <c>timed_out</c>, <c>unavailable</c>; null while pending) and a link to it.

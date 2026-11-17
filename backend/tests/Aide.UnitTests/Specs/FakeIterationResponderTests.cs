@@ -4,6 +4,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Specs;

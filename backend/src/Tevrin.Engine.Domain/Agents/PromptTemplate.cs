@@ -1,9 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Aide.Domain.Common;
 using Tevrin.Engine.Domain.Common;
 
-namespace Aide.Domain.Agents;
+namespace Tevrin.Engine.Domain.Agents;
 
 /// <summary>A placeholder in a prompt template: <c>{{NAME}}</c> (required) or <c>{{NAME?}}</c> (optional, empty when absent).</summary>
 public sealed record PromptPlaceholder(string Name, bool Optional);
@@ -16,7 +15,7 @@ public sealed record RenderedPrompt(string System, string User);
 /// <code>
 /// ---
 /// version: 1
-/// agent: spec_generator
+/// agent: my_agent
 /// ---
 /// (system prompt)
 /// &lt;!-- user --&gt;
@@ -136,7 +135,7 @@ public sealed partial class PromptTemplate
         if (missing.Count > 0)
         {
             return Result.Failure<RenderedPrompt>(new DomainError(
-                ErrorCodes.MissingInput,
+                EngineErrorCodes.MissingInput,
                 $"The {Agent} prompt is missing {string.Join(", ", missing)}.")
             {
                 Details = missing,
@@ -161,7 +160,7 @@ public sealed partial class PromptTemplate
     }
 
     private static Result<PromptTemplate> Invalid(string agent, string reason) =>
-        Result.Failure<PromptTemplate>(new DomainError(ErrorCodes.Validation, $"Invalid {agent} prompt template: {reason}"));
+        Result.Failure<PromptTemplate>(new DomainError(EngineErrorCodes.Validation, $"Invalid {agent} prompt template: {reason}"));
 
     [GeneratedRegex(@"\{\{(?<name>[A-Z][A-Z0-9_]*)(?<optional>\?)?\}\}", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex PlaceholderPattern();

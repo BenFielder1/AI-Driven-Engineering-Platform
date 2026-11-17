@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Notifications;
 

@@ -4,6 +4,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Execution;

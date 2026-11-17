@@ -28,7 +28,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
         var state = await GetStateAsync(owner.Client, project.Id);
 
         Assert.Equal((project.Id, Phase.Refinement, ProjectStatus.Active, 1, false), (state.ProjectId, state.Phase, state.Status, state.Checkpoint, state.ExecutionPaused));
-        Assert.Equal(ArtifactRules.All, state.Artifacts.Select(a => a.Type));
+        Assert.Equal(SdlcArtifactRules.All, state.Artifacts.Select(a => a.Type));
         Assert.All(state.Artifacts, a => Assert.Equal((null, null, null), (a.LatestVersion, a.LatestStatus, a.CurrentLockedVersion)));
         Assert.Equal(new ExecutionCountsDto(0, 0, 0, 0, 0, 0), state.Execution);
         Assert.Equal(new ReviewStateDto(0, 3, null, null, null, ReviewRunStatus.Idle), state.Review);

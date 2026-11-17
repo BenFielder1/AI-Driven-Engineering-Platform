@@ -7,7 +7,6 @@ using Aide.Api.Features.Gates;
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;

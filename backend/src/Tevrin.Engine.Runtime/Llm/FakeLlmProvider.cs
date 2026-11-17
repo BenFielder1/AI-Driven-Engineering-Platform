@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
-using Aide.Domain.RepoTools;
+using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Infrastructure.Agents;
+namespace Tevrin.Engine.Runtime.Llm;
 
 /// <summary>
 /// Produces the Fake provider's output for one agent (D13). Register implementations in DI (<c>AddSingleton&lt;IFakeAgentResponder, …&gt;</c>);
@@ -71,7 +71,7 @@ public sealed class FakeLlmProvider : ILlmProvider, IToolCallingLlmProvider
             "\n",
             toolRequest.Exchanges.SelectMany(e => e.Results.Select(r => r.Content)));
         var made = toolRequest.Exchanges.Sum(e => e.Calls.Count);
-        var limited = toolRequest.Exchanges.Any(e => e.Results.Any(r => r.IsError && r.Content.StartsWith(RepoToolErrors.ToolLimit, StringComparison.Ordinal)));
+        var limited = toolRequest.Exchanges.Any(e => e.Results.Any(r => r.IsError && r.Content.StartsWith(EngineErrorCodes.ToolLimit, StringComparison.Ordinal)));
         var script = toolRequest.Request.Agent is { } agent && _scripts.TryGetValue(agent, out var found) ? found.Calls : [];
         if (!toolRequest.ForceFinalAnswer && !limited && made < script.Count)
         {

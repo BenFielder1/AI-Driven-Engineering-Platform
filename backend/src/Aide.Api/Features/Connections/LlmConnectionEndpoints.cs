@@ -5,12 +5,12 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Api.Features.Connections;

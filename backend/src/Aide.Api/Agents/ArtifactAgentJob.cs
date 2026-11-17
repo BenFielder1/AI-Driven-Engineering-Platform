@@ -11,6 +11,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Agents;
@@ -200,18 +201,18 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
     /// <summary>
     /// Should a job of this trigger still produce a <paramref name="type"/> draft? Phase-entry jobs only while the project
     /// is still in the producing phase (a stale job after a rollback or fallback does nothing); re-runs whenever a draft of
-    /// the type may be created (<see cref="ArtifactRules.CanCreateDraft"/>).
+    /// the type may be created (<see cref="SdlcArtifactRules.CanCreateDraft"/>).
     /// </summary>
     public static bool ShouldRun(LifecycleJobPayload payload, string type, Project project)
     {
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(project);
-        if (ArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status).IsFailure)
+        if (SdlcArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status).IsFailure)
         {
             return false;
         }
 
-        return payload.Trigger != LifecycleJobPayload.StageEntered || project.CurrentPhase == ArtifactRules.ProducingPhase(type);
+        return payload.Trigger != LifecycleJobPayload.StageEntered || project.CurrentPhase == SdlcArtifactRules.ProducingPhase(type);
     }
 
     /// <summary>FR-172: for a release version, when its oldest still-queued or running import was queued, and whether a failed import awaits a retry.</summary>

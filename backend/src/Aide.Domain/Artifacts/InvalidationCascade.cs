@@ -63,7 +63,7 @@ public static class InvalidationCascade
             _ => throw new ArgumentOutOfRangeException(nameof(approved), approved, null),
         };
 
-        var producingPhases = types.Select(ArtifactRules.ProducingPhase).ToList();
+        var producingPhases = types.Select(SdlcArtifactRules.ProducingPhase).ToList();
 
         // §4.27: the stack_profile cascade falls back to analysis, where the profile itself is produced.
         if (approved == SdlcArtifacts.StackProfile)

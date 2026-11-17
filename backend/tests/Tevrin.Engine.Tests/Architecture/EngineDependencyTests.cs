@@ -80,6 +80,32 @@ public class EngineDependencyTests
     }
 
     [Fact]
+    public void D_0_7_0_23_engine_sources_hold_no_sdlc_key_value()
+    {
+        // SDLC keys live in the pack (SdlcAgents, SdlcArtifacts, SdlcGates, SdlcJobTypes); an engine source that spells one
+        // as a string literal has taken an SDLC rule into the engine.
+        var keys = new[] { typeof(SdlcAgents), typeof(SdlcArtifacts), typeof(SdlcGates), typeof(SdlcJobTypes) }
+            .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static))
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => "\"" + (string)f.GetRawConstantValue()! + "\"")
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var offending = EngineProjects
+            .SelectMany(p => SourceFiles(p.Project))
+            .SelectMany(path =>
+            {
+                var text = File.ReadAllText(path);
+                return keys.Where(k => text.Contains(k, StringComparison.Ordinal)).Select(k => $"{Path.GetFileName(path)}: {k}");
+            })
+            .ToList();
+
+        Assert.NotEmpty(keys);
+        Assert.NotEmpty(EngineProjects.SelectMany(p => SourceFiles(p.Project)));
+        Assert.Empty(offending);
+    }
+
+    [Fact]
     public void FR263_the_project_file_check_sees_project_and_package_references()
     {
         // Guards the guard: the project-file parsing finds the references the engine projects really have.
@@ -115,6 +141,18 @@ public class EngineDependencyTests
             .. doc.Descendants("PackageReference").Select(e => "package:" + (string?)e.Attribute("Include")),
             .. doc.Descendants("FrameworkReference").Select(e => "framework:" + (string?)e.Attribute("Include")),
         ];
+    }
+
+    /// <summary>The project's C# sources, without build output.</summary>
+    private static IEnumerable<string> SourceFiles(string project)
+    {
+        var root = Path.Combine(SourceRoot(), project);
+        return Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(path =>
+            {
+                var relative = Path.GetRelativePath(root, path).Replace(WindowsSeparator, '/');
+                return !relative.StartsWith("obj/", StringComparison.Ordinal) && !relative.StartsWith("bin/", StringComparison.Ordinal);
+            });
     }
 
     /// <summary><c>backend/src</c>, found by walking up from the test binaries.</summary>

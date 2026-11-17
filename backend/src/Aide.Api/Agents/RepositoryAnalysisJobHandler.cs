@@ -10,6 +10,7 @@ using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Pack.Sdlc;

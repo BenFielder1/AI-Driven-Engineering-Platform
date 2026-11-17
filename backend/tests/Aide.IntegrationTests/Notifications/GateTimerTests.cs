@@ -75,7 +75,7 @@ public sealed class GateTimerTests(AideApiFactory factory)
                 .Select(_ => new Aide.Domain.Entities.Project { Name = "Filler", Slug = $"filler-{Guid.NewGuid():N}", Idea = "Idea", CreatedAt = now, UpdatedAt = now })
                 .ToList();
             db.Projects.AddRange(projects);
-            db.ApprovalGates.AddRange(projects.Select((p, i) => new Aide.Domain.Entities.ApprovalGate
+            db.ApprovalGates.AddRange(projects.Select((p, i) => new Tevrin.Engine.Domain.Entities.ApprovalGate
             {
                 ProjectId = p.Id,
                 Type = SdlcGates.PreRelease,

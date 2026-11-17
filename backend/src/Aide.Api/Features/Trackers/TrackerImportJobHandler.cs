@@ -2,7 +2,6 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Trackers;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
@@ -12,6 +11,7 @@ using Npgsql;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Engine.Runtime.Persistence;
 using Tevrin.Pack.Sdlc;
 
