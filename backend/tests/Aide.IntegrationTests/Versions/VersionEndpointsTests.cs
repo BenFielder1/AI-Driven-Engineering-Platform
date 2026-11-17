@@ -7,7 +7,6 @@ using Aide.Api.Features.Versions;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.IntegrationTests.Support;
@@ -64,7 +63,7 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         Assert.Equal((version.Id.ToString(), "1.2.0", "v1.1.0"), (startedEvent.GetProperty("releaseVersionId").GetString(), startedEvent.GetProperty("version").GetString(), startedEvent.GetProperty("baseTag").GetString()));
 
         // The Repository Analyst job is queued; until the analyst exists (FR-70) its handler completes without work.
-        var analysis = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.RepositoryAnalysis);
+        var analysis = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.RepositoryAnalysis);
         Assert.Equal(version.Id.ToString(), LifecycleSeed.Payload(analysis.Payload).GetProperty("releaseVersionId").GetString());
         Assert.Equal(JobStatus.Succeeded, Assert.Single(await AgentJobs.RunQueuedAsync(factory, id), j => j.Id == analysis.Id).Status);
 

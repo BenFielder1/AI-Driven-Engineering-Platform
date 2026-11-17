@@ -1,7 +1,6 @@
 using System.Net;
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Common;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Npgsql;
@@ -59,7 +58,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
 
         // FR-28: entering specification queues the spec generator in the same transaction (outbox).
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal((JobTypes.SpecGeneration, JobStatus.Queued, 0), (job.Type, job.Status, job.Attempts));
+        Assert.Equal((SdlcJobTypes.SpecGeneration, JobStatus.Queued, 0), (job.Type, job.Status, job.Attempts));
         Assert.Equal(id.ToString(), LifecycleSeed.Payload(job.Payload).GetProperty("projectId").GetString());
         Assert.Equal(transition.CreatedAt, job.CreatedAt);
     }
@@ -135,7 +134,7 @@ public sealed class AdvancePhaseTests(AideApiFactory factory)
         Assert.Null(result.Gate);
         Assert.Equal((Phase.Planning, ProjectStatus.Active, 3), (result.State.Phase, result.State.Status, result.State.Checkpoint));
         Assert.Empty(await LifecycleSeed.GatesAsync(factory, id));
-        Assert.Equal([JobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]

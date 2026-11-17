@@ -265,16 +265,16 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
     {
         var project = NewProject();
         var other = NewProject();
-        var first = new Job { ProjectId = project.Id, Type = Job.ExecutionType, RunAfter = Now, CreatedAt = Now };
+        var first = new Job { ProjectId = project.Id, Type = SdlcJobTypes.Execution, RunAfter = Now, CreatedAt = Now };
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
         db.Projects.AddRange(project, other);
         db.Jobs.Add(first);
         db.Jobs.Add(new Job { ProjectId = project.Id, Type = "agent_run", RunAfter = Now, CreatedAt = Now });
-        db.Jobs.Add(new Job { ProjectId = other.Id, Type = Job.ExecutionType, Status = JobStatus.Running, RunAfter = Now, CreatedAt = Now });
+        db.Jobs.Add(new Job { ProjectId = other.Id, Type = SdlcJobTypes.Execution, Status = JobStatus.Running, RunAfter = Now, CreatedAt = Now });
         await db.SaveChangesAsync(Ct);
 
-        var duplicate = new Job { ProjectId = project.Id, Type = Job.ExecutionType, RunAfter = Now, CreatedAt = Now };
+        var duplicate = new Job { ProjectId = project.Id, Type = SdlcJobTypes.Execution, RunAfter = Now, CreatedAt = Now };
         db.Jobs.Add(duplicate);
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
         var pg = Assert.IsType<PostgresException>(ex.InnerException);
@@ -285,7 +285,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         first.Status = JobStatus.Succeeded;
         await db.SaveChangesAsync(Ct);
 
-        db.Jobs.Add(new Job { ProjectId = project.Id, Type = Job.ExecutionType, RunAfter = Now, CreatedAt = Now });
+        db.Jobs.Add(new Job { ProjectId = project.Id, Type = SdlcJobTypes.Execution, RunAfter = Now, CreatedAt = Now });
         await db.SaveChangesAsync(Ct);
     }
 

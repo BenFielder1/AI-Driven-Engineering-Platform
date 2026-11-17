@@ -1,13 +1,13 @@
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -145,7 +145,7 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
 
         db.Deployments.Add(deployment);
         DeploymentEvents.Created(db, deployment, version, actor, now);
-        jobs.Enqueue(JobTypes.Deployment, new DeploymentJobPayload(spec.ProjectId, deployment.Id), spec.ProjectId, now);
+        jobs.Enqueue(SdlcJobTypes.Deployment, new DeploymentJobPayload(spec.ProjectId, deployment.Id), spec.ProjectId, now);
         return deployment;
     }
 
@@ -187,7 +187,7 @@ public sealed class DeploymentScheduler(AideDbContext db, JobEnqueuer jobs, IDep
 
         var ids = older.Select(d => d.Id).ToHashSet();
         var queued = await db.Jobs
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Deployment && j.Status == JobStatus.Queued)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Deployment && j.Status == JobStatus.Queued)
             .ToListAsync(cancellationToken);
         foreach (var job in queued)
         {

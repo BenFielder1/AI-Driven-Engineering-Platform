@@ -5,7 +5,6 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHosts;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
@@ -20,6 +19,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Security;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Projects;
 
@@ -702,7 +702,7 @@ public sealed partial class ProjectCreator(
         // FR-70: a version with existing code starts with the Repository Analyst.
         if (version.BaseCommitSha is not null)
         {
-            await jobs.EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, version.Id), project.Id, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, version.Id), project.Id, cancellationToken, now);
         }
 
         foreach (var planned in plannedImports)

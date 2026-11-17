@@ -7,7 +7,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
@@ -15,6 +14,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.BuildChecks;
 
@@ -111,7 +111,7 @@ public sealed partial class BuildCheckJobHandler(
         buildChecks.Complete(check, decision.Status, decision.Sources, failures, now, endReason: decision.EndReason);
         if (decision.PlanFix)
         {
-            jobs.Enqueue(JobTypes.BuildFix, new BuildFixJobPayload(project.Id, check.Id), project.Id, now);
+            jobs.Enqueue(SdlcJobTypes.BuildFix, new BuildFixJobPayload(project.Id, check.Id), project.Id, now);
             await SaveAsync(cancellationToken);
             return;
         }
@@ -274,7 +274,7 @@ public sealed class BuildCheckJobEndedHook(BuildCheckService buildChecks, TimePr
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType is not (JobTypes.BuildCheck or JobTypes.BuildFix) || job.ProjectId is not { } projectId)
+        if (job.JobType is not (SdlcJobTypes.BuildCheck or SdlcJobTypes.BuildFix) || job.ProjectId is not { } projectId)
         {
             return;
         }

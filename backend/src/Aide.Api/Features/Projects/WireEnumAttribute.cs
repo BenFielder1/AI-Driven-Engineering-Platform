@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
+using Aide.Api.Jobs;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -58,13 +59,18 @@ internal sealed class WireEnumSchemaTransformer : IOpenApiSchemaTransformer
     /// <c>oneOf: [null, $ref]</c>.</summary>
     private const string NullablePropertyKey = "x-is-nullable-property";
 
-    /// <summary>The component schema of each key set: the name and description of the 0.6.1 enum it replaces.</summary>
-    internal static readonly IReadOnlyDictionary<Type, (string Name, string? Description)> KeySetSchemas =
-        new Dictionary<Type, (string Name, string? Description)>
+    /// <summary>
+    /// The component schema of each key set: the name and description of the 0.6.1 enum it replaces, and whether that
+    /// enum's component listed <c>null</c> among its values (an enum only ever used nullable, such as
+    /// <c>AgentJobTrigger</c>, FR-273).
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<Type, (string Name, string? Description, bool NullInEnum)> KeySetSchemas =
+        new Dictionary<Type, (string Name, string? Description, bool NullInEnum)>
         {
-            [typeof(SdlcAgents)] = ("AgentKind", "The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70) and the Stack Analyst (FR-180)."),
-            [typeof(SdlcArtifacts)] = ("ArtifactType", null),
-            [typeof(SdlcGates)] = ("GateType", null),
+            [typeof(SdlcAgents)] = ("AgentKind", "The cognitive agents (§1, FR-23), plus the Repository Analyst (FR-70) and the Stack Analyst (FR-180).", false),
+            [typeof(SdlcArtifacts)] = ("ArtifactType", null, false),
+            [typeof(SdlcGates)] = ("GateType", null, false),
+            [typeof(AgentJobTriggerWire)] = ("AgentJobTrigger", null, true),
         };
 
     public Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken cancellationToken)
@@ -86,6 +92,11 @@ internal sealed class WireEnumSchemaTransformer : IOpenApiSchemaTransformer
             schema.Type = null;
             schema.Format = null;
             schema.Enum = [.. keys.Values.Select(v => (System.Text.Json.Nodes.JsonNode)v)];
+            if (component.NullInEnum)
+            {
+                schema.Enum.Add(null!);
+            }
+
             schema.Description = component.Description;
             schema.Metadata ??= new Dictionary<string, object>();
             schema.Metadata[SchemaIdKey] = component.Name;

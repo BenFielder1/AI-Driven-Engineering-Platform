@@ -11,7 +11,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
@@ -613,7 +612,7 @@ public static partial class ProjectEndpoints
             report?.DriftLevel,
             ReviewStatusRules.Status(
                 await db.Jobs.AsNoTracking()
-                    .Where(j => j.ProjectId == id && j.Type == JobTypes.Review)
+                    .Where(j => j.ProjectId == id && j.Type == SdlcJobTypes.Review)
                     .OrderByDescending(j => j.CreatedAt)
                     .ThenByDescending(j => j.Id)
                     .Select(j => (JobStatus?)j.Status)

@@ -2,7 +2,6 @@ using System.Net;
 using Aide.Api.Features.Artifacts;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Tevrin.Pack.Sdlc;
@@ -33,7 +32,7 @@ public sealed class ArtifactIntegrityTests(AideApiFactory factory)
         Assert.Equal(EventCategory.Integrity, EventTypes.CategoryOf(EventTypes.IntegrityAlert));
 
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal(JobTypes.SpecGeneration, job.Type);
+        Assert.Equal(SdlcJobTypes.SpecGeneration, job.Type);
         var payload = LifecycleSeed.Payload(job.Payload);
         Assert.Equal(("artifact_corrupted", spec.Id.ToString()), (payload.GetProperty("trigger").GetString(), payload.GetProperty("artifactId").GetString()));
 
@@ -61,7 +60,7 @@ public sealed class ArtifactIntegrityTests(AideApiFactory factory)
 
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.IntegrityAlert));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.ArtifactCorrupted));
-        Assert.Equal([JobTypes.IdeaRefinement], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.IdeaRefinement], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -111,7 +110,7 @@ public sealed class ArtifactIntegrityTests(AideApiFactory factory)
         Assert.Equal((2, ArtifactIntegrity.Corrupted, ArtifactStatus.Corrupted), (spec.Version, spec.Integrity, spec.Status));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.IntegrityAlert));
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal((JobTypes.SpecGeneration, current.Id.ToString()), (job.Type, LifecycleSeed.Payload(job.Payload).GetProperty("artifactId").GetString()));
+        Assert.Equal((SdlcJobTypes.SpecGeneration, current.Id.ToString()), (job.Type, LifecycleSeed.Payload(job.Payload).GetProperty("artifactId").GetString()));
     }
 
     [Fact]
@@ -142,7 +141,7 @@ public sealed class ArtifactIntegrityTests(AideApiFactory factory)
         await ArtifactApi.TamperAsync(factory, v3.Id, "tampered");
         await ArtifactApi.GetAsync(fixture.Owner.Client, id, "/technical_specification/history");
         Assert.Equal(3, (await LifecycleSeed.EventsAsync(factory, id, EventTypes.IntegrityAlert)).Count);
-        Assert.Equal([JobTypes.SpecGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.SpecGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -158,7 +157,7 @@ public sealed class ArtifactIntegrityTests(AideApiFactory factory)
 
         Assert.Equal([ArtifactIntegrity.Corrupted, ArtifactIntegrity.Ok], history.Select(h => h.Integrity));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.IntegrityAlert));
-        Assert.Equal([JobTypes.IdeaRefinement], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.IdeaRefinement], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]

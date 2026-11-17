@@ -211,7 +211,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         await flow.StartExecutionAsync();
 
         // Step 1 runs; the next execution job is queued when the request changes.
-        await AgentJobs.RunAsync(factory, await flow.QueuedJobAsync(JobTypes.Execution));
+        await AgentJobs.RunAsync(factory, await flow.QueuedJobAsync(SdlcJobTypes.Execution));
 
         // FR-19: a new request version is approved: the cascade invalidates the downstream work and falls back.
         await flow.SaveDraftAsync("project_request", "# Todo API\n\n## Summary\nA todo API for small teams, with due dates and reminders.\n");
@@ -263,7 +263,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
 
         // A reviewer merges on GitHub; the merge poll tags it and the release completes.
         github.MergedAs(ReleaseFlowTests.MergeInBare(remote, github.Branch));
-        await AgentJobs.RunCoreAsync(app, await flow.QueuedJobAsync(JobTypes.MergePoll));
+        await AgentJobs.RunCoreAsync(app, await flow.QueuedJobAsync(SdlcJobTypes.MergePoll));
 
         await flow.ExpectPhaseAsync(Phase.Release, ProjectStatus.Released);
         await AssertSnapshotAsync(flow, "release_refused_awaiting_merge_then_merged");
@@ -286,7 +286,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
 
         // FR-65: the PR is closed without merging: PR_CLOSED, awaiting_merge → releasing.
         github.State = "closed";
-        await AgentJobs.RunCoreAsync(app, await flow.QueuedJobAsync(JobTypes.MergePoll));
+        await AgentJobs.RunCoreAsync(app, await flow.QueuedJobAsync(SdlcJobTypes.MergePoll));
 
         await flow.ExpectPhaseAsync(Phase.Release, ProjectStatus.Releasing);
         await AssertSnapshotAsync(flow, "merge_abandoned");
@@ -360,8 +360,8 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
         // FR-254–FR-256: attempt 0's preview builds a commit with the Fake failure marker and fails; a fix is planned.
         await flow.RunJobsAsync();
         await SettleNewestRolloutAsync(app, flow.Id);
-        await DeploymentHarness.SettleAsync(app, (await flow.QueuedJobAsync(JobTypes.BuildCheck)).Id);
-        await flow.QueuedJobAsync(JobTypes.BuildFix);
+        await DeploymentHarness.SettleAsync(app, (await flow.QueuedJobAsync(SdlcJobTypes.BuildCheck)).Id);
+        await flow.QueuedJobAsync(SdlcJobTypes.BuildFix);
 
         // The cause is removed on the branch (as a person would) before the fix step runs, so attempt 1 passes.
         var workingCopy = Path.Combine(factory.WorkspacesRoot, flow.Id.ToString("D"));
@@ -470,7 +470,7 @@ public sealed class SdlcCharacterisationTests(AideApiFactory factory)
             }
 
             await SettleNewestRolloutAsync(app, flow.Id);
-            var checks = (await LifecycleSeed.JobsAsync(app, flow.Id)).Where(j => j.Type == JobTypes.BuildCheck && j.Status == JobStatus.Queued).ToList();
+            var checks = (await LifecycleSeed.JobsAsync(app, flow.Id)).Where(j => j.Type == SdlcJobTypes.BuildCheck && j.Status == JobStatus.Queued).ToList();
             foreach (var check in checks)
             {
                 await DeploymentHarness.SettleAsync(app, check.Id);

@@ -1,14 +1,12 @@
-using Aide.Domain.Lifecycle;
-using Tevrin.Engine.Domain.Entities;
-using Tevrin.Pack.Sdlc;
-
-namespace Aide.Domain.Jobs;
+namespace Tevrin.Pack.Sdlc;
 
 /// <summary>
-/// Job types of the PostgreSQL work queue (§4.9, D1). Values are stored in <c>jobs.type</c>, so they never change once
-/// used. A job type is only claimed by a worker once a handler is registered for it; until then its jobs stay queued.
+/// FR-272, D-0.7.0-23: the SDLC's job types of the PostgreSQL work queue (§4.9, D1), the 0.6.1 job type strings unchanged.
+/// Values are stored in <c>jobs.type</c>, so they never change once used. The host registers a handler for every one of
+/// them; enqueuing a type with no registered handler fails at enqueue. The engine's own types are
+/// <c>Tevrin.Engine.Domain.Jobs.EngineJobTypes</c>.
 /// </summary>
-public static class JobTypes
+public static class SdlcJobTypes
 {
     /// <summary>FR-27: one idea refinement round.</summary>
     public const string IdeaRefinement = "idea_refinement";
@@ -19,8 +17,11 @@ public static class JobTypes
     /// <summary>FR-29: generate the implementation plan (also re-run after a rejected plan_approval gate).</summary>
     public const string PlanGeneration = "plan_generation";
 
-    /// <summary>FR-31–FR-34: run the current plan's steps. At most one queued or running per project (§4.9).</summary>
-    public const string Execution = Job.ExecutionType;
+    /// <summary>
+    /// FR-31–FR-34: run the current plan's steps. At most one queued or running per project (§4.9): the host registers its
+    /// handler as one per project, and a partial unique index enforces it.
+    /// </summary>
+    public const string Execution = "execution";
 
     /// <summary>
     /// FR-36: when every step of the current plan is completed, push the project branch, open (or reuse) the one project PR
@@ -122,6 +123,14 @@ public static class JobTypes
     /// <summary>FR-256, §4.48: the build-fix agent plans 1–5 fix steps from a failed build check.</summary>
     public const string BuildFix = "build_fix";
 
+    /// <summary>Every SDLC job type; the host registers a handler for each (FR-272).</summary>
+    public static IReadOnlyList<string> All { get; } =
+    [
+        IdeaRefinement, SpecGeneration, PlanGeneration, Execution, PullRequest, Review, Release, MergePoll, MergeReadiness,
+        RepositoryAnalysis, StackAnalysis, TrackerImport, Deployment, DeploymentSetup, DatabaseProvisioning, PreviewRollout,
+        ProductionRollout, PreviewDatabaseReset, DatabaseExpirySweep, Notification, BuildCheck, BuildFix,
+    ];
+
     /// <summary>The job that runs <paramref name="agent"/>.</summary>
     public static string ForAgent(string agent) => agent switch
     {
@@ -134,20 +143,5 @@ public static class JobTypes
         SdlcAgents.StackAnalyst => StackAnalysis,
         SdlcAgents.BuildFix => BuildFix,
         _ => throw new ArgumentOutOfRangeException(nameof(agent), agent, null),
-    };
-
-    /// <summary>
-    /// The follow-up job written in the same transaction as a forward transition into <paramref name="entered"/>:
-    /// spec generation on entering specification (FR-28), plan generation on entering planning (FR-29), a review
-    /// cycle on entering review (FR-38) and the release job on entering release (FR-42). Refinement is started by
-    /// the user (FR-27) and execution by <c>POST /execution/start</c> (FR-35, FR-37), so they have none.
-    /// </summary>
-    public static string? OnEnter(Phase entered) => entered switch
-    {
-        Phase.Specification => SpecGeneration,
-        Phase.Planning => PlanGeneration,
-        Phase.Review => Review,
-        Phase.Release => Release,
-        _ => null,
     };
 }

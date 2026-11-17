@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Infrastructure.Persistence.Configurations;
 
@@ -30,7 +31,7 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<Job>
         // unconstrained (plain varchar), so new JobStatus members need no schema change.
         builder.HasIndex(j => j.ProjectId, "ux_jobs_project_id_active_execution")
             .IsUnique()
-            .HasFilter($"type = '{Job.ExecutionType}' AND status IN ('queued', 'running')")
+            .HasFilter($"type = '{SdlcJobTypes.Execution}' AND status IN ('queued', 'running')")
             .HasDatabaseName("ux_jobs_project_id_active_execution");
     }
 }

@@ -5,7 +5,6 @@ using Aide.Api.Features.Versions;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
@@ -67,7 +66,7 @@ public sealed class RollbackEndpointTests(AideApiFactory factory)
         var gate = await LifecycleSeed.AddGateAsync(factory, id, EngineGates.Escalation);
         var job = await ProjectApi.WithDbAsync(factory, async db =>
         {
-            var queued = new Job { ProjectId = id, Type = JobTypes.Review, Payload = "{}", RunAfter = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow };
+            var queued = new Job { ProjectId = id, Type = SdlcJobTypes.Review, Payload = "{}", RunAfter = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow };
             db.Jobs.Add(queued);
             await db.SaveChangesAsync(Ct);
             return queued;

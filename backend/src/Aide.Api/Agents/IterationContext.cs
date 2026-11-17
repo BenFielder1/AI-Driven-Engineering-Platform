@@ -1,7 +1,6 @@
 using Aide.Api.Features.Versions;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Releases;
 using Aide.Domain.Specs;
 using Aide.Infrastructure.Persistence;
@@ -79,7 +78,7 @@ public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inpu
     public async Task<(Guid? JobId, AnalysisJobState State)> AnalysisJobAsync(Guid projectId, Guid releaseVersionId, CancellationToken cancellationToken)
     {
         var jobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.RepositoryAnalysis)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.RepositoryAnalysis)
             .OrderByDescending(j => j.CreatedAt)
             .Select(j => new { j.Id, j.Status, j.Payload })
             .Take(20)

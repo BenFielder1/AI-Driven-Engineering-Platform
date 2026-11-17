@@ -3,11 +3,11 @@ using System.Net.Http.Json;
 using Aide.Api.Features.Databases;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Databases;
 
@@ -57,7 +57,7 @@ public sealed class ManagedDatabaseTests(AideApiFactory factory)
 
     private static Task<Job> ProvisioningJobAsync(WebApplicationFactory<Program> app, Guid projectId) =>
         ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DatabaseProvisioning)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DatabaseProvisioning)
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
             .FirstAsync(Ct));
 

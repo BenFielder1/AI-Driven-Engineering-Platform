@@ -2,7 +2,6 @@ using Aide.Api.Features.Projects;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -61,7 +60,7 @@ public static class ExecutionQueries
     {
         ArgumentNullException.ThrowIfNull(db);
         return db.Jobs.AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.Execution && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Execution && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken);
     }
 

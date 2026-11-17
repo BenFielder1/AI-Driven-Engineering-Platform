@@ -4,7 +4,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Specs;
 using Aide.Domain.Stack;
 using Aide.Domain.Trackers;
@@ -332,9 +331,6 @@ public static class AgentJobServiceCollectionExtensions
         services.AddScoped<AgentJobInputs>();
         services.AddScoped<IterationContextReader>();
         services.AddScoped<ArtifactAgentJob>();
-        services.AddJobHandler<IdeaRefinementJobHandler>(JobTypes.IdeaRefinement);
-        services.AddJobHandler<SpecGenerationJobHandler>(JobTypes.SpecGeneration);
-        services.AddJobHandler<PlanGenerationJobHandler>(JobTypes.PlanGeneration);
         return services;
     }
 }

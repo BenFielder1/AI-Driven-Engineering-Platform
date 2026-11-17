@@ -2,7 +2,6 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Agents;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Artifacts;
@@ -36,7 +35,7 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
 
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(factory, id));
 
-        Assert.Equal((JobTypes.SpecGeneration, JobStatus.Succeeded), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.SpecGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var spec = Assert.Single(await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.TechnicalSpecification));
         Assert.Equal((1, ArtifactStatus.Draft, (Guid?)job.Id, (Guid?)null, 2), (spec.Version, spec.Status, spec.AgentRunId, spec.CreatedByUserId, spec.CheckpointAtCreation));
         Assert.Empty(SpecSections.Missing(spec.Content));
@@ -108,7 +107,7 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<Aide.Api.Features.Gates.GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "reject", new { comment = "Add rate limits" }));
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id));
 
-        Assert.Equal((JobTypes.SpecGeneration, JobStatus.Succeeded), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.SpecGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         Assert.Contains("Add rate limits", Assert.Single(scripted.Prompts), StringComparison.Ordinal);
         Assert.Contains("The first spec.", scripted.Prompts[0], StringComparison.Ordinal);
         var run = Assert.Single(await AgentJobs.RunsAsync(app, id));
@@ -191,7 +190,7 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
 
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(factory, id));
 
-        Assert.Equal((JobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var plan = Assert.Single(await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.ImplementationPlan));
         Assert.Equal((ArtifactStatus.Draft, (Guid?)job.Id), (plan.Status, plan.AgentRunId));
         Assert.Contains("```aide-plan\n", plan.Content, StringComparison.Ordinal);
@@ -267,7 +266,7 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<Aide.Api.Features.Gates.GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "reject", new { comment = "split step 4" }));
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id));
 
-        Assert.Equal((JobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var prompt = Assert.Single(responder.Prompts);
         Assert.Contains("split step 4", prompt, StringComparison.Ordinal);
         Assert.Contains("\"title\": \"Step 4\"", prompt, StringComparison.Ordinal); // the previous plan, as JSON

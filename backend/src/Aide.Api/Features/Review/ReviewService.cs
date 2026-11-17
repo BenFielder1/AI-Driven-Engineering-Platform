@@ -4,7 +4,6 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
@@ -14,6 +13,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Review;
 
@@ -46,7 +46,7 @@ public sealed partial class ReviewService(AideDbContext db, JobEnqueuer jobs, Ti
         var now = time.GetUtcNow();
         project.UpdatedAt = now;
         var job = await jobs.EnqueueAsync(
-            JobTypes.Review,
+            SdlcJobTypes.Review,
             new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.UserRequested),
             project.Id,
             cancellationToken,
@@ -66,9 +66,9 @@ public sealed partial class ReviewService(AideDbContext db, JobEnqueuer jobs, Ti
     public static async Task<bool> ActiveAsync(AideDbContext db, Guid projectId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return db.ChangeTracker.Entries<Job>().Any(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.Review && e.Entity.ProjectId == projectId)
+        return db.ChangeTracker.Entries<Job>().Any(e => e.State == EntityState.Added && e.Entity.Type == SdlcJobTypes.Review && e.Entity.ProjectId == projectId)
             || await db.Jobs.AnyAsync(
-                j => j.ProjectId == projectId && j.Type == JobTypes.Review && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+                j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Review && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
                 cancellationToken);
     }
 
@@ -326,7 +326,6 @@ public static class ReviewServiceCollectionExtensions
         services.AddScoped<ExternalChecksCollector>();
         services.AddScoped<PreviewCollector>();
         services.AddScoped<IJobEndedHook, ReviewJobEndedHook>();
-        services.AddJobHandler<ReviewJobHandler>(JobTypes.Review);
         return services;
     }
 }

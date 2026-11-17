@@ -8,7 +8,6 @@ using Aide.Api.Features.Runs;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -595,7 +594,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             new { type = "message_stop" },
         }.Select(e => "data: " + JsonSerializer.Serialize(e) + Environment.NewLine + Environment.NewLine));
 
-    private static JobExecution NewJob(Guid projectId) => new(Guid.CreateVersion7(), JobTypes.SpecGeneration, "{}", projectId, 1);
+    private static JobExecution NewJob(Guid projectId) => new(Guid.CreateVersion7(), SdlcJobTypes.SpecGeneration, "{}", projectId, 1);
 
     private static AgentRunRequest Spec(Guid projectId, JobExecution job) => new()
     {

@@ -8,7 +8,6 @@ using Aide.Api.Features.Versions;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.RepoTools;
 using Aide.Infrastructure.Agents;
@@ -108,7 +107,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         // The imported baseline has no AIDE artifacts; the Repository Analyst is queued for the version in development.
         Assert.False(await ProjectApi.WithDbAsync(app, db => db.Artifacts.AnyAsync(a => a.ProjectId == project.Id, Ct)));
         var analysis = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id));
-        Assert.Equal((JobTypes.RepositoryAnalysis, versions[0].Id.ToString()), (analysis.Type, LifecycleSeed.Payload(analysis.Payload).GetProperty("releaseVersionId").GetString()));
+        Assert.Equal((SdlcJobTypes.RepositoryAnalysis, versions[0].Id.ToString()), (analysis.Type, LifecycleSeed.Payload(analysis.Payload).GetProperty("releaseVersionId").GetString()));
         var created = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, project.Id, EventTypes.ProjectCreated)).Payload);
         Assert.Equal(("import", "v2.3.0"), (created.GetProperty("source").GetString(), created.GetProperty("importedTag").GetString()));
 
@@ -148,7 +147,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         Assert.Equal(((string?)null, "0.1.0"), (project.ReleasedVersion, project.DevelopmentVersion));
         var version = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == project.Id, Ct));
         Assert.Equal((ReleaseVersionStatus.InDevelopment, (string?)null, _head), (version.Status, version.BaseTag, version.BaseCommitSha));
-        Assert.Contains(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == JobTypes.RepositoryAnalysis);
+        Assert.Contains(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == SdlcJobTypes.RepositoryAnalysis);
     }
 
     [Theory]
@@ -225,7 +224,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         using var owner = await ApiSession.RegisterAsync(app);
         var project = await ProjectApi.ReadAsync<ProjectDto>(await ImportAsync(owner.Client, "v2.3.0", "2.4.0"), HttpStatusCode.Created);
         await owner.Client.PostAsJsonAsync($"/api/projects/{project.Id}/refinement/run", new { }, Ct);
-        var refinementJob = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == JobTypes.IdeaRefinement);
+        var refinementJob = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == SdlcJobTypes.IdeaRefinement);
 
         // The analyst hasn't run: the round waits (re-queued, attempt not counted) and nothing is called yet.
         Assert.True(await AgentJobs.RunCoreAsync(app, refinementJob));
@@ -295,7 +294,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.TokenBudget, before + 1), Ct));
         await owner.Client.PostAsJsonAsync($"/api/projects/{project.Id}/refinement/run", new { }, Ct);
 
-        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, project.Id), j => j.Type == JobTypes.IdeaRefinement);
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, project.Id), j => j.Type == SdlcJobTypes.IdeaRefinement);
 
         Assert.Equal(JobStatus.Failed, job.Status);
         Assert.StartsWith(ErrorCodes.BudgetExceeded, job.LastError, StringComparison.Ordinal);
@@ -319,7 +318,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         await AgentJobs.RunQueuedAsync(flakyApp, project.Id);
         var before = (await LifecycleSeed.ProjectAsync(flakyApp, project.Id)).TokensUsed;
         await owner.Client.PostAsJsonAsync($"/api/projects/{project.Id}/refinement/run", new { }, Ct);
-        var job = Assert.Single(await LifecycleSeed.JobsAsync(flakyApp, project.Id), j => j.Type == JobTypes.IdeaRefinement);
+        var job = Assert.Single(await LifecycleSeed.JobsAsync(flakyApp, project.Id), j => j.Type == SdlcJobTypes.IdeaRefinement);
 
         // Attempt 1: two tool turns, then the final turn fails transiently: the run stays running, the turns are counted.
         await AgentJobs.RunCoreAsync(flakyApp, job);

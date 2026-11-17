@@ -3,7 +3,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +11,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -460,7 +460,7 @@ public sealed class DeploymentJobEndedHook(TimeProvider time) : IJobEndedHook
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.Deployment || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.Deployment || job.ProjectId is not { } projectId)
         {
             return;
         }

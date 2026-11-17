@@ -4,11 +4,11 @@ using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Artifacts;
 
@@ -85,7 +85,7 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
         if (change.RerunAgent is { } agent)
         {
             var job = await jobs.EnqueueAsync(
-                JobTypes.ForAgent(agent),
+                SdlcJobTypes.ForAgent(agent),
                 new LifecycleJobPayload(artifact.ProjectId, projectVersion, LifecycleJobPayload.ArtifactCorrupted, ArtifactId: artifact.Id),
                 artifact.ProjectId,
                 token,

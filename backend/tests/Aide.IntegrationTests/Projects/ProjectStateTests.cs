@@ -96,7 +96,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                 ProjectId = projectId,
                 Type = type,
                 Version = version,
-                Content = $"# {type} v{version}",
+                Content = $"# {KeyNames.ToPascalCase(type)} v{version}",
                 ContentHash = new string('a', 64),
                 Status = status,
                 CheckpointAtCreation = 1,

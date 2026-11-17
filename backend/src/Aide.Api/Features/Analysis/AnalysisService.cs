@@ -8,7 +8,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
@@ -182,13 +181,13 @@ public sealed partial class AnalysisService(
         }
 
         if (await db.Jobs.AnyAsync(
-                j => j.ProjectId == projectId && j.Type == JobTypes.StackAnalysis && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+                j => j.ProjectId == projectId && j.Type == SdlcJobTypes.StackAnalysis && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
                 cancellationToken))
         {
             return Result.Failure<StackAnalysisQueuedDto>(new DomainError(ErrorCodes.InvalidState, "The Stack Analyst is already queued or running. Wait for it to finish."));
         }
 
-        var job = jobs.Enqueue(JobTypes.StackAnalysis, new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.UserRequested), projectId, now);
+        var job = jobs.Enqueue(SdlcJobTypes.StackAnalysis, new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.UserRequested), projectId, now);
         project.UpdatedAt = now; // xmin: concurrent starts conflict instead of queueing two runs
         var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
         if (saved.IsFailure)
@@ -273,7 +272,7 @@ public sealed partial class AnalysisService(
             .Select(v => (DateTimeOffset?)v.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         var job = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.StackAnalysis && j.CreatedAt >= version.CreatedAt)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.StackAnalysis && j.CreatedAt >= version.CreatedAt)
             .Where(j => next == null || j.CreatedAt < next)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
@@ -305,7 +304,7 @@ public sealed partial class AnalysisService(
 
         var error = status == StackAnalysisRunState.Failed ? run?.Error ?? job.LastError : null;
         var code = error?.Split(':', 2)[0] is { Length: > 0 } prefix && prefix.All(c => char.IsAsciiLetterUpper(c) || c == '_') ? prefix : null;
-        var trigger = ReadTrigger(job.Payload);
+        var trigger = AgentJobTriggerWire.ToWire(ReadTrigger(job.Payload));
         return new StackAnalysisRunDto(
             job.Id,
             run?.Id,

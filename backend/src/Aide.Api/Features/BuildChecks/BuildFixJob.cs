@@ -7,7 +7,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
@@ -190,7 +189,7 @@ public sealed partial class BuildFixJobHandler(
         buildChecks.FixPlanned(check, [.. plan.Steps.Select(s => s.Number)], now);
         if (!project.ExecutionPaused)
         {
-            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionTrigger), project.Id, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionTrigger), project.Id, cancellationToken, now);
         }
 
         await SaveAsync(cancellationToken);

@@ -4,7 +4,6 @@ using Aide.Api.Features.Versions;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Configurations;
@@ -19,7 +18,7 @@ using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Trackers;
 
-/// <summary>Payload of the <see cref="JobTypes.TrackerImport"/> job.</summary>
+/// <summary>Payload of the <see cref="SdlcJobTypes.TrackerImport"/> job.</summary>
 public sealed record TrackerImportJobPayload(Guid ProjectId, Guid ImportId);
 
 /// <summary>An import checked and ready to queue.</summary>
@@ -102,7 +101,7 @@ public sealed partial class SourceImportService(
             CreatedAt = now,
         };
         db.TrackerImports.Add(import);
-        jobs.Enqueue(JobTypes.TrackerImport, new TrackerImportJobPayload(projectId, import.Id), projectId, now);
+        jobs.Enqueue(SdlcJobTypes.TrackerImport, new TrackerImportJobPayload(projectId, import.Id), projectId, now);
         return import;
     }
 

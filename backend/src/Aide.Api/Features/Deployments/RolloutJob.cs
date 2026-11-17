@@ -3,12 +3,12 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -121,7 +121,7 @@ public sealed partial class RolloutJobHandler(
     {
         var createdAt = await db.Jobs.AsNoTracking().Where(j => j.Id == jobId).Select(j => (DateTimeOffset?)j.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         return createdAt is { } at && await db.Jobs.AsNoTracking().AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.PreviewRollout && j.Id != jobId && j.CreatedAt > at && j.Status != JobStatus.Cancelled,
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PreviewRollout && j.Id != jobId && j.CreatedAt > at && j.Status != JobStatus.Cancelled,
             cancellationToken);
     }
 

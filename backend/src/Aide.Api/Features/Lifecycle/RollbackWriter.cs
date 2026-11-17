@@ -3,7 +3,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Rollback;
 using Aide.Infrastructure.Persistence;
@@ -13,6 +12,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Lifecycle;
 
@@ -58,16 +58,16 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         var activeJobs = await db.Jobs
             .FromSql($"""
                 SELECT * FROM jobs
-                WHERE project_id = {id} AND status IN ('queued', 'running') AND type <> {JobTypes.Notification}
+                WHERE project_id = {id} AND status IN ('queued', 'running') AND type <> {SdlcJobTypes.Notification}
                 ORDER BY id
                 FOR UPDATE
                 """)
             .ToListAsync(cancellationToken);
-        var releaseRunning = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Running);
+        var releaseRunning = activeJobs.Any(j => j.Type == SdlcJobTypes.Release && j.Status == JobStatus.Running);
 
         // A release job waiting out a retry backoff whose attempt already merged: cancelling it would leave a merged,
         // untagged release behind (the merge can't be undone), so the rollback waits for the release instead.
-        var releasePartiallyApplied = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Queued)
+        var releasePartiallyApplied = activeJobs.Any(j => j.Type == SdlcJobTypes.Release && j.Status == JobStatus.Queued)
             && await db.Releases.AsNoTracking().AnyAsync(
                 r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && (r.MergeCommitSha != null || r.MergeSubmittedAt != null), cancellationToken);
 

@@ -7,7 +7,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
@@ -550,7 +549,7 @@ public sealed class ExecutionContinuationHook(JobEnqueuer jobs) : IJobSucceededH
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.Type != JobTypes.Execution || job.ProjectId is not { } projectId)
+        if (job.Type != SdlcJobTypes.Execution || job.ProjectId is not { } projectId)
         {
             return;
         }
@@ -568,7 +567,7 @@ public sealed class ExecutionContinuationHook(JobEnqueuer jobs) : IJobSucceededH
         var steps = await ExecutionQueries.CurrentStepsAsync(db, planId, track: false, cancellationToken);
         if (ExecutionRules.ShouldContinue([.. steps.Select(ExecutionQueries.ToState)], project.ExecutionPaused))
         {
-            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Continue), projectId, cancellationToken);
+            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Continue), projectId, cancellationToken);
         }
     }
 }
@@ -587,13 +586,13 @@ public sealed partial class ExecutionJobEndedHook(TimeProvider time, ILogger<Exe
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.Execution || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.Execution || job.ProjectId is not { } projectId)
         {
             return;
         }
 
         var otherRunning = await db.Jobs.AsNoTracking().AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.Execution && j.Status == JobStatus.Running && j.Id != job.JobId,
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Execution && j.Status == JobStatus.Running && j.Id != job.JobId,
             cancellationToken);
         if (otherRunning)
         {
@@ -652,7 +651,6 @@ public static class ExecutionJobServiceCollectionExtensions
         services.AddScoped<ExecutionRunReader>();
         services.AddScoped<IJobSucceededHook, ExecutionContinuationHook>();
         services.AddScoped<IJobEndedHook, ExecutionJobEndedHook>();
-        services.AddJobHandler<ExecutionJobHandler>(JobTypes.Execution);
         return services;
     }
 }

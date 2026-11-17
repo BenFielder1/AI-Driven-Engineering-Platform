@@ -5,7 +5,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
@@ -43,7 +42,7 @@ public sealed class DeployFilePlanTests(AideApiFactory factory)
 
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id));
 
-        Assert.Equal((JobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var agentSteps = Assert.Single(responder.Replies);
         Assert.DoesNotContain(VercelConfigRules.FileName, agentSteps, StringComparison.Ordinal);
         var plan = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ImplementationPlan));

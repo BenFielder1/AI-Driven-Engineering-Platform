@@ -2,12 +2,10 @@ using Tevrin.Engine.Domain.Jobs;
 
 namespace Tevrin.Engine.Domain.Entities;
 
-/// <summary>Outbox + work-queue row (§4.9, D1). Retry and lease policy live in <c>JobPolicy</c>.</summary>
+/// <summary>Outbox + work-queue row (§4.9, D1). Retry and lease policy live in <c>JobPolicy</c>; <see cref="Type"/> is an
+/// <see cref="EngineJobTypes"/> value or a type a pack registers (FR-272).</summary>
 public sealed class Job
 {
-    /// <summary>Job type of execution jobs; at most one queued/running per project (§4.9), enforced by a partial unique index.</summary>
-    public const string ExecutionType = "execution";
-
     public Guid Id { get; set; } = Guid.CreateVersion7();
 
     public string Type { get; set; } = string.Empty;

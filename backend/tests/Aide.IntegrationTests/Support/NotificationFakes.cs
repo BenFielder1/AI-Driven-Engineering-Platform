@@ -2,11 +2,11 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Runtime.CompilerServices;
 using Aide.Api.Features.Notifications;
-using Aide.Domain.Jobs;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Support;
 
@@ -107,7 +107,7 @@ public static class NotificationJobs
     public static async Task<List<Job>> RunQueuedAsync(WebApplicationFactory<Program> app, Guid projectId)
     {
         var queued = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Notification && j.Status == JobStatus.Queued)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Notification && j.Status == JobStatus.Queued)
             .OrderBy(j => j.CreatedAt)
             .ToListAsync(Ct));
         foreach (var job in queued)

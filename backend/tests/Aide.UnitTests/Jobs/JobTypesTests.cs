@@ -11,29 +11,29 @@ public class JobTypesTests
 {
     [Theory]
     [InlineData(Phase.Refinement, null)]
-    [InlineData(Phase.Specification, JobTypes.SpecGeneration)]
-    [InlineData(Phase.Planning, JobTypes.PlanGeneration)]
+    [InlineData(Phase.Specification, SdlcJobTypes.SpecGeneration)]
+    [InlineData(Phase.Planning, SdlcJobTypes.PlanGeneration)]
     [InlineData(Phase.Execution, null)]
-    [InlineData(Phase.Review, JobTypes.Review)]
-    [InlineData(Phase.Release, JobTypes.Release)]
+    [InlineData(Phase.Review, SdlcJobTypes.Review)]
+    [InlineData(Phase.Release, SdlcJobTypes.Release)]
     public void S4_9_Entering_a_phase_queues_its_follow_up_job(Phase entered, string? expected) =>
-        Assert.Equal(expected, JobTypes.OnEnter(entered));
+        Assert.Equal(expected, PhaseJobs.OnEnter(entered));
 
     [Theory]
-    [InlineData(SdlcAgents.IdeaRefinement, JobTypes.IdeaRefinement)]
-    [InlineData(SdlcAgents.SpecGenerator, JobTypes.SpecGeneration)]
-    [InlineData(SdlcAgents.PlanGenerator, JobTypes.PlanGeneration)]
-    [InlineData(SdlcAgents.CodeGenerator, JobTypes.Execution)]
-    [InlineData(SdlcAgents.CodeReview, JobTypes.Review)]
-    [InlineData(SdlcAgents.BuildFix, JobTypes.BuildFix)] // FR-256
+    [InlineData(SdlcAgents.IdeaRefinement, SdlcJobTypes.IdeaRefinement)]
+    [InlineData(SdlcAgents.SpecGenerator, SdlcJobTypes.SpecGeneration)]
+    [InlineData(SdlcAgents.PlanGenerator, SdlcJobTypes.PlanGeneration)]
+    [InlineData(SdlcAgents.CodeGenerator, SdlcJobTypes.Execution)]
+    [InlineData(SdlcAgents.CodeReview, SdlcJobTypes.Review)]
+    [InlineData(SdlcAgents.BuildFix, SdlcJobTypes.BuildFix)] // FR-256
     public void FR13_Each_agent_runs_as_a_job_type(string agent, string expected) =>
-        Assert.Equal(expected, JobTypes.ForAgent(agent));
+        Assert.Equal(expected, SdlcJobTypes.ForAgent(agent));
 
     [Fact]
     public void FR13_Rejected_spec_and_plan_gates_requeue_their_generators_D16()
     {
-        Assert.Equal(JobTypes.SpecGeneration, JobTypes.ForAgent(GateRules.AgentToRerunOnReject(SdlcGates.SpecApproval)!));
-        Assert.Equal(JobTypes.PlanGeneration, JobTypes.ForAgent(GateRules.AgentToRerunOnReject(SdlcGates.PlanApproval)!));
+        Assert.Equal(SdlcJobTypes.SpecGeneration, SdlcJobTypes.ForAgent(GateRules.AgentToRerunOnReject(SdlcGates.SpecApproval)!));
+        Assert.Equal(SdlcJobTypes.PlanGeneration, SdlcJobTypes.ForAgent(GateRules.AgentToRerunOnReject(SdlcGates.PlanApproval)!));
     }
 
     [Theory]

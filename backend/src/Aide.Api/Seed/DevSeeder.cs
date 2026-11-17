@@ -14,7 +14,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
@@ -381,7 +380,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             && !await db.Releases.AnyAsync(r => r.ProjectId == id, cancellationToken)
             && !await db.RollbackEvents.AnyAsync(r => r.ProjectId == id, cancellationToken)
             && !await db.Deployments.AnyAsync(d => d.ProjectId == id, cancellationToken)
-            && !await db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type != JobTypes.Notification, cancellationToken)
+            && !await db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type != SdlcJobTypes.Notification, cancellationToken)
             && !await db.StateTransitions.AnyAsync(t => t.ProjectId == id && t.FromPhase != null, cancellationToken)
             && !await db.Events.AnyAsync(e => e.ProjectId == id && e.Type != EventTypes.ProjectCreated, cancellationToken);
     }
@@ -585,8 +584,8 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         AddLockedArtifact(db, project, versionId, SdlcArtifacts.TechnicalSpecification, 2, PresetDemoSpecification(await SpecSectionsAsync(services, version, cancellationToken)), admin.Id, now);
         EnterPhase(db, project, versionId, Phase.Planning, planningCheckpoint, DemoPresetReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
-            JobTypes.PlanGeneration,
-            new LifecycleJobPayload(projectId, planningCheckpoint, LifecycleJobPayload.PhaseEntered),
+            SdlcJobTypes.PlanGeneration,
+            new LifecycleJobPayload(projectId, planningCheckpoint, LifecycleJobPayload.StageEntered),
             projectId,
             cancellationToken,
             now);
@@ -641,8 +640,8 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         AddLockedArtifact(db, project, versionId, SdlcArtifacts.ProjectRequest, 1, BaasDemoRequest(), admin.Id, now);
         EnterPhase(db, project, versionId, Phase.Specification, specificationCheckpoint, DemoBaasReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
-            JobTypes.SpecGeneration,
-            new LifecycleJobPayload(projectId, specificationCheckpoint, LifecycleJobPayload.PhaseEntered),
+            SdlcJobTypes.SpecGeneration,
+            new LifecycleJobPayload(projectId, specificationCheckpoint, LifecycleJobPayload.StageEntered),
             projectId,
             cancellationToken,
             now);

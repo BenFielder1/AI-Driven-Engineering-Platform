@@ -4,7 +4,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Databases;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
@@ -14,6 +13,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Databases;
 
@@ -367,7 +367,7 @@ public sealed class DatabaseProvisioningJobEndedHook(ManagedDatabaseSecrets secr
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.DatabaseProvisioning || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.DatabaseProvisioning || job.ProjectId is not { } projectId)
         {
             return;
         }

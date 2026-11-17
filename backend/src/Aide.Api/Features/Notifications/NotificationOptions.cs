@@ -1,7 +1,5 @@
 using Aide.Api.Features.Approvals;
-using Aide.Domain.Jobs;
 using Tevrin.Engine.Domain.Notifications;
-using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Notifications;
 
 namespace Aide.Api.Features.Notifications;
@@ -98,7 +96,6 @@ public static class NotificationServiceCollectionExtensions
         services.AddScoped<NotificationDispatcher>();
         services.AddScoped<GateTimerService>();
         services.AddScoped<Trackers.TrackerConnectionExpirySweepService>();
-        services.AddJobHandler<NotificationJobHandler>(JobTypes.Notification);
         services.AddSingleton<NotificationSweeper>();
         services.AddHostedService(sp => sp.GetRequiredService<NotificationSweeper>());
         return services;

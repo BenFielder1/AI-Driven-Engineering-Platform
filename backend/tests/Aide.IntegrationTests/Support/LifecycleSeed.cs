@@ -2,7 +2,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -59,7 +58,8 @@ public static class LifecycleSeed
         Guid? createdByUserId = null) =>
         ProjectApi.WithDbAsync(factory, async db =>
         {
-            content ??= $"# {type} v{version}";
+            // 0.6.1 seeded the ArtifactType member name (PascalCase); tests assert this content.
+            content ??= $"# {KeyNames.ToPascalCase(type)} v{version}";
             var artifact = new Artifact
             {
                 CreatedByUserId = createdByUserId,
@@ -173,12 +173,12 @@ public static class LifecycleSeed
     /// <summary>The project's jobs, oldest first, without <c>notification</c> jobs (FR-47 outbox; see <see cref="NotificationJobsAsync"/>).</summary>
     public static Task<List<Job>> JobsAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
         ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type != JobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
+            .Where(j => j.ProjectId == projectId && j.Type != SdlcJobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
 
     /// <summary>The project's <c>notification</c> jobs (FR-47), oldest first.</summary>
     public static Task<List<Job>> NotificationJobsAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
         ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
 
     public static Task<List<AuditEvent>> EventsAsync(WebApplicationFactory<Program> factory, Guid projectId, string type) =>
         ProjectApi.WithDbAsync(factory, db => db.Events.AsNoTracking()

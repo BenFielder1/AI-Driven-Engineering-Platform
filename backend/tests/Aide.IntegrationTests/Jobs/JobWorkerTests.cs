@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Jobs;
 
@@ -230,8 +230,8 @@ public sealed class JobWorkerTests(AideApiFactory factory)
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var enqueuer = scope.ServiceProvider.GetRequiredService<JobEnqueuer>();
-            var first = await enqueuer.EnqueueAsync(JobTypes.Execution, new { projectId = id }, id, Ct);
-            var again = await enqueuer.EnqueueAsync(JobTypes.Execution, new { projectId = id }, id, Ct);
+            var first = await enqueuer.EnqueueAsync(SdlcJobTypes.Execution, new { projectId = id }, id, Ct);
+            var again = await enqueuer.EnqueueAsync(SdlcJobTypes.Execution, new { projectId = id }, id, Ct);
             Assert.Same(first, again); // same unit of work
             await scope.ServiceProvider.GetRequiredService<AideDbContext>().SaveChangesAsync(Ct);
         }
@@ -239,20 +239,20 @@ public sealed class JobWorkerTests(AideApiFactory factory)
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var enqueuer = scope.ServiceProvider.GetRequiredService<JobEnqueuer>();
-            await enqueuer.EnqueueAsync(JobTypes.Execution, new { projectId = id }, id, Ct); // already queued: no new row
+            await enqueuer.EnqueueAsync(SdlcJobTypes.Execution, new { projectId = id }, id, Ct); // already queued: no new row
             await scope.ServiceProvider.GetRequiredService<AideDbContext>().SaveChangesAsync(Ct);
         }
 
         Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
 
         // The database enforces it too (partial unique index), whatever writes the row.
-        var duplicate = await Assert.ThrowsAsync<DbUpdateException>(() => AddJobAsync(JobTypes.Execution, projectId: id));
+        var duplicate = await Assert.ThrowsAsync<DbUpdateException>(() => AddJobAsync(SdlcJobTypes.Execution, projectId: id));
         Assert.Equal(PostgresErrorCodes.UniqueViolation, Assert.IsType<PostgresException>(duplicate.InnerException).SqlState);
 
         // Once it has finished, the next execution job can be queued.
         await ProjectApi.WithDbAsync(factory, db => db.Jobs.Where(j => j.ProjectId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Succeeded), Ct));
-        await AddJobAsync(JobTypes.Execution, projectId: id);
+        await AddJobAsync(SdlcJobTypes.Execution, projectId: id);
         Assert.Equal(2, (await LifecycleSeed.JobsAsync(factory, id)).Count);
     }
 

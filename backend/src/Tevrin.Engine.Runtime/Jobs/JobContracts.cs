@@ -70,18 +70,55 @@ public sealed class JobFailedException : Exception
     public string? ErrorCode { get; }
 }
 
-/// <summary>A handler for one job type. Only registered types are claimed by the worker.</summary>
-public sealed record JobHandlerRegistration(string JobType, Func<IServiceProvider, IJobHandler> Factory);
+/// <summary>
+/// A handler for one job type. Only registered types are claimed by the worker, and only registered types can be enqueued
+/// (FR-272, <see cref="JobTypeRegistry"/>). <see cref="OnePerProject"/>: at most one job of the type is queued or running
+/// per project (§4.9, e.g. the SDLC's <c>execution</c>); <see cref="JobEnqueuer.EnqueueAsync"/> returns the active one
+/// instead of adding another, and a dead letter isn't retried while one is active.
+/// </summary>
+public sealed record JobHandlerRegistration(string JobType, Func<IServiceProvider, IJobHandler> Factory, bool OnePerProject = false);
+
+/// <summary>
+/// FR-272: the job types with a registered handler (<see cref="JobHandlerRegistration"/>): the engine's
+/// (<c>EngineJobTypes</c>) once it handles them, plus every type a pack registers. A type is one per project when its
+/// registration says so.
+/// </summary>
+public sealed class JobTypeRegistry
+{
+    private readonly Dictionary<string, bool> _types = new(StringComparer.Ordinal);
+
+    public JobTypeRegistry(IEnumerable<JobHandlerRegistration> registrations)
+    {
+        ArgumentNullException.ThrowIfNull(registrations);
+        foreach (var registration in registrations)
+        {
+            _types[registration.JobType] = registration.OnePerProject || (_types.TryGetValue(registration.JobType, out var one) && one);
+        }
+    }
+
+    /// <summary>Every registered job type.</summary>
+    public IReadOnlyCollection<string> Types => _types.Keys;
+
+    /// <summary>Whether a handler is registered for <paramref name="jobType"/> (ordinal).</summary>
+    public bool IsRegistered(string jobType) => _types.ContainsKey(jobType);
+
+    /// <summary>Whether <paramref name="jobType"/> allows at most one queued or running job per project (§4.9).</summary>
+    public bool IsOnePerProject(string jobType) => _types.TryGetValue(jobType, out var one) && one;
+}
 
 public static class JobServiceCollectionExtensions
 {
-    /// <summary>Registers <typeparamref name="THandler"/> (scoped) as the handler of <paramref name="jobType"/>.</summary>
-    public static IServiceCollection AddJobHandler<THandler>(this IServiceCollection services, string jobType)
+    /// <summary>
+    /// Registers <typeparamref name="THandler"/> (scoped) as the handler of <paramref name="jobType"/>, so the type can be
+    /// enqueued and claimed (FR-272). <paramref name="onePerProject"/>: at most one job of the type queued or running per
+    /// project (§4.9).
+    /// </summary>
+    public static IServiceCollection AddJobHandler<THandler>(this IServiceCollection services, string jobType, bool onePerProject = false)
         where THandler : class, IJobHandler
     {
         ArgumentException.ThrowIfNullOrEmpty(jobType);
         services.AddScoped<THandler>();
-        services.AddSingleton(new JobHandlerRegistration(jobType, sp => sp.GetRequiredService<THandler>()));
+        services.AddSingleton(new JobHandlerRegistration(jobType, sp => sp.GetRequiredService<THandler>(), onePerProject));
         return services;
     }
 
@@ -92,6 +129,7 @@ public static class JobServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddTevrinJobQueue(this IServiceCollection services)
     {
+        services.AddSingleton<JobTypeRegistry>();
         services.AddScoped<JobEnqueuer>();
         services.AddSingleton<JobWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<JobWorker>());

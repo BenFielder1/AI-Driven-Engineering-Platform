@@ -4,7 +4,6 @@ using Aide.Api.Features.Refinement;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;
@@ -26,7 +25,7 @@ public sealed class RefinementTests(AideApiFactory factory)
         var id = fixture.Project.Id;
 
         var queued = await ProjectApi.ReadAsync<RefinementRoundDto>(await StartAsync(fixture.Contributor.Client, id), HttpStatusCode.Accepted);
-        Assert.Equal((AgentRunStatus.Queued, (AgentJobTrigger?)AgentJobTrigger.UserRequested, queued.JobId), (queued.Status, queued.Trigger, queued.RunId));
+        Assert.Equal((AgentRunStatus.Queued, (string?)JobTriggers.UserRequested, queued.JobId), (queued.Status, queued.Trigger, queued.RunId));
         var before = await GetAsync(fixture.Viewer.Client, id);
         Assert.Equal((AgentRunStatus.Queued, (Guid?)null), (before.LatestRound!.Status, before.QuestionsRunId));
         Assert.Null(before.LatestDraft);
@@ -273,7 +272,7 @@ public sealed class RefinementTests(AideApiFactory factory)
         Assert.Equal([new InputArtifactRef(v1.Id, SdlcArtifacts.ProjectRequest, 1)], rerun.InputArtifacts);
 
         var state = await GetAsync(fixture.Viewer.Client, id);
-        Assert.Equal((AgentJobTrigger?)AgentJobTrigger.ArtifactRejected, state.LatestRound!.Trigger);
+        Assert.Equal((string?)JobTriggers.ArtifactRejected, state.LatestRound!.Trigger);
         Assert.Equal("Mention offline use.", state.LatestRound.Feedback);
         Assert.Equal(2, responder.Calls);
     }

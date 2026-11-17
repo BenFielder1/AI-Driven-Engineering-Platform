@@ -4,7 +4,6 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.IntegrationTests.Support;
@@ -39,7 +38,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         Assert.Equal(project.CurrentReleaseVersionId, decided.ReleaseVersionId);
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.GateApproved));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged));
-        Assert.Equal([JobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -92,7 +91,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.Checkpoint));
 
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal((JobTypes.PlanGeneration, JobStatus.Queued), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, JobStatus.Queued), (job.Type, job.Status));
         var payload = LifecycleSeed.Payload(job.Payload);
         Assert.Equal("split step 4", payload.GetProperty("feedback").GetString());
         Assert.Equal(gate.Id.ToString(), payload.GetProperty("gateId").GetString());
@@ -111,7 +110,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, fixture.Project.Id, gate.Id, "reject", new { comment = "Add auth" }));
 
-        Assert.Equal([JobTypes.SpecGeneration], (await LifecycleSeed.JobsAsync(factory, fixture.Project.Id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.SpecGeneration], (await LifecycleSeed.JobsAsync(factory, fixture.Project.Id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -127,7 +126,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
         Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
-        Assert.Equal([JobTypes.Release], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.Release], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -311,7 +310,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.ExtraReviewCycles, 2), Ct));
         await ProjectApi.WithDbAsync(factory, async db =>
         {
-            db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = JobTypes.Review, ProjectId = id, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
+            db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = SdlcJobTypes.Review, ProjectId = id, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync(Ct);
         });
 
@@ -344,7 +343,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
             Assert.Equal(GateStatus.Cancelled, (await db.ApprovalGates.SingleAsync(g => g.Id == otherGate.Id, Ct)).Status);
             Assert.Equal(GateStatus.Approved, (await db.ApprovalGates.SingleAsync(g => g.Id == gate.Id, Ct)).Status);
-            Assert.All(await db.Jobs.Where(j => j.ProjectId == id && j.Type != JobTypes.Notification).ToListAsync(Ct), j => Assert.Equal(JobStatus.Cancelled, j.Status));
+            Assert.All(await db.Jobs.Where(j => j.ProjectId == id && j.Type != SdlcJobTypes.Notification).ToListAsync(Ct), j => Assert.Equal(JobStatus.Cancelled, j.Status));
         });
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.RollbackCompleted));
         Assert.Equal(Phase.Planning, (await LifecycleSeed.TransitionsAsync(factory, id))[^1].ToPhase);

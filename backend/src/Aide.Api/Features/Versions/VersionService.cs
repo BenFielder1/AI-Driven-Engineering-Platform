@@ -3,7 +3,6 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Rollback;
@@ -15,10 +14,11 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Security;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Versions;
 
-/// <summary>Payload of the <see cref="JobTypes.RepositoryAnalysis"/> job (FR-70): the project and the version to analyse.</summary>
+/// <summary>Payload of the <see cref="SdlcJobTypes.RepositoryAnalysis"/> job (FR-70): the project and the version to analyse.</summary>
 public sealed record RepositoryAnalysisJobPayload(Guid ProjectId, Guid ReleaseVersionId);
 
 /// <summary>
@@ -189,7 +189,7 @@ public sealed partial class VersionService(
             },
             actor,
             now);
-        await jobs.EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, started.Id), project.Id, cancellationToken, now);
+        await jobs.EnqueueAsync(SdlcJobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, started.Id), project.Id, cancellationToken, now);
         foreach (var planned in plannedImports.Value)
         {
             imports.Queue(project.Id, started.Id, planned, userId, now);
@@ -371,7 +371,6 @@ public static class VersionServiceCollectionExtensions
     public static IServiceCollection AddReleaseVersions(this IServiceCollection services)
     {
         services.AddScoped<VersionService>();
-        services.AddJobHandler<Agents.RepositoryAnalysisJobHandler>(JobTypes.RepositoryAnalysis);
         return services;
     }
 }

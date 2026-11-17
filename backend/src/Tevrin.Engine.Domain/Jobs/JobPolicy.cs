@@ -1,5 +1,4 @@
 using Tevrin.Engine.Domain.Common;
-using Tevrin.Engine.Domain.Entities;
 
 namespace Tevrin.Engine.Domain.Jobs;
 
@@ -90,10 +89,12 @@ public static class JobPolicy
     /// <summary>
     /// FR-51: retrying a dead letter marks it <c>retried</c> and creates a new queued job with the same type,
     /// payload and project, a fresh attempt count, runnable now. The dead row stays as history.
-    /// <paramref name="executionJobActive"/>: for an execution job, whether the project already has a queued or running
-    /// execution job (§4.9 allows one); then the retry is refused with <c>CONFLICT</c> and nothing changes.
+    /// <paramref name="onePerProject"/>: whether the dead job's type allows at most one queued or running job per project
+    /// (§4.9; the host says so when it registers the type's handler, e.g. the SDLC's <c>execution</c>, FR-272).
+    /// <paramref name="sameTypeActive"/>: whether the project already has a queued or running job of that type. When both
+    /// hold, the retry is refused with <c>CONFLICT</c> and nothing changes.
     /// </summary>
-    public static Result<DeadLetterRetry> RetryDeadLetter(JobSnapshot deadJob, DateTimeOffset now, bool executionJobActive = false)
+    public static Result<DeadLetterRetry> RetryDeadLetter(JobSnapshot deadJob, DateTimeOffset now, bool onePerProject = false, bool sameTypeActive = false)
     {
         ArgumentNullException.ThrowIfNull(deadJob);
         if (deadJob.Status != JobStatus.Dead)
@@ -101,16 +102,25 @@ public static class JobPolicy
             return Result.Failure<DeadLetterRetry>(new DomainError(EngineErrorCodes.Conflict, $"Only dead jobs can be retried; this one is {deadJob.Status.ToWire()}."));
         }
 
-        if (executionJobActive && deadJob.Type == Job.ExecutionType)
+        if (onePerProject && sameTypeActive)
         {
-            return Result.Failure<DeadLetterRetry>(new DomainError(
-                EngineErrorCodes.Conflict,
-                "An execution job is already queued or running for this project; retry this dead letter after it finishes."));
+            return Result.Failure<DeadLetterRetry>(new DomainError(EngineErrorCodes.Conflict, OnePerProjectActiveMessage(deadJob.Type)));
         }
 
         return Result.Success(new DeadLetterRetry(
             JobStatus.Retried,
             new NewJob(deadJob.Type, deadJob.Payload, deadJob.ProjectId, JobStatus.Queued, Attempts: 0, RunAfter: now)));
+    }
+
+    /// <summary>
+    /// FR-51, §4.9: why a dead letter of a one-per-project type can't be retried while another job of its type is queued
+    /// or running (e.g. "An execution job is already queued or running for this project; …").
+    /// </summary>
+    public static string OnePerProjectActiveMessage(string jobType)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(jobType);
+        var article = "aeiou".Contains(char.ToLowerInvariant(jobType[0]), StringComparison.Ordinal) ? "An" : "A";
+        return $"{article} {jobType} job is already queued or running for this project; retry this dead letter after it finishes.";
     }
 
     /// <summary>Rollback cancels queued jobs; running and finished jobs are left alone.</summary>

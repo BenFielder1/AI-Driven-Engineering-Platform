@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -25,7 +24,7 @@ public static class AgentJobs
     {
         ArgumentNullException.ThrowIfNull(app);
         // Notification jobs (FR-47 outbox) are left queued: notification tests run them explicitly.
-        var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).Where(t => t != JobTypes.Notification).ToArray();
+        var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).Where(t => t != SdlcJobTypes.Notification).ToArray();
         // A job that deferred itself (FR-70: waiting for the codebase summary) stays queued and isn't run again here.
         var deferred = new HashSet<Guid>();
         for (var round = 0; round < 25; round++)

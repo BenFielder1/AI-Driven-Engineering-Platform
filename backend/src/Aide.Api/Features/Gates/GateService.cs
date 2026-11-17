@@ -7,7 +7,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
@@ -121,7 +120,7 @@ public sealed partial class GateService(
                         await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);
                         if (!project.ExecutionPaused)
                         {
-                            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
+                            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
                         }
                     }
                     else if (!await snapshots.CyclePlanDraftPendingAsync(project, cancellationToken)
@@ -129,7 +128,7 @@ public sealed partial class GateService(
                     {
                         // The escalated review proposed no optimisation plan to approve: the extra cycle is a new review.
                         await jobs.EnqueueAsync(
-                            JobTypes.Review,
+                            SdlcJobTypes.Review,
                             new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.UserRequested, "Escalation decision: continue with another review cycle."),
                             project.Id,
                             cancellationToken,
@@ -248,7 +247,7 @@ public sealed partial class GateService(
 
         if (ExecutionRules.ShouldContinue([.. steps.Select(ExecutionQueries.ToState)], project.ExecutionPaused))
         {
-            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.EscalationContinue), project.Id, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.EscalationContinue), project.Id, cancellationToken, now);
         }
     }
 
@@ -285,7 +284,7 @@ public sealed partial class GateService(
         if (resolution.FollowUp == GateFollowUp.RerunAgent && resolution.RerunAgent is { } agent)
         {
             var job = await jobs.EnqueueAsync(
-                JobTypes.ForAgent(agent),
+                SdlcJobTypes.ForAgent(agent),
                 new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.GateRejected, comment, gate.Id),
                 project.Id,
                 cancellationToken,

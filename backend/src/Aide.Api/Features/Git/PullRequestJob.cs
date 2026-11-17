@@ -6,7 +6,6 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
@@ -21,7 +20,7 @@ using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Git;
 
-/// <summary>Payload of a <see cref="JobTypes.PullRequest"/> job (FR-36): the project, the plan whose steps all completed, and what queued it.</summary>
+/// <summary>Payload of a <see cref="SdlcJobTypes.PullRequest"/> job (FR-36): the project, the plan whose steps all completed, and what queued it.</summary>
 public sealed record PullRequestJobPayload(Guid ProjectId, Guid PlanArtifactId, string Trigger)
 {
     /// <summary>The last step of the plan completed (<see cref="GitCompletionHook"/>).</summary>
@@ -44,7 +43,7 @@ public sealed class PullRequestJobs(AideDbContext db, JobEnqueuer jobs)
     {
         if (!await PendingAsync(projectId, cancellationToken))
         {
-            await jobs.EnqueueAsync(JobTypes.PullRequest, new PullRequestJobPayload(projectId, planArtifactId, trigger), projectId, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.PullRequest, new PullRequestJobPayload(projectId, planArtifactId, trigger), projectId, cancellationToken, now);
         }
     }
 
@@ -67,7 +66,7 @@ public sealed class PullRequestJobs(AideDbContext db, JobEnqueuer jobs)
         var verdict = PullRequestRules.CanRequest(facts);
         if (verdict.IsSuccess)
         {
-            await jobs.EnqueueAsync(JobTypes.PullRequest, new PullRequestJobPayload(project.Id, planId!.Value, trigger), project.Id, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.PullRequest, new PullRequestJobPayload(project.Id, planId!.Value, trigger), project.Id, cancellationToken, now);
         }
 
         return verdict;
@@ -75,9 +74,9 @@ public sealed class PullRequestJobs(AideDbContext db, JobEnqueuer jobs)
 
     private async Task<bool> PendingAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.ChangeTracker.Entries<Job>()
-            .Any(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.PullRequest && e.Entity.ProjectId == projectId)
+            .Any(e => e.State == EntityState.Added && e.Entity.Type == SdlcJobTypes.PullRequest && e.Entity.ProjectId == projectId)
         || await db.Jobs.AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.PullRequest && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PullRequest && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken);
 }
 
@@ -441,7 +440,7 @@ public sealed class PullRequestJobEndedHook(TimeProvider time) : IJobEndedHook
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType == JobTypes.PullRequest && job.ProjectId is { } projectId)
+        if (job.JobType == SdlcJobTypes.PullRequest && job.ProjectId is { } projectId)
         {
             db.AddEvent(
                 EventTypes.PullRequestFailed,
@@ -507,7 +506,6 @@ public static class PullRequestServiceCollectionExtensions
         services.AddScoped<IExecutionCompletionHook, GitCompletionHook>();
         services.AddScoped<IJobEndedHook, PullRequestJobEndedHook>();
         services.AddScoped<PullRequestReader>();
-        services.AddJobHandler<PullRequestJobHandler>(JobTypes.PullRequest);
         return services;
     }
 }

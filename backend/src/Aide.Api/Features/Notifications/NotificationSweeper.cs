@@ -3,7 +3,6 @@ using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +10,7 @@ using Microsoft.Extensions.Options;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Notifications;
 
@@ -85,7 +85,7 @@ public sealed partial class GateTimerService(AideDbContext db, JobEnqueuer jobs,
             return false;
         }
 
-        await jobs.EnqueueAsync(JobTypes.Notification, new NotificationJobPayload(gate.ProjectId, NotificationType.GateReminder, gate.Id), gate.ProjectId, cancellationToken, now);
+        await jobs.EnqueueAsync(SdlcJobTypes.Notification, new NotificationJobPayload(gate.ProjectId, NotificationType.GateReminder, gate.Id), gate.ProjectId, cancellationToken, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         LogReminded(logger, gate.ProjectId, gate.Id, gate.Type);
@@ -144,12 +144,12 @@ public sealed partial class NotificationSweeper(
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
-        if (await db.Jobs.AsNoTracking().AnyAsync(j => j.Type == JobTypes.DatabaseExpirySweep && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running), cancellationToken))
+        if (await db.Jobs.AsNoTracking().AnyAsync(j => j.Type == SdlcJobTypes.DatabaseExpirySweep && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running), cancellationToken))
         {
             return false;
         }
 
-        scope.ServiceProvider.GetRequiredService<JobEnqueuer>().Enqueue(JobTypes.DatabaseExpirySweep, new { }, null, time.GetUtcNow());
+        scope.ServiceProvider.GetRequiredService<JobEnqueuer>().Enqueue(SdlcJobTypes.DatabaseExpirySweep, new { }, null, time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }

@@ -5,12 +5,12 @@ using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Databases;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Databases;
 
@@ -149,7 +149,7 @@ public sealed partial class ManagedDatabaseService
         row.UpdatedAt = now;
         var payload = new DatabaseProvisioningPayload(
             projectId, row.Id, mode!.Value, name, request.Create?.Region, request.Create?.Plan, linkId, DatabaseProvisioningPayload.SetupPhase);
-        var job = jobs.Enqueue(JobTypes.DatabaseProvisioning, payload, projectId, now);
+        var job = jobs.Enqueue(SdlcJobTypes.DatabaseProvisioning, payload, projectId, now);
         secrets.SetConnection(row, new ManagedDatabaseConnection
         {
             Url = request.External?.ConnectionString.Trim(),
@@ -294,7 +294,7 @@ public sealed partial class ManagedDatabaseService
         var now = time.GetUtcNow();
         var payload = new DatabaseProvisioningPayload(
             projectId, row.Id, DatabaseSetupMode.Link, row.ResourceId, row.Region, row.Plan, row.ResourceId, DatabaseProvisioningPayload.PollPhase);
-        var job = jobs.Enqueue(JobTypes.DatabaseProvisioning, payload, projectId, now);
+        var job = jobs.Enqueue(SdlcJobTypes.DatabaseProvisioning, payload, projectId, now);
         secrets.SetConnection(row, secrets.Connection(row) with { Step = StepWaiting, JobId = job.Id, ProvisioningStartedAt = now, ErrorMessage = null });
         row.Status = ManagedDatabaseStatus.Provisioning;
         row.UpdatedAt = now;

@@ -1,12 +1,12 @@
 using Aide.Domain.Access;
 using Aide.Domain.Common;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Admin;
 
@@ -15,10 +15,10 @@ namespace Aide.Api.Features.Admin;
 /// the dead job becomes <c>retried</c>, a new queued job with the same type, payload and project is added
 /// (<see cref="JobPolicy.RetryDeadLetter"/>), and a <c>DEAD_LETTER_RETRIED</c> audit event is written.
 /// </summary>
-public sealed partial class DeadLetterService(AideDbContext db, ICurrentUser currentUser, TimeProvider time, ILogger<DeadLetterService> logger)
+public sealed partial class DeadLetterService(AideDbContext db, ICurrentUser currentUser, TimeProvider time, JobTypeRegistry jobTypes, ILogger<DeadLetterService> logger)
 {
-    /// <summary>The new queued job; <c>NOT_FOUND</c> when the job doesn't exist or isn't dead, <c>CONFLICT</c> when the
-    /// project already has an active execution job (§4.9).</summary>
+    /// <summary>The new queued job; <c>NOT_FOUND</c> when the job doesn't exist or isn't dead, <c>CONFLICT</c> when its type is
+    /// one per project (the SDLC's <c>execution</c>, FR-272) and the project already has an active job of that type (§4.9).</summary>
     public async Task<Result<Job>> RetryAsync(Guid jobId, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -31,12 +31,13 @@ public sealed partial class DeadLetterService(AideDbContext db, ICurrentUser cur
             return Result.Failure<Job>(new DomainError(ErrorCodes.NotFound, "The dead letter was not found."));
         }
 
-        var executionActive = dead.Type == JobTypes.Execution && dead.ProjectId is { } projectId
+        var onePerProject = jobTypes.IsOnePerProject(dead.Type);
+        var sameTypeActive = onePerProject && dead.ProjectId is { } projectId
             && await db.Jobs.AnyAsync(
-                j => j.ProjectId == projectId && j.Type == JobTypes.Execution && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+                j => j.ProjectId == projectId && j.Type == dead.Type && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
                 cancellationToken);
         var now = time.GetUtcNow();
-        var retry = JobPolicy.RetryDeadLetter(new JobSnapshot(dead.Id, dead.Type, dead.Payload, dead.ProjectId, dead.Status), now, executionActive);
+        var retry = JobPolicy.RetryDeadLetter(new JobSnapshot(dead.Id, dead.Type, dead.Payload, dead.ProjectId, dead.Status), now, onePerProject, sameTypeActive);
         if (retry.IsFailure)
         {
             return Result.Failure<Job>(retry.Error!);
@@ -63,10 +64,9 @@ public sealed partial class DeadLetterService(AideDbContext db, ICurrentUser cur
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            // A concurrent request queued an execution job for the project after the check (partial unique index, §4.9).
-            return Result.Failure<Job>(new DomainError(
-                ErrorCodes.Conflict,
-                "An execution job is already queued or running for this project; retry this dead letter after it finishes."));
+            // A concurrent request queued a job of this one-per-project type (execution) for the project after the check
+            // (partial unique index, §4.9).
+            return Result.Failure<Job>(new DomainError(ErrorCodes.Conflict, JobPolicy.OnePerProjectActiveMessage(dead.Type)));
         }
 
         await transaction.CommitAsync(cancellationToken);

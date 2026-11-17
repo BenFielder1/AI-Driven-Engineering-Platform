@@ -3,7 +3,6 @@ using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.IntegrationTests.Support;
@@ -298,7 +297,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
 
         Assert.Equal((ArtifactStatus.Rejected, "Add auth"), (rejected.Status, rejected.RejectionComment));
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal((JobTypes.SpecGeneration, JobStatus.Queued), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.SpecGeneration, JobStatus.Queued), (job.Type, job.Status));
         var payload = LifecycleSeed.Payload(job.Payload);
         Assert.Equal(("Add auth", "artifact_rejected", draft.Id.ToString(), 2),
             (payload.GetProperty("feedback").GetString(), payload.GetProperty("trigger").GetString(), payload.GetProperty("artifactId").GetString(), payload.GetProperty("projectVersion").GetInt32()));
@@ -336,7 +335,7 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
         var escalation = await LifecycleSeed.AddGateAsync(factory, id, EngineGates.Escalation);
         await ProjectApi.WithDbAsync(factory, async db =>
         {
-            db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = JobTypes.Execution, Payload = "{}", ProjectId = id, Status = JobStatus.Queued, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
+            db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = SdlcJobTypes.Execution, Payload = "{}", ProjectId = id, Status = JobStatus.Queued, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync(Ct);
         });
 
@@ -547,6 +546,6 @@ public sealed class ArtifactEndpointsTests(AideApiFactory factory)
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "reject", "split step 4"));
 
-        Assert.Equal(JobTypes.ForAgent(SdlcAgents.PlanGenerator), Assert.Single(await LifecycleSeed.JobsAsync(factory, id)).Type);
+        Assert.Equal(SdlcJobTypes.ForAgent(SdlcAgents.PlanGenerator), Assert.Single(await LifecycleSeed.JobsAsync(factory, id)).Type);
     }
 }

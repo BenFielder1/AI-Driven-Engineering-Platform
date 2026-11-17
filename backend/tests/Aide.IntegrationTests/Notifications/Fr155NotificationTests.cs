@@ -8,12 +8,12 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Notifications;
 
@@ -148,17 +148,17 @@ public sealed class Fr155NotificationTests(AideApiFactory factory)
     {
         var app = App;
         var sweeper = app.Services.GetRequiredService<NotificationSweeper>();
-        await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Type == JobTypes.DatabaseExpirySweep).ExecuteDeleteAsync(Ct));
+        await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Type == SdlcJobTypes.DatabaseExpirySweep).ExecuteDeleteAsync(Ct));
 
         Assert.True(await sweeper.QueueDatabaseExpirySweepAsync(Ct));
         Assert.False(await sweeper.QueueDatabaseExpirySweepAsync(Ct));
 
-        var job = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.Type == JobTypes.DatabaseExpirySweep, Ct));
+        var job = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.Type == SdlcJobTypes.DatabaseExpirySweep, Ct));
         await AgentJobs.RunAsync(app, job);
         var finished = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.Id == job.Id, Ct));
         Assert.Equal(JobStatus.Succeeded, finished.Status);
         Assert.True(await sweeper.QueueDatabaseExpirySweepAsync(Ct));
-        await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Type == JobTypes.DatabaseExpirySweep).ExecuteDeleteAsync(Ct));
+        await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Type == SdlcJobTypes.DatabaseExpirySweep).ExecuteDeleteAsync(Ct));
     }
 
     [Theory]

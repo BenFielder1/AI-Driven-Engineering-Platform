@@ -211,7 +211,7 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
             return false;
         }
 
-        return payload.Trigger != LifecycleJobPayload.PhaseEntered || project.CurrentPhase == ArtifactRules.ProducingPhase(type);
+        return payload.Trigger != LifecycleJobPayload.StageEntered || project.CurrentPhase == ArtifactRules.ProducingPhase(type);
     }
 
     /// <summary>FR-172: for a release version, when its oldest still-queued or running import was queued, and whether a failed import awaits a retry.</summary>

@@ -10,7 +10,6 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.IntegrationTests.Support;
@@ -232,7 +231,7 @@ public sealed class BitbucketProjectTests(AideApiFactory factory)
 
         Assert.Equal(HttpStatusCode.NoContent, (await ana.Client.DeleteAsync(new Uri($"/api/projects/{id}/members/{ana.User.Id}", UriKind.Relative), Ct)).StatusCode);
 
-        var execution = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.Execution);
+        var execution = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == SdlcJobTypes.Execution);
         Assert.Equal(JobStatus.Failed, execution.Status);
         Assert.StartsWith(ErrorCodes.GitNotConnected, execution.LastError, StringComparison.Ordinal);
         var cleared = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.GitBindingCleared)).Payload);

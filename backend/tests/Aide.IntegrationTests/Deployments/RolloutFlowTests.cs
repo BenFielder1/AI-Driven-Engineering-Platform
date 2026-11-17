@@ -7,7 +7,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
@@ -201,7 +200,7 @@ public sealed class RolloutFlowTests(AideApiFactory factory)
             environment.Current!.Steps.Select(s => (s.Step, s.State, s.CanRedeploy)));
 
         await DeploymentHarness.SettleAsync(app, (await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.Review && j.Status == JobStatus.Queued, Ct))).Id);
+            .SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.Review && j.Status == JobStatus.Queued, Ct))).Id);
         var report = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
         var finding = Assert.Single(report.Violations, v => v.Message == RolloutFindings.PreDeployFailedMessage);
         Assert.Equal((ReviewCategory.Architecture, Severity.Critical, FindingSource.Deterministic), (finding.Category, finding.Severity, finding.Source));

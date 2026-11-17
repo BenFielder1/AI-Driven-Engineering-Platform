@@ -155,6 +155,7 @@ builder.Services.AddScoped<RollbackWriter>();
 builder.Services.AddScoped<GateService>();
 builder.Services.AddScoped<GateReader>();
 builder.Services.AddAideJobs();
+builder.Services.AddSdlcJobHandlers();
 
 // Artifacts: versions, approval, cascade, integrity, diff (FR-16–FR-21).
 builder.Services.AddScoped<ArtifactIntegrityGuard>();

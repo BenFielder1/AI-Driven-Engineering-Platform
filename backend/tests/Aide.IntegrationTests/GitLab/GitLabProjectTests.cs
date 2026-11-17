@@ -10,7 +10,6 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.IntegrationTests.Support;
@@ -284,7 +283,7 @@ public sealed class GitLabProjectTests(AideApiFactory factory)
         Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
-        var execution = Assert.Single(jobs, j => j.Type == JobTypes.Execution);
+        var execution = Assert.Single(jobs, j => j.Type == SdlcJobTypes.Execution);
         Assert.Equal(JobStatus.Failed, execution.Status);
         Assert.StartsWith(ErrorCodes.GitNotConnected, execution.LastError, StringComparison.Ordinal);
 

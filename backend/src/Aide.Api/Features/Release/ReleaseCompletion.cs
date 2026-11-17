@@ -3,7 +3,6 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Git;
@@ -11,6 +10,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Release;
 
@@ -206,7 +206,7 @@ public sealed partial class ReleaseCompletion(
             },
             SystemActor.Name,
             now);
-        jobs.Enqueue(JobTypes.MergePoll, new MergePollJobPayload(project.Id, release.Id), project.Id, now, MergePollRules.NextPollAt(now, now));
+        jobs.Enqueue(SdlcJobTypes.MergePoll, new MergePollJobPayload(project.Id, release.Id), project.Id, now, MergePollRules.NextPollAt(now, now));
         await SaveAsync(cancellationToken);
         LogAwaiting(logger, project.Id, release.Tag, reasons.Count);
     }

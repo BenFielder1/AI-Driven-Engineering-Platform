@@ -87,7 +87,7 @@ internal sealed partial class SnapshotNormaliser
         text = GuidWithoutDashes().Replace(text, m => Label(Guid.ParseExact(m.Value, "N")));
         text = Timestamp().Replace(text, "<timestamp>");
         text = Date().Replace(text, "<date>");
-        text = ShortHex().Replace(text, m => ShortLabel(m.Value));
+        text = HexToken().Replace(text, m => ShortLabel(m.Value));
         return text;
     }
 
@@ -124,12 +124,21 @@ internal sealed partial class SnapshotNormaliser
         return label;
     }
 
+    /// <summary>
+    /// A 7–12 hex token: the prefix of a known commit SHA is <c>sha#n:len</c> whatever its characters (a prefix can be all
+    /// digits, e.g. <c>95910490</c>); any other token with a digit and a letter is <c>hex#n</c>; anything else stays.
+    /// </summary>
     private string ShortLabel(string hex)
     {
         var full = _knownShas.Find(s => s.StartsWith(hex, StringComparison.Ordinal));
         if (full is not null)
         {
             return string.Create(CultureInfo.InvariantCulture, $"{ShaLabel(full)}:{hex.Length}");
+        }
+
+        if (!ShortHex().IsMatch(hex))
+        {
+            return hex;
         }
 
         if (!_hexLabels.TryGetValue(hex, out var label))
@@ -158,4 +167,7 @@ internal sealed partial class SnapshotNormaliser
 
     [GeneratedRegex("(?<![0-9A-Za-z])(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])[0-9a-f]{7,12}(?![0-9A-Za-z])", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex ShortHex();
+
+    [GeneratedRegex("(?<![0-9A-Za-z])[0-9a-f]{7,12}(?![0-9A-Za-z])", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex HexToken();
 }

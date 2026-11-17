@@ -8,7 +8,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
@@ -510,7 +509,7 @@ public sealed partial class ArtifactService(
         if (decided.Value.RerunAgent is { } agent)
         {
             var job = await jobs.EnqueueAsync(
-                JobTypes.ForAgent(agent),
+                SdlcJobTypes.ForAgent(agent),
                 new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.ArtifactRejected, cleanComment, ArtifactId: artifact.Id),
                 projectId,
                 cancellationToken,
@@ -762,7 +761,7 @@ public sealed partial class ArtifactService(
     private async Task CancelQueuedExecutionAsync(Guid projectId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var queued = await db.Jobs
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Execution && j.Status == JobStatus.Queued)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Execution && j.Status == JobStatus.Queued)
             .ToListAsync(cancellationToken);
         foreach (var job in queued)
         {
@@ -800,7 +799,7 @@ public sealed partial class ArtifactService(
             // FR-40: the optimisation steps run on the same branch straight away (unless execution is paused, FR-37).
             if (!project.ExecutionPaused)
             {
-                await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
+                await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
             }
         }
     }

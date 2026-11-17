@@ -5,7 +5,6 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Tokens;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
@@ -108,8 +107,8 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
     {
         using var admin = await ApiSession.AdminAsync(factory);
         var (projectId, _) = await NewProjectAsync();
-        var dead = await AddJobAsync(JobTypes.Execution, JobStatus.Dead, projectId);
-        await AddJobAsync(JobTypes.Execution, JobStatus.Queued, projectId);
+        var dead = await AddJobAsync(SdlcJobTypes.Execution, JobStatus.Dead, projectId);
+        await AddJobAsync(SdlcJobTypes.Execution, JobStatus.Queued, projectId);
 
         var response = await admin.Client.PostAsync(RetryUri(dead.Id), null, Ct);
 
@@ -123,11 +122,11 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
     {
         using var admin = await ApiSession.AdminAsync(factory);
         var (projectId, _) = await NewProjectAsync();
-        var dead = await AddJobAsync(JobTypes.Execution, JobStatus.Dead, projectId);
+        var dead = await AddJobAsync(SdlcJobTypes.Execution, JobStatus.Dead, projectId);
 
         var job = await ProjectApi.ReadAsync<JobDto>(await admin.Client.PostAsync(RetryUri(dead.Id), null, Ct));
 
-        Assert.Equal((JobTypes.Execution, JobStatus.Queued), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.Execution, JobStatus.Queued), (job.Type, job.Status));
         Assert.Equal(JobStatus.Retried, (await LoadJobAsync(dead.Id)).Status);
     }
 

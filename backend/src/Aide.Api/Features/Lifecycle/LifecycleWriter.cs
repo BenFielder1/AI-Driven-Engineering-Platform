@@ -14,7 +14,7 @@ namespace Aide.Api.Features.Lifecycle;
 /// <summary>
 /// Writes an applied lifecycle move (a <see cref="PhaseTransition"/> from the domain state machine) into the current unit of
 /// work: the project's phase, status and version, the <c>state_transitions</c> row, the <c>PHASE_CHANGED</c> event and,
-/// for a forward move, the follow-up job of the entered phase (<see cref="JobTypes.OnEnter"/>). Nothing is saved here: the
+/// for a forward move, the follow-up job of the entered phase (<see cref="PhaseJobs.OnEnter"/>). Nothing is saved here: the
 /// caller's single <c>SaveChanges</c> commits it all in one transaction, guarded by the project's <c>xmin</c> (FR-11, §4.9).
 /// </summary>
 public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
@@ -72,11 +72,11 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
             actor,
             now);
 
-        if (transition.Kind == TransitionKind.Advance && JobTypes.OnEnter(transition.To) is { } jobType)
+        if (transition.Kind == TransitionKind.Advance && PhaseJobs.OnEnter(transition.To) is { } jobType)
         {
             await jobs.EnqueueAsync(
                 jobType,
-                new LifecycleJobPayload(project.Id, transition.Version, LifecycleJobPayload.PhaseEntered),
+                new LifecycleJobPayload(project.Id, transition.Version, LifecycleJobPayload.StageEntered),
                 project.Id,
                 cancellationToken,
                 now);
@@ -84,7 +84,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
             {
                 // FR-42: the release attempt is visible (in progress) from the moment the release job is queued.
                 await Features.Release.ReleaseRecords.AddAttemptAsync(
-                    db, project, Features.Release.ReleaseRecords.PhaseEntered, actor, now, cancellationToken);
+                    db, project, Features.Release.ReleaseRecords.StageEntered, actor, now, cancellationToken);
             }
         }
     }
@@ -144,7 +144,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
         if (type == SdlcGates.PreRelease)
         {
             // FR-84: merge readiness is checked when the pre-release gate is created (stored for the gate and Release page).
-            jobs.Enqueue(JobTypes.MergeReadiness, new Features.Git.MergeReadinessJobPayload(project.Id, gate.Id), project.Id, now);
+            jobs.Enqueue(SdlcJobTypes.MergeReadiness, new Features.Git.MergeReadinessJobPayload(project.Id, gate.Id), project.Id, now);
         }
 
         return gate;

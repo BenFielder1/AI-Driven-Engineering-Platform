@@ -1,7 +1,6 @@
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
@@ -279,7 +278,7 @@ public sealed class TrackerImportJobEndedHook(TimeProvider time) : IJobEndedHook
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.TrackerImport)
+        if (job.JobType != SdlcJobTypes.TrackerImport)
         {
             return;
         }

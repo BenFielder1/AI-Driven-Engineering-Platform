@@ -5,10 +5,10 @@ using Aide.Api.Features.Databases;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Access;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Performance;
 
@@ -141,7 +141,7 @@ public sealed class Performance_0_4_0_Tests(AideApiFactory factory)
                 await owner.Client.PutAsJsonAsync($"{DeploymentHarness.SettingsPath(id)}/databases/{environment}", new { provider = "render", connectionId = render, create = new { region = "oregon" } }, Ct),
                 HttpStatusCode.Accepted);
             var job = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-                .Where(j => j.ProjectId == id && j.Type == JobTypes.DatabaseProvisioning)
+                .Where(j => j.ProjectId == id && j.Type == SdlcJobTypes.DatabaseProvisioning)
                 .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
                 .FirstAsync(Ct));
             await DeploymentHarness.SettleAsync(app, job.Id);

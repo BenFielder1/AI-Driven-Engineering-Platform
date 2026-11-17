@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Aide.Domain.Common;
-using Aide.Domain.Jobs;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
@@ -65,7 +64,6 @@ public static class MergeReadinessServiceCollectionExtensions
         services.AddScoped<GitHostTargets>();
         services.AddScoped<MergeReadinessService>();
         services.AddSingleton<MergeReadinessThrottle>();
-        services.AddJobHandler<MergeReadinessJobHandler>(JobTypes.MergeReadiness);
         return services;
     }
 }

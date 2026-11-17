@@ -9,7 +9,6 @@ using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
@@ -18,6 +17,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Releases;
 
@@ -98,7 +98,7 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.Release).Status);
         var release = await ProjectApi.WithDbAsync(app, db => db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
         Assert.Equal(ReleaseStatus.Succeeded, release.Status);
         var runs = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().Where(r => r.ProjectId == id).OrderBy(r => r.StartedAt).ToListAsync(Ct));
@@ -108,7 +108,7 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         // §4.21: no target is set up, so the rollout is migrations-only: its run on the merge commit has nothing left to apply.
         Assert.Equal((MigrationRunStatus.Succeeded, release.MergeCommitSha, (Guid?)release.Id), (runs[1].Status, runs[1].GitSha, runs[1].ReleaseId));
         Assert.Empty(runs[1].Applied);
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.ProductionRollout).Status);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.ProductionRollout).Status);
         Assert.Empty(await DeploymentHarness.DeploymentsAsync(app, id));
         Assert.Equal(
             (DeploymentEnvironment.Production, MigrationRunStatus.Succeeded, branchHead, (Guid?)release.Id, (Guid?)run.Id),
@@ -194,7 +194,7 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        var job = Assert.Single(jobs, j => j.Type == JobTypes.Release);
+        var job = Assert.Single(jobs, j => j.Type == SdlcJobTypes.Release);
         Assert.True(job.Status == JobStatus.Succeeded, job.LastError);
         var run = await ProjectApi.WithDbAsync(app, db => db.DatabaseMigrationRuns.AsNoTracking().Where(r => r.ProjectId == id).OrderBy(r => r.StartedAt).FirstAsync(Ct));
         Assert.Equal((MigrationRunStatus.Succeeded, remoteHead), (run.Status, run.GitSha));
@@ -311,8 +311,8 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
         await ReleaseFlowTests.ApproveReleaseGateAsync(app, fixture);
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status);
-        Assert.DoesNotContain(jobs, j => j.Type is JobTypes.ProductionRollout or JobTypes.PreviewRollout);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.Release).Status);
+        Assert.DoesNotContain(jobs, j => j.Type is SdlcJobTypes.ProductionRollout or SdlcJobTypes.PreviewRollout);
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public sealed class BaasReleaseMigrationTests(AideApiFactory factory)
             var versionId = await db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.Id).SingleAsync(Ct);
             var queued = new Job
             {
-                Type = JobTypes.PreviewRollout,
+                Type = SdlcJobTypes.PreviewRollout,
                 ProjectId = id,
                 Status = JobStatus.Queued,
                 Payload = AideJson.Serialize(new RolloutJobPayload(id, DeploymentEnvironment.Preview, versionId, null, "aide/test", branchHead, DeploymentTrigger.Auto, null, now)),

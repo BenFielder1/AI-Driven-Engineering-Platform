@@ -8,7 +8,6 @@ using Aide.Api.Features.Projects;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
@@ -50,7 +49,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         Assert.Equal(InitialCommit, await GitAsync(id, "log", "-1", "--format=%s", "main"));
         Assert.Equal(branch, await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id).Select(v => v.BranchName).SingleAsync(Ct)));
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal((JobTypes.Execution, JobStatus.Queued), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.Execution, JobStatus.Queued), (job.Type, job.Status));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.ExecutionStarted));
         var projectState = await ProjectApi.ReadAsync<ProjectStateDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct));
         Assert.Equal(ExecutionRunStatus.Running, projectState.ExecutionStatus);
@@ -132,7 +131,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.ExecutionCompleted));
         Assert.Equal(3, (await LifecycleSeed.EventsAsync(factory, id, EventTypes.StepCompleted)).Count);
         // FR-36: the pull request job recorded the Local comparison and moved the project to review (its job queued).
-        Assert.All((await LifecycleSeed.JobsAsync(factory, id)).Where(j => j.Type != JobTypes.Review), j => Assert.Equal(JobStatus.Succeeded, j.Status));
+        Assert.All((await LifecycleSeed.JobsAsync(factory, id)).Where(j => j.Type != SdlcJobTypes.Review), j => Assert.Equal(JobStatus.Succeeded, j.Status));
         var state = await ProjectApi.ReadAsync<ProjectStateDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct));
         Assert.Equal((ExecutionRunStatus.Completed, 3), (state.ExecutionStatus, state.Execution.Completed));
         Assert.Equal(Phase.Review, state.Phase);

@@ -8,7 +8,6 @@ using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Review;
@@ -16,6 +15,7 @@ using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Releases;
 
@@ -315,7 +315,7 @@ public sealed class MergeFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         // A pending check: the review job deferred itself 30 s ahead (not a counted attempt) and recorded nothing yet.
-        var review = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Review);
+        var review = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Review);
         Assert.Equal((JobStatus.Queued, 0), (review.Status, review.Attempts));
         Assert.InRange(review.RunAfter, DateTimeOffset.UtcNow.AddSeconds(5), DateTimeOffset.UtcNow.AddSeconds(31));
         var waitingSince = JsonDocument.Parse(review.Payload).RootElement.GetProperty("checksWaitSince").GetDateTimeOffset();
@@ -374,7 +374,7 @@ public sealed class MergeFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         // Not a refusal: the job waits for the reset (attempt not counted); the release stays in progress.
-        var job = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Release);
+        var job = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Release);
         Assert.Equal((JobStatus.Queued, 0), (job.Status, job.Attempts));
         Assert.Contains(ErrorCodes.GitHubRateLimited, job.LastError, StringComparison.Ordinal);
         Assert.Equal(ReleaseStatus.InProgress, (await LatestAsync(fixture.Viewer.Client, id)).Status);
@@ -544,7 +544,7 @@ public sealed class MergeFlowTests(AideApiFactory factory)
         ReleaseVersionRules.BranchName(fixture.Project.Slug, fixture.Project.Id, SemVer.Parse(fixture.Project.DevelopmentVersion!));
 
     private static Task<Job> PollJobAsync(WebApplicationFactory<Program> app, Guid id) =>
-        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.MergePoll, Ct));
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.MergePoll, Ct));
 
     private static Task<ReleaseVersion> VersionAsync(WebApplicationFactory<Program> app, Guid id) =>
         ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));

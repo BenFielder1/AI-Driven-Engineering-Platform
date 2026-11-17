@@ -8,7 +8,6 @@ using System.Text.Json;
 using Aide.Api.Features.Trackers;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Security;
 using Aide.Infrastructure.Trackers;
@@ -16,6 +15,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Trackers;
 
@@ -151,7 +151,7 @@ public sealed class TrackerLimitsTests(AideApiFactory factory)
             await ProjectApi.ReadAsync<SourceImportDto>(
                 await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{id}/sources", new { provider = "jira", connectionId = connection, selection = new { keys = new[] { key } }, options = new { includeChildren = false } }, Ct),
                 HttpStatusCode.Accepted);
-            var job = (await LifecycleSeed.JobsAsync(app, id)).Single(j => j.Type == JobTypes.TrackerImport && j.Status == JobStatus.Queued);
+            var job = (await LifecycleSeed.JobsAsync(app, id)).Single(j => j.Type == SdlcJobTypes.TrackerImport && j.Status == JobStatus.Queued);
             Assert.False(await AgentJobs.RunCoreAsync(app, job));
         }
 
@@ -258,7 +258,7 @@ public sealed class TrackerLimitsTests(AideApiFactory factory)
             : (HttpStatusCode.Unauthorized, """{"message":"Bad credentials"}"""));
 
         var queued = await ProjectApi.ReadAsync<SourceImportDto>(await owner.Client.PostAsJsonAsync(sources, import, Ct), HttpStatusCode.Accepted);
-        var job = (await LifecycleSeed.JobsAsync(harness.App, project.Id)).Single(j => j.Type == JobTypes.TrackerImport && j.Status == JobStatus.Queued);
+        var job = (await LifecycleSeed.JobsAsync(harness.App, project.Id)).Single(j => j.Type == SdlcJobTypes.TrackerImport && j.Status == JobStatus.Queued);
         Assert.False(await AgentJobs.RunCoreAsync(harness.App, job));
 
         var done = (await ProjectApi.ReadAsync<ProjectSourcesDto>(await owner.Client.GetAsync(U(sources), Ct))).Imports.Single(i => i.Id == queued.Id);

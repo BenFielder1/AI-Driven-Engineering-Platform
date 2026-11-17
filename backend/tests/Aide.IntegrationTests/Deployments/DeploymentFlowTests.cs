@@ -10,7 +10,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
@@ -70,7 +69,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
     }
 
     private static Task<Job> ReviewJobAsync(WebApplicationFactory<Program> app, Guid id) =>
-        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.Review && j.Status == JobStatus.Queued, Ct));
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.Review && j.Status == JobStatus.Queued, Ct));
 
     private static Task<ComplianceReport> ReportAsync(WebApplicationFactory<Program> app, Guid id) =>
         ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
@@ -288,7 +287,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve");
         await AgentJobs.RunQueuedAsync(app, id);
         var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Environment == DeploymentEnvironment.Production);
-        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout)).Id);
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id, SdlcJobTypes.ProductionRollout)).Id);
 
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal(ProjectStatus.Released, project.Status);
@@ -322,7 +321,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
         var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Environment == DeploymentEnvironment.Production);
         var releaseRow = await ProjectApi.WithDbAsync(app, db => db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
-        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout);
+        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, SdlcJobTypes.ProductionRollout);
         Assert.Equal((releaseRow.Id, releaseRow.MergeCommitSha, DeploymentTrigger.Auto, (Guid?)rollout.Id), (production.ReleaseId, production.GitSha, production.Trigger, production.RolloutId));
         await DeploymentHarness.SettleRolloutAsync(app, id, rollout.Id);
 

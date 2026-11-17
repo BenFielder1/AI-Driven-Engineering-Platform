@@ -207,7 +207,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
 
         var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
 
-        Assert.Equal((Domain.Jobs.JobTypes.PlanGeneration, Tevrin.Engine.Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, Tevrin.Engine.Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
         await WithDbAsync(app, async db =>
         {
             var plan = await db.Artifacts.SingleAsync(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.ImplementationPlan, Ct);
@@ -239,7 +239,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
 
         var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
 
-        Assert.Equal((Domain.Jobs.JobTypes.SpecGeneration, Tevrin.Engine.Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
+        Assert.Equal((SdlcJobTypes.SpecGeneration, Tevrin.Engine.Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
     }
 
     [Fact]
@@ -281,7 +281,7 @@ public sealed class DevSeederTests(AideApiFactory factory)
             Assert.Contains("FAKE-1", snapshot.Content, StringComparison.Ordinal);
 
             // Seeded quietly: no agent job and no notification.
-            Assert.False(await db.Jobs.AnyAsync(j => j.ProjectId == project.Id && j.Type != Domain.Jobs.JobTypes.Notification, Ct));
+            Assert.False(await db.Jobs.AnyAsync(j => j.ProjectId == project.Id && j.Type != SdlcJobTypes.Notification, Ct));
             Assert.False(await db.Notifications.AnyAsync(n => n.ProjectId == project.Id, Ct));
             Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoAnalysisProjectSeeded).ToListAsync(Ct));
         });

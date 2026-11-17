@@ -11,7 +11,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
@@ -79,7 +78,7 @@ internal sealed record FailureHistoryInput(IReadOnlyList<FailureRecord> Previous
 internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult Result);
 
 /// <summary>
-/// FR-38–FR-40: one review cycle (job <see cref="JobTypes.Review"/>, queued on entering review, by
+/// FR-38–FR-40: one review cycle (job <see cref="SdlcJobTypes.Review"/>, queued on entering review, by
 /// <c>POST /review</c>, or by an escalation <c>continue</c> with no optimisation plan to run).
 /// <list type="number">
 /// <item>Start the cycle once per job: <c>projects.review_cycle</c> + 1, pending <c>pre_release</c> and escalation gates of the
@@ -274,7 +273,7 @@ public sealed partial class ReviewJobHandler(
         db.AddEvent(
             EventTypes.ReviewStarted,
             project.Id,
-            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = payload.Trigger, checkpoint = project.Checkpoint, releaseVersionId = project.CurrentReleaseVersionId },
+            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = AgentJobTriggerWire.ToWire(payload.Trigger), checkpoint = project.Checkpoint, releaseVersionId = project.CurrentReleaseVersionId },
             SystemActor.Name,
             now);
         await SaveAsync("starting the review cycle", cancellationToken);
@@ -917,7 +916,7 @@ public sealed class ReviewJobEndedHook(TimeProvider time) : IJobEndedHook
         var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.Review || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.Review || job.ProjectId is not { } projectId)
         {
             return;
         }

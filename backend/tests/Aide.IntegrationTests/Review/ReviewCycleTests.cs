@@ -7,7 +7,6 @@ using Aide.Api.Features.Review;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
@@ -60,7 +59,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<ExecutionStateDto>(
             await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/execution/start", new { }, Ct), HttpStatusCode.Accepted);
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
-        Assert.True(jobs.Any(j => j.Type == JobTypes.Review && (j.Status == JobStatus.Succeeded) == reviewSucceeds), string.Join("; ", jobs.Select(j => $"{j.Type}:{j.Status}:{j.LastError}")));
+        Assert.True(jobs.Any(j => j.Type == SdlcJobTypes.Review && (j.Status == JobStatus.Succeeded) == reviewSucceeds), string.Join("; ", jobs.Select(j => $"{j.Type}:{j.Status}:{j.LastError}")));
         return fixture;
     }
 
@@ -252,7 +251,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
 
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
-        Assert.Contains(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Execution && j.Status == JobStatus.Queued);
+        Assert.Contains(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Execution && j.Status == JobStatus.Queued);
     }
 
     [Fact]
@@ -307,7 +306,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Equal(GateStatus.Cancelled, gates.Single(g => g.Id == oldGate.Id).Status);
         Assert.Single(gates, g => g.Status == GateStatus.Pending && g.Type == SdlcGates.PreRelease);
         Assert.Equal([1, 2], (await ReportsAsync(app, id)).Select(r => r.ReviewCycle));
-        Assert.Equal(started.JobId, (await LifecycleSeed.JobsAsync(app, id)).Last(j => j.Type == JobTypes.Review).Id);
+        Assert.Equal(started.JobId, (await LifecycleSeed.JobsAsync(app, id)).Last(j => j.Type == SdlcJobTypes.Review).Id);
     }
 
     [Fact]
@@ -329,7 +328,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var app = AgentJobs.WithResponders(factory, counting);
         using var fixture = await ReviewedAsync(app);
         var id = fixture.Project.Id;
-        var job = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Review);
+        var job = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Review);
 
         await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id).ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Queued), Ct));
         await AgentJobs.RunAsync(app, await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.Id == job.Id, Ct)));
@@ -371,10 +370,10 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         var id = fixture.Project.Id;
 
         Assert.Empty(await ReportsAsync(app, id));
-        Assert.Equal(JobStatus.Failed, Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Review).Status);
+        Assert.Equal(JobStatus.Failed, Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Review).Status);
 
         // The test runner doesn't run the worker's ended hooks; run the hook as the worker would.
-        var job = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Review);
+        var job = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Review);
         await ProjectApi.WithDbAsync(app, async db =>
         {
             await new ReviewJobEndedHook(TimeProvider.System).OnJobEndedAsync(
@@ -494,7 +493,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "continue" }));
 
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
-        Assert.Contains(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Execution && j.Status == JobStatus.Queued);
+        Assert.Contains(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Execution && j.Status == JobStatus.Queued);
         await AgentJobs.RunQueuedAsync(app, id);
 
         var steps = await ProjectApi.WithDbAsync(app, db => db.ExecutionSteps.AsNoTracking().Where(s => s.PlanArtifactId == draft.Id).ToListAsync(Ct));
@@ -515,13 +514,13 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         {
             var db = scope.ServiceProvider.GetRequiredService<Aide.Infrastructure.Persistence.AideDbContext>();
             await scope.ServiceProvider.GetRequiredService<Tevrin.Engine.Runtime.Jobs.JobEnqueuer>()
-                .EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(id, ExecutionJobPayload.ReviewCycle), id, Ct);
+                .EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(id, ExecutionJobPayload.ReviewCycle), id, Ct);
             await db.SaveChangesAsync(Ct);
         }
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Equal(2, jobs.Count(j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Succeeded));
+        Assert.Equal(2, jobs.Count(j => j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Succeeded));
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal((Phase.Review, 6), (project.CurrentPhase, project.Checkpoint));
     }
@@ -573,7 +572,7 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
 
         // Continue: there is no plan to run, so the extra cycle is a new review.
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve", new { decision = "continue" }));
-        Assert.Contains(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Review && j.Status == JobStatus.Queued);
+        Assert.Contains(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Review && j.Status == JobStatus.Queued);
     }
 
     // ---------- §4.8 review timeline ----------

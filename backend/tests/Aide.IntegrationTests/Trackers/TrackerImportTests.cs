@@ -6,7 +6,6 @@ using Aide.Api.Features.Connections;
 using Aide.Api.Features.Trackers;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Security;
@@ -268,7 +267,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var connection = await JiraAsync(fixture.Owner);
         await ImportAsync(fixture.Owner, fixture.Project.Id, Keys(connection.Id, "FAKE-1"));
         _app.Services.GetRequiredService<FakeTrackerScript>().RateLimitNext(TimeSpan.FromSeconds(60));
-        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == JobTypes.TrackerImport);
+        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == SdlcJobTypes.TrackerImport);
         var before = DateTimeOffset.UtcNow;
 
         Assert.True(await AgentJobs.RunCoreAsync(_app, job));
@@ -373,7 +372,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(_app, db => db.Database.ExecuteSqlRawAsync(install, Ct));
         try
         {
-            var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == JobTypes.TrackerImport);
+            var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == SdlcJobTypes.TrackerImport);
 
             Assert.False(await AgentJobs.RunCoreAsync(_app, job));
 
@@ -420,7 +419,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
                 Ct),
             HttpStatusCode.Created);
 
-        Assert.Single(await LifecycleSeed.JobsAsync(_app, created.Id), j => j.Type == JobTypes.TrackerImport);
+        Assert.Single(await LifecycleSeed.JobsAsync(_app, created.Id), j => j.Type == SdlcJobTypes.TrackerImport);
         await AgentJobs.RunQueuedAsync(_app, created.Id);
         Assert.Equal(5, Assert.Single((await SourcesAsync(user, created.Id)).Imports).ItemCount);
     }
@@ -558,7 +557,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var connection = await JiraAsync(fixture.Owner);
         await ImportAsync(fixture.Owner, fixture.Project.Id, Keys(connection.Id, "FAKE-1"));
         await ProjectApi.ReadAsync<Aide.Api.Features.Refinement.RefinementRoundDto>(await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{fixture.Project.Id}/refinement/run", new { }, Ct), HttpStatusCode.Accepted);
-        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == JobTypes.IdeaRefinement);
+        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == SdlcJobTypes.IdeaRefinement);
 
         Assert.True(await AgentJobs.RunCoreAsync(_app, job));
 
@@ -574,7 +573,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var import = await ImportAsync(fixture.Owner, fixture.Project.Id, Keys(connection.Id, "FAKE-1"));
         await ProjectApi.WithDbAsync(_app, db => db.TrackerImports.Where(i => i.Id == import.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.CreatedAt, DateTimeOffset.UtcNow.AddMinutes(-11)), Ct));
-        await ProjectApi.WithDbAsync(_app, db => db.Jobs.Where(j => j.ProjectId == fixture.Project.Id && j.Type == JobTypes.TrackerImport)
+        await ProjectApi.WithDbAsync(_app, db => db.Jobs.Where(j => j.ProjectId == fixture.Project.Id && j.Type == SdlcJobTypes.TrackerImport)
             .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Cancelled), Ct));
 
         var run = await RefineAsync(fixture.Owner, fixture.Project.Id);
@@ -661,7 +660,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
 
         Assert.Equal(retry.Id, duplicate.Id);
         Assert.Equal(retry.Id, ofRetry.Id);
-        Assert.Equal(2, (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Count(j => j.Type == JobTypes.TrackerImport));
+        Assert.Equal(2, (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Count(j => j.Type == SdlcJobTypes.TrackerImport));
 
         await AgentJobs.RunQueuedAsync(_app, fixture.Project.Id);
         var sources = await SourcesAsync(fixture.Owner, fixture.Project.Id);

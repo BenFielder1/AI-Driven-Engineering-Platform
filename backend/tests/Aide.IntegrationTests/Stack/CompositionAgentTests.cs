@@ -9,7 +9,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Domain.Stack;
@@ -21,6 +20,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Stack;
@@ -282,7 +282,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Contains(jobs, j => j.Type == JobTypes.Review && j.Status == JobStatus.Succeeded);
+        Assert.Contains(jobs, j => j.Type == SdlcJobTypes.Review && j.Status == JobStatus.Succeeded);
         var latest = await LatestReportAsync(fixture);
         var finding = Assert.Single(latest.Violations, v => v.Source == FindingSource.Deterministic);
         Assert.Equal((ReviewCategory.Architecture, Severity.Major, "backend/src/App.Api/Program.cs"), (finding.Category, finding.Severity, finding.File));
@@ -319,7 +319,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
             var versionId = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.Id).SingleAsync(Ct));
             await ProjectApi.WithDbAsync(app, async db =>
             {
-                await new JobEnqueuer(db, TimeProvider.System, Aide.Api.Jobs.AideJobPayloadSerializer.Instance).EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(id, versionId), id, Ct);
+                await new JobEnqueuer(db, TimeProvider.System, Aide.Api.Jobs.AideJobPayloadSerializer.Instance, app.Services.GetRequiredService<JobTypeRegistry>(), NullLogger<JobEnqueuer>.Instance).EnqueueAsync(SdlcJobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(id, versionId), id, Ct);
                 await db.SaveChangesAsync(Ct);
             });
         }

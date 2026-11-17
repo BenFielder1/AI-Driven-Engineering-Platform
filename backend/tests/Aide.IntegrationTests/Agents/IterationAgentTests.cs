@@ -9,7 +9,6 @@ using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
@@ -141,7 +140,7 @@ public sealed class IterationAgentTests(AideApiFactory factory)
         await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, version: 2, content: ProjectRequest + "\n\nCSV export.");
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
-        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.SpecGeneration);
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == SdlcJobTypes.SpecGeneration);
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
         Assert.Contains("<spec_mode>\nnew_version\n</spec_mode>", responder.Prompts[0], StringComparison.Ordinal);

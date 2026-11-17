@@ -9,7 +9,6 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
@@ -53,8 +52,8 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         Assert.Equal((Phase.Review, ProjectStatus.Reviewing, 5), (project.CurrentPhase, project.Status, project.Checkpoint));
         var transition = (await LifecycleSeed.TransitionsAsync(factory, id)).Single(t => t.ToPhase == Phase.Review);
         Assert.Equal((Phase.Execution, SystemActor.Name, PullRequestJobHandler.AdvanceReason), (transition.FromPhase, transition.Actor, transition.Reason));
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.PullRequest).Status);
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Review).Status); // entering review runs cycle 1 (FR-38)
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.PullRequest).Status);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.Review).Status); // entering review runs cycle 1 (FR-38)
 
         var opened = Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
         var payload = LifecycleSeed.Payload(opened.Payload);
@@ -86,12 +85,12 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await ControlAsync(fixture.Contributor.Client, id, "start");
         var jobs = await AgentJobs.RunQueuedAsync(factory, id);
 
-        await AgentJobs.RunAsync(factory, jobs.Single(j => j.Type == JobTypes.PullRequest));
+        await AgentJobs.RunAsync(factory, jobs.Single(j => j.Type == SdlcJobTypes.PullRequest));
 
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
         Assert.Single(await LifecycleSeed.TransitionsAsync(factory, id), t => t.ToPhase == Phase.Review);
         Assert.Equal(5, (await LifecycleSeed.ProjectAsync(factory, id)).Checkpoint);
-        Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.Review);
+        Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.Review);
     }
 
     [Fact]
@@ -119,13 +118,13 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await SeedExecutionAsync(factory, id, 1);
         await ControlAsync(fixture.Contributor.Client, id, "start");
         await AgentJobs.RunAsync(factory, Assert.Single(await LifecycleSeed.JobsAsync(factory, id)));
-        var queued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest);
+        var queued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest);
         await ProjectApi.WithDbAsync(factory, db => db.Jobs.Where(j => j.Id == queued.Id).ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Cancelled), Ct));
 
         var advanced = await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id, "Ready for review");
 
         Assert.Equal(HttpStatusCode.OK, advanced.StatusCode);
-        var requeued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Queued);
+        var requeued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Queued);
         Assert.Equal(PullRequestJobPayload.PhaseAdvanced, LifecycleSeed.Payload(requeued.Payload).GetProperty("trigger").GetString());
         await AgentJobs.RunQueuedAsync(factory, id);
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
@@ -244,14 +243,14 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await SeedExecutionAsync(factory, id, 1);
         await ControlAsync(fixture.Contributor.Client, id, "start");
-        var job = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == JobTypes.PullRequest);
+        var job = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == SdlcJobTypes.PullRequest);
 
         // The PR exists on GitHub but the job's transaction never committed: the job is delivered again.
         await ProjectApi.WithDbAsync(factory, async db =>
         {
             await db.Events.Where(e => e.ProjectId == id && e.Type == EventTypes.PullRequestOpened).ExecuteDeleteAsync(Ct);
             await db.StateTransitions.Where(t => t.ProjectId == id && t.ToPhase == Phase.Review).ExecuteDeleteAsync(Ct);
-            await db.Jobs.Where(j => j.ProjectId == id && j.Type == JobTypes.Review).ExecuteDeleteAsync(Ct);
+            await db.Jobs.Where(j => j.ProjectId == id && j.Type == SdlcJobTypes.Review).ExecuteDeleteAsync(Ct);
             await db.ReleaseVersions.Where(v => v.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(v => v.PullRequestNumber, (int?)null).SetProperty(v => v.PullRequestUrl, (string?)null), Ct);
         });
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Execution, 4, ApprovalMode.Advisory);
@@ -276,7 +275,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await SeedExecutionAsync(factory, id, 1);
         await ControlAsync(fixture.Contributor.Client, id, "start");
 
-        var job = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == JobTypes.PullRequest);
+        var job = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == SdlcJobTypes.PullRequest);
         // The test runner records a transient failure as dead (no retries); the worker retries it with backoff first.
         Assert.Equal(JobStatus.Dead, job.Status);
         Assert.Contains("HTTP 502", job.LastError, StringComparison.Ordinal);
@@ -324,9 +323,9 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         Assert.Contains("rejected", failed.GetProperty("reason").GetString(), StringComparison.Ordinal);
 
         // The PR job pushes first: still rejected, so it fails for good and the project stays in execution.
-        var prJob = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest);
+        var prJob = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest);
         await AgentJobs.RunAsync(app, prJob);
-        prJob = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest);
+        prJob = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest);
         Assert.Equal(JobStatus.Failed, prJob.Status);
         Assert.Contains("could not be pushed", prJob.LastError, StringComparison.Ordinal);
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase);
@@ -337,7 +336,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
             var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
             foreach (var hook in scope.ServiceProvider.GetServices<IJobEndedHook>())
             {
-                await hook.OnJobEndedAsync(db, new JobEnded(prJob.Id, JobTypes.PullRequest, id, false, prJob.LastError), Ct);
+                await hook.OnJobEndedAsync(db, new JobEnded(prJob.Id, SdlcJobTypes.PullRequest, id, false, prJob.LastError), Ct);
             }
 
             await db.SaveChangesAsync(Ct);
@@ -395,7 +394,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestForgotten));
         Assert.Null((await StateAsync(fixture.Viewer.Client, id)).PullRequest);
         await Problems.AssertAsync(await GetPullRequestAsync(fixture.Viewer.Client, id), HttpStatusCode.NotFound, ErrorCodes.NotFound);
-        var requeued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Queued);
+        var requeued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Queued);
         Assert.Equal(PullRequestJobPayload.SettingsChanged, LifecycleSeed.Payload(requeued.Payload).GetProperty("trigger").GetString());
 
         await AgentJobs.RunQueuedAsync(app, id);
@@ -437,7 +436,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.PullRequest).Status);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.PullRequest).Status);
         var project = await LifecycleSeed.ProjectAsync(factory, id);
         Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.Checkpoint));
         Assert.Empty(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PullRequestOpened));
@@ -482,7 +481,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
 
         var retried = await RetryPullRequestAsync(fixture.Contributor.Client, id);
         Assert.Equal(HttpStatusCode.Accepted, retried.StatusCode);
-        var queued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Queued);
+        var queued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Queued);
         Assert.Equal(PullRequestJobPayload.Retried, LifecycleSeed.Payload(queued.Payload).GetProperty("trigger").GetString());
         await Problems.AssertAsync(await RetryPullRequestAsync(fixture.Contributor.Client, id), HttpStatusCode.Conflict, ErrorCodes.Conflict);
 
@@ -506,7 +505,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await ControlAsync(fixture.Contributor.Client, id, "start");
         await Problems.AssertAsync(await RetryPullRequestAsync(fixture.Contributor.Client, id), HttpStatusCode.Conflict, ErrorCodes.PhasePreconditionFailed);
         await AgentJobs.RunAsync(factory, Assert.Single(await LifecycleSeed.JobsAsync(factory, id)));
-        await AgentJobs.RunAsync(factory, Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.Execution && j.Status == JobStatus.Queued));
+        await AgentJobs.RunAsync(factory, Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.Execution && j.Status == JobStatus.Queued));
         await DeadLetterPullRequestJobsAsync(id);
 
         Assert.Equal(HttpStatusCode.Accepted, (await RetryPullRequestAsync(fixture.Contributor.Client, id)).StatusCode);
@@ -530,18 +529,18 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await SeedExecutionAsync(factory, id, 1);
         await ControlAsync(fixture.Contributor.Client, id, "start");
-        var failed = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == JobTypes.PullRequest);
+        var failed = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == SdlcJobTypes.PullRequest);
         Assert.Equal(JobStatus.Failed, failed.Status);
         Assert.Equal(HttpStatusCode.OK, (await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id, "Review anyway")).StatusCode);
         await AgentJobs.RunQueuedAsync(app, id);
         Assert.Equal(Phase.Review, (await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase);
-        Assert.DoesNotContain(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Queued);
+        Assert.DoesNotContain(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Queued);
 
         api.On(HttpMethod.Post, Pulls, HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""");
         var saved = await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { token = Token });
 
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
-        var queued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Queued);
+        var queued = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Queued);
         Assert.Equal(PullRequestJobPayload.SettingsChanged, LifecycleSeed.Payload(queued.Payload).GetProperty("trigger").GetString());
         await AgentJobs.RunQueuedAsync(app, id);
         Assert.Equal((Phase.Review, 42), ((await LifecycleSeed.ProjectAsync(factory, id)).CurrentPhase, await PrNumberAsync(id)));
@@ -549,7 +548,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
 
         // With the PR recorded, saving settings again queues nothing.
         Assert.Equal(HttpStatusCode.OK, (await ProjectApi.PatchAsync(fixture.Owner.Client, $"{fixture.Path}/settings/git", new { token = Token })).StatusCode);
-        Assert.DoesNotContain(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest && j.Status == JobStatus.Queued);
+        Assert.DoesNotContain(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Queued);
     }
 
     [Fact]
@@ -565,9 +564,9 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(factory, db => db.ProjectGitSettings.Where(s => s.ProjectId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.TokenEncrypted, (string?)null), Ct));
 
-        await AgentJobs.RunAsync(app, Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest));
+        await AgentJobs.RunAsync(app, Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest));
 
-        var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.PullRequest);
+        var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.PullRequest);
         Assert.Equal(JobStatus.Failed, job.Status);
         Assert.Contains("No access token", job.LastError, StringComparison.Ordinal);
     }
@@ -584,7 +583,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await SeedExecutionAsync(factory, id, 1);
         await ControlAsync(fixture.Contributor.Client, id, "start");
-        var job = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == JobTypes.PullRequest);
+        var job = (await AgentJobs.RunQueuedAsync(app, id)).Single(j => j.Type == SdlcJobTypes.PullRequest);
 
         var patch = Assert.Single(api.Requests, r => r.Method == "PATCH");
         using (var body = JsonDocument.Parse(patch.Body))
@@ -685,6 +684,6 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
 
     /// <summary>Every queued pull request job of the project ends dead (its retries ran out).</summary>
     private Task<int> DeadLetterPullRequestJobsAsync(Guid id) =>
-        ProjectApi.WithDbAsync(factory, db => db.Jobs.Where(j => j.ProjectId == id && j.Type == JobTypes.PullRequest && j.Status == JobStatus.Queued)
+        ProjectApi.WithDbAsync(factory, db => db.Jobs.Where(j => j.ProjectId == id && j.Type == SdlcJobTypes.PullRequest && j.Status == JobStatus.Queued)
             .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Dead), Ct));
 }
