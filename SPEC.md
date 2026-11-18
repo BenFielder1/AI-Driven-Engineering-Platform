@@ -527,6 +527,7 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 | Q1 | Should the engine keep PolyForm Shield or get a more permissive licence when its packages are published? | Ben | nothing in 0.7.0 (packaging is out) |
 | Q2 | Is 1 MB per agent run the right cap for stored inputs, given execution prompts with large repo context? | Ben | nothing (default applies) |
 | Q3 | Should the gate inbox replace the Home dashboard's pending-gates card, or sit beside it? Default: beside it | Ben | nothing (default applies) |
+| Q4 | JsonSchema.Net is pinned at 8.0.5, the last MIT release, because 9.x uses the commercial OSMF EULA (D-0.7.0-26). Stay on 8.x, accept the EULA, or switch libraries? | Ben | nothing (8.0.5 works) |
 
 ## 12. Milestones
 

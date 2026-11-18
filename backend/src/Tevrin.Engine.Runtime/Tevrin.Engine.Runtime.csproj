@@ -17,6 +17,11 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <!-- The LLM layer's HTTP providers and model lookups (FR-265): IHttpClientFactory, outside ASP.NET Core. -->
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <!-- Pipeline definitions (FR-275, FR-279, FR-290): YAML loading, JSON Schema checks and the readiness check. -->
+    <PackageReference Include="YamlDotNet" />
+    <!-- Compile assets stay private: the package's root 'Json' namespace would shadow the host's own 'Json' helpers. -->
+    <PackageReference Include="JsonSchema.Net" PrivateAssets="compile;contentfiles;analyzers;build" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" />
   </ItemGroup>
 
 </Project>

@@ -10,6 +10,7 @@
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="EF Core / PostgreSQL">
@@ -25,6 +26,14 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.19.1" />
     <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Pipeline definitions">
+    <!-- FR-275: safe YAML parsing of pipeline definitions (event-level parser only, no object deserialisation). -->
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <!-- FR-279: JSON Schema checks. Pinned to 8.0.5, the last MIT release; 9.x ships under the OSMF EULA (a commercial
+         maintenance fee), which needs a spec decision before it's used. -->
+    <PackageVersion Include="JsonSchema.Net" Version="8.0.5" />
   </ItemGroup>
 
   <ItemGroup Label="CLI">

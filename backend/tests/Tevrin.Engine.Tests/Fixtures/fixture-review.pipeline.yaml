@@ -1,0 +1,61 @@
+# Fixture pipeline (M57, reused by M59 and M61): draft → check (validated, retried with feedback) → gate → summarise.
+pipeline: fixture-review
+version: 1
+title: Fixture review
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [draft]
+settings: [redraft_cycles]
+
+artifacts:
+  draft:   { title: Draft, format: json, schema: draft.schema.json, approval: auto_lock, cascade: downstream }
+  report:  { title: Check report, format: json, schema: report.schema.json, approval: required, cascade: downstream }
+  summary: { title: Summary, format: markdown, approval: required, cascade: none }
+
+statuses:
+  drafting:    { generic: active }
+  checking:    { generic: active }
+  summarising: { generic: active }
+  published:   { generic: completed }
+  rolled_back: { generic: active }
+
+status_changes:
+  summary_published: { stage: summarise, from: [summarising], to: published, completes_run: true, error_code: NOT_SUMMARISING }
+
+rollback_status: rolled_back
+
+concurrency:
+  exclusive:
+    - { job_type: agent.run, scope: run }
+
+stages:
+  - id: draft
+    title: Draft
+    status: drafting
+    agent: { key: drafter, prompt: fixture.draft, tools: [fixture.lookup] }
+    output: draft
+
+  - id: check
+    title: Check
+    status: checking
+    agent: { key: checker, prompt: fixture.check }
+    inputs: [draft]
+    output: report
+    requires:
+      - { artifact_locked: draft }
+    validate:
+      - { guard: fixture.report-consistent }
+    on_invalid: { retry_with_feedback: true, max_attempts: 3, then: escalate }
+    loop: { to: draft, on: needs_redraft, max_iterations: { setting: redraft_cycles } }
+
+  - id: summarise
+    title: Summarise
+    status: summarising
+    agent: { key: summariser, prompt: fixture.summarise }
+    inputs: [draft, report]
+    output: summary
+    requires:
+      - { artifact_locked: report }
+      - { no_pending_gates: { except: [] } }
+    gate: { type: report_approval, modes: [strict, advisory], approves: report, approval_links: true }

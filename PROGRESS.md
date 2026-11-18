@@ -105,6 +105,13 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Architecture test:** a new test fails if an engine source file contains an SDLC key literal.
 - **M58 scope (from M56c):** blocked by `Phase`: the `AgentRun` entity, `RestoreRules`, `GateRules` (`RequiredGate`, `GuardedEntry`, approve/reject/cancel) and `SdlcArtifactRules` (producing phase, `CanCreateDraft`). Staying on the SDLC side because they hold SDLC values or project rules: `AgentModelRules`, `PromptLibrary`, the fake responders, `LlmOptionsValidator`, `LlmProviderCatalog`, `LlmResolver`, `NotificationDispatcher`, `NotificationComposer`, `NotificationJobHandler`, `GateTimerService` and `NotificationSweeper`. The sweeper's single loop mixes delivery retries with the SDLC sweeps; splitting it would change timing.
 
+- **D-0.7.0-26** (Build, M57a, Claude, assumed): definition packages and model details.
+  - **Packages:** YamlDotNet 18.1.0 (MIT) and JsonSchema.Net **8.0.5** go in `Tevrin.Engine.Runtime` only. 8.0.5 is the last MIT release; 9.x moved to the commercial OSMF EULA. JsonSchema.Net's compile assets are private (`PrivateAssets`) because its root `Json` namespace clashed with Aide's helpers. Upgrading past 8.x needs a decision (open question Q4).
+  - **Model additions to §4.49:** `rollback_status`; `loop.requires`, which carries `sdlc.review-cycle-ready`; and `on_reject: { to, max_iterations }`. `agent.prompt` is optional and defaults to the pack's prompt for the agent key.
+  - **Artifact defaults** (amends §4.49, which marks only `schema` as optional): `format` defaults to `markdown`, `approval` to `required` and `cascade` to `downstream`. Defaults are written into the canonical JSON, so writing one out explicitly doesn't change the hash.
+  - **Deferred to M59:** checking prompt names against the prompts the pack registers (a readiness check).
+  - **Validator:** values that fit no specific code are `DEF_PARSE`. M57a review fixes: a backward `on_success` is `DEF_UNCAPPED_LOOP`; schema `$ref`s must resolve; `escalation` can't be an entry gate; canonical JSON escapes only the quote, backslash and C0 controls (so the hash doesn't depend on the .NET version); M58 must read stored canonical JSON back with a JSON reader, not the YAML loader, because YAML treats U+2028 as a line break. Previously: `"`, `\` and C0 controls. The loader reads YAML through the event parser only, with no tags, alias expansion capped at 1 MB, a nesting depth of 64 and one document.
+
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.

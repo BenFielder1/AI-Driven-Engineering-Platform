@@ -1,0 +1,65 @@
+# A test-only copy of the SPEC §4.51 SDLC sketch, completed with the keys §4.49 requires, to show the model can
+# express it. The real definition is Tevrin.Pack.Sdlc/Definitions/sdlc.pipeline.yaml (M57b).
+pipeline: sdlc-sketch
+version: 1
+title: Software delivery (sketch)
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [refinement, analysis]
+settings: [review_cycles]
+
+artifacts:
+  source_items:            { title: Source items, format: json, approval: auto_lock, cascade: none }
+  codebase_summary:        { title: Codebase summary, format: markdown, approval: auto_lock, cascade: none }
+  stack_profile:           { title: Stack profile, format: json, approval: required, cascade: self_and_downstream }
+  project_request:         { title: Project request, format: markdown, approval: required, cascade: downstream }
+  technical_specification: { title: Technical specification, format: markdown, approval: required, cascade: downstream }
+  implementation_plan:     { title: Implementation plan, format: json, approval: required, cascade: downstream }
+  optimization_plan:       { title: Optimisation plan, format: json, approval: required, cascade: downstream }
+
+statuses:
+  active:         { generic: active }
+  building:       { generic: active }
+  reviewing:      { generic: active }
+  releasing:      { generic: active }
+  rolled_back:    { generic: active }
+  awaiting_merge: { generic: active }
+  released:       { generic: completed }
+
+status_changes:
+  release_completed:       { stage: release, from: [releasing, awaiting_merge], to: released, completes_run: true, error_code: NOT_RELEASING }
+  release_awaiting_merge:  { stage: release, from: releasing, to: awaiting_merge, error_code: NOT_RELEASING }
+  release_merge_abandoned: { stage: release, from: [awaiting_merge], to: releasing, error_code: NOT_RELEASING }
+
+rollback_status: rolled_back
+
+concurrency:
+  exclusive: [{ job_type: execution, scope: project }]
+
+stages:
+  - { id: analysis, title: Analysis, status: active, agent: { key: stack_analyst, job_type: stack_analysis }, output: stack_profile,
+      on_success: refinement }
+  - { id: refinement, title: Refinement, status: active, agent: { key: idea_refinement, job_type: idea_refinement },
+      inputs: [source_items, codebase_summary], output: project_request,
+      requires: [{ guard: sdlc.leaving-analysis }] }
+  - { id: specification, title: Specification, status: active, agent: { key: spec_generator, job_type: spec_generation },
+      inputs: [project_request, codebase_summary], output: technical_specification,
+      requires: [{ artifact_locked: project_request }] }
+  - { id: planning, title: Planning, status: active, agent: { key: plan_generator, job_type: plan_generation },
+      inputs: [technical_specification, codebase_summary], output: implementation_plan,
+      requires: [{ artifact_locked: technical_specification }],
+      validate: [{ guard: sdlc.plan-valid }],
+      on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail },
+      gate: { type: spec_approval, modes: [strict, advisory], approves: technical_specification, approval_links: true } }
+  - { id: execution, title: Execution, status: building,
+      requires: [{ artifact_locked: technical_specification }, { artifact_locked: implementation_plan },
+                 { guard: sdlc.plan-has-steps }, { guard: sdlc.working-copy-prepared }],
+      gate: { type: plan_approval, modes: [strict], approves: implementation_plan, approval_links: true } }
+  - { id: review, title: Review, status: reviewing, agent: { key: code_review, job_type: review },
+      inputs: [technical_specification, implementation_plan], output: optimization_plan,
+      requires: [{ guard: sdlc.plan-steps-completed }],
+      loop: { to: execution, on: review_required, max_iterations: { setting: review_cycles },
+              requires: [{ guard: sdlc.review-cycle-ready }] } }
+  - { id: release, title: Release, status: releasing,
+      requires: [{ guard: sdlc.release-eligible }, { no_pending_gates: { except: [pre_release] } }],
+      gate: { type: pre_release, modes: [strict, advisory, autonomous], approval_links: true } }

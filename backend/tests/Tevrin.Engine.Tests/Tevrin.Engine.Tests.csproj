@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- M57 fixture definitions and schemas (reused by M59 and M61), embedded like a pack's own files. -->
+    <EmbeddedResource Include="Fixtures/*.yaml;Fixtures/*.json" LogicalName="Fixtures/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
