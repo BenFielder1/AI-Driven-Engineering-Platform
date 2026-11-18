@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using Aide.Api.Features.Refinement;
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;

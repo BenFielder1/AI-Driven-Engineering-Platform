@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;

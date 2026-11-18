@@ -5,7 +5,6 @@ using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
@@ -267,6 +266,7 @@ public sealed partial class RefinementService(
         var runIds = roundJobs.SelectMany(j => new[] { AgentRunRules.RunId(j.Id), AgentRunRules.RunId(j.Id, AgentOutput.CorrectiveRunKey) }).ToList();
         var runs = await db.AgentRuns.AsNoTracking()
             .Where(r => r.ProjectId == projectId && runIds.Contains(r.Id))
+            .Select(r => new AgentRun { Id = r.Id, Status = r.Status, Output = r.Output, Error = r.Error, CompletedAt = r.CompletedAt })
             .ToDictionaryAsync(r => r.Id, cancellationToken);
         var drafts = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.ProjectRequest && a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))

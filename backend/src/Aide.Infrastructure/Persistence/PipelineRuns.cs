@@ -61,6 +61,9 @@ public static class PipelineRunBackfill
         var closed = await CloseSupersededAsync(db, sdlc, projectId, null, now, cancellationToken);
         var runs = await CreateRunsAsync(db, sdlc, projectId, now, cancellationToken);
         var synced = await SyncCurrentAsync(db, sdlc, projectId, now, cancellationToken);
+
+        // FR-297: executions left open by runs that ended (superseded versions, or runs a 0.6.1 build finished).
+        await StageExecutionWriter.CloseEndedAsync(db, projectId, now, cancellationToken);
         var linked = await LinkAsync(db, sdlc.Definition!.Pipeline, projectId, cancellationToken);
         return new Outcome(runs, closed + synced, linked);
     }
@@ -321,6 +324,9 @@ public sealed class PipelineRunSyncInterceptor(PipelineRegistryHost? registry, T
                 entry.Property(RunIdProperty).CurrentValue = runId;
             }
         }
+
+        await session.RecordStageExecutionsAsync(
+            [.. db.ChangeTracker.Entries<StateTransition>().Where(e => e.State == EntityState.Added).Select(e => e.Entity)]);
     }
 
     /// <summary>One <c>SaveChanges</c>: the definition, the clock, the runs loaded or started in it (by release version), run
@@ -339,6 +345,41 @@ public sealed class PipelineRunSyncInterceptor(PipelineRegistryHost? registry, T
         private bool _definitionStored;
 
         private string Pipeline => sdlc.Definition!.Pipeline;
+
+        /// <summary>
+        /// FR-297, D-0.7.0-32: stage executions in this save, after the links are set. Each new transition that enters a stage
+        /// (<see cref="StageExecutionRules.IsEntry"/>) closes its run's open execution with the transition's kind and opens
+        /// one for the stage it enters, at the transition's checkpoint and time (in the order the transitions were added). A
+        /// run that ended in this save closes its open execution with its final status.
+        /// </summary>
+        public async Task RecordStageExecutionsAsync(IReadOnlyList<StateTransition> transitions)
+        {
+            foreach (var transition in transitions.Where(t => t.PipelineRunId is not null).OrderBy(t => t.CreatedAt))
+            {
+                var from = transition.FromPhase?.ToWire();
+                var to = transition.ToPhase.ToWire();
+                if (StageExecutionRules.IsEntry(from, to, transition.Kind))
+                {
+                    await StageExecutionWriter.EnterAsync(
+                        db,
+                        transition.PipelineRunId!.Value,
+                        to,
+                        transition.Checkpoint,
+                        StageExecutionRules.LeavingOutcome(from, transition.Kind),
+                        transition.CreatedAt,
+                        cancellationToken);
+                }
+            }
+
+            foreach (var run in _runs.Values.Where(r => PipelineRunRules.IsFinal(r.Status)).ToList())
+            {
+                var entry = db.Entry(run);
+                if (entry.State == EntityState.Added || entry.Property(r => r.Status).IsModified)
+                {
+                    await StageExecutionWriter.EndAsync(db, run.Id, run.Status, run.CompletedAt ?? now, cancellationToken);
+                }
+            }
+        }
 
         public async Task SyncAsync(EntityEntry<Project> entry)
         {
@@ -429,6 +470,7 @@ public sealed class PipelineRunSyncInterceptor(PipelineRegistryHost? registry, T
             await StoreDefinitionAsync();
             DetachTracked(r => r.ProjectId == projectId);
             await PipelineRunBackfill.CloseSupersededAsync(db, sdlc, projectId, null, now, cancellationToken);
+            await StageExecutionWriter.CloseEndedAsync(db, projectId, now, cancellationToken);
             await PipelineRunBackfill.CreateRunsAsync(db, sdlc, projectId, now, cancellationToken);
             return true;
         }
@@ -481,6 +523,7 @@ public sealed class PipelineRunSyncInterceptor(PipelineRegistryHost? registry, T
             {
                 DetachTracked(r => r.ProjectId == projectId && r.SubjectId != versionId);
                 await PipelineRunBackfill.CloseSupersededAsync(db, sdlc, projectId, versionId, now, cancellationToken);
+                await StageExecutionWriter.CloseEndedAsync(db, projectId, now, cancellationToken);
             }
 
             var run = new PipelineRun

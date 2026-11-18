@@ -18,6 +18,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Analysis;
@@ -284,7 +285,10 @@ public sealed partial class AnalysisService(
 
         var main = AgentRunRules.RunId(job.Id);
         var corrective = AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey);
-        var runs = await db.AgentRuns.AsNoTracking().Where(r => r.Id == main || r.Id == corrective).ToListAsync(cancellationToken);
+        var runs = await db.AgentRuns.AsNoTracking()
+            .Where(r => r.Id == main || r.Id == corrective)
+            .Select(AgentRunProjections.WithoutInput)
+            .ToListAsync(cancellationToken);
         var run = runs.FirstOrDefault(r => r.Id == corrective) ?? runs.FirstOrDefault(r => r.Id == main);
         var draft = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.StackProfile && a.AgentRunId != null && (a.AgentRunId == main || a.AgentRunId == corrective))

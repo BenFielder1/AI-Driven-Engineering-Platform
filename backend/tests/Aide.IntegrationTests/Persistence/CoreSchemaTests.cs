@@ -45,7 +45,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         {
             ProjectId = project.Id,
             Agent = SdlcAgents.PlanGenerator,
-            Phase = Phase.Planning,
+            Stage = Phase.Planning.ToWire(),
             Provider = LlmProvider.Openai,
             Model = "fake-model",
             PromptVersion = "plan-generator@1",
@@ -322,7 +322,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         var user = NewUser();
         var project = NewProject();
         var plan = NewArtifact(project.Id, SdlcArtifacts.ImplementationPlan, 1, user.Id);
-        var run = new AgentRun { ProjectId = project.Id, Agent = SdlcAgents.CodeGenerator, Phase = Phase.Execution, Model = "m", PromptVersion = "1", CreatedAt = Now };
+        var run = new AgentRun { ProjectId = project.Id, Agent = SdlcAgents.CodeGenerator, Stage = Phase.Execution.ToWire(), Model = "m", PromptVersion = "1", CreatedAt = Now };
         var step = new ExecutionStep { ProjectId = project.Id, PlanArtifactId = plan.Id, StepNumber = 1, Title = "t", Task = "t" };
         var gate = new ApprovalGate { ProjectId = project.Id, Type = SdlcGates.PlanApproval, ArtifactId = plan.Id, CreatedAt = Now };
 

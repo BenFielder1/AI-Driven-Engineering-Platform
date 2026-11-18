@@ -39,6 +39,9 @@ internal interface ILlmStreamAccumulator
     /// <summary>Nothing more will come (Anthropic <c>message_stop</c>, OpenAI <c>[DONE]</c>, Ollama <c>done</c>).</summary>
     bool Ended { get; }
 
+    /// <summary>FR-297: some output (text, a refusal or a tool call) has arrived.</summary>
+    bool HasOutput { get; }
+
     void Add(string data);
 
     LlmStreamedMessage Result();
@@ -154,7 +157,7 @@ internal static class LlmStream
             {
                 if (hasData)
                 {
-                    accumulator.Add(data.ToString());
+                    Add(accumulator, data.ToString());
                     data.Clear();
                     hasData = false;
                 }
@@ -182,7 +185,17 @@ internal static class LlmStream
 
         if (hasData && !accumulator.Ended)
         {
-            accumulator.Add(data.ToString());
+            Add(accumulator, data.ToString());
+        }
+    }
+
+    /// <summary>Adds one event and marks the first streamed output (FR-297, <see cref="LlmFirstTokenProbe"/>).</summary>
+    private static void Add(ILlmStreamAccumulator accumulator, string data)
+    {
+        accumulator.Add(data);
+        if (accumulator.HasOutput)
+        {
+            LlmFirstTokenProbe.MarkFirstToken();
         }
     }
 
@@ -193,7 +206,7 @@ internal static class LlmStream
         {
             if (!string.IsNullOrWhiteSpace(line))
             {
-                accumulator.Add(line);
+                Add(accumulator, line);
             }
         }
     }
@@ -325,6 +338,8 @@ internal sealed class AnthropicStreamAccumulator(string providerName, int turn) 
     public bool Completed { get; private set; }
 
     public bool Ended => Completed;
+
+    public bool HasOutput => _blocks.Values.Any(b => b.Content.Length > 0 || b.Type == "tool_use");
 
     public void Add(string data)
     {
@@ -496,6 +511,8 @@ internal sealed class OpenAiStreamAccumulator(string providerName, int turn) : I
 
     public bool Ended { get; private set; }
 
+    public bool HasOutput => _text.Length > 0 || _refusal.Length > 0 || _calls.Count > 0;
+
     public void Add(string data)
     {
         if (data.Trim() == "[DONE]")
@@ -659,6 +676,8 @@ internal sealed class OllamaStreamAccumulator(string providerName, int turn) : I
     public bool Completed { get; private set; }
 
     public bool Ended => Completed;
+
+    public bool HasOutput => _text.Length > 0 || _calls.Count > 0;
 
     public void Add(string data)
     {

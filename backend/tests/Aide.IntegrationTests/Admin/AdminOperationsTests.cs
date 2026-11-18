@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Tokens;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
@@ -426,7 +425,7 @@ public sealed class AdminOperationsTests(AideApiFactory factory)
     {
         ProjectId = projectId,
         Agent = agent,
-        Phase = Phase.Specification,
+        Stage = Phase.Specification.ToWire(),
         Provider = provider,
         Model = model,
         PromptVersion = "1",

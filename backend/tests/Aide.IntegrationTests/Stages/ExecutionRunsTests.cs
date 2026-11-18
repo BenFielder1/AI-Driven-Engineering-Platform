@@ -373,7 +373,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         {
             ProjectId = id,
             Agent = SdlcAgents.CodeReview,
-            Phase = Phase.Review,
+            Stage = Phase.Review.ToWire(),
             Provider = LlmProvider.Fake,
             Model = "fake-1",
             PromptVersion = "code-review@1",
@@ -446,7 +446,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
             {
                 ProjectId = id,
                 Agent = SdlcAgents.CodeGenerator,
-                Phase = Phase.Execution,
+                Stage = Phase.Execution.ToWire(),
                 StepId = step.Id,
                 Provider = LlmProvider.Fake,
                 Model = "fake-1",

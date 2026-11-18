@@ -28,6 +28,12 @@ public interface IEngineDbContext
     /// <summary>FR-294: pipeline runs.</summary>
     DbSet<PipelineRun> PipelineRuns { get; }
 
+    /// <summary>FR-268, FR-297: agent runs (the run log).</summary>
+    DbSet<AgentRun> AgentRuns { get; }
+
+    /// <summary>FR-297: per-stage timings of pipeline runs.</summary>
+    DbSet<StageExecution> StageExecutions { get; }
+
     DatabaseFacade Database { get; }
 
     ChangeTracker ChangeTracker { get; }

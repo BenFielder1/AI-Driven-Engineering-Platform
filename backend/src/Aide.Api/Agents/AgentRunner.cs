@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
@@ -15,6 +16,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Agents;
 
@@ -187,7 +189,13 @@ public sealed partial class AgentRunner(
     private async Task<AgentRunOutcome> RunCoreAsync(AgentRunRequest request, Guid runId, CancellationToken cancellationToken)
     {
         var template = prompts.Template(request.Agent);
-        var run = await db.AgentRuns.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
+        // FR-297: the recorded input isn't loaded (a retry records it again).
+        var run = await db.AgentRuns.AsNoTracking()
+            .Where(r => r.Id == runId)
+            .Select(AgentRunProjections.WithoutInput)
+            .FirstOrDefaultAsync(cancellationToken) is { } loaded
+            ? AgentRunProjections.Track(db, loaded)
+            : null;
         if (run is { Status: AgentRunStatus.Succeeded })
         {
             LogAlreadySucceeded(logger);
@@ -258,6 +266,8 @@ public sealed partial class AgentRunner(
         // FR-160: the output limit of the run's provider and model (catalog, Anthropic discovery, ceiling, fallback).
         var maxOutputTokens = request.MaxTokens ?? await outputLimits.ResolveAsync(run.Provider, run.Model, apiKey, cancellationToken);
 
+        // FR-297: the prompt and messages sent, redacted and capped (the request itself is unchanged).
+        RecordInput(run, rendered.Value, apiKey);
         run.Attempts++;
         await db.SaveChangesAsync(cancellationToken);
         LogCalling(logger, run.Provider, run.Model, run.Attempts, maxOutputTokens);
@@ -266,6 +276,7 @@ public sealed partial class AgentRunner(
         using var context = request.Repo == RepoScope.None
             ? RepoToolContext.Empty
             : await repoContext.OpenAsync(run.ProjectId, request.Repo, cancellationToken);
+        using var firstToken = LlmFirstTokenProbe.Start(time);
         var started = time.GetTimestamp();
         LlmCompletion completion;
         IReadOnlyList<string> loopWarnings;
@@ -314,6 +325,7 @@ public sealed partial class AgentRunner(
             // FR-26: the budget ran out between turns: the turns made are counted, the run stops with BUDGET_EXCEEDED.
             RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            RecordLatency(run, firstToken, started);
             await RecordPaidTurnsAsync(run, ex.Tokens);
             var used = budget.TokensUsed + run.InputTokens + run.OutputTokens;
             var message = TokenBudget.CheckCanStart(budget.TokenBudget, used).Error?.Message ?? "The project's token budget is used up.";
@@ -331,6 +343,7 @@ public sealed partial class AgentRunner(
         {
             RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            RecordLatency(run, firstToken, started);
             await RecordPaidTurnsAsync(run, paid);
             var message = SecretRedaction.SanitizeProviderError(ex.Message, apiKey);
             LogAttemptFailed(logger, run.Attempts, ex.Transient, ex.StatusCode, message);
@@ -352,6 +365,7 @@ public sealed partial class AgentRunner(
             // or it would stay running. Its text may quote the request (and the key), so only the exception type is kept.
             RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            RecordLatency(run, firstToken, started);
             await RecordPaidTurnsAsync(run, paid);
             var transient = ex is HttpRequestException or TimeoutException or IOException;
             var message = $"{run.Provider.ToWire()} call failed unexpectedly ({ex.GetType().Name}).";
@@ -361,6 +375,7 @@ public sealed partial class AgentRunner(
         }
 
         RecordToolCalls(run, context);
+        RecordLatency(run, firstToken, started);
         IReadOnlyList<string> warnings =
         [
             .. request.Warnings
@@ -394,6 +409,35 @@ public sealed partial class AgentRunner(
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.TokensUsed, p => p.TokensUsed + tokens), CancellationToken.None);
         await db.SaveChangesAsync(CancellationToken.None);
         await transaction.CommitAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// FR-297, D-0.7.0-16: stores the rendered system prompt and user message as the run's input, redacted (the bound key
+    /// and key patterns) and capped at 1 MB. Recording never fails the run: input the redaction can't process in time is
+    /// left out.
+    /// </summary>
+    internal static void RecordInput(AgentRun run, RenderedPrompt prompt, string? apiKey)
+    {
+        try
+        {
+            var input = AgentRunInput.Record([new AgentInputMessage("system", prompt.System), new AgentInputMessage("user", prompt.User)], apiKey);
+            run.Input = input.Text;
+            run.InputTruncated = input.Truncated;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            run.Input = null;
+            run.InputTruncated = false;
+        }
+    }
+
+    /// <summary>FR-297: the time to the first streamed output of this attempt, when the provider streamed one.</summary>
+    private static void RecordLatency(AgentRun run, LlmFirstTokenProbe probe, long started)
+    {
+        if (probe.LatencyMs(started) is { } latency)
+        {
+            run.LatencyMs = latency;
+        }
     }
 
     /// <summary>FR-71: the tool calls the run made (refused ones included) as its <c>tool_calls</c> log.</summary>
@@ -477,7 +521,7 @@ public sealed partial class AgentRunner(
             ProjectId = project.Id,
             ReleaseVersionId = project.CurrentReleaseVersionId,
             Agent = request.Agent,
-            Phase = project.CurrentPhase,
+            Stage = project.CurrentPhase.ToWire(),
             StepId = request.StepId,
             Provider = resolved.Provider,
             Model = resolved.Model,

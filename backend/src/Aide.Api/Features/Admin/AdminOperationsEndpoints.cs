@@ -4,6 +4,7 @@ using Aide.Api.Errors;
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Common;
+using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -200,7 +201,7 @@ public static class AdminOperationsEndpoints
                 r.ProjectId,
                 p.Name,
                 r.Agent,
-                r.Phase,
+                SdlcStages.PhaseOf(r.Stage),
                 r.StepId,
                 r.Provider,
                 r.Model,

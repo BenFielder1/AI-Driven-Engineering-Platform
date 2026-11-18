@@ -71,6 +71,7 @@ public static class DependencyInjection
 
         // D-0.7.0-20: the engine reaches its tables through the same scoped context (one unit of work).
         services.AddScoped<IEngineDbContext>(sp => sp.GetRequiredService<AideDbContext>());
+        services.AddScoped<RunLogQueries>();
         services.TryAddSingleton<IProjectEventPublisher, NullProjectEventPublisher>();
         services.TryAddSingleton<ProjectEventPublishingInterceptor>();
         services.TryAddSingleton(TimeProvider.System);

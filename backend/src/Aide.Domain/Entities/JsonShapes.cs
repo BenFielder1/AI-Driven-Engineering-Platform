@@ -8,9 +8,6 @@ namespace Aide.Domain.Entities;
 /// <summary>A file written by an accepted step (FR-34): path, action and SHA-256 of the content.</summary>
 public sealed record FileManifestEntry(string Path, FileAction Action, string ContentHash);
 
-/// <summary>An artifact version an agent run used as input (FR-23).</summary>
-public sealed record InputArtifactRef(Guid ArtifactId, string Type, int Version);
-
 /// <summary>A compliance category score (FR-38, §4.7): the agent's 0–1 score, the deterministic penalty applied to it,
 /// the resulting <see cref="Score"/> (floored at 0) and the agent's evidence. Reports written before the breakdown existed
 /// read with <see cref="AgentScore"/> and <see cref="Penalty"/> 0 and their evidence string as one reason.</summary>

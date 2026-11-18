@@ -44,9 +44,14 @@ public sealed partial class AgentRunJobEndedHook(TimeProvider time, ILogger<Agen
             }
         }
 
-        var runs = await db.AgentRuns
+        // FR-297: the recorded input isn't loaded; only the columns marked failed are written.
+        var runs = (await db.AgentRuns.AsNoTracking()
             .Where(r => ids.Contains(r.Id) && r.Status == AgentRunStatus.Running)
-            .ToListAsync(cancellationToken);
+            .Select(AgentRunProjections.WithoutInput)
+            .ToListAsync(cancellationToken))
+            .Select(r => AgentRunProjections.Track(db, r))
+            .Where(r => r.Status == AgentRunStatus.Running)
+            .ToList();
         if (runs.Count == 0)
         {
             return;

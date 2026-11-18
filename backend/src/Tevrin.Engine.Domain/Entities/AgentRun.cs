@@ -1,9 +1,7 @@
-using Aide.Domain.Lifecycle;
-using Tevrin.Engine.Domain.Entities;
+namespace Tevrin.Engine.Domain.Entities;
 
-namespace Aide.Domain.Entities;
-
-/// <summary>One agent invocation (FR-23); replaces the old stack's agent_logs.</summary>
+/// <summary>One agent invocation (FR-23); replaces the old stack's agent_logs. FR-268: moved to the engine's run log, keyed by
+/// the agent key and the stage id (D-0.7.0-32).</summary>
 public sealed class AgentRun
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
@@ -37,7 +35,9 @@ public sealed class AgentRun
     /// <summary>The LLM connection that paid for the run (never the key itself).</summary>
     public Guid? CredentialId { get; set; }
 
-    public Phase Phase { get; set; }
+    /// <summary>The stage the run belongs to (the stage id; for the SDLC the phase wire value). Stored in the
+    /// <c>phase</c> column (D-0.7.0-32).</summary>
+    public string Stage { get; set; } = string.Empty;
 
     public Guid? StepId { get; set; }
 
@@ -70,9 +70,23 @@ public sealed class AgentRun
 
     public long DurationMs { get; set; }
 
+    /// <summary>FR-297: the rendered prompt and messages sent to the model, redacted and capped at
+    /// <see cref="Agents.AgentRunInput.MaxBytes"/> UTF-8 bytes; null on runs recorded before 0.7.0.</summary>
+    public string? Input { get; set; }
+
+    /// <summary>FR-297: <see cref="Input"/> was cut at the cap.</summary>
+    public bool InputTruncated { get; set; }
+
+    /// <summary>FR-297: milliseconds from the call to the first streamed token of the last attempt; null when the provider
+    /// didn't stream (or before 0.7.0).</summary>
+    public long? LatencyMs { get; set; }
+
     public string? Error { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? CompletedAt { get; set; }
 }
+
+/// <summary>An artifact version an agent run used as input (FR-23).</summary>
+public sealed record InputArtifactRef(Guid ArtifactId, string Type, int Version);

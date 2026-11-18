@@ -7,11 +7,13 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
-using Aide.Domain.Entities;
+using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Persistence;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Runs;
@@ -95,7 +97,7 @@ public static class RunEndpoints
                 ProjectId = r.ProjectId,
                 ReleaseVersionId = r.ReleaseVersionId,
                 Agent = r.Agent,
-                Phase = r.Phase,
+                Stage = r.Stage,
                 StepId = r.StepId,
                 Provider = r.Provider,
                 Model = r.Model,
@@ -141,7 +143,10 @@ public static class RunEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var run = await db.AgentRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == runId && r.ProjectId == id, cancellationToken);
+        var run = await db.AgentRuns.AsNoTracking()
+            .Where(r => r.Id == runId && r.ProjectId == id)
+            .Select(AgentRunProjections.WithoutInput)
+            .FirstOrDefaultAsync(cancellationToken);
         if (run is null)
         {
             return ApiProblems.NotFound("The agent run was not found.");
@@ -252,7 +257,7 @@ public static class RunEndpoints
         r.Id,
         r.ReleaseVersionId,
         r.Agent,
-        r.Phase,
+        SdlcStages.PhaseOf(r.Stage),
         r.StepId,
         r.Provider,
         r.Model,

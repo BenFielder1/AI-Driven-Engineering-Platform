@@ -44,8 +44,8 @@ public static class TevrinEngineModel
     }
 
     /// <summary>The engine's tables: <c>events</c>, <c>jobs</c>, <c>notifications</c>, <c>notification_deliveries</c>,
-    /// <c>approval_links</c>, <c>artifacts</c>, <c>approval_gates</c>, <c>pipeline_definitions</c> and
-    /// <c>pipeline_runs</c>.</summary>
+    /// <c>approval_links</c>, <c>artifacts</c>, <c>approval_gates</c>, <c>pipeline_definitions</c>, <c>pipeline_runs</c>,
+    /// <c>agent_runs</c> and <c>stage_executions</c>.</summary>
     public static ModelBuilder ApplyTevrinEngineModel(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -179,8 +179,82 @@ public static class TevrinEngineModel
         });
 
         ApplyPipelineRuns(builder);
+        ApplyRunLog(builder);
         return builder;
     }
+
+    /// <summary>FR-268, FR-297, §5: <c>agent_runs</c> and <c>stage_executions</c>. The host adds the agent run's relationships
+    /// to its tables (projects, steps, release versions, LLM connections).</summary>
+    private static void ApplyRunLog(ModelBuilder builder)
+    {
+        builder.Entity<AgentRun>(b =>
+        {
+            b.ToTable("agent_runs");
+            b.HasKey(r => r.Id);
+            b.Property(r => r.Id).ValueGeneratedNever();
+
+            // FR-269, FR-274: the agent key, the same column as the 0.6.1 enum.
+            b.Property(r => r.Agent).HasMaxLength(EnumMaxLength);
+
+            // D-0.7.0-32: the stage id lives in the existing phase column (same values, no stage_id column).
+            b.Property(r => r.Stage).HasColumnName("phase").HasMaxLength(EnumMaxLength).IsRequired();
+            b.Property(r => r.Model).HasMaxLength(100).IsRequired();
+            b.Property(r => r.PromptVersion).HasMaxLength(50).IsRequired();
+            b.Property(r => r.InputArtifacts)
+                .HasConversion(InputArtifactsConverter, InputArtifactsComparer)
+                .HasColumnType("jsonb")
+                .IsRequired();
+            b.Property(r => r.Output).HasColumnType("jsonb");
+            b.Property(r => r.CostEstimate).HasPrecision(10, 4);
+            b.Property(r => r.AgentKey).HasMaxLength(100);
+            b.Property(r => r.PresetId).HasMaxLength(100);
+            b.Property(r => r.PresetVersion).HasMaxLength(50);
+            b.Property(r => r.Packs).HasColumnType("jsonb");
+            b.Property(r => r.CatalogVersion).HasColumnType("text");
+            b.Property(r => r.ToolCalls).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
+
+            // FR-297, D-0.7.0-16: additive; rows recorded before 0.7.0 keep a null input and latency.
+            b.Property(r => r.Input).HasColumnType("text");
+            b.Property(r => r.InputTruncated).HasDefaultValue(false).IsRequired();
+
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
+
+            b.HasIndex(r => new { r.ProjectId, r.CreatedAt });
+            b.HasIndex(r => new { r.Status, r.CreatedAt });
+            b.HasIndex(r => new { r.ProjectId, r.ReleaseVersionId });
+            b.HasIndex(r => r.ReleaseVersionId);
+
+            // FR-51 cross-project admin list: ORDER BY created_at DESC, id DESC.
+            b.HasIndex(r => new { r.CreatedAt, r.Id }, "ix_agent_runs_created_at_id").IsDescending(true, true);
+        });
+
+        builder.Entity<StageExecution>(b =>
+        {
+            b.ToTable("stage_executions");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Id).ValueGeneratedNever();
+            b.Property(e => e.StageId).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(e => e.Outcome).HasMaxLength(EnumMaxLength);
+
+            // A run's timings go with the run (and the run with its project).
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(e => e.PipelineRunId).OnDelete(DeleteBehavior.Cascade);
+
+            // §5: a run's executions in order.
+            b.HasIndex(e => new { e.PipelineRunId, e.EnteredAt });
+        });
+    }
+
+    private static readonly JsonSerializerOptions InputArtifactsJson = new(JsonSerializerDefaults.Web);
+
+    // The same JSON as before the move (camelCase properties: artifactId, type, version).
+    private static readonly ValueConverter<IReadOnlyList<InputArtifactRef>, string> InputArtifactsConverter = new(
+        v => JsonSerializer.Serialize(v, InputArtifactsJson),
+        s => JsonSerializer.Deserialize<List<InputArtifactRef>>(s, InputArtifactsJson) ?? new List<InputArtifactRef>());
+
+    private static readonly ValueComparer<IReadOnlyList<InputArtifactRef>> InputArtifactsComparer = new(
+        (a, b) => JsonSerializer.Serialize(a, InputArtifactsJson) == JsonSerializer.Serialize(b, InputArtifactsJson),
+        v => JsonSerializer.Serialize(v, InputArtifactsJson).GetHashCode(StringComparison.Ordinal),
+        v => JsonSerializer.Deserialize<List<InputArtifactRef>>(JsonSerializer.Serialize(v, InputArtifactsJson), InputArtifactsJson)!);
 
     /// <summary>FR-277, FR-294, §5: <c>pipeline_definitions</c> and <c>pipeline_runs</c>. The host adds the run's
     /// relationship to its projects table (D-0.7.0-11).</summary>

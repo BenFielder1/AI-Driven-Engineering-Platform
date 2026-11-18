@@ -83,7 +83,7 @@ public sealed class LlmCredentialMigrationTests(AideApiFactory factory)
         {
             ProjectId = WithKey,
             Agent = SdlcAgents.IdeaRefinement,
-            Phase = Aide.Domain.Lifecycle.Phase.Refinement,
+            Stage = Aide.Domain.Lifecycle.Phase.Refinement.ToWire(),
             Provider = LlmProvider.Anthropic,
             Model = "claude-opus-5-5",
             PromptVersion = "idea-refinement@1",

@@ -23,175 +23,6 @@ namespace Aide.Infrastructure.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Aide.Domain.Entities.AgentRun", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Agent")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("agent");
-
-                    b.Property<string>("AgentKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("agent_key");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer")
-                        .HasColumnName("attempts");
-
-                    b.Property<string>("CatalogVersion")
-                        .HasColumnType("text")
-                        .HasColumnName("catalog_version");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<decimal>("CostEstimate")
-                        .HasPrecision(10, 4)
-                        .HasColumnType("numeric(10,4)")
-                        .HasColumnName("cost_estimate");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CredentialId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("credential_id");
-
-                    b.Property<long>("DurationMs")
-                        .HasColumnType("bigint")
-                        .HasColumnName("duration_ms");
-
-                    b.Property<string>("Error")
-                        .HasColumnType("text")
-                        .HasColumnName("error");
-
-                    b.Property<string>("InputArtifacts")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("input_artifacts");
-
-                    b.Property<int>("InputTokens")
-                        .HasColumnType("integer")
-                        .HasColumnName("input_tokens");
-
-                    b.Property<string>("Model")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("model");
-
-                    b.Property<string>("Output")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("output");
-
-                    b.Property<int>("OutputTokens")
-                        .HasColumnType("integer")
-                        .HasColumnName("output_tokens");
-
-                    b.Property<string>("Packs")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("packs");
-
-                    b.Property<string>("Phase")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("phase");
-
-                    b.Property<Guid?>("PipelineRunId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pipeline_run_id");
-
-                    b.Property<string>("PresetId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("preset_id");
-
-                    b.Property<string>("PresetVersion")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("preset_version");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("project_id");
-
-                    b.Property<string>("PromptVersion")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("prompt_version");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("provider");
-
-                    b.Property<Guid?>("ReleaseVersionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("release_version_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("status");
-
-                    b.Property<Guid?>("StepId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("step_id");
-
-                    b.Property<string>("ToolCalls")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("tool_calls")
-                        .HasDefaultValueSql("'[]'::jsonb");
-
-                    b.Property<string>("UserFeedback")
-                        .HasColumnType("text")
-                        .HasColumnName("user_feedback");
-
-                    b.HasKey("Id")
-                        .HasName("pk_agent_runs");
-
-                    b.HasIndex("CredentialId")
-                        .HasDatabaseName("ix_agent_runs_credential_id");
-
-                    b.HasIndex("PipelineRunId")
-                        .HasDatabaseName("ix_agent_runs_pipeline_run_id");
-
-                    b.HasIndex("ReleaseVersionId")
-                        .HasDatabaseName("ix_agent_runs_release_version_id");
-
-                    b.HasIndex("StepId")
-                        .HasDatabaseName("ix_agent_runs_step_id");
-
-                    b.HasIndex("ProjectId", "CreatedAt")
-                        .HasDatabaseName("ix_agent_runs_project_id_created_at");
-
-                    b.HasIndex("ProjectId", "ReleaseVersionId")
-                        .HasDatabaseName("ix_agent_runs_project_id_release_version_id");
-
-                    b.HasIndex("Status", "CreatedAt")
-                        .HasDatabaseName("ix_agent_runs_status_created_at");
-
-                    b.HasIndex(new[] { "CreatedAt", "Id" }, "ix_agent_runs_created_at_id")
-                        .IsDescending()
-                        .HasDatabaseName("ix_agent_runs_created_at_id");
-
-                    b.ToTable("agent_runs", (string)null);
-                });
-
             modelBuilder.Entity("Aide.Domain.Entities.ApiToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2926,6 +2757,189 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("user_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.AgentRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Agent")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("agent");
+
+                    b.Property<string>("AgentKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("agent_key");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("CatalogVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("catalog_version");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<decimal>("CostEstimate")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("cost_estimate");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CredentialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credential_id");
+
+                    b.Property<long>("DurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<string>("Input")
+                        .HasColumnType("text")
+                        .HasColumnName("input");
+
+                    b.Property<string>("InputArtifacts")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("input_artifacts");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<bool>("InputTruncated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("input_truncated");
+
+                    b.Property<long?>("LatencyMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("latency_ms");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Output")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("output");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<string>("Packs")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("packs");
+
+                    b.Property<Guid?>("PipelineRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pipeline_run_id");
+
+                    b.Property<string>("PresetId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("preset_id");
+
+                    b.Property<string>("PresetVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("preset_version");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("PromptVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("prompt_version");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid?>("ReleaseVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_version_id");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phase");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("StepId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("step_id");
+
+                    b.Property<string>("ToolCalls")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tool_calls")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<string>("UserFeedback")
+                        .HasColumnType("text")
+                        .HasColumnName("user_feedback");
+
+                    b.HasKey("Id")
+                        .HasName("pk_agent_runs");
+
+                    b.HasIndex("CredentialId")
+                        .HasDatabaseName("ix_agent_runs_credential_id");
+
+                    b.HasIndex("PipelineRunId")
+                        .HasDatabaseName("ix_agent_runs_pipeline_run_id");
+
+                    b.HasIndex("ReleaseVersionId")
+                        .HasDatabaseName("ix_agent_runs_release_version_id");
+
+                    b.HasIndex("StepId")
+                        .HasDatabaseName("ix_agent_runs_step_id");
+
+                    b.HasIndex("ProjectId", "CreatedAt")
+                        .HasDatabaseName("ix_agent_runs_project_id_created_at");
+
+                    b.HasIndex("ProjectId", "ReleaseVersionId")
+                        .HasDatabaseName("ix_agent_runs_project_id_release_version_id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_agent_runs_status_created_at");
+
+                    b.HasIndex(new[] { "CreatedAt", "Id" }, "ix_agent_runs_created_at_id")
+                        .IsDescending()
+                        .HasDatabaseName("ix_agent_runs_created_at_id");
+
+                    b.ToTable("agent_runs", (string)null);
+                });
+
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.ApprovalGate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3582,38 +3596,50 @@ namespace Aide.Infrastructure.Migrations
                     b.ToTable("pipeline_runs", (string)null);
                 });
 
-            modelBuilder.Entity("Aide.Domain.Entities.AgentRun", b =>
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.StageExecution", b =>
                 {
-                    b.HasOne("Aide.Domain.Entities.LlmCredential", null)
-                        .WithMany()
-                        .HasForeignKey("CredentialId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_agent_runs_llm_credentials_credential_id");
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
-                    b.HasOne("Tevrin.Engine.Domain.Entities.PipelineRun", null)
-                        .WithMany()
-                        .HasForeignKey("PipelineRunId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .HasConstraintName("fk_agent_runs_pipeline_runs_pipeline_run_id");
+                    b.Property<int>("Checkpoint")
+                        .HasColumnType("integer")
+                        .HasColumnName("checkpoint");
 
-                    b.HasOne("Aide.Domain.Entities.Project", null)
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                    b.Property<DateTimeOffset>("EnteredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("entered_at");
+
+                    b.Property<DateTimeOffset?>("ExitedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exited_at");
+
+                    b.Property<int>("Iteration")
+                        .HasColumnType("integer")
+                        .HasColumnName("iteration");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("outcome");
+
+                    b.Property<Guid>("PipelineRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pipeline_run_id");
+
+                    b.Property<string>("StageId")
                         .IsRequired()
-                        .HasConstraintName("fk_agent_runs_projects_project_id");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("stage_id");
 
-                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
-                        .WithMany()
-                        .HasForeignKey("ReleaseVersionId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .HasConstraintName("fk_agent_runs_release_versions_release_version_id");
+                    b.HasKey("Id")
+                        .HasName("pk_stage_executions");
 
-                    b.HasOne("Aide.Domain.Entities.ExecutionStep", null)
-                        .WithMany()
-                        .HasForeignKey("StepId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .HasConstraintName("fk_agent_runs_execution_steps_step_id");
+                    b.HasIndex("PipelineRunId", "EnteredAt")
+                        .HasDatabaseName("ix_stage_executions_pipeline_run_id_entered_at");
+
+                    b.ToTable("stage_executions", (string)null);
                 });
 
             modelBuilder.Entity("Aide.Domain.Entities.ApiToken", b =>
@@ -3645,7 +3671,7 @@ namespace Aide.Infrastructure.Migrations
 
             modelBuilder.Entity("Aide.Domain.Entities.ComplianceReport", b =>
                 {
-                    b.HasOne("Aide.Domain.Entities.AgentRun", null)
+                    b.HasOne("Tevrin.Engine.Domain.Entities.AgentRun", null)
                         .WithMany()
                         .HasForeignKey("AgentRunId")
                         .OnDelete(DeleteBehavior.NoAction)
@@ -3836,7 +3862,7 @@ namespace Aide.Infrastructure.Migrations
 
             modelBuilder.Entity("Aide.Domain.Entities.ExecutionStepAttempt", b =>
                 {
-                    b.HasOne("Aide.Domain.Entities.AgentRun", null)
+                    b.HasOne("Tevrin.Engine.Domain.Entities.AgentRun", null)
                         .WithMany()
                         .HasForeignKey("AgentRunId")
                         .OnDelete(DeleteBehavior.SetNull)
@@ -4208,6 +4234,40 @@ namespace Aide.Infrastructure.Migrations
                         .HasConstraintName("fk_user_tokens_users_user_id");
                 });
 
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.AgentRun", b =>
+                {
+                    b.HasOne("Aide.Domain.Entities.LlmCredential", null)
+                        .WithMany()
+                        .HasForeignKey("CredentialId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_agent_runs_llm_credentials_credential_id");
+
+                    b.HasOne("Tevrin.Engine.Domain.Entities.PipelineRun", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineRunId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_agent_runs_pipeline_runs_pipeline_run_id");
+
+                    b.HasOne("Aide.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_agent_runs_projects_project_id");
+
+                    b.HasOne("Aide.Domain.Entities.ReleaseVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_agent_runs_release_versions_release_version_id");
+
+                    b.HasOne("Aide.Domain.Entities.ExecutionStep", null)
+                        .WithMany()
+                        .HasForeignKey("StepId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_agent_runs_execution_steps_step_id");
+                });
+
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.ApprovalGate", b =>
                 {
                     b.HasOne("Tevrin.Engine.Domain.Entities.Artifact", null)
@@ -4255,7 +4315,7 @@ namespace Aide.Infrastructure.Migrations
 
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.Artifact", b =>
                 {
-                    b.HasOne("Aide.Domain.Entities.AgentRun", null)
+                    b.HasOne("Tevrin.Engine.Domain.Entities.AgentRun", null)
                         .WithMany()
                         .HasForeignKey("AgentRunId")
                         .OnDelete(DeleteBehavior.NoAction)
@@ -4352,6 +4412,16 @@ namespace Aide.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_pipeline_runs_projects_project_id");
+                });
+
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.StageExecution", b =>
+                {
+                    b.HasOne("Tevrin.Engine.Domain.Entities.PipelineRun", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stage_executions_pipeline_runs_pipeline_run_id");
                 });
 #pragma warning restore 612, 618
         }

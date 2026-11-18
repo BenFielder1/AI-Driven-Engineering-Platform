@@ -101,8 +101,8 @@ public sealed class LegacyRowsTests(AideApiFactory factory)
             Assert.Equal([(EngineGates.Escalation, GateStatus.Cancelled), (SdlcGates.SpecApproval, GateStatus.Cancelled)], gates.Select(g => (g.Type, g.Status)));
             var runs = await db.AgentRuns.AsNoTracking().Where(r => r.ProjectId == id).OrderBy(r => r.CreatedAt).ToListAsync(Ct);
             Assert.Equal(
-                [(SdlcAgents.IdeaRefinement, Phase.Refinement, AgentRunStatus.Succeeded), (SdlcAgents.SpecGenerator, Phase.Specification, AgentRunStatus.Failed)],
-                runs.Select(r => (r.Agent, r.Phase, r.Status)));
+                [(SdlcAgents.IdeaRefinement, Phase.Refinement.ToWire(), AgentRunStatus.Succeeded), (SdlcAgents.SpecGenerator, Phase.Specification.ToWire(), AgentRunStatus.Failed)],
+                runs.Select(r => (r.Agent, r.Stage, r.Status)));
             var deadJob = await db.Jobs.AsNoTracking().SingleAsync(j => j.Id == dead, Ct);
             var deadTrigger = LifecycleSeed.Payload(deadJob.Payload).GetProperty("trigger").GetString(); // a non-generic trigger, unchanged
             Assert.Equal((SdlcJobTypes.Execution, JobStatus.Dead, "start"), (deadJob.Type, deadJob.Status, deadTrigger));

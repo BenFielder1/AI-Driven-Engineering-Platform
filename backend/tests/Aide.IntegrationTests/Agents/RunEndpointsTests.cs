@@ -2,7 +2,6 @@ using System.Net;
 using Aide.Api.Agents;
 using Aide.Api.Features.Admin;
 using Aide.Api.Features.Runs;
-using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.IntegrationTests.Support;
@@ -103,7 +102,7 @@ public sealed class RunEndpointsTests(AideApiFactory factory)
             {
                 ProjectId = projectId,
                 Agent = agent,
-                Phase = Phase.Specification,
+                Stage = Phase.Specification.ToWire(),
                 Provider = LlmProvider.Ollama,
                 Model = "qwen2.5-coder",
                 PromptVersion = "1",

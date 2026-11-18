@@ -439,7 +439,7 @@ One additive migration in M56 only if column types change (FR-274), and these in
 | `stage_executions` | `id` (v7), `pipeline_run_id`, `stage_id`, `iteration`, `checkpoint`, `entered_at`, `exited_at`, `outcome` | Index (`pipeline_run_id`, `entered_at`) | Per-stage timings |
 | `state_transitions` | + `pipeline_run_id` (FK, backfilled, then not null), `kind` (string) | | `from_phase`/`to_phase` hold stage ids (same values) |
 | `approval_gates` | + `pipeline_run_id` (FK, backfilled) | | `type` is a string key (same values) |
-| `agent_runs` | + `pipeline_run_id` (nullable FK), `stage_id`, `input` (text), `input_truncated` (bool), `latency_ms` (nullable) | | Existing rows keep `input` null |
+| `agent_runs` | + `pipeline_run_id` (nullable FK), `stage_id`, `input` (text), `input_truncated` (bool), `latency_ms` (nullable) | | Existing rows keep `input` null. `stage_id` is the existing `phase` column, which already holds the stage id (D-0.7.0-32) |
 | `artifacts` | + `pipeline_run_id` (FK, backfilled) | | |
 
 `projects.current_phase`, `status`, `checkpoint` stay, written with the run in one transaction (D-0.7.0-8). Removing them is a later contract step. Retention unchanged.

@@ -124,44 +124,19 @@ internal sealed class ExecutionStepAttemptConfiguration : IEntityTypeConfigurati
     }
 }
 
+/// <summary>FR-268, D-0.7.0-32: <c>agent_runs</c> is configured by the engine (<see cref="TevrinEngineModel"/>); the host adds
+/// the relationships to its tables.</summary>
 internal sealed class AgentRunConfiguration : IEntityTypeConfiguration<AgentRun>
 {
     public void Configure(EntityTypeBuilder<AgentRun> builder)
     {
-        builder.ToTable("agent_runs");
-        builder.HasKey(r => r.Id);
-        builder.Property(r => r.Id).ValueGeneratedNever();
-
-        // FR-269, FR-274: the agent key (SdlcAgents), the same column as the 0.6.1 enum.
-        builder.Property(r => r.Agent).HasMaxLength(AideDbContext.EnumMaxLength);
-        builder.Property(r => r.Model).HasMaxLength(100).IsRequired();
-        builder.Property(r => r.PromptVersion).HasMaxLength(50).IsRequired();
-        builder.Property(r => r.InputArtifacts).HasJsonbConversion().IsRequired();
-        builder.Property(r => r.Output).HasColumnType("jsonb");
-        builder.Property(r => r.CostEstimate).HasPrecision(10, 4);
-        builder.Property(r => r.AgentKey).HasMaxLength(100);
-        builder.Property(r => r.PresetId).HasMaxLength(100);
-        builder.Property(r => r.PresetVersion).HasMaxLength(50);
-        builder.Property(r => r.Packs).HasColumnType("jsonb");
-        builder.Property(r => r.CatalogVersion).HasColumnType("text");
-        builder.Property(r => r.ToolCalls).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
-
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<ExecutionStep>().WithMany().HasForeignKey(r => r.StepId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(r => r.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
-        builder.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
 
         // The connection that paid for the run (FR-78/79); deleting the connection keeps the run.
         builder.HasOne<LlmCredential>().WithMany().HasForeignKey(r => r.CredentialId).OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(r => r.CredentialId);
-
-        builder.HasIndex(r => new { r.ProjectId, r.CreatedAt });
-        builder.HasIndex(r => new { r.Status, r.CreatedAt });
-        builder.HasIndex(r => new { r.ProjectId, r.ReleaseVersionId });
-        builder.HasIndex(r => r.ReleaseVersionId);
-
-        // FR-51 cross-project admin list: ORDER BY created_at DESC, id DESC.
-        builder.HasIndex(r => new { r.CreatedAt, r.Id }, "ix_agent_runs_created_at_id").IsDescending(true, true);
     }
 }
 

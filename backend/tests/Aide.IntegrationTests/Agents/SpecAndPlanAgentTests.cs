@@ -1,6 +1,5 @@
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Agents;
-using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
@@ -41,7 +40,7 @@ public sealed class SpecAndPlanAgentTests(AideApiFactory factory)
         Assert.Empty(SpecSections.Missing(spec.Content));
         Assert.Contains("/api/todos", spec.Content, StringComparison.Ordinal);
         var run = Assert.Single(await AgentJobs.RunsAsync(factory, id));
-        Assert.Equal((SdlcAgents.SpecGenerator, Phase.Specification, AgentRunStatus.Succeeded, (string?)null), (run.Agent, run.Phase, run.Status, run.UserFeedback));
+        Assert.Equal((SdlcAgents.SpecGenerator, Phase.Specification.ToWire(), AgentRunStatus.Succeeded, (string?)null), (run.Agent, run.Stage, run.Status, run.UserFeedback));
         Assert.Equal([new InputArtifactRef(request.Id, SdlcArtifacts.ProjectRequest, 1)], run.InputArtifacts);
     }
 

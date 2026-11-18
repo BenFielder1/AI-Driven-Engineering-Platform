@@ -137,7 +137,7 @@ public static class LifecycleSeed
             {
                 ProjectId = projectId,
                 Agent = SdlcAgents.CodeReview,
-                Phase = Phase.Review,
+                Stage = Phase.Review.ToWire(),
                 Provider = LlmProvider.Fake,
                 Model = "fake-1",
                 PromptVersion = "code-review@1",

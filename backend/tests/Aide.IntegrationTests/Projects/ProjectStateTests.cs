@@ -131,7 +131,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
             {
                 ProjectId = projectId,
                 Agent = SdlcAgents.CodeGenerator,
-                Phase = Phase.Execution,
+                Stage = Phase.Execution.ToWire(),
                 StepId = steps[3].Id,
                 Provider = LlmProvider.Fake,
                 Model = "fake-1",
