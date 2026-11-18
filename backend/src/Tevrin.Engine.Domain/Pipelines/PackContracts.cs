@@ -172,10 +172,18 @@ public interface IAgentContextProvider
 /// <summary>An approval that invalidated artifacts (§4.54).</summary>
 public sealed record InvalidationContext(Guid RunId, Guid ProjectId, string ApprovedArtifactKey, IReadOnlyList<string> InvalidatedArtifactKeys);
 
-/// <summary>FR-278, §4.54: pack effects of an invalidation (the SDLC resets steps).</summary>
+/// <summary>FR-278, FR-289, §4.54: pack effects of an invalidation (the SDLC resets steps).</summary>
 public interface IInvalidationHook
 {
     string PipelineId { get; }
+
+    /// <summary>
+    /// Pure, for <see cref="DefinitionCascade.Effect"/>: the stages the pack's own effect of approving
+    /// <paramref name="approvedArtifactKey"/> counts as produced in, so they're considered for the fallback stage (the
+    /// SDLC's step reset counts as produced in <c>execution</c>). Called only when the artifact's cascade isn't
+    /// <see cref="CascadeMode.None"/>; empty when the pack has no effect.
+    /// </summary>
+    IReadOnlyList<string> FallbackStages(string approvedArtifactKey, IReadOnlyList<string> invalidatedArtifactKeys);
 
     Task OnInvalidatedAsync(InvalidationContext context, CancellationToken cancellationToken);
 }

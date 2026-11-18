@@ -1,9 +1,13 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Domain.Pipelines;
 
 namespace Tevrin.Engine.Runtime.Persistence;
 
@@ -19,6 +23,9 @@ public static class TevrinEngineModel
     /// <summary>Max length of enum wire-value columns.</summary>
     public const int EnumMaxLength = 32;
 
+    /// <summary>Max length of pipeline, pack, stage and status ids.</summary>
+    public const int IdMaxLength = 100;
+
     /// <summary>Every engine enum is stored as its snake_case wire value (<see cref="EnumWireConverter{TEnum}"/>).</summary>
     public static ModelConfigurationBuilder ApplyTevrinEngineConventions(this ModelConfigurationBuilder configurationBuilder)
     {
@@ -32,11 +39,13 @@ public static class TevrinEngineModel
         MapEnum<JobStatus>(configurationBuilder);
         MapEnum<NotificationDeliveryStatus>(configurationBuilder);
         MapEnum<ApprovalLinkDecision>(configurationBuilder);
+        MapEnum<GenericRunStatus>(configurationBuilder);
         return configurationBuilder;
     }
 
     /// <summary>The engine's tables: <c>events</c>, <c>jobs</c>, <c>notifications</c>, <c>notification_deliveries</c>,
-    /// <c>approval_links</c>, <c>artifacts</c> and <c>approval_gates</c>.</summary>
+    /// <c>approval_links</c>, <c>artifacts</c>, <c>approval_gates</c>, <c>pipeline_definitions</c> and
+    /// <c>pipeline_runs</c>.</summary>
     public static ModelBuilder ApplyTevrinEngineModel(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -141,6 +150,9 @@ public static class TevrinEngineModel
             b.HasIndex(a => new { a.ProjectId, a.Type, a.Status });
             b.HasIndex(a => new { a.ProjectId, a.ReleaseVersionId });
             b.HasIndex(a => a.ReleaseVersionId);
+
+            // FR-294: rows of the same project; they go together through the project cascade (NO ACTION, as for versions).
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(a => a.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
         });
 
         builder.Entity<ApprovalGate>(b =>
@@ -154,6 +166,7 @@ public static class TevrinEngineModel
             XminRowVersion(b.Property(g => g.RowVersion));
 
             b.HasOne<Artifact>().WithMany().HasForeignKey(g => g.ArtifactId).OnDelete(DeleteBehavior.NoAction);
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(g => g.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
 
             // At most one pending gate per (project, type) — enforced by the database (§4.2).
             b.HasIndex(g => new { g.ProjectId, g.Type })
@@ -165,8 +178,82 @@ public static class TevrinEngineModel
             b.HasIndex(g => g.ReleaseVersionId);
         });
 
+        ApplyPipelineRuns(builder);
         return builder;
     }
+
+    /// <summary>FR-277, FR-294, §5: <c>pipeline_definitions</c> and <c>pipeline_runs</c>. The host adds the run's
+    /// relationship to its projects table (D-0.7.0-11).</summary>
+    private static void ApplyPipelineRuns(ModelBuilder builder)
+    {
+        builder.Entity<PipelineDefinitionRecord>(b =>
+        {
+            b.ToTable("pipeline_definitions");
+            b.HasKey(d => d.Hash);
+            HashColumn(b.Property(d => d.Hash));
+            b.Property(d => d.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(d => d.PackId).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(d => d.CanonicalJson).HasColumnType("jsonb").IsRequired();
+        });
+
+        builder.Entity<PipelineRun>(b =>
+        {
+            b.ToTable("pipeline_runs");
+            b.HasKey(r => r.Id);
+            b.Property(r => r.Id).ValueGeneratedNever();
+            b.Property(r => r.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+            HashColumn(b.Property(r => r.DefinitionHash));
+            b.Property(r => r.CurrentStage).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(r => r.PackStatus).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(r => r.Iterations)
+                .HasConversion(IterationsConverter, IterationsComparer)
+                .HasColumnType("jsonb")
+                .IsRequired();
+            XminRowVersion(b.Property(r => r.RowVersion));
+
+            // FR-277: a run is pinned to a stored definition, which is never deleted.
+            b.HasOne<PipelineDefinitionRecord>().WithMany().HasForeignKey(r => r.DefinitionHash).OnDelete(DeleteBehavior.Restrict);
+
+            // D-0.7.0-10: one run per subject (the SDLC's release version) and pipeline.
+            b.HasIndex(r => new { r.PipelineId, r.SubjectId })
+                .IsUnique()
+                .HasDatabaseName("ux_pipeline_runs_pipeline_id_subject_id");
+
+            // §5: at most one run per project and pipeline that hasn't ended (final statuses, §4.57).
+            b.HasIndex(r => new { r.ProjectId, r.PipelineId })
+                .IsUnique()
+                .HasFilter("status NOT IN ('completed', 'failed', 'cancelled')")
+                .HasDatabaseName("ux_pipeline_runs_project_id_pipeline_id_open");
+
+            // The project cascade and per-project lookups (the partial index covers open runs only).
+            b.HasIndex(r => r.ProjectId, "ix_pipeline_runs_project_id");
+        });
+    }
+
+    private static readonly JsonSerializerOptions IterationsJson = new();
+
+    private static readonly ValueConverter<IReadOnlyDictionary<string, int>, string> IterationsConverter = new(
+        v => SerializeIterations(v),
+        s => DeserializeIterations(s));
+
+    private static readonly ValueComparer<IReadOnlyDictionary<string, int>> IterationsComparer = new(
+        (a, b) => SerializeIterations(a!) == SerializeIterations(b!),
+        v => SerializeIterations(v).GetHashCode(StringComparison.Ordinal),
+        v => DeserializeIterations(SerializeIterations(v)));
+
+    private static string SerializeIterations(IReadOnlyDictionary<string, int> iterations) =>
+        JsonSerializer.Serialize(
+            new SortedDictionary<string, int>(iterations.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal), StringComparer.Ordinal),
+            IterationsJson);
+
+    private static IReadOnlyDictionary<string, int> DeserializeIterations(string json) =>
+        JsonSerializer.Deserialize<Dictionary<string, int>>(json, IterationsJson) is { } parsed
+            ? new Dictionary<string, int>(parsed, StringComparer.Ordinal)
+            : new Dictionary<string, int>(StringComparer.Ordinal);
+
+    /// <summary>A definition hash: SHA-256, lower-case hex, <c>character(64)</c>.</summary>
+    private static void HashColumn(PropertyBuilder<string> property) =>
+        property.HasMaxLength(64).IsFixedLength().IsRequired();
 
     /// <summary>Maps the property to PostgreSQL's <c>xmin</c> system column as an optimistic concurrency token (no physical
     /// column is created).</summary>

@@ -88,6 +88,8 @@ public static class DefinitionHash
         ["to"] = c.To,
         ["completes_run"] = c.CompletesRun,
         ["error_code"] = c.ErrorCode,
+        ["reason"] = c.EffectiveReason,
+        ["error_message"] = c.EffectiveErrorMessage,
     };
 
     private static Obj Stage(StageDefinition s)
@@ -134,6 +136,7 @@ public static class DefinitionHash
         }
 
         obj.AddIfSet("on_success", s.OnSuccess);
+        obj.AddIfSet("enqueue_on_enter", s.EnqueueOnEnter);
         if (s.OnReject is { } onReject)
         {
             var r = new Obj { ["to"] = onReject.To };
@@ -143,7 +146,7 @@ public static class DefinitionHash
 
         if (s.Loop is { } loop)
         {
-            var l = new Obj { ["to"] = loop.To, ["requires"] = Requirements(loop.Requires) };
+            var l = new Obj { ["to"] = loop.To, ["requires"] = Requirements(loop.Requires), ["title"] = loop.EffectiveTitle };
             l.AddIfSet("on", loop.On);
             l.AddIfSet("max_iterations", Cap(loop.MaxIterations));
             obj["loop"] = l;

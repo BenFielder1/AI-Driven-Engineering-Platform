@@ -32,6 +32,9 @@ public sealed class Artifact
     /// <summary>The release version the artifact belongs to (§4.10).</summary>
     public Guid ReleaseVersionId { get; init; }
 
+    /// <summary>FR-294: the pipeline run the artifact belongs to (nullable until the contract step, D-0.7.0-28).</summary>
+    public Guid? PipelineRunId { get; init; }
+
     /// <summary>FR-58: the version whose content a restored draft copies; null otherwise.</summary>
     public int? RestoredFromVersion { get; init; }
 

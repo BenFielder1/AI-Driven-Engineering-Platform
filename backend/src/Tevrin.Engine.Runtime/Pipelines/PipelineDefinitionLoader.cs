@@ -68,7 +68,7 @@ public static class PipelineDefinitionLoader
         private static readonly string[] StageKeys =
         [
             "id", "title", "status", "agent", "handler", "inputs", "output", "requires", "validate", "on_invalid", "gate",
-            "on_success", "on_reject", "loop",
+            "on_success", "on_reject", "loop", "enqueue_on_enter",
         ];
 
         public PipelineDefinition Definition(YamlMapping map)
@@ -148,7 +148,7 @@ public static class PipelineDefinitionLoader
 
         private StatusChangeDefinition? StatusChange(string name, YamlNode node, string path)
         {
-            if (AsObject(node, path, ["stage", "from", "to", "completes_run", "error_code"]) is not { } obj)
+            if (AsObject(node, path, ["stage", "from", "to", "completes_run", "error_code", "reason", "error_message"]) is not { } obj)
             {
                 return new StatusChangeDefinition(name, string.Empty, [], string.Empty, false, string.Empty);
             }
@@ -159,7 +159,11 @@ public static class PipelineDefinitionLoader
                 obj.StringList("from", allowSingle: true),
                 obj.String("to"),
                 obj.Bool("completes_run") ?? false,
-                obj.String("error_code"));
+                obj.String("error_code"))
+            {
+                Reason = obj.OptionalString("reason"),
+                ErrorMessage = obj.OptionalString("error_message"),
+            };
         }
 
         private ConcurrencyDefinition Concurrency(Obj top)
@@ -207,6 +211,7 @@ public static class PipelineDefinitionLoader
                 OnSuccess = obj.OptionalString("on_success"),
                 OnReject = OnReject(obj),
                 Loop = Loop(obj),
+                EnqueueOnEnter = obj.OptionalString("enqueue_on_enter"),
             };
         }
 
@@ -311,8 +316,11 @@ public static class PipelineDefinitionLoader
                 return null;
             }
 
-            var obj = Object(loop.Map, loop.Path, ["to", "on", "max_iterations", "requires"]);
-            return new LoopDefinition(obj.String("to"), obj.OptionalString("on"), Cap(obj), Requirements(obj, "requires"));
+            var obj = Object(loop.Map, loop.Path, ["to", "on", "max_iterations", "requires", "title"]);
+            return new LoopDefinition(obj.String("to"), obj.OptionalString("on"), Cap(obj), Requirements(obj, "requires"))
+            {
+                Title = obj.OptionalString("title"),
+            };
         }
 
         private IterationCap? Cap(Obj owner)

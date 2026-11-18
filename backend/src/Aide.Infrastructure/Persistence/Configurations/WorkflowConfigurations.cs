@@ -38,6 +38,14 @@ internal sealed class ApprovalGateConfiguration : IEntityTypeConfiguration<Appro
     }
 }
 
+/// <summary>FR-294, D-0.7.0-11: <c>pipeline_runs</c> is configured by the engine (<see cref="TevrinEngineModel"/>); every
+/// run belongs to a project and goes with it (FR-7).</summary>
+internal sealed class PipelineRunConfiguration : IEntityTypeConfiguration<PipelineRun>
+{
+    public void Configure(EntityTypeBuilder<PipelineRun> builder) =>
+        builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
+}
+
 internal sealed class ExecutionStepConfiguration : IEntityTypeConfiguration<ExecutionStep>
 {
     public void Configure(EntityTypeBuilder<ExecutionStep> builder)
@@ -141,6 +149,7 @@ internal sealed class AgentRunConfiguration : IEntityTypeConfiguration<AgentRun>
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<ExecutionStep>().WithMany().HasForeignKey(r => r.StepId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(r => r.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
 
         // The connection that paid for the run (FR-78/79); deleting the connection keeps the run.
         builder.HasOne<LlmCredential>().WithMany().HasForeignKey(r => r.CredentialId).OnDelete(DeleteBehavior.SetNull);

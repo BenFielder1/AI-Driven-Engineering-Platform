@@ -678,6 +678,7 @@ public sealed partial class ProjectCreator(
             Actor = actor,
             Reason = ProjectRules.CreatedReason,
             Checkpoint = project.Checkpoint,
+            Kind = PipelineTransitionKinds.Start,
             CreatedAt = now,
         });
         db.AddEvent(

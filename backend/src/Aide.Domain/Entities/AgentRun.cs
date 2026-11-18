@@ -13,6 +13,9 @@ public sealed class AgentRun
     /// <summary>The release version the run belongs to (§4.10); null only for runs outside any version.</summary>
     public Guid? ReleaseVersionId { get; set; }
 
+    /// <summary>FR-294: the pipeline run the agent run belongs to (nullable, D-0.7.0-28).</summary>
+    public Guid? PipelineRunId { get; set; }
+
     public string Agent { get; set; } = string.Empty;
 
     /// <summary>The specialist key of a plan step run (FR-121), e.g. <c>data-engineer</c> (0.2.0 keys such as <c>db-engineer</c> on runs before FR-129); null for base agents.</summary>

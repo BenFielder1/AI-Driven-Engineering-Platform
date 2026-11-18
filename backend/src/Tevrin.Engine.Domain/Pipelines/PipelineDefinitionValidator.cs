@@ -315,6 +315,11 @@ public static partial class PipelineDefinitionValidator
                 CheckJobType(agent.JobType, path + ".agent.job_type");
             }
 
+            if (stage.EnqueueOnEnter is { } enqueue)
+            {
+                CheckJobType(enqueue, path + ".enqueue_on_enter");
+            }
+
             if (stage.Handler is { } handler && !string.IsNullOrEmpty(handler) && !_handlers.Contains(handler))
             {
                 Add(DefinitionErrorCodes.UnknownHandler, path + ".handler", $"No pack registered stage handler '{handler}'.");

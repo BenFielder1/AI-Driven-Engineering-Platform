@@ -94,6 +94,10 @@ public sealed class AideDbContext(DbContextOptions<AideDbContext> options)
 
     public DbSet<ApprovalLink> ApprovalLinks => Set<ApprovalLink>();
 
+    public DbSet<PipelineDefinitionRecord> PipelineDefinitions => Set<PipelineDefinitionRecord>();
+
+    public DbSet<PipelineRun> PipelineRuns => Set<PipelineRun>();
+
     public DbSet<UserNotificationPreferences> UserNotificationPreferences => Set<UserNotificationPreferences>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

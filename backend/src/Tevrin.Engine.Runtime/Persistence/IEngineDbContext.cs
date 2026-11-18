@@ -22,6 +22,12 @@ public interface IEngineDbContext
 
     DbSet<ApprovalLink> ApprovalLinks { get; }
 
+    /// <summary>FR-277: stored definitions, by hash.</summary>
+    DbSet<PipelineDefinitionRecord> PipelineDefinitions { get; }
+
+    /// <summary>FR-294: pipeline runs.</summary>
+    DbSet<PipelineRun> PipelineRuns { get; }
+
     DatabaseFacade Database { get; }
 
     ChangeTracker ChangeTracker { get; }

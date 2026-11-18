@@ -175,7 +175,28 @@ public sealed record StatusChangeDefinition(
     IReadOnlyList<string> From,
     string To,
     bool CompletesRun,
-    string ErrorCode);
+    string ErrorCode)
+{
+    /// <summary>
+    /// <c>reason</c> (addition to §4.49, M58): the transition's default reason, recorded when the caller gives none. When
+    /// omitted it's <see cref="EffectiveReason"/>, the name in words (<c>release_completed</c> → "Release completed").
+    /// </summary>
+    public string? Reason { get; init; }
+
+    /// <summary>
+    /// <c>error_message</c> (addition to §4.49, M58): the message of the <see cref="ErrorCode"/> failure, with the
+    /// placeholders <c>{stage}</c> and <c>{status}</c> (the run's), <c>{change_stage}</c> (<see cref="Stage"/>) and
+    /// <c>{from}</c> (<see cref="From"/>, joined with " or "). When omitted it's <see cref="DefaultErrorMessage"/>.
+    /// </summary>
+    public string? ErrorMessage { get; init; }
+
+    /// <summary>The default <see cref="ErrorMessage"/>: 0.6.1's release status-change message, made generic.</summary>
+    public const string DefaultErrorMessage = "The project is in {stage} with status {status}, not {change_stage} with status {from}.";
+
+    public string EffectiveReason => Reason ?? KeyWords.Humanise(Name);
+
+    public string EffectiveErrorMessage => ErrorMessage ?? DefaultErrorMessage;
+}
 
 /// <summary>FR-286, §4.59: job types of which at most one may be active per scope.</summary>
 public sealed record ConcurrencyDefinition(IReadOnlyList<ExclusiveJob> Exclusive)
@@ -240,6 +261,13 @@ public sealed record StageDefinition
 
     public LoopDefinition? Loop { get; init; }
 
+    /// <summary>
+    /// <c>enqueue_on_enter: &lt;job_type&gt;</c> (D-0.7.0-27, addition to §4.49): the job queued in the same transaction as
+    /// an <c>advance</c> into this stage, or <c>null</c> for none. The engine never infers it from the stage kind (an agent
+    /// stage doesn't imply a job on entry).
+    /// </summary>
+    public string? EnqueueOnEnter { get; init; }
+
     /// <summary>The stage's kind; a stage with both an agent and a handler is invalid (<see cref="DefinitionErrorCodes.StageKind"/>)
     /// and reads as an agent stage.</summary>
     public StageKind Kind => Agent is not null ? StageKind.Agent : Handler is not null ? StageKind.Code : StageKind.Manual;
@@ -301,7 +329,39 @@ public sealed record IterationCap(int? Value, string? Setting)
 /// (<c>null</c>: the pack decides). <see cref="Requires"/> (addition to §4.49, for §4.51's <c>sdlc.review-cycle-ready</c>)
 /// is the loop's own entry check, in the same shape as a stage's <c>requires:</c>.
 /// </summary>
-public sealed record LoopDefinition(string To, string? On, IterationCap? MaxIterations, IReadOnlyList<StageRequirement> Requires);
+public sealed record LoopDefinition(string To, string? On, IterationCap? MaxIterations, IReadOnlyList<StageRequirement> Requires)
+{
+    /// <summary>The default <see cref="Title"/>.</summary>
+    public const string DefaultTitle = "Loop";
+
+    /// <summary>
+    /// <c>title</c> (addition to §4.49, M58): what the loop is called in transition reasons and errors (the SDLC's
+    /// "Review cycle"); <see cref="DefaultTitle"/> when omitted.
+    /// </summary>
+    public string? Title { get; init; }
+
+    public string EffectiveTitle => string.IsNullOrWhiteSpace(Title) ? DefaultTitle : Title;
+}
+
+/// <summary>Turns keys into words for default texts.</summary>
+public static class KeyWords
+{
+    /// <summary><c>release_completed</c> → "Release completed": underscores and hyphens become spaces, the first letter
+    /// upper-case.</summary>
+    public static string Humanise(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        var words = key.Replace('_', ' ').Replace('-', ' ');
+        return words.Length == 0 ? words : char.ToUpperInvariant(words[0]) + words[1..];
+    }
+
+    /// <summary>"Review cycle" → "review cycle": the first letter lower-cased (for use mid-sentence).</summary>
+    public static string LowerFirst(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return text.Length > 0 && char.IsUpper(text[0]) ? char.ToLowerInvariant(text[0]) + text[1..] : text;
+    }
+}
 
 /// <summary>
 /// FR-281: <c>on_reject: &lt;stage&gt;</c>, or <c>on_reject: { to, max_iterations }</c> (addition to §4.49): an

@@ -880,6 +880,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             Actor = SystemActor.Name,
             Reason = reason,
             Checkpoint = checkpoint,
+            Kind = PipelineTransitionKinds.Advance, // a seeded forward shortcut
             CreatedAt = now,
         });
     }
@@ -991,6 +992,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             Actor = SystemActor.Name,
             Reason = DemoReleasedReason,
             Checkpoint = tracked.Checkpoint,
+            Kind = PipelineTransitionKinds.Advance, // a seeded forward shortcut
             CreatedAt = now,
         });
         db.Releases.Add(new Release

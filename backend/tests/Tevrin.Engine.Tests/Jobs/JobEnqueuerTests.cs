@@ -117,6 +117,10 @@ public sealed class JobEnqueuerTests : IDisposable
 
         public DbSet<ApprovalLink> ApprovalLinks => Set<ApprovalLink>();
 
+        public DbSet<PipelineDefinitionRecord> PipelineDefinitions => Set<PipelineDefinitionRecord>();
+
+        public DbSet<PipelineRun> PipelineRuns => Set<PipelineRun>();
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
             optionsBuilder.UseNpgsql("Host=unused.invalid;Database=unused");
 

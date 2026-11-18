@@ -12,6 +12,9 @@ public sealed class ApprovalGate
     /// <summary>The release version the gate belongs to (§4.10).</summary>
     public Guid ReleaseVersionId { get; set; }
 
+    /// <summary>FR-294: the pipeline run the gate belongs to (nullable until the contract step, D-0.7.0-28).</summary>
+    public Guid? PipelineRunId { get; set; }
+
     public string Type { get; set; } = string.Empty;
 
     public Guid? ArtifactId { get; set; }

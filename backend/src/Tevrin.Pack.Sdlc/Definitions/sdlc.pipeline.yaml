@@ -1,6 +1,7 @@
 # FR-290: the SDLC lifecycle as a pipeline definition (SPEC §4.51 sketch, with keys fixed to 0.6.1 behaviour).
 # Stage order and statuses equal PhaseOrder.All / StatusFor, gates GateRules.RequiredGate (§4.53), start stages
 # LifecycleStateMachine.Start, and the guards reproduce UnmetEntryConditions verbatim (Aide.UnitTests, FR290_*).
+# Jobs queued on entering a stage (enqueue_on_enter) equal PhaseJobs.OnEnter (D-0.7.0-27).
 # Changing any value changes the definition hash (§4.50).
 pipeline: sdlc
 version: 1
@@ -35,11 +36,14 @@ statuses:
 
 rollback_status: rolled_back
 
-# FR-65: the release's status-only moves, refused with NOT_RELEASING from any other status.
+# FR-65: the release's status-only moves, refused with NOT_RELEASING from any other status. The reasons and messages are
+# 0.6.1's (the default reason is the name in words; the default message names the stage and statuses).
 status_changes:
-  release_completed:       { stage: release, from: [releasing, awaiting_merge], to: released, completes_run: true, error_code: NOT_RELEASING }
+  release_completed:       { stage: release, from: [releasing, awaiting_merge], to: released, completes_run: true, error_code: NOT_RELEASING,
+                             error_message: "The project is not releasing." }
   release_awaiting_merge:  { stage: release, from: [releasing], to: awaiting_merge, error_code: NOT_RELEASING }
-  release_merge_abandoned: { stage: release, from: [awaiting_merge], to: releasing, error_code: NOT_RELEASING }
+  release_merge_abandoned: { stage: release, from: [awaiting_merge], to: releasing, error_code: NOT_RELEASING,
+                             reason: Awaited merge abandoned }
 
 # §4.9, FR-286: one active execution job per project (ux_jobs_project_id_active_execution stays as the backstop).
 concurrency:
@@ -70,6 +74,7 @@ stages:
   - id: specification
     title: Specification
     status: active
+    enqueue_on_enter: spec_generation
     agent: { key: spec_generator, job_type: spec_generation }
     inputs: [project_request, source_items, codebase_summary]
     output: technical_specification
@@ -79,6 +84,7 @@ stages:
   - id: planning
     title: Planning
     status: active
+    enqueue_on_enter: plan_generation
     agent: { key: plan_generator, job_type: plan_generation }
     inputs: [project_request, technical_specification, codebase_summary]
     output: implementation_plan
@@ -101,20 +107,23 @@ stages:
   - id: review
     title: Review
     status: reviewing
+    enqueue_on_enter: review
     agent: { key: code_review, job_type: review }
     inputs: [technical_specification, implementation_plan, codebase_summary]
     output: optimization_plan
     requires: [{ guard: sdlc.plan-steps-completed }]
     loop:
+      title: Review cycle
       to: execution
       on: review_required
       max_iterations: { setting: review_cycles }
       requires: [{ guard: sdlc.review-cycle-ready }]
 
-  # FR-42: manual; the release job is queued on entry (by the SDLC service until M58).
+  # FR-42: manual; the release job is queued on entry.
   - id: release
     title: Release
     status: releasing
+    enqueue_on_enter: release
     requires:
       - { guard: sdlc.release-eligible }
       - { no_pending_gates: { except: [pre_release] } }

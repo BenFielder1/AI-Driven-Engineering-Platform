@@ -55,6 +55,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
             Actor = actor,
             Reason = transition.Reason,
             Checkpoint = transition.Version,
+            Kind = TransitionKinds.Of(transition.Kind),
             CreatedAt = now,
         });
         db.AddEvent(
