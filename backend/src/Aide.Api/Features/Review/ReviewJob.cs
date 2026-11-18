@@ -263,7 +263,7 @@ public sealed partial class ReviewJobHandler(
         var superseded = await db.ApprovalGates
             .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending && (g.Type == SdlcGates.PreRelease || g.Type == EngineGates.Escalation))
             .ToListAsync(cancellationToken);
-        foreach (var gate in superseded)
+        foreach (var gate in Artifacts.EventOrder.Cancelled(superseded))
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;

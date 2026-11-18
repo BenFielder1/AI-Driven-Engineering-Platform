@@ -115,7 +115,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         project.LastRollbackAt = now;
 
         var invalidated = plan.InvalidatedArtifactIds.ToHashSet();
-        foreach (var artifact in artifacts.Where(a => invalidated.Contains(a.Id)))
+        foreach (var artifact in Artifacts.EventOrder.Invalidated(artifacts.Where(a => invalidated.Contains(a.Id))))
         {
             artifact.Status = ArtifactStatus.Invalidated;
             db.AddEvent(
@@ -151,7 +151,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         var pendingGates = await db.ApprovalGates
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending && g.Id != keepGateId)
             .ToListAsync(cancellationToken);
-        foreach (var gate in pendingGates)
+        foreach (var gate in Artifacts.EventOrder.Cancelled(pendingGates))
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;

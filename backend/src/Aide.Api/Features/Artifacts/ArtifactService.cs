@@ -253,7 +253,7 @@ public sealed partial class ArtifactService(
         var drafts = await db.Artifacts
             .Where(a => a.ProjectId == project.Id && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
             .ToListAsync(cancellationToken);
-        foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
+        foreach (var draft in EventOrder.Superseded(drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded))))
         {
             draft.Status = ArtifactStatus.Superseded;
             db.AddEvent(
@@ -386,7 +386,7 @@ public sealed partial class ArtifactService(
             now);
 
         var invalidated = cascade.InvalidatedArtifactIds.ToHashSet();
-        foreach (var downstream in artifacts.Where(a => invalidated.Contains(a.Id)))
+        foreach (var downstream in EventOrder.Invalidated(artifacts.Where(a => invalidated.Contains(a.Id))))
         {
             downstream.Status = ArtifactStatus.Invalidated;
             db.AddEvent(
@@ -744,7 +744,7 @@ public sealed partial class ArtifactService(
             invalidated,
             fellBack,
             [.. pending.Select(g => new PendingGateRef(g.Id, g.Type, g.ArtifactId))]).ToHashSet();
-        foreach (var gate in pending.Where(g => stale.Contains(g.Id)))
+        foreach (var gate in EventOrder.Cancelled(pending.Where(g => stale.Contains(g.Id))))
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;
