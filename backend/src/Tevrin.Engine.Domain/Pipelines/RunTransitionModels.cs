@@ -70,8 +70,9 @@ public sealed record RunFacts
 
 /// <summary>
 /// FR-287: a requested move. <see cref="TargetStage"/> is required for <c>rollback</c> and <c>fallback</c>, optional for
-/// <c>advance</c>, <c>loop</c> and <c>noop</c> (when given it must be where the move goes) and ignored for
-/// <c>status_change</c>, which <see cref="StatusChange"/> names. <see cref="LoopOutcome"/> is the outcome the caller
+/// <c>advance</c>, <c>loop</c> and <c>noop</c> (when given it must be where the move goes), and for
+/// <c>status_change</c>, which <see cref="StatusChange"/> names, refused when it isn't the change's stage and the change sets
+/// <c>wrong_stage_message</c> (otherwise ignored). <see cref="LoopOutcome"/> is the outcome the caller
 /// requests the loop for (D-0.7.0-27: the caller decides it; <c>loop.on</c> must match). <see cref="Reason"/> replaces
 /// the default reason when not blank.
 /// </summary>

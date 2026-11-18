@@ -81,16 +81,21 @@ public static class DefinitionHash
         return obj;
     }
 
-    private static Obj StatusChange(StatusChangeDefinition c) => new()
+    private static Obj StatusChange(StatusChangeDefinition c)
     {
-        ["stage"] = c.Stage,
-        ["from"] = Strings(c.From),
-        ["to"] = c.To,
-        ["completes_run"] = c.CompletesRun,
-        ["error_code"] = c.ErrorCode,
-        ["reason"] = c.EffectiveReason,
-        ["error_message"] = c.EffectiveErrorMessage,
-    };
+        var obj = new Obj
+        {
+            ["stage"] = c.Stage,
+            ["from"] = Strings(c.From),
+            ["to"] = c.To,
+            ["completes_run"] = c.CompletesRun,
+            ["error_code"] = c.ErrorCode,
+            ["reason"] = c.EffectiveReason,
+            ["error_message"] = c.EffectiveErrorMessage,
+        };
+        obj.AddIfSet("wrong_stage_message", c.WrongStageMessage);
+        return obj;
+    }
 
     private static Obj Stage(StageDefinition s)
     {

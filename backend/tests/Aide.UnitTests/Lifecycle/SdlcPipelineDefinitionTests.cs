@@ -1,6 +1,4 @@
 using Aide.Domain.Artifacts;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +15,7 @@ namespace Aide.UnitTests.Lifecycle;
 /// <summary>FR-290 (FR-278, FR-283, FR-285, FR-286): <c>sdlc.pipeline.yaml</c> loads, validates and equals 0.6.1's lifecycle tables.</summary>
 public class SdlcPipelineDefinitionTests
 {
-    public static TheoryData<Phase> Phases => [.. PhaseOrder.All];
+    public static TheoryData<Phase> Phases => [.. Sdlc.All];
 
     [Fact]
     public void FR290_the_SDLC_definition_loads_and_validates_with_no_errors()
@@ -53,8 +51,12 @@ public class SdlcPipelineDefinitionTests
     }
 
     [Fact]
-    public void FR290_stage_order_equals_PhaseOrder_All() =>
-        Assert.Equal(PhaseOrder.All.Select(p => p.ToWire()), Definition.Stages.Select(s => s.Id));
+    public void FR290_stage_order_equals_the_0_6_1_phase_order() =>
+        Assert.Equal(["analysis", "refinement", "specification", "planning", "execution", "review", "release"], Definition.Stages.Select(s => s.Id));
+
+    [Fact]
+    public void FR293_the_Phase_order_is_the_definition_stage_order() =>
+        Assert.Equal(Enum.GetValues<Phase>().Order(), Sdlc.All);
 
     [Fact]
     public void FR290_stage_titles_are_the_phase_names() =>
@@ -63,31 +65,52 @@ public class SdlcPipelineDefinitionTests
             Definition.Stages.Select(s => s.Title));
 
     [Theory]
-    [MemberData(nameof(Phases))]
-    public void FR290_each_stage_status_equals_StatusFor(Phase phase) =>
-        Assert.Equal(PhaseOrder.StatusFor(phase).ToWire(), StageOf(phase).Status);
+    [InlineData(Phase.Analysis, ProjectStatus.Active)]
+    [InlineData(Phase.Refinement, ProjectStatus.Active)]
+    [InlineData(Phase.Specification, ProjectStatus.Active)]
+    [InlineData(Phase.Planning, ProjectStatus.Active)]
+    [InlineData(Phase.Execution, ProjectStatus.Building)]
+    [InlineData(Phase.Review, ProjectStatus.Reviewing)]
+    [InlineData(Phase.Release, ProjectStatus.Releasing)]
+    public void FR290_each_stage_status_equals_the_0_6_1_status_for_its_phase(Phase phase, ProjectStatus expected) =>
+        Assert.Equal(expected.ToWire(), StageOf(phase).Status);
 
     [Theory]
-    [MemberData(nameof(Phases))]
-    public void FR290_the_linear_successor_equals_PhaseOrder_Next(Phase phase) =>
-        Assert.Equal(PhaseOrder.Next(phase)?.ToWire(), Definition.SuccessorOf(phase.ToWire()));
+    [InlineData(Phase.Analysis, Phase.Refinement)]
+    [InlineData(Phase.Refinement, Phase.Specification)]
+    [InlineData(Phase.Specification, Phase.Planning)]
+    [InlineData(Phase.Planning, Phase.Execution)]
+    [InlineData(Phase.Execution, Phase.Review)]
+    [InlineData(Phase.Review, Phase.Release)]
+    [InlineData(Phase.Release, null)]
+    public void FR290_the_linear_successor_equals_the_0_6_1_next_phase(Phase phase, Phase? expected) =>
+        Assert.Equal(expected?.ToWire(), Definition.SuccessorOf(phase.ToWire()));
 
     [Fact]
-    public void FR290_the_entry_gate_for_every_stage_and_approval_mode_equals_RequiredGate()
+    public void FR290_the_entry_gate_for_every_stage_and_approval_mode_equals_the_0_6_1_required_gate()
     {
-        foreach (var phase in PhaseOrder.All)
+        foreach (var phase in Sdlc.All)
         {
             foreach (var mode in Enum.GetValues<ApprovalMode>())
             {
+                // 0.6.1's table (§4.2): spec_approval into planning (strict, advisory), plan_approval into execution
+                // (strict), pre_release into release (every mode).
+                string? expected = (phase, mode) switch
+                {
+                    (Phase.Planning, ApprovalMode.Strict or ApprovalMode.Advisory) => SdlcGates.SpecApproval,
+                    (Phase.Execution, ApprovalMode.Strict) => SdlcGates.PlanApproval,
+                    (Phase.Release, _) => SdlcGates.PreRelease,
+                    _ => null,
+                };
                 Assert.True(
-                    GateRules.RequiredGate(mode, phase) == BuiltInRequirements.RequiredGate(StageOf(phase), mode),
+                    expected == BuiltInRequirements.RequiredGate(StageOf(phase), mode) && expected == Sdlc.RequiredGate(mode, phase),
                     $"{phase.ToWire()} in {mode.ToWire()}");
             }
         }
     }
 
     [Fact]
-    public void FR290_each_gate_guards_the_entry_of_GuardedEntry_and_approves_GatedArtifact_with_SupportsApprovalLinks()
+    public void FR290_each_gate_guards_the_0_6_1_entry_and_approves_the_0_6_1_artifact_with_approval_links()
     {
         var gated = Definition.Stages.Where(s => s.Gate is not null).ToList();
 
@@ -95,21 +118,31 @@ public class SdlcPipelineDefinitionTests
         Assert.All(gated, stage =>
         {
             var gate = stage.Gate!;
-            Assert.Equal(GateRules.GuardedEntry(gate.Type)?.ToWire(), stage.Id);
-            Assert.Equal(GateRules.GatedArtifact(gate.Type), gate.Approves);
-            Assert.Equal(GateRules.SupportsApprovalLinks(gate.Type), gate.ApprovalLinks);
+            var (entry, artifact) = gate.Type switch
+            {
+                SdlcGates.SpecApproval => (Phase.Planning, SdlcArtifacts.TechnicalSpecification),
+                SdlcGates.PlanApproval => (Phase.Execution, SdlcArtifacts.ImplementationPlan),
+                _ => (Phase.Release, (string?)null),
+            };
+            Assert.Equal(entry.ToWire(), stage.Id);
+            Assert.Equal(artifact, gate.Approves);
+            Assert.True(gate.ApprovalLinks);
+            Assert.Equal(
+                ((Phase?)entry, artifact, true),
+                (SdlcStages.GuardedEntry(Definition, gate.Type), SdlcStages.GatedArtifact(Definition, gate.Type), SdlcStages.SupportsApprovalLinks(Definition, gate.Type)));
         });
     }
 
     [Fact]
-    public void FR290_start_stages_equal_Start()
+    public void FR290_start_stages_equal_the_0_6_1_start_phases()
     {
         var start = Definition.Start;
 
+        Assert.Equal(["refinement", "analysis"], start);
         Assert.Equal([SdlcGuards.StartStage(infersStack: false), SdlcGuards.StartStage(infersStack: true)], start);
-        Assert.Equal(LifecycleStateMachine.Start(infersStack: false, baseHasCode: true).Value.Phase.ToWire(), start[0]);
-        Assert.Equal(LifecycleStateMachine.Start(infersStack: false, baseHasCode: false).Value.Phase.ToWire(), start[0]);
-        var inferred = LifecycleStateMachine.Start(infersStack: true, baseHasCode: true).Value;
+        Assert.Equal(Sdlc.Start(infersStack: false, baseHasCode: true).Value.Phase.ToWire(), start[0]);
+        Assert.Equal(Sdlc.Start(infersStack: false, baseHasCode: false).Value.Phase.ToWire(), start[0]);
+        var inferred = Sdlc.Start(infersStack: true, baseHasCode: true).Value;
         Assert.Equal(inferred.Phase.ToWire(), start[1]);
         Assert.Equal(inferred.Status.ToWire(), StageOf(inferred.Phase).Status);
     }
@@ -129,7 +162,14 @@ public class SdlcPipelineDefinitionTests
         Assert.Equal(SdlcJobTypes.ForAgent(stage.Agent!.Key), stage.Agent.JobType);
         Assert.Equal(SdlcArtifactRules.ProducingAgent(stage.Output!), stage.Agent.Key);
         Assert.Equal(phase, SdlcArtifactRules.ProducingPhase(stage.Output!));
-        if (PhaseJobs.OnEnter(phase) is { } onEnter)
+        string? onEnterIn061 = phase switch
+        {
+            Phase.Specification => SdlcJobTypes.SpecGeneration,
+            Phase.Planning => SdlcJobTypes.PlanGeneration,
+            Phase.Review => SdlcJobTypes.Review,
+            _ => null,
+        };
+        if (onEnterIn061 is { } onEnter)
         {
             Assert.Equal(onEnter, stage.Agent.JobType);
         }
@@ -166,13 +206,22 @@ public class SdlcPipelineDefinitionTests
     [InlineData(SdlcArtifacts.StackProfile)]
     public void FR290_the_artifacts_downstream_of_the_inputs_equal_the_0_6_1_invalidated_types(string approved)
     {
+        // 0.6.1's cascade table (§4.4, §4.27).
+        string[] expected = approved switch
+        {
+            SdlcArtifacts.ProjectRequest => [SdlcArtifacts.TechnicalSpecification, SdlcArtifacts.ImplementationPlan, SdlcArtifacts.OptimizationPlan],
+            SdlcArtifacts.TechnicalSpecification => [SdlcArtifacts.ImplementationPlan, SdlcArtifacts.OptimizationPlan],
+            SdlcArtifacts.ImplementationPlan => [SdlcArtifacts.OptimizationPlan],
+            SdlcArtifacts.StackProfile => [SdlcArtifacts.ProjectRequest, SdlcArtifacts.TechnicalSpecification, SdlcArtifacts.ImplementationPlan, SdlcArtifacts.OptimizationPlan],
+            _ => [],
+        };
+
         // §4.54's dependency rule over the stage inputs. Fallback stages and step resets are compared in M58.
         var definition = Definition;
         List<string> invalidated = definition.FindArtifact(approved)!.Cascade == CascadeMode.None ? [] : Downstream(definition, approved);
 
-        Assert.Equal(
-            InvalidationCascade.Effect(approved, Phase.Release).InvalidatedTypes.Order(StringComparer.Ordinal),
-            invalidated.Order(StringComparer.Ordinal));
+        Assert.Equal(expected.Order(StringComparer.Ordinal), invalidated.Order(StringComparer.Ordinal));
+        Assert.Equal(expected, Sdlc.Cascade(approved, Phase.Release).InvalidatedTypes);
     }
 
     [Fact]
@@ -193,18 +242,18 @@ public class SdlcPipelineDefinitionTests
     {
         // Each named change against the 0.6.1 transition it replaces (§4.51): the statuses it applies from, its target,
         // whether it completes the run (released) and the error from any other status.
-        var requests = new Dictionary<string, TransitionRequest>
+        var requests = new Dictionary<string, Transition>
         {
-            ["release_completed"] = TransitionRequest.ReleaseCompleted(),
-            ["release_awaiting_merge"] = TransitionRequest.ReleaseAwaitingMerge(),
-            ["release_merge_abandoned"] = TransitionRequest.ReleaseMergeAbandoned(),
+            ["release_completed"] = SdlcTransitions.ReleaseCompleted(),
+            ["release_awaiting_merge"] = SdlcTransitions.ReleaseAwaitingMerge(),
+            ["release_merge_abandoned"] = SdlcTransitions.ReleaseMergeAbandoned(),
         };
 
         Assert.Equal(requests.Keys, Definition.StatusChanges.Select(c => c.Name));
         Assert.All(Definition.StatusChanges, change =>
         {
             var outcomes = Enum.GetValues<ProjectStatus>()
-                .Select(status => (Status: status, Result: LifecycleStateMachine.Apply(new LifecycleState(Phase.Release, status, 3), requests[change.Name], LifecycleSnapshot.Empty)))
+                .Select(status => (Status: status, Result: Sdlc.Apply(new LifecycleState(Phase.Release, status, 3), requests[change.Name], LifecycleSnapshot.Empty)))
                 .ToList();
             var allowed = outcomes.Where(o => o.Result.IsSuccess).ToList();
 

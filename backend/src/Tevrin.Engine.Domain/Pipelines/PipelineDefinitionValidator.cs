@@ -213,6 +213,11 @@ public static partial class PipelineDefinitionValidator
                 }
 
                 CheckStatus(change.To, path + ".to");
+                if (change.WrongStageMessage is { } wrongStage && string.IsNullOrWhiteSpace(wrongStage))
+                {
+                    Add(DefinitionErrorCodes.Parse, path + ".wrong_stage_message", "'wrong_stage_message' can't be empty.");
+                }
+
                 if (string.IsNullOrEmpty(change.ErrorCode))
                 {
                     Add(DefinitionErrorCodes.Parse, path + ".error_code", "'error_code' is required.");

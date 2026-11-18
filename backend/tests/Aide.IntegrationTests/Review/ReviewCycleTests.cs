@@ -427,8 +427,8 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
 
     /// <summary>
     /// D-0.7.0-30, FR-291: cycle 1 is review_required, then an Owner lowers max_review_cycles to 1 (the current cycle).
-    /// 0.6.1 still starts the cycle when the optimisation plan is approved; in parity mode (Throw on in tests) the engine
-    /// must agree, because the SDLC's review_cycles setting is at least the current cycle + 1.
+    /// 0.6.1 still starts the cycle when the optimisation plan is approved, and so does the engine (FR-292), because the
+    /// SDLC's review_cycles setting is at least the current cycle + 1.
     /// </summary>
     [Fact]
     public async Task D_0_7_0_30_lowering_max_review_cycles_never_refuses_a_cycle_0_6_1_allows()

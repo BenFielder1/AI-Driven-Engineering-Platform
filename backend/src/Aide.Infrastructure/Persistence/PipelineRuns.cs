@@ -254,8 +254,9 @@ public static class PipelineRunBackfill
 /// Runs are never reused from an earlier save in the same scope: the run to update is loaded fresh (a stale tracked copy is
 /// detached first) and links read run ids without tracking, so the dual write never adds a concurrency failure of its own.
 /// </para>
-/// In 0.7.0 M58 the project's columns are still written by the lifecycle code (the old state machine decides), so the run
-/// follows them wherever they change; nothing here decides anything. Runs after <see cref="ReleaseVersionStampingInterceptor"/>,
+/// Since FR-292 the engine decides every lifecycle move from the run (<c>SdlcLifecycle</c> in the API); the writers record
+/// the result on the project's columns (the 0.6.1 copy), and this copies them onto the run in the same transaction, so the
+/// run follows them wherever they change; nothing here decides anything. Runs after <see cref="ReleaseVersionStampingInterceptor"/>,
 /// which fills the release versions this reads. Disabled when the host has no pipeline registry (design-time tools).
 /// Synchronous <c>SaveChanges</c> isn't supported for saves that touch projects or linked rows (no caller uses one).
 /// </summary>

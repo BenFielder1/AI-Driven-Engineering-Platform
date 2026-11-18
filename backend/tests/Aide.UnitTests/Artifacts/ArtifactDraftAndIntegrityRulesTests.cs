@@ -2,6 +2,7 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Pack.Sdlc;
@@ -21,7 +22,7 @@ public class ArtifactDraftAndIntegrityRulesTests
     [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Execution)]
     [InlineData(SdlcArtifacts.OptimizationPlan, Phase.Review)]
     public void FR18_A_type_can_be_drafted_from_its_producing_phase_onwards(string type, Phase phase) =>
-        Assert.True(SdlcArtifactRules.CanCreateDraft(type, phase, PhaseOrder.StatusFor(phase)).IsSuccess);
+        Assert.True(SdlcArtifactRules.CanCreateDraft(type, phase, Sdlc.StatusFor(phase)).IsSuccess);
 
     [Theory]
     [InlineData(SdlcArtifacts.TechnicalSpecification, Phase.Refinement)]
@@ -166,7 +167,7 @@ public class ArtifactDraftAndIntegrityRulesTests
         var current = new PendingGateRef(Guid.NewGuid(), SdlcGates.SpecApproval, approved);
         var preRelease = new PendingGateRef(Guid.NewGuid(), SdlcGates.PreRelease, null);
 
-        var stale = GateRules.StaleAfterArtifactApproval(approved, SdlcArtifacts.TechnicalSpecification, [], phaseFellBack: false, [older, current, preRelease]);
+        var stale = GateRules.StaleAfterArtifactApproval(Sdlc.Definition, approved, SdlcArtifacts.TechnicalSpecification, [], phaseFellBack: false, [older, current, preRelease]);
 
         Assert.Equal([older.Id], stale);
     }
@@ -177,7 +178,7 @@ public class ArtifactDraftAndIntegrityRulesTests
         var plan = Guid.NewGuid();
         var planGate = new PendingGateRef(Guid.NewGuid(), SdlcGates.PlanApproval, plan);
 
-        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), SdlcArtifacts.TechnicalSpecification, [plan], phaseFellBack: false, [planGate]);
+        var stale = GateRules.StaleAfterArtifactApproval(Sdlc.Definition, Guid.NewGuid(), SdlcArtifacts.TechnicalSpecification, [plan], phaseFellBack: false, [planGate]);
 
         Assert.Equal([planGate.Id], stale);
     }
@@ -188,7 +189,7 @@ public class ArtifactDraftAndIntegrityRulesTests
         var escalation = new PendingGateRef(Guid.NewGuid(), EngineGates.Escalation, null);
         var preRelease = new PendingGateRef(Guid.NewGuid(), SdlcGates.PreRelease, null);
 
-        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), SdlcArtifacts.TechnicalSpecification, [], phaseFellBack: true, [escalation, preRelease]);
+        var stale = GateRules.StaleAfterArtifactApproval(Sdlc.Definition, Guid.NewGuid(), SdlcArtifacts.TechnicalSpecification, [], phaseFellBack: true, [escalation, preRelease]);
 
         Assert.Equal([escalation.Id, preRelease.Id], stale);
     }
@@ -199,7 +200,7 @@ public class ArtifactDraftAndIntegrityRulesTests
         var specGate = new PendingGateRef(Guid.NewGuid(), SdlcGates.SpecApproval, Guid.NewGuid());
         var escalation = new PendingGateRef(Guid.NewGuid(), EngineGates.Escalation, null);
 
-        var stale = GateRules.StaleAfterArtifactApproval(Guid.NewGuid(), SdlcArtifacts.OptimizationPlan, [], phaseFellBack: false, [specGate, escalation]);
+        var stale = GateRules.StaleAfterArtifactApproval(Sdlc.Definition, Guid.NewGuid(), SdlcArtifacts.OptimizationPlan, [], phaseFellBack: false, [specGate, escalation]);
 
         Assert.Empty(stale);
     }

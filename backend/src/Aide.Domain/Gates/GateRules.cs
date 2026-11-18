@@ -2,50 +2,17 @@ using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Gates;
 
-/// <summary>Gates by approval mode and gate decision rules (§4.2, FR-12–FR-14, D3, D16).</summary>
+/// <summary>Gate decision rules (§4.2, FR-12–FR-14, D3, D16). Which gate guards which entry, in which approval modes, and
+/// what it approves are the SDLC definition's (<see cref="SdlcStages"/>, FR-293).</summary>
 public static class GateRules
 {
     /// <summary>An escalation <c>continue</c> raises the effective max-cycle limit by this much (FR-14).</summary>
     public const int ExtraCyclesPerContinue = 1;
-
-    /// <summary>
-    /// The gate required to enter <paramref name="entering"/>, or <c>null</c> when the transition applies directly.
-    /// Escalations (§4.5) always create an <see cref="EngineGates.Escalation"/> gate, in every mode.
-    /// </summary>
-    public static string? RequiredGate(ApprovalMode mode, Phase entering) => (entering, mode) switch
-    {
-        (Phase.Planning, ApprovalMode.Strict or ApprovalMode.Advisory) => SdlcGates.SpecApproval,
-        (Phase.Execution, ApprovalMode.Strict) => SdlcGates.PlanApproval,
-        (Phase.Release, _) => SdlcGates.PreRelease,
-        _ => null,
-    };
-
-    /// <summary>
-    /// FR-48: one-click approve/reject links exist for spec_approval, plan_approval and pre_release gates.
-    /// Escalation decisions need a choice (and maybe a version), so their notifications link to the project page.
-    /// </summary>
-    public static bool SupportsApprovalLinks(string type) => type is SdlcGates.SpecApproval or SdlcGates.PlanApproval or SdlcGates.PreRelease;
-
-    /// <summary>The phase whose entry a gate guards; <c>null</c> for escalation gates, which guard no single entry.</summary>
-    public static Phase? GuardedEntry(string type) => type switch
-    {
-        SdlcGates.SpecApproval => Phase.Planning,
-        SdlcGates.PlanApproval => Phase.Execution,
-        SdlcGates.PreRelease => Phase.Release,
-        _ => null,
-    };
-
-    /// <summary>The artifact a gate approves (the latest locked version is attached to the gate); <c>null</c> for pre_release and escalation.</summary>
-    public static string? GatedArtifact(string type) => type switch
-    {
-        SdlcGates.SpecApproval => SdlcArtifacts.TechnicalSpecification,
-        SdlcGates.PlanApproval => SdlcArtifacts.ImplementationPlan,
-        _ => null,
-    };
 
     /// <summary>The agent re-run when a gate is rejected (D16: spec gate → spec generator).</summary>
     public static string? AgentToRerunOnReject(string type) => type switch
@@ -125,12 +92,14 @@ public static class GateRules
     /// </list>
     /// </summary>
     public static IReadOnlyList<Guid> StaleAfterArtifactApproval(
+        PipelineDefinition definition,
         Guid approvedArtifactId,
         string approvedType,
         IReadOnlyCollection<Guid> invalidatedArtifactIds,
         bool phaseFellBack,
         IEnumerable<PendingGateRef> pendingGates)
     {
+        ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(invalidatedArtifactIds);
         ArgumentNullException.ThrowIfNull(pendingGates);
         return
@@ -138,7 +107,7 @@ public static class GateRules
             .. pendingGates
                 .Where(g => phaseFellBack
                     || (g.ArtifactId is { } id && invalidatedArtifactIds.Contains(id))
-                    || (GatedArtifact(g.Type) == approvedType && g.ArtifactId != approvedArtifactId))
+                    || (SdlcStages.GatedArtifact(definition, g.Type) == approvedType && g.ArtifactId != approvedArtifactId))
                 .Select(g => g.Id),
         ];
     }

@@ -7,9 +7,9 @@ namespace Aide.Api.Pipelines;
 
 /// <summary>
 /// FR-278, FR-290: the pipeline registry with the SDLC pack, its guards (composed from <c>Aide.Domain</c> rules,
-/// D-0.7.0-23), its run settings and its start selector. In 0.7.0 M57 the registry is only loaded, validated and
-/// health-checked (<see cref="PipelineDefinitionsHealthCheck"/>); in M58 parity mode every lifecycle decision also runs
-/// through the engine (<see cref="ParityStateMachine"/>, FR-291), while the SDLC state machine still decides.
+/// D-0.7.0-23), its run settings, its start selector and invalidation hook, and the lifecycle service through which every
+/// lifecycle decision runs on the engine (<see cref="SdlcLifecycle"/>, FR-292). The registry is validated and health-checked
+/// (<see cref="PipelineDefinitionsHealthCheck"/>).
 /// </summary>
 public static class SdlcPipelineRegistration
 {
@@ -30,9 +30,9 @@ public static class SdlcPipelineRegistration
         services.AddScoped<IRunStartSelector, SdlcRunStartSelector>();
         services.AddSingleton<IInvalidationHook>(SdlcInvalidationHook.Instance);
 
-        // FR-291 (M58 parity mode): every lifecycle decision runs through both machines; Throw is on in the test hosts only.
-        services.AddOptions<ParityOptions>().BindConfiguration(ParityOptions.SectionName);
-        services.AddSingleton<ParityStateMachine>();
+        // FR-292: every lifecycle decision runs on the engine with the SDLC definition.
+        services.AddLogging();
+        services.AddSingleton<SdlcLifecycle>();
         return services;
     }
 }

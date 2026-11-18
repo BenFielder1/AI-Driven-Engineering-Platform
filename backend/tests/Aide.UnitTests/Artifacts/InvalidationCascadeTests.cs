@@ -1,6 +1,7 @@
 using Aide.Domain.Artifacts;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Pack.Sdlc;
 
@@ -12,7 +13,7 @@ public class InvalidationCascadeTests
     [Fact]
     public void S4_4_Project_request_invalidates_spec_plan_optimisation_and_all_steps()
     {
-        var effect = InvalidationCascade.Effect(SdlcArtifacts.ProjectRequest, Phase.Review);
+        var effect = Sdlc.Cascade(SdlcArtifacts.ProjectRequest, Phase.Review);
 
         Assert.Equal([SdlcArtifacts.TechnicalSpecification, SdlcArtifacts.ImplementationPlan, SdlcArtifacts.OptimizationPlan], effect.InvalidatedTypes);
         Assert.Equal(StepReset.AllSteps, effect.StepReset);
@@ -22,7 +23,7 @@ public class InvalidationCascadeTests
     [Fact]
     public void S4_4_Spec_invalidates_plan_optimisation_and_all_steps()
     {
-        var effect = InvalidationCascade.Effect(SdlcArtifacts.TechnicalSpecification, Phase.Execution);
+        var effect = Sdlc.Cascade(SdlcArtifacts.TechnicalSpecification, Phase.Execution);
 
         Assert.Equal([SdlcArtifacts.ImplementationPlan, SdlcArtifacts.OptimizationPlan], effect.InvalidatedTypes);
         Assert.Equal(StepReset.AllSteps, effect.StepReset);
@@ -31,7 +32,7 @@ public class InvalidationCascadeTests
     [Fact]
     public void S4_4_Plan_invalidates_optimisation_and_steps_of_older_plans()
     {
-        var effect = InvalidationCascade.Effect(SdlcArtifacts.ImplementationPlan, Phase.Planning);
+        var effect = Sdlc.Cascade(SdlcArtifacts.ImplementationPlan, Phase.Planning);
 
         Assert.Equal([SdlcArtifacts.OptimizationPlan], effect.InvalidatedTypes);
         Assert.Equal(StepReset.StepsOfOtherPlans, effect.StepReset);
@@ -44,7 +45,7 @@ public class InvalidationCascadeTests
     [InlineData(Phase.Release)]
     public void S4_4_Optimisation_plan_invalidates_nothing(Phase phase)
     {
-        var effect = InvalidationCascade.Effect(SdlcArtifacts.OptimizationPlan, phase);
+        var effect = Sdlc.Cascade(SdlcArtifacts.OptimizationPlan, phase);
 
         Assert.Empty(effect.InvalidatedTypes);
         Assert.Equal(StepReset.None, effect.StepReset);
@@ -54,10 +55,10 @@ public class InvalidationCascadeTests
     [Fact]
     public void S4_4_Example_spec_v4_approved_in_review_falls_back_to_planning_active()
     {
-        var effect = InvalidationCascade.Effect(SdlcArtifacts.TechnicalSpecification, Phase.Review);
-        var transition = LifecycleStateMachine.Apply(
+        var effect = Sdlc.Cascade(SdlcArtifacts.TechnicalSpecification, Phase.Review);
+        var transition = Sdlc.Apply(
             new LifecycleState(Phase.Review, ProjectStatus.Reviewing, 6),
-            TransitionRequest.Fallback(effect.FallbackPhase!.Value),
+            SdlcTransitions.Fallback(effect.FallbackPhase!.Value),
             LifecycleSnapshot.Empty);
 
         Assert.Equal(Phase.Planning, effect.FallbackPhase);
@@ -74,11 +75,11 @@ public class InvalidationCascadeTests
     [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Planning)]
     [InlineData(SdlcArtifacts.ImplementationPlan, Phase.Execution)]
     public void S4_4_No_fallback_when_the_current_phase_is_not_later(string approved, Phase current) =>
-        Assert.Null(InvalidationCascade.Effect(approved, current).FallbackPhase);
+        Assert.Null(Sdlc.Cascade(approved, current).FallbackPhase);
 
     [Fact]
     public void S4_4_Plan_approved_in_review_falls_back_to_execution_for_the_reset_steps() =>
-        Assert.Equal(Phase.Execution, InvalidationCascade.Effect(SdlcArtifacts.ImplementationPlan, Phase.Review).FallbackPhase);
+        Assert.Equal(Phase.Execution, Sdlc.Cascade(SdlcArtifacts.ImplementationPlan, Phase.Review).FallbackPhase);
 
     [Fact]
     public void FR19_Spec_v4_approved_invalidates_the_plan_and_resets_all_its_steps()
@@ -96,7 +97,7 @@ public class InvalidationCascadeTests
             new StepRef(Guid.NewGuid(), plan.Id, StepStatus.Invalidated),
         };
 
-        var result = InvalidationCascade.Plan(spec4.Id, SdlcArtifacts.TechnicalSpecification, Phase.Review, [spec3, spec4, plan, oldPlan, request], steps);
+        var result = InvalidationCascade.Plan(spec4.Id, Sdlc.Cascade(SdlcArtifacts.TechnicalSpecification, Phase.Review), [spec3, spec4, plan, oldPlan, request], steps);
 
         Assert.Equal([plan.Id], result.InvalidatedArtifactIds);
         Assert.Equal(steps.Take(3).Select(s => s.Id), result.ResetStepIds);
@@ -116,7 +117,7 @@ public class InvalidationCascadeTests
             new StepRef(Guid.NewGuid(), newPlan, StepStatus.Pending),
         };
 
-        var result = InvalidationCascade.Plan(newPlan, SdlcArtifacts.ImplementationPlan, Phase.Review, [optimisation], steps);
+        var result = InvalidationCascade.Plan(newPlan, Sdlc.Cascade(SdlcArtifacts.ImplementationPlan, Phase.Review), [optimisation], steps);
 
         Assert.Equal([optimisation.Id], result.InvalidatedArtifactIds);
         Assert.Equal([steps[0].Id, steps[1].Id], result.ResetStepIds);

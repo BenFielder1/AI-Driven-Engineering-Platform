@@ -60,7 +60,7 @@ public sealed partial class ProjectCreator(
     ProjectStackService stacks,
     Trackers.SourceImportService imports,
     IOptions<LocalGitOptions> localGit,
-    Pipelines.ParityStateMachine parity,
+    Pipelines.SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<ProjectCreator> logger)
 {
@@ -162,7 +162,7 @@ public sealed partial class ProjectCreator(
         }
 
         // FR-178, §4.27: a version that infers its stack starts in analysis, and needs a base commit with code.
-        var initial = parity.Start(project.Id, request.StackSource == StackSource.Infer, (start.Value.ReleasedCommit ?? start.Value.HeadCommit) is not null);
+        var initial = lifecycle.Start(request.StackSource == StackSource.Infer, (start.Value.ReleasedCommit ?? start.Value.HeadCommit) is not null);
         if (initial.IsFailure)
         {
             if (start.Value.LocalCopy)

@@ -26,7 +26,7 @@ namespace Aide.Api.Features.Artifacts;
 
 /// <summary>
 /// FR-16–FR-19: creating, approving and rejecting artifact versions. <see cref="ArtifactRules"/>,
-/// <see cref="InvalidationCascade"/>, <see cref="GateRules"/> and the lifecycle state machine decide; this service loads
+/// <see cref="InvalidationCascade"/>, <see cref="GateRules"/> and the engine with the SDLC definition decide; this service loads
 /// the rows and writes each outcome — status changes, events, cascade, phase fallback, stale gates and follow-up jobs —
 /// in one <c>SaveChanges</c> (one transaction) guarded by the project's and the artifacts' <c>xmin</c>.
 /// </summary>
@@ -41,7 +41,7 @@ public sealed partial class ArtifactService(
     ProjectStackService projectStacks,
     Analysis.StackProfileBaseReader profileBases,
     IStackCatalog catalogs,
-    ParityStateMachine parity,
+    SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<ArtifactService> logger)
 {
@@ -364,13 +364,12 @@ public sealed partial class ArtifactService(
         project.UpdatedAt = now;
 
         // §4.4 cascade.
+        var state = await lifecycle.StateAsync(db, project, cancellationToken);
         var cascade = InvalidationCascade.Plan(
             artifact.Id,
-            artifact.Type,
-            project.CurrentPhase,
+            lifecycle.CascadeEffect(artifact.Type, state.Phase),
             [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.CheckpointAtCreation))],
-            [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))],
-            (type, phase) => parity.CascadeEffect(project.Id, type, phase));
+            [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))]);
 
         db.AddEvent(
             EventTypes.ArtifactApproved,
@@ -427,7 +426,7 @@ public sealed partial class ArtifactService(
         if (cascade.Effect.FallbackPhase is { } fallback)
         {
             var reason = $"{artifact.Type} v{artifact.Version} approved; downstream work invalidated";
-            var transition = parity.Apply(project, TransitionRequest.Fallback(fallback, reason), LifecycleSnapshot.Empty);
+            var transition = lifecycle.Apply(state, project, SdlcTransitions.Fallback(fallback, reason), LifecycleSnapshot.Empty);
             if (transition.IsFailure)
             {
                 return Result.Failure<Artifact>(transition.Error!);
@@ -741,6 +740,7 @@ public sealed partial class ArtifactService(
             .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending)
             .ToListAsync(cancellationToken);
         var stale = GateRules.StaleAfterArtifactApproval(
+            lifecycle.Definition,
             approved.Id,
             approved.Type,
             invalidated,
@@ -790,10 +790,12 @@ public sealed partial class ArtifactService(
                 ? steps.Count(s => s.PlanArtifactId == plan.Id && s.Status is not StepStatus.Invalidated and not StepStatus.Completed)
                 : 0,
         };
-        var cycle = parity.Apply(
+        var cycle = await lifecycle.ApplyAsync(
+            db,
             project,
-            TransitionRequest.ReviewCycle($"optimization_plan v{plan.Version} approved: re-entering execution"),
-            snapshot);
+            SdlcTransitions.ReviewCycle($"optimization_plan v{plan.Version} approved: re-entering execution"),
+            snapshot,
+            cancellationToken);
         if (cycle.IsSuccess)
         {
             await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);

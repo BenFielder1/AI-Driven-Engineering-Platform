@@ -231,6 +231,48 @@ public sealed class PipelineRunTests(AideApiFactory factory)
     }
 
     [Fact]
+    public async Task FR292_a_run_that_lags_the_project_does_not_change_the_decision_and_the_next_project_save_re_syncs_it()
+    {
+        using var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        await AssertInSyncAsync(id);
+
+        // A write outside the dual write (a 0.6.1 replica, raw SQL) moves the project on; its run stays at refinement 1.
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
+        await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Autonomous);
+        var lagging = Assert.Single(await RunsAsync(id));
+        Assert.Equal(("refinement", 1), (lagging.CurrentStage, lagging.Checkpoint));
+
+        // A refused advance decides from the project's copy (entering planning, not specification), writes nothing and
+        // raises no CONFLICT: the run still lags.
+        await ProjectApi.WithDbAsync(factory, db => db.Artifacts
+            .Where(a => a.ProjectId == id && a.Type == SdlcArtifacts.TechnicalSpecification)
+            .ExecuteUpdateAsync(u => u.SetProperty(a => a.Status, ArtifactStatus.Draft), Ct));
+        var refused = await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id);
+        var body = await refused.Content.ReadAsStringAsync(Ct);
+        Assert.Contains("\"PHASE_PRECONDITION_FAILED\"", body, StringComparison.Ordinal);
+        Assert.Contains("Can't enter planning", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"CONFLICT\"", body, StringComparison.Ordinal);
+        var stillLagging = Assert.Single(await RunsAsync(id));
+        Assert.Equal(("refinement", 1), (stillLagging.CurrentStage, stillLagging.Checkpoint));
+        await ProjectApi.WithDbAsync(factory, db => db.Artifacts
+            .Where(a => a.ProjectId == id && a.Type == SdlcArtifacts.TechnicalSpecification)
+            .ExecuteUpdateAsync(u => u.SetProperty(a => a.Status, ArtifactStatus.Locked), Ct));
+
+        Ok(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
+
+        // The decision used the project's copy (specification 2 → planning 3), and its save re-synced the run.
+        var run = await AssertInSyncAsync(id);
+        Assert.Equal(("planning", "active", 3), (run.CurrentStage, run.PackStatus, run.Checkpoint));
+        var transition = (await LifecycleSeed.TransitionsAsync(factory, id))[^1];
+        Assert.Equal((Phase.Specification, Phase.Planning, 3), (transition.FromPhase!.Value, transition.ToPhase, transition.Checkpoint));
+        Assert.Contains(factory.Logs.Entries, e =>
+            e.Level == Microsoft.Extensions.Logging.LogLevel.Information
+            && e.Message.Contains($"Pipeline run of project {id} is at refinement/active checkpoint 1, the project at specification/active checkpoint 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task FR277_the_definition_is_stored_once_and_its_canonical_JSON_reproduces_the_hash()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);

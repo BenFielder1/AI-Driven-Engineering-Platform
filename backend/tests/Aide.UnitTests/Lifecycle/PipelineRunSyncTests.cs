@@ -1,4 +1,3 @@
-using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
@@ -17,27 +16,61 @@ public class PipelineRunSyncTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 18, 10, 0, 0, TimeSpan.Zero);
 
-    public static TheoryData<TransitionKind, string> Kinds => new()
-    {
-        { TransitionKind.Advance, "advance" },
-        { TransitionKind.ReviewCycle, "loop" },
-        { TransitionKind.Rollback, "rollback" },
-        { TransitionKind.InvalidationFallback, "fallback" },
-        { TransitionKind.ReleaseNoop, "noop" },
-        { TransitionKind.ReleaseCompleted, "status_change" },
-        { TransitionKind.ReleaseAwaitingMerge, "status_change" },
-        { TransitionKind.ReleaseMergeAbandoned, "status_change" },
-        { TransitionKind.NewVersion, "start" },
-    };
+    /// <summary>Each SDLC move, applied on the engine: its stored generic kind and 0.6.1's <c>PHASE_CHANGED</c> kind.</summary>
+    private static readonly (string Move, string Stored, string Event)[] Moves =
+    [
+        ("advance", "advance", "advance"),
+        ("review cycle", "loop", "review_cycle"),
+        ("rollback", "rollback", "rollback"),
+        ("fallback", "fallback", "invalidation_fallback"),
+        ("release no-op", "noop", "release_noop"),
+        ("release completed", "status_change", "release_completed"),
+        ("release awaiting merge", "status_change", "release_awaiting_merge"),
+        ("release merge abandoned", "status_change", "release_merge_abandoned"),
+        ("new version", "start", "new_version"),
+    ];
+
+    public static TheoryData<string, string, string> Kinds => [.. Moves];
 
     [Theory]
     [MemberData(nameof(Kinds))]
-    public void FR294_each_transition_kind_is_stored_as_its_generic_kind(TransitionKind kind, string expected) =>
-        Assert.Equal(expected, TransitionKinds.Of(kind));
+    public void FR294_each_transition_kind_is_stored_as_its_generic_kind(string move, string expected, string eventKind)
+    {
+        var all = new LifecycleSnapshot
+        {
+            Mode = ApprovalMode.Autonomous,
+            TechnicalSpecificationLocked = true,
+            ImplementationPlanLocked = true,
+            CurrentPlanStepCount = 1,
+            WorkingCopyPrepared = true,
+            LatestReviewDecision = Domain.Review.ReviewDecision.ReviewRequired,
+            LatestReviewProjectVersion = 4,
+            OptimizationPlanLocked = true,
+            OptimizationPlanStepCount = 1,
+        };
+        var review = new LifecycleState(Phase.Review, ProjectStatus.Reviewing, 4);
+        var releasing = new LifecycleState(Phase.Release, ProjectStatus.Releasing, 4);
+        var awaiting = releasing with { Status = ProjectStatus.AwaitingMerge };
+        var applied = move switch
+        {
+            "advance" => Sdlc.Apply(review with { Phase = Phase.Planning, Status = ProjectStatus.Active }, SdlcTransitions.Advance(), all),
+            "review cycle" => Sdlc.Apply(review, SdlcTransitions.ReviewCycle(), all),
+            "rollback" => Sdlc.Apply(review, SdlcTransitions.Rollback(Phase.Planning, 2), all),
+            "fallback" => Sdlc.Apply(review, SdlcTransitions.Fallback(Phase.Planning), all),
+            "release no-op" => Sdlc.Apply(releasing, SdlcTransitions.ReleaseNoop(), all),
+            "release completed" => Sdlc.Apply(releasing, SdlcTransitions.ReleaseCompleted(), all),
+            "release awaiting merge" => Sdlc.Apply(releasing, SdlcTransitions.ReleaseAwaitingMerge(), all),
+            "release merge abandoned" => Sdlc.Apply(awaiting, SdlcTransitions.ReleaseMergeAbandoned(), all),
+            _ => Sdlc.NewVersion(releasing with { Status = ProjectStatus.Released }, LifecycleSnapshot.Empty),
+        };
+
+        Assert.True(applied.IsSuccess, applied.Error?.Message);
+        Assert.Equal((expected, eventKind), (applied.Value.Kind, applied.Value.EventKind));
+    }
 
     [Fact]
-    public void FR294_every_transition_kind_has_a_generic_kind() =>
-        Assert.Equal(Enum.GetValues<TransitionKind>().Length, Kinds.Count);
+    public void FR294_every_engine_transition_kind_and_a_new_version_have_a_generic_kind() =>
+        Assert.Equal(Enum.GetValues<RunTransitionKind>().Length + 1, Moves.Select(m => m.Stored).Distinct().Count());
 
     [Fact]
     public void FR292_the_run_copies_the_projects_stage_status_checkpoint_mode_and_review_cycle()

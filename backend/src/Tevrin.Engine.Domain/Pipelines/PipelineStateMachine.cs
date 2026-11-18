@@ -261,6 +261,13 @@ public static class PipelineStateMachine
         var change = definition.StatusChanges.FirstOrDefault(c => string.Equals(c.Name, transition.StatusChange, StringComparison.Ordinal))
             ?? throw new ArgumentException($"'{transition.StatusChange}' is not a status change of '{definition.Pipeline}'.", nameof(transition));
 
+        if (change.WrongStageMessage is not null
+            && transition.TargetStage is { } target
+            && !string.Equals(target, change.Stage, StringComparison.Ordinal))
+        {
+            return WrongPhase(TransitionMessages.StatusChangeWrongStage(change, target));
+        }
+
         if (!string.Equals(state.Stage, change.Stage, StringComparison.Ordinal) || !change.From.Contains(state.PackStatus, StringComparer.Ordinal))
         {
             return Result.Failure<RunTransition>(new DomainError(change.ErrorCode, TransitionMessages.StatusChangeRefused(change, state)));
@@ -396,6 +403,16 @@ public static class TransitionMessages
         ArgumentNullException.ThrowIfNull(definition);
         var final = definition.Stages.LastOrDefault(s => definition.SuccessorOf(s.Id) is null)?.Id ?? "?";
         return $"{final} → {final} is only valid in the {final} phase.";
+    }
+
+    /// <summary>A status change asked to move to another stage: the change's <c>wrong_stage_message</c>
+    /// (<see cref="StatusChangeDefinition.WrongStageMessage"/>) with <c>{change_stage}</c> and <c>{target}</c> filled in.</summary>
+    public static string StatusChangeWrongStage(StatusChangeDefinition change, string target)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        return (change.WrongStageMessage ?? string.Empty)
+            .Replace("{change_stage}", change.Stage, StringComparison.Ordinal)
+            .Replace("{target}", target, StringComparison.Ordinal);
     }
 
     /// <summary>The change's <c>error_message</c> with <c>{stage}</c>, <c>{status}</c>, <c>{change_stage}</c> and <c>{from}</c> filled in.</summary>

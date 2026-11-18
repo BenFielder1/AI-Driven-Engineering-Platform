@@ -1,7 +1,6 @@
 # FR-290: the SDLC lifecycle as a pipeline definition (SPEC §4.51 sketch, with keys fixed to 0.6.1 behaviour).
-# Stage order and statuses equal PhaseOrder.All / StatusFor, gates GateRules.RequiredGate (§4.53), start stages
-# LifecycleStateMachine.Start, and the guards reproduce UnmetEntryConditions verbatim (Aide.UnitTests, FR290_*).
-# Jobs queued on entering a stage (enqueue_on_enter) equal PhaseJobs.OnEnter (D-0.7.0-27).
+# Since FR-292/FR-293 this definition is the SDLC lifecycle: stage order and statuses, gates (§4.53), start stages, guards
+# and the jobs queued on entering a stage (enqueue_on_enter, D-0.7.0-27) are 0.6.1's, pinned by Aide.UnitTests (FR290_*).
 # Changing any value changes the definition hash (§4.50).
 pipeline: sdlc
 version: 1
@@ -37,13 +36,15 @@ statuses:
 rollback_status: rolled_back
 
 # FR-65: the release's status-only moves, refused with NOT_RELEASING from any other status. The reasons and messages are
-# 0.6.1's (the default reason is the name in words; the default message names the stage and statuses).
+# 0.6.1's (the default reason is the name in words; the default message names the stage and statuses). The awaiting-merge
+# moves refuse a request naming another phase (wrong_stage_message, 0.6.1's text); release_completed ignored it in 0.6.1.
 status_changes:
   release_completed:       { stage: release, from: [releasing, awaiting_merge], to: released, completes_run: true, error_code: NOT_RELEASING,
                              error_message: "The project is not releasing." }
-  release_awaiting_merge:  { stage: release, from: [releasing], to: awaiting_merge, error_code: NOT_RELEASING }
+  release_awaiting_merge:  { stage: release, from: [releasing], to: awaiting_merge, error_code: NOT_RELEASING,
+                             wrong_stage_message: "Awaiting a release merge stays in the release phase." }
   release_merge_abandoned: { stage: release, from: [awaiting_merge], to: releasing, error_code: NOT_RELEASING,
-                             reason: Awaited merge abandoned }
+                             reason: Awaited merge abandoned, wrong_stage_message: "Awaiting a release merge stays in the release phase." }
 
 # §4.9, FR-286: one active execution job per project (ux_jobs_project_id_active_execution stays as the backstop).
 concurrency:

@@ -12,33 +12,33 @@ using static Aide.UnitTests.Lifecycle.SdlcPipelineFixture;
 namespace Aide.UnitTests.Lifecycle;
 
 /// <summary>
-/// FR-290, §4.52: a stage's <c>requires:</c> (built-ins and SDLC guards, in declared order) and its gate give exactly
-/// 0.6.1's <see cref="LifecycleStateMachine.UnmetEntryConditions"/> for every phase, current phase and approval mode,
-/// over the "all false" and "all true" snapshots and each fact varied one at a time from both. The review loop's guard
-/// gives the review cycle's reasons. The full transition parity (§4.56) is M58's.
+/// FR-290, §4.52: a stage's <c>requires:</c> (built-ins and SDLC guards, in declared order) and its gate, composed here,
+/// give exactly the engine's <see cref="SdlcMachine.UnmetEntryConditions"/> for every phase, current phase and approval
+/// mode, over the "all false" and "all true" snapshots and each fact varied one at a time from both. The review loop's
+/// guard gives the review cycle's refusal reasons. (0.6.1's own reasons are pinned by <see cref="SdlcLifecycleTransitionTests"/>.)
 /// </summary>
 public class SdlcGuardParityTests
 {
     private const int Checkpoint = 4;
 
-    public static TheoryData<Phase> Phases => [.. PhaseOrder.All];
+    public static TheoryData<Phase> Phases => [.. Sdlc.All];
 
     [Theory]
     [MemberData(nameof(Phases))]
-    public void FR290_stage_requirements_and_gate_equal_UnmetEntryConditions(Phase entering)
+    public void FR290_stage_requirements_and_gate_equal_the_engine_UnmetEntryConditions(Phase entering)
     {
         var definition = Definition;
         var stage = StageOf(entering);
         var mismatches = new List<string>();
 
-        foreach (var current in PhaseOrder.All)
+        foreach (var current in Sdlc.All)
         {
-            var state = new LifecycleState(current, PhaseOrder.StatusFor(current), Checkpoint);
+            var state = new LifecycleState(current, Sdlc.StatusFor(current), Checkpoint);
             foreach (var (label, snapshot) in Snapshots())
             {
                 foreach (var includeGate in new[] { false, true })
                 {
-                    var expected = LifecycleStateMachine.UnmetEntryConditions(state, entering, snapshot, includeGate);
+                    var expected = Sdlc.UnmetEntryConditions(state, entering, snapshot, includeGate);
                     var actual = Compose(definition, stage, state, snapshot, includeGate);
                     if (!expected.SequenceEqual(actual))
                     {
@@ -59,7 +59,7 @@ public class SdlcGuardParityTests
 
         foreach (var (label, snapshot) in Snapshots())
         {
-            var applied = LifecycleStateMachine.Apply(state, TransitionRequest.ReviewCycle(), snapshot);
+            var applied = Sdlc.Apply(state, SdlcTransitions.ReviewCycle(), snapshot);
             var expected = applied.IsSuccess ? [] : applied.Error!.Details;
             if (!applied.IsSuccess)
             {
@@ -91,9 +91,9 @@ public class SdlcGuardParityTests
     public async Task FR290_the_host_guards_read_the_lifecycle_fact_and_return_the_SDLC_reasons()
     {
         using var scope = Services.CreateScope();
-        foreach (var current in PhaseOrder.All)
+        foreach (var current in Sdlc.All)
         {
-            var state = new LifecycleState(current, PhaseOrder.StatusFor(current), Checkpoint);
+            var state = new LifecycleState(current, Sdlc.StatusFor(current), Checkpoint);
             foreach (var (label, snapshot) in new[] { ("all false", AllFalse), ("all true", AllTrue) })
             {
                 var facts = FactBag.Empty.With(new SdlcLifecycleFacts(state, snapshot));

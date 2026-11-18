@@ -582,7 +582,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         const int planningCheckpoint = 3;
         AddLockedArtifact(db, project, versionId, SdlcArtifacts.ProjectRequest, 1, PresetDemoRequest(), admin.Id, now);
         AddLockedArtifact(db, project, versionId, SdlcArtifacts.TechnicalSpecification, 2, PresetDemoSpecification(await SpecSectionsAsync(services, version, cancellationToken)), admin.Id, now);
-        EnterPhase(db, project, versionId, Phase.Planning, planningCheckpoint, DemoPresetReason, now);
+        EnterPhase(services, db, project, versionId, Phase.Planning, planningCheckpoint, DemoPresetReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
             SdlcJobTypes.PlanGeneration,
             new LifecycleJobPayload(projectId, planningCheckpoint, LifecycleJobPayload.StageEntered),
@@ -638,7 +638,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         var versionId = project.CurrentReleaseVersionId!.Value;
         const int specificationCheckpoint = 2;
         AddLockedArtifact(db, project, versionId, SdlcArtifacts.ProjectRequest, 1, BaasDemoRequest(), admin.Id, now);
-        EnterPhase(db, project, versionId, Phase.Specification, specificationCheckpoint, DemoBaasReason, now);
+        EnterPhase(services, db, project, versionId, Phase.Specification, specificationCheckpoint, DemoBaasReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
             SdlcJobTypes.SpecGeneration,
             new LifecycleJobPayload(projectId, specificationCheckpoint, LifecycleJobPayload.StageEntered),
@@ -704,7 +704,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         // Rule 8, FR-178: like a project created with "Infer", the version starts in analysis: its creation transition (from no
         // phase) goes into analysis, and no refinement → analysis transition is recorded.
         project.CurrentPhase = Phase.Analysis;
-        project.Status = PhaseOrder.StatusFor(Phase.Analysis);
+        project.Status = SdlcStages.StatusFor(services.GetRequiredService<Pipelines.SdlcLifecycle>().Definition, Phase.Analysis);
         project.UpdatedAt = now;
         var creation = await db.StateTransitions.SingleAsync(t => t.ProjectId == projectId && t.ReleaseVersionId == versionId && t.FromPhase == null, cancellationToken);
         creation.ToPhase = Phase.Analysis;
@@ -865,10 +865,10 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>The seed shortcut into <paramref name="phase"/> at <paramref name="checkpoint"/>: one seeded transition from refinement.</summary>
-    private static void EnterPhase(AideDbContext db, Project project, Guid versionId, Phase phase, int checkpoint, string reason, DateTimeOffset now)
+    private static void EnterPhase(IServiceProvider services, AideDbContext db, Project project, Guid versionId, Phase phase, int checkpoint, string reason, DateTimeOffset now)
     {
         project.CurrentPhase = phase;
-        project.Status = PhaseOrder.StatusFor(phase);
+        project.Status = SdlcStages.StatusFor(services.GetRequiredService<Pipelines.SdlcLifecycle>().Definition, phase);
         project.Checkpoint = checkpoint;
         project.UpdatedAt = now;
         db.StateTransitions.Add(new StateTransition

@@ -348,6 +348,28 @@ public class PipelineStateMachineTests
         Assert.Equal("Not summarise (summarising); it is draft/drafting.", error.Message);
     }
 
+    [Theory]
+    [InlineData("summarising")]
+    [InlineData("published")]
+    public void FR293_a_status_change_naming_another_stage_is_wrong_phase_with_the_definition_message(string status)
+    {
+        var change = Definition.StatusChanges[0] with { WrongStageMessage = "It stays in {change_stage}, not {target}." };
+        var definition = Definition with { StatusChanges = [change] };
+
+        var error = Failed(PipelineStateMachine.Apply(
+            At("summarise", status), new Transition(RunTransitionKind.StatusChange, "check", StatusChange: "summary_published"), Facts(), definition));
+        var same = PipelineStateMachine.Apply(
+            At("summarise", "summarising"), new Transition(RunTransitionKind.StatusChange, "summarise", StatusChange: "summary_published"), Facts(), definition);
+
+        Assert.Equal((EngineErrorCodes.WrongPhase, "It stays in summarise, not check."), (error.Code, error.Message));
+        Assert.True(same.IsSuccess);
+    }
+
+    [Fact]
+    public void FR293_without_a_wrong_stage_message_a_named_target_is_ignored() =>
+        Assert.True(PipelineStateMachine.Apply(
+            At("summarise", "summarising"), new Transition(RunTransitionKind.StatusChange, "check", StatusChange: "summary_published"), Facts(), Definition).IsSuccess);
+
     [Fact]
     public void FR287_an_unknown_status_change_is_a_programming_error() =>
         Assert.Throws<ArgumentException>(() => PipelineStateMachine.Apply(At("summarise", "summarising"), Transition.Change("nope"), Facts(), Definition));

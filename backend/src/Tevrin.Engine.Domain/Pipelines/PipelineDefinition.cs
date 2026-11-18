@@ -190,6 +190,13 @@ public sealed record StatusChangeDefinition(
     /// </summary>
     public string? ErrorMessage { get; init; }
 
+    /// <summary>
+    /// <c>wrong_stage_message</c> (addition to §4.49, M58d): when set, a <c>status_change</c> transition that names a target
+    /// stage other than <see cref="Stage"/> is refused with <c>WRONG_PHASE</c> and this message (placeholders
+    /// <c>{change_stage}</c> and <c>{target}</c>), before the status is checked. When omitted, a named target is ignored.
+    /// </summary>
+    public string? WrongStageMessage { get; init; }
+
     /// <summary>The default <see cref="ErrorMessage"/>: 0.6.1's release status-change message, made generic.</summary>
     public const string DefaultErrorMessage = "The project is in {stage} with status {status}, not {change_stage} with status {from}.";
 

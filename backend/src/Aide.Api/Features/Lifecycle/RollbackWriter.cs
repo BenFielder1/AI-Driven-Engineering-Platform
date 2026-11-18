@@ -27,7 +27,7 @@ namespace Aide.Api.Features.Lifecycle;
 /// whose job was queued fail as <c>RELEASE_CANCELLED</c>. Used by the escalation <c>rollback</c> decision and by
 /// <c>POST /rollback</c>.
 /// </summary>
-public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, BuildChecks.BuildCheckService buildChecks, Pipelines.ParityStateMachine parity)
+public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, BuildChecks.BuildCheckService buildChecks, Pipelines.SdlcLifecycle lifecycle)
 {
     /// <summary>
     /// Rolls the tracked <paramref name="project"/> back to checkpoint <paramref name="targetVersion"/> of its current release
@@ -87,8 +87,10 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         var runInProgress = await db.AgentRuns.AsNoTracking()
             .AnyAsync(r => r.ProjectId == id && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.Running), cancellationToken);
 
+        // FR-292: the run is the source of truth for the position rolled back from.
+        var current = await lifecycle.StateAsync(db, project, cancellationToken);
         var planned = RollbackRules.Plan(new RollbackRequest(
-            new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint),
+            current,
             targetVersion,
             reason,
             transitions,
@@ -100,10 +102,10 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         {
             ReleaseRunning = releaseRunning,
             ReleasePartiallyApplied = releasePartiallyApplied,
-            VersionReleased = project.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
+            VersionReleased = current.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
             AwaitingMerge = versionStatus == ReleaseVersionStatus.AwaitingMerge,
         },
-        (state, rollback) => parity.Apply(project.Id, state, rollback, LifecycleSnapshot.Empty, Pipelines.ParityStateMachine.LoopOf(project)));
+        lifecycle.Definition);
         if (planned.IsFailure)
         {
             return Result.Failure<RollbackEvent>(planned.Error!);

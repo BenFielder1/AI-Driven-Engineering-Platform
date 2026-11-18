@@ -33,7 +33,7 @@ public sealed partial class GateService(
     JobEnqueuer jobs,
     WorkingCopyPreparer workingCopies,
     BuildChecks.BuildCheckService buildChecks,
-    ParityStateMachine parity,
+    SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<GateService> logger)
 {
@@ -57,7 +57,7 @@ public sealed partial class GateService(
         var resolution = resolved.Value;
         var now = time.GetUtcNow();
         var comment = Clean(request.Comment);
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
+        var state = await lifecycle.StateAsync(db, project, cancellationToken);
         Decide(gate, resolution.NewStatus, resolution.Decision, resolution.TargetVersion, reviewerId, comment, now);
         project.UpdatedAt = now;
 
@@ -70,12 +70,12 @@ public sealed partial class GateService(
         {
             case GateFollowUp.ApplyTransition:
                 {
-                    var entry = GateRules.GuardedEntry(gate.Type);
-                    if (PhaseOrder.Next(project.CurrentPhase) != entry)
+                    var entry = SdlcStages.GuardedEntry(lifecycle.Definition, gate.Type);
+                    if (lifecycle.Next(state.Phase) != entry)
                     {
                         return Result.Failure<ApprovalGate>(new DomainError(
                             ErrorCodes.WrongPhase,
-                            $"The project is in {project.CurrentPhase.ToWire()}; this {gate.Type} gate guards entry to {entry?.ToWire()}."));
+                            $"The project is in {state.Phase.ToWire()}; this {gate.Type} gate guards entry to {entry?.ToWire()}."));
                     }
 
                     bool? prepared = null;
@@ -95,7 +95,7 @@ public sealed partial class GateService(
                     };
                     var advanceReason = await AdvanceReasonAsync(project.Id, gate.Id, cancellationToken);
                     var reason = GatedAdvanceReason(gate.Type, advanceReason, comment);
-                    var applied = parity.Apply(project.Id, state, TransitionRequest.Advance(reason), snapshot, ParityStateMachine.LoopOf(project));
+                    var applied = lifecycle.Apply(state, project, SdlcTransitions.Advance(reason), snapshot);
                     if (applied.IsFailure)
                     {
                         return Result.Failure<ApprovalGate>(applied.Error!);
@@ -105,7 +105,7 @@ public sealed partial class GateService(
                     break;
                 }
 
-            case GateFollowUp.StartReviewCycle when project.CurrentPhase == Phase.Execution:
+            case GateFollowUp.StartReviewCycle when state.Phase == Phase.Execution:
                 await ContinueBlockedStepsAsync(project, gate, actor, now, cancellationToken);
                 break;
 
@@ -117,7 +117,7 @@ public sealed partial class GateService(
                     // steps still to run). If it already is, the cycle starts now; if its draft is waiting, approving it
                     // starts the cycle (Decisions: review cycle); with no plan at all, the extra cycle is a new review.
                     var snapshot = await snapshots.LoadAsync(project, cancellationToken) with { EscalationOutcome = EscalationDecision.Continue };
-                    var cycle = parity.Apply(project.Id, state, TransitionRequest.ReviewCycle("Escalation: continue with another review cycle"), snapshot, ParityStateMachine.LoopOf(project));
+                    var cycle = lifecycle.Apply(state, project, SdlcTransitions.ReviewCycle("Escalation: continue with another review cycle"), snapshot);
                     if (cycle.IsSuccess)
                     {
                         await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);
@@ -148,7 +148,7 @@ public sealed partial class GateService(
                     var preReleasePending = await db.ApprovalGates.AnyAsync(
                         g => g.ProjectId == project.Id && g.Type == SdlcGates.PreRelease && g.Status == GateStatus.Pending,
                         cancellationToken);
-                    if (project.CurrentPhase == Phase.Review && !preReleasePending)
+                    if (state.Phase == Phase.Review && !preReleasePending)
                     {
                         writer.AddGate(project, SdlcGates.PreRelease, null, actor, now);
                     }

@@ -3,7 +3,6 @@ using Aide.Api.Features.Git;
 using Aide.Api.Logging;
 using Aide.Api.Pipelines;
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +17,7 @@ namespace Aide.Api.Features.Lifecycle;
 public sealed record AdvanceResult(PhaseTransition? Transition, ApprovalGate? Gate);
 
 /// <summary>
-/// FR-11, FR-12: "advance to next phase". The domain state machine decides (entry conditions, gate per approval mode);
+/// FR-11, FR-12: "advance to next phase". The engine with the SDLC definition decides (FR-292) (entry conditions, gate per approval mode);
 /// this service loads the facts and writes the outcome in one transaction guarded by the project's <c>xmin</c>.
 /// </summary>
 public sealed partial class LifecycleService(
@@ -27,7 +26,7 @@ public sealed partial class LifecycleService(
     LifecycleWriter writer,
     WorkingCopyPreparer workingCopies,
     PullRequestJobs pullRequests,
-    ParityStateMachine parity,
+    SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<LifecycleService> logger)
 {
@@ -44,15 +43,17 @@ public sealed partial class LifecycleService(
             return Result.Failure<AdvanceResult>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
         }
 
-        if (expectedFrom is { } expected && project.CurrentPhase != expected)
+        // FR-292: the run is the source of truth for the phase the project is in.
+        var state = await lifecycle.StateAsync(db, project, cancellationToken);
+        if (expectedFrom is { } expected && state.Phase != expected)
         {
             LogAdvanceRefused(logger, project.Id, ErrorCodes.WrongPhase);
             return Result.Failure<AdvanceResult>(new DomainError(
-                ErrorCodes.WrongPhase, $"The project is in {project.CurrentPhase.ToWire()}, not {expected.ToWire()}; nothing was advanced."));
+                ErrorCodes.WrongPhase, $"The project is in {state.Phase.ToWire()}, not {expected.ToWire()}; nothing was advanced."));
         }
 
         bool? prepared = null;
-        if (PhaseOrder.Next(project.CurrentPhase) == Phase.Execution)
+        if (lifecycle.Next(state.Phase) == Phase.Execution)
         {
             // FR-35, §4.1: prepare the working copy and project branch before execution is entered (idempotent). The
             // outcome is the "working copy prepared" condition: a failure leaves it unmet, which the state machine reports.
@@ -66,7 +67,7 @@ public sealed partial class LifecycleService(
         }
 
         var cleanReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
-        var outcome = parity.RequestAdvance(project, snapshot, cleanReason);
+        var outcome = lifecycle.RequestAdvance(state, project, snapshot, cleanReason);
         if (outcome.IsFailure)
         {
             LogAdvanceRefused(logger, project.Id, outcome.Error!.Code);
@@ -110,7 +111,7 @@ public sealed partial class LifecycleService(
     /// <summary>The latest locked version of the artifact a gate approves (spec or plan), if any.</summary>
     internal async Task<Guid?> GatedArtifactIdAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
-        if (GateRules.GatedArtifact(type) is not { } artifactType)
+        if (SdlcStages.GatedArtifact(lifecycle.Definition, type) is not { } artifactType)
         {
             return null;
         }

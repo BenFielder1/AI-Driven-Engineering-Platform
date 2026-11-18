@@ -61,7 +61,8 @@ public static class RestoreRules
             return NotAllowed(RestoreReasons.StageCompleted, $"The {facts.Type} is produced automatically and can't be restored.");
         }
 
-        if (facts.ProjectPhase.IsBefore(phase.Value))
+        // Phase is declared in the SDLC definition's stage order (FR293_the_Phase_order_is_the_definition_stage_order).
+        if (facts.ProjectPhase < phase.Value)
         {
             return NotAllowed(
                 RestoreReasons.StageNotReached,

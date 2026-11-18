@@ -148,6 +148,15 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **SDLC:** `review_cycles` (`SdlcRunSettingsProvider`, and the parity mapper through `SdlcReviewLoop`) is `max(maxReviewCycles + extraReviewCycles, review_cycle + 1)`, so the backstop never refuses a cycle 0.6.1 allows (e.g. after an Owner lowers `maxReviewCycles` below the current cycle). The review decision rules (escalation at the max) stay the real limit.
 
 
+- **D-0.7.0-31** (Build, M58d, Claude, assumed): the switch-over.
+  - **Who decides:** lifecycle decisions go only through the engine (`SdlcLifecycle`, using the pure `SdlcMachine`), and fail closed with no valid SDLC definition. `LifecycleStateMachine`, `PhaseOrder`, `TransitionKind`, the phase-keyed `GateRules` lookups, `InvalidationCascade.Effect`, `PhaseJobs` and the parity code are removed.
+  - **Reading state:** decisions read stage, status and checkpoint from the current `pipeline_runs` row. Writers still write the project columns, and the interceptor copies them onto the run in the same save. When the run and the project disagree, the project copy wins and the disagreement is logged at Information level. That happens when a concurrent request has committed, or a write bypassed EF (an overlapping 0.6.1 replica, or raw SQL in test seeds). There is no eager re-sync, which the M58d review found could write stale state; the interceptor re-syncs the run on the next save that changes the project.
+  - **What stays:** the `Phase` enum stays as the SDLC's typed stage id (DTOs and contract), and a test pins its order to the definition. Step resets stay in `InvalidationCascade.Plan`, because the hook context doesn't carry the steps.
+  - **Status changes:** a status change naming another stage is refused with the definition's `wrong_stage_message`, which reproduces 0.6.1's `WRONG_PHASE` text.
+  - **Tests:** the transition tests were rewritten as `SdlcLifecycleTransitionTests`: 40 methods and 648 cases, with the same expected results.
+
+- **Watch (flaky test):** `DeliveryTimeoutTests.FR49_An_SMTP_server_that_never_answers_times_out_as_a_transient_failure` failed twice in local unit runs on this memory-starved machine and passes on its own. It is green on CI so far; if it fails there, give it a `FakeTimeProvider` or wider margins (the M58c review also flagged wall-clock tests in `LlmStreamingTests`, `LlmKeyCheckTests` and `CheckFailureLogTests`).
+
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.

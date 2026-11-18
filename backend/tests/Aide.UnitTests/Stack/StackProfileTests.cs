@@ -2,6 +2,7 @@ using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Pack.Sdlc;
 
@@ -505,7 +506,7 @@ public class StackProfileTests
     [InlineData(Phase.Planning, Phase.Analysis)]
     public void FR183_S4_27_S4_4_Approving_a_new_stack_profile_invalidates_everything_downstream_and_falls_back_to_analysis(Phase current, Phase? fallback)
     {
-        var effect = InvalidationCascade.Effect(SdlcArtifacts.StackProfile, current);
+        var effect = Sdlc.Cascade(SdlcArtifacts.StackProfile, current);
 
         Assert.Equal(
             [SdlcArtifacts.ProjectRequest, SdlcArtifacts.TechnicalSpecification, SdlcArtifacts.ImplementationPlan, SdlcArtifacts.OptimizationPlan],
@@ -519,10 +520,10 @@ public class StackProfileTests
     {
         foreach (var type in SdlcArtifacts.All)
         {
-            Assert.DoesNotContain(SdlcArtifacts.StackProfile, InvalidationCascade.Effect(type, Phase.Review).InvalidatedTypes);
+            Assert.DoesNotContain(SdlcArtifacts.StackProfile, Sdlc.Cascade(type, Phase.Review).InvalidatedTypes);
         }
 
-        Assert.Empty(InvalidationCascade.Effect(SdlcArtifacts.SourceItems, Phase.Analysis).InvalidatedTypes);
-        Assert.Empty(InvalidationCascade.Effect(SdlcArtifacts.CodebaseSummary, Phase.Analysis).InvalidatedTypes);
+        Assert.Empty(Sdlc.Cascade(SdlcArtifacts.SourceItems, Phase.Analysis).InvalidatedTypes);
+        Assert.Empty(Sdlc.Cascade(SdlcArtifacts.CodebaseSummary, Phase.Analysis).InvalidatedTypes);
     }
 }

@@ -3,6 +3,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.Releases;
@@ -10,7 +11,7 @@ namespace Aide.UnitTests.Releases;
 /// <summary>FR-64, FR-65, FR-84 (§4.10 tag prefix): merge readiness, auto-merge and the release settings rules.</summary>
 public class MergeReadinessRulesTests
 {
-    public static TheoryData<Phase> AllPhases() => [.. PhaseOrder.All];
+    public static TheoryData<Phase> AllPhases() => [.. Sdlc.All];
 
     [Theory]
     [MemberData(nameof(AllPhases))]

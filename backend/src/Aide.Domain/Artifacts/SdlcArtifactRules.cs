@@ -127,7 +127,8 @@ public static class SdlcArtifactRules
             return WrongPhase($"The stack profile can only be edited during analysis, not in {phase.ToWire()}. Change the stack in Settings → Stack instead.");
         }
 
-        return phase.IsBefore(producing)
+        // Phase is declared in the SDLC definition's stage order (FR293_the_Phase_order_is_the_definition_stage_order).
+        return phase < producing
             ? WrongPhase($"The {type} is produced in {producing.ToWire()}; the project is still in {phase.ToWire()}.")
             : Result.Success();
     }

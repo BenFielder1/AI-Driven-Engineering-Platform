@@ -148,7 +148,7 @@ public static class PipelineDefinitionLoader
 
         private StatusChangeDefinition? StatusChange(string name, YamlNode node, string path)
         {
-            if (AsObject(node, path, ["stage", "from", "to", "completes_run", "error_code", "reason", "error_message"]) is not { } obj)
+            if (AsObject(node, path, ["stage", "from", "to", "completes_run", "error_code", "reason", "error_message", "wrong_stage_message"]) is not { } obj)
             {
                 return new StatusChangeDefinition(name, string.Empty, [], string.Empty, false, string.Empty);
             }
@@ -163,6 +163,7 @@ public static class PipelineDefinitionLoader
             {
                 Reason = obj.OptionalString("reason"),
                 ErrorMessage = obj.OptionalString("error_message"),
+                WrongStageMessage = obj.OptionalString("wrong_stage_message"),
             };
         }
 

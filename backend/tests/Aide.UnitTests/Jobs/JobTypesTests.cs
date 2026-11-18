@@ -1,12 +1,13 @@
 using Aide.Domain.Gates;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Jobs;
 
-/// <summary>§4.9 follow-up jobs per phase entry (FR-28, FR-29, FR-38, FR-42), gate rejections (FR-13, D16) and gate targets.</summary>
+/// <summary>§4.9 follow-up jobs per phase entry (the SDLC definition's <c>enqueue_on_enter</c>, FR-293) (FR-28, FR-29, FR-38, FR-42), gate rejections (FR-13, D16) and gate targets.</summary>
 public class JobTypesTests
 {
     [Theory]
@@ -17,7 +18,7 @@ public class JobTypesTests
     [InlineData(Phase.Review, SdlcJobTypes.Review)]
     [InlineData(Phase.Release, SdlcJobTypes.Release)]
     public void S4_9_Entering_a_phase_queues_its_follow_up_job(Phase entered, string? expected) =>
-        Assert.Equal(expected, PhaseJobs.OnEnter(entered));
+        Assert.Equal(expected, StageJobs.OnEnter(Sdlc.Definition, entered));
 
     [Theory]
     [InlineData(SdlcAgents.IdeaRefinement, SdlcJobTypes.IdeaRefinement)]
@@ -43,8 +44,8 @@ public class JobTypesTests
     [InlineData(EngineGates.Escalation, null, null)]
     public void FR12_Gates_guard_one_entry_and_approve_one_artifact(string gate, Phase? entry, string? artifact)
     {
-        Assert.Equal(entry, GateRules.GuardedEntry(gate));
-        Assert.Equal(artifact, GateRules.GatedArtifact(gate));
+        Assert.Equal(entry, SdlcStages.GuardedEntry(Sdlc.Definition, gate));
+        Assert.Equal(artifact, SdlcStages.GatedArtifact(Sdlc.Definition, gate));
     }
 
     [Fact]
@@ -52,11 +53,11 @@ public class JobTypesTests
     {
         foreach (var mode in Enum.GetValues<ApprovalMode>())
         {
-            foreach (var phase in PhaseOrder.All)
+            foreach (var phase in Sdlc.All)
             {
-                if (GateRules.RequiredGate(mode, phase) is { } gate)
+                if (Sdlc.RequiredGate(mode, phase) is { } gate)
                 {
-                    Assert.Equal(phase, GateRules.GuardedEntry(gate));
+                    Assert.Equal(phase, SdlcStages.GuardedEntry(Sdlc.Definition, gate));
                 }
             }
         }

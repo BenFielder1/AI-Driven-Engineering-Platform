@@ -1,16 +1,19 @@
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Lifecycle;
 
 /// <summary>
-/// CLAUDE.md rule 9 / §4.1 / FR-11: every allowed and forbidden phase and status transition, for every
-/// transition kind, over the full phase × phase matrix.
+/// CLAUDE.md rule 8 / §4.1 / FR-11, FR-293: every allowed and forbidden phase and status transition, for every
+/// transition kind, over the full phase × phase matrix, on the engine with the SDLC definition (<see cref="Sdlc"/>; 0.6.1's
+/// cases and expected results, rewritten from the removed lifecycle machine).
 /// </summary>
-public class LifecycleStateMachineTests
+public class SdlcLifecycleTransitionTests
 {
     /// <summary>A snapshot in which every entry condition of every phase is met.</summary>
     private static readonly LifecycleSnapshot AllMet = new()
@@ -34,9 +37,9 @@ public class LifecycleStateMachineTests
     public static TheoryData<Phase, Phase> AllPhasePairs()
     {
         var data = new TheoryData<Phase, Phase>();
-        foreach (var from in PhaseOrder.All)
+        foreach (var from in Sdlc.All)
         {
-            foreach (var to in PhaseOrder.All)
+            foreach (var to in Sdlc.All)
             {
                 data.Add(from, to);
             }
@@ -48,7 +51,7 @@ public class LifecycleStateMachineTests
     public static TheoryData<Phase, ProjectStatus> AllPhaseStatusPairs()
     {
         var data = new TheoryData<Phase, ProjectStatus>();
-        foreach (var phase in PhaseOrder.All)
+        foreach (var phase in Sdlc.All)
         {
             foreach (var status in Enum.GetValues<ProjectStatus>())
             {
@@ -59,7 +62,7 @@ public class LifecycleStateMachineTests
         return data;
     }
 
-    private static LifecycleState At(Phase phase, int version = 5) => new(phase, PhaseOrder.StatusFor(phase), version);
+    private static LifecycleState At(Phase phase, int version = 5) => new(phase, Sdlc.StatusFor(phase), version);
 
     // ---- Advance: only to the next phase ----
 
@@ -67,13 +70,13 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhasePairs))]
     public void FR11_Advance_matrix_allows_only_the_next_phase(Phase from, Phase to)
     {
-        var result = LifecycleStateMachine.Apply(At(from), TransitionRequest.AdvanceTo(to), AllMet);
+        var result = Sdlc.Apply(At(from), SdlcTransitions.AdvanceTo(to), AllMet);
 
         if (to == from + 1)
         {
             Assert.True(result.IsSuccess, result.Error?.Message);
             Assert.Equal(to, result.Value.To);
-            Assert.Equal(PhaseOrder.StatusFor(to), result.Value.Status);
+            Assert.Equal(Sdlc.StatusFor(to), result.Value.Status);
             Assert.Equal(6, result.Value.Version);
         }
         else
@@ -86,7 +89,7 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhaseStatusPairs))]
     public void FR11_Advance_status_follows_phase_from_any_status_and_clears_rolled_back(Phase from, ProjectStatus status)
     {
-        var result = LifecycleStateMachine.Apply(new LifecycleState(from, status, 2), TransitionRequest.Advance(), AllMet with { LatestReviewProjectVersion = 2 });
+        var result = Sdlc.Apply(new LifecycleState(from, status, 2), SdlcTransitions.Advance(), AllMet with { LatestReviewProjectVersion = 2 });
 
         if (from == Phase.Release)
         {
@@ -95,7 +98,7 @@ public class LifecycleStateMachineTests
         }
 
         Assert.True(result.IsSuccess, result.Error?.Message);
-        Assert.Equal(PhaseOrder.StatusFor(from + 1), result.Value.Status);
+        Assert.Equal(Sdlc.StatusFor(from + 1), result.Value.Status);
         Assert.NotEqual(ProjectStatus.RolledBack, result.Value.Status);
         Assert.NotEqual(ProjectStatus.Released, result.Value.Status);
         Assert.Equal(3, result.Value.Version);
@@ -110,7 +113,7 @@ public class LifecycleStateMachineTests
     [InlineData(Phase.Review, ProjectStatus.Reviewing)]
     [InlineData(Phase.Release, ProjectStatus.Releasing)]
     public void Status_follows_phase_table(Phase phase, ProjectStatus expected) =>
-        Assert.Equal(expected, PhaseOrder.StatusFor(phase));
+        Assert.Equal(expected, Sdlc.StatusFor(phase));
 
     // ---- Review cycle: review → execution only, version unchanged ----
 
@@ -119,7 +122,7 @@ public class LifecycleStateMachineTests
     public void FR39_ReviewCycle_matrix_allows_only_review_to_execution(Phase from, Phase to)
     {
         var snapshot = AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired };
-        var result = LifecycleStateMachine.Apply(At(from), new TransitionRequest(TransitionKind.ReviewCycle, to), snapshot);
+        var result = Sdlc.Apply(At(from), SdlcTransitions.ReviewCycle(target: to), snapshot);
 
         if (from == Phase.Review && to == Phase.Execution)
         {
@@ -143,7 +146,7 @@ public class LifecycleStateMachineTests
     public void FR14_ReviewCycle_requires_review_required_or_escalation_continue(ReviewDecision? decision, EscalationDecision? escalation, bool allowed)
     {
         var snapshot = AllMet with { LatestReviewDecision = decision, EscalationOutcome = escalation };
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.ReviewCycle(), snapshot);
+        var result = Sdlc.Apply(At(Phase.Review), SdlcTransitions.ReviewCycle(), snapshot);
 
         Assert.Equal(allowed, result.IsSuccess);
         if (!allowed)
@@ -164,7 +167,7 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(MissingReviewCycleConditions))]
     public void FR40_ReviewCycle_needs_an_approved_optimisation_plan_with_steps_and_a_working_copy(string reasonFragment, LifecycleSnapshot snapshot)
     {
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.ReviewCycle(), snapshot);
+        var result = Sdlc.Apply(At(Phase.Review), SdlcTransitions.ReviewCycle(), snapshot);
 
         Assert.Equal(ErrorCodes.PhasePreconditionFailed, result.Error!.Code);
         Assert.Contains(result.Error.Details, d => d.Contains(reasonFragment, StringComparison.OrdinalIgnoreCase));
@@ -173,7 +176,7 @@ public class LifecycleStateMachineTests
     [Fact]
     public void FR39_Release_entry_ignores_a_report_from_another_project_version()
     {
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Advance(), AllMet with { LatestReviewProjectVersion = 4 });
+        var result = Sdlc.Apply(At(Phase.Review), SdlcTransitions.Advance(), AllMet with { LatestReviewProjectVersion = 4 });
 
         Assert.Equal(ErrorCodes.PhasePreconditionFailed, result.Error!.Code);
         Assert.Contains(result.Error.Details, d => d.Contains("release_eligible", StringComparison.Ordinal));
@@ -189,7 +192,7 @@ public class LifecycleStateMachineTests
             LatestReviewProjectVersion = 3,
         };
 
-        Assert.Equal(ErrorCodes.PhasePreconditionFailed, LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Advance(), snapshot).Error!.Code);
+        Assert.Equal(ErrorCodes.PhasePreconditionFailed, Sdlc.Apply(At(Phase.Review), SdlcTransitions.Advance(), snapshot).Error!.Code);
     }
 
     // ---- Rollback: to the same or an earlier phase, at an earlier version ----
@@ -198,7 +201,7 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhasePairs))]
     public void FR44_Rollback_matrix_allows_same_or_earlier_phase(Phase from, Phase to)
     {
-        var result = LifecycleStateMachine.Apply(At(from, version: 7), TransitionRequest.Rollback(to, 4), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(At(from, version: 7), SdlcTransitions.Rollback(to, 4), LifecycleSnapshot.Empty);
 
         if (to <= from)
         {
@@ -220,7 +223,7 @@ public class LifecycleStateMachineTests
     [InlineData(-1)]
     public void FR44_Rollback_to_a_version_not_below_current_is_invalid(int target)
     {
-        var result = LifecycleStateMachine.Apply(At(Phase.Review, 7), TransitionRequest.Rollback(Phase.Planning, target), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(At(Phase.Review, 7), SdlcTransitions.Rollback(Phase.Planning, target), LifecycleSnapshot.Empty);
 
         Assert.Equal(ErrorCodes.InvalidTargetVersion, result.Error!.Code);
     }
@@ -228,8 +231,8 @@ public class LifecycleStateMachineTests
     [Fact]
     public void FR44_Rolled_back_status_is_cleared_by_the_next_forward_transition()
     {
-        var rolledBack = LifecycleStateMachine.Apply(At(Phase.Review, 7), TransitionRequest.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value;
-        var next = LifecycleStateMachine.Apply(rolledBack.NewState, TransitionRequest.Advance(), AllMet).Value;
+        var rolledBack = Sdlc.Apply(At(Phase.Review, 7), SdlcTransitions.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value;
+        var next = Sdlc.Apply(rolledBack.NewState, SdlcTransitions.Advance(), AllMet).Value;
 
         Assert.Equal(ProjectStatus.RolledBack, rolledBack.Status);
         Assert.Equal(Phase.Execution, next.To);
@@ -243,12 +246,12 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhasePairs))]
     public void FR19_Fallback_matrix_allows_only_earlier_phases(Phase from, Phase to)
     {
-        var result = LifecycleStateMachine.Apply(At(from), TransitionRequest.Fallback(to), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(At(from), SdlcTransitions.Fallback(to), LifecycleSnapshot.Empty);
 
         if (to < from)
         {
             Assert.True(result.IsSuccess, result.Error?.Message);
-            Assert.Equal(PhaseOrder.StatusFor(to), result.Value.Status);
+            Assert.Equal(Sdlc.StatusFor(to), result.Value.Status);
             Assert.Equal(5, result.Value.Version);
         }
         else
@@ -264,7 +267,7 @@ public class LifecycleStateMachineTests
     public void FR42_ReleaseNoop_matrix_allows_only_release_to_release(Phase from, Phase to)
     {
         var state = At(from);
-        var result = LifecycleStateMachine.Apply(state, new TransitionRequest(TransitionKind.ReleaseNoop, to), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(state, SdlcTransitions.ReleaseNoop(target: to), LifecycleSnapshot.Empty);
 
         if (from == Phase.Release && to == Phase.Release)
         {
@@ -283,7 +286,7 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhaseStatusPairs))]
     public void FR42_amended_by_S4_10_FR65_ReleaseCompleted_only_from_release_releasing_or_awaiting_merge_and_keeps_the_checkpoint(Phase phase, ProjectStatus status)
     {
-        var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 7), TransitionRequest.ReleaseCompleted(), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(new LifecycleState(phase, status, 7), SdlcTransitions.ReleaseCompleted(), LifecycleSnapshot.Empty);
 
         if (phase == Phase.Release && status is ProjectStatus.Releasing or ProjectStatus.AwaitingMerge)
         {
@@ -303,12 +306,12 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhaseStatusPairs))]
     public void FR65_ReleaseAwaitingMerge_only_from_release_releasing(Phase phase, ProjectStatus status)
     {
-        var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 7), TransitionRequest.ReleaseAwaitingMerge(), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(new LifecycleState(phase, status, 7), SdlcTransitions.ReleaseAwaitingMerge(), LifecycleSnapshot.Empty);
 
         if (phase == Phase.Release && status == ProjectStatus.Releasing)
         {
             Assert.Equal(new LifecycleState(Phase.Release, ProjectStatus.AwaitingMerge, 7), result.Value.NewState);
-            Assert.Equal(TransitionKind.ReleaseAwaitingMerge, result.Value.Kind);
+            Assert.Equal(SdlcStatusChanges.ReleaseAwaitingMerge, result.Value.EventKind);
         }
         else
         {
@@ -320,7 +323,7 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhaseStatusPairs))]
     public void FR65_ReleaseMergeAbandoned_only_from_release_awaiting_merge_back_to_releasing(Phase phase, ProjectStatus status)
     {
-        var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 7), TransitionRequest.ReleaseMergeAbandoned(), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(new LifecycleState(phase, status, 7), SdlcTransitions.ReleaseMergeAbandoned(), LifecycleSnapshot.Empty);
 
         if (phase == Phase.Release && status == ProjectStatus.AwaitingMerge)
         {
@@ -333,14 +336,18 @@ public class LifecycleStateMachineTests
     }
 
     [Theory]
-    [InlineData(TransitionKind.ReleaseAwaitingMerge, ProjectStatus.Releasing)]
-    [InlineData(TransitionKind.ReleaseMergeAbandoned, ProjectStatus.AwaitingMerge)]
-    public void FR65_Awaiting_merge_moves_never_leave_the_release_phase(TransitionKind kind, ProjectStatus status)
+    [InlineData(SdlcStatusChanges.ReleaseAwaitingMerge, ProjectStatus.Releasing)]
+    [InlineData(SdlcStatusChanges.ReleaseMergeAbandoned, ProjectStatus.AwaitingMerge)]
+    public void FR65_Awaiting_merge_moves_never_leave_the_release_phase(string change, ProjectStatus status)
     {
-        foreach (var target in PhaseOrder.All.Where(p => p != Phase.Release))
+        foreach (var target in Sdlc.All.Where(p => p != Phase.Release))
         {
-            var result = LifecycleStateMachine.Apply(new LifecycleState(Phase.Release, status, 7), new TransitionRequest(kind, target), LifecycleSnapshot.Empty);
+            var result = Sdlc.Apply(
+                new LifecycleState(Phase.Release, status, 7),
+                new Transition(RunTransitionKind.StatusChange, target.ToWire(), StatusChange: change),
+                LifecycleSnapshot.Empty);
             Assert.Equal(ErrorCodes.WrongPhase, result.Error!.Code);
+            Assert.Equal("Awaiting a release merge stays in the release phase.", result.Error.Message);
         }
     }
 
@@ -349,15 +356,15 @@ public class LifecycleStateMachineTests
     {
         var state = new LifecycleState(Phase.Release, ProjectStatus.AwaitingMerge, 7);
 
-        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(state, TransitionRequest.Advance(), AllMet).Error!.Code);
-        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(state, TransitionRequest.ReviewCycle(), AllMet).Error!.Code);
-        Assert.Equal(ErrorCodes.NotReleased, LifecycleStateMachine.Apply(state, TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).Error!.Code);
+        Assert.Equal(ErrorCodes.WrongPhase, Sdlc.Apply(state, SdlcTransitions.Advance(), AllMet).Error!.Code);
+        Assert.Equal(ErrorCodes.WrongPhase, Sdlc.Apply(state, SdlcTransitions.ReviewCycle(), AllMet).Error!.Code);
+        Assert.Equal(ErrorCodes.NotReleased, Sdlc.NewVersion(state, LifecycleSnapshot.Empty).Error!.Code);
     }
 
     [Fact]
     public void D4_Entering_release_sets_releasing_not_released()
     {
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Advance(), AllMet);
+        var result = Sdlc.Apply(At(Phase.Review), SdlcTransitions.Advance(), AllMet);
 
         Assert.Equal(ProjectStatus.Releasing, result.Value.Status);
     }
@@ -365,13 +372,23 @@ public class LifecycleStateMachineTests
     [Fact]
     public void Released_is_never_produced_by_any_kind_other_than_release_completed()
     {
-        foreach (var from in PhaseOrder.All)
+        foreach (var from in Sdlc.All)
         {
-            foreach (var to in PhaseOrder.All)
+            foreach (var to in Sdlc.All)
             {
-                foreach (var kind in Enum.GetValues<TransitionKind>().Where(k => k != TransitionKind.ReleaseCompleted && k != TransitionKind.ReleaseNoop))
+                var snapshot = AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired };
+                Transition[] moves =
+                [
+                    SdlcTransitions.AdvanceTo(to),
+                    SdlcTransitions.ReviewCycle(target: to),
+                    SdlcTransitions.Rollback(to, 4),
+                    SdlcTransitions.Fallback(to),
+                    new Transition(RunTransitionKind.StatusChange, to.ToWire(), StatusChange: SdlcStatusChanges.ReleaseAwaitingMerge),
+                    new Transition(RunTransitionKind.StatusChange, to.ToWire(), StatusChange: SdlcStatusChanges.ReleaseMergeAbandoned),
+                ];
+                var results = moves.Select(m => Sdlc.Apply(At(from, 7), m, snapshot)).Append(Sdlc.NewVersion(At(from, 7), snapshot, to));
+                foreach (var result in results)
                 {
-                    var result = LifecycleStateMachine.Apply(At(from, 7), new TransitionRequest(kind, to, 4), AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired });
                     if (result.IsSuccess)
                     {
                         Assert.NotEqual(ProjectStatus.Released, result.Value.Status);
@@ -386,7 +403,7 @@ public class LifecycleStateMachineTests
     [Fact]
     public void FR11_Refinement_without_approved_project_request_cannot_advance()
     {
-        var result = LifecycleStateMachine.Apply(LifecycleState.Initial, TransitionRequest.Advance(), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(LifecycleState.Initial, SdlcTransitions.Advance(), LifecycleSnapshot.Empty);
 
         Assert.Equal(ErrorCodes.PhasePreconditionFailed, result.Error!.Code);
         Assert.Contains("project request", result.Error.Message, StringComparison.OrdinalIgnoreCase);
@@ -413,7 +430,7 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(MissingConditions))]
     public void FR11_Each_unmet_entry_condition_fails_with_its_reason(Phase from, string reasonFragment, LifecycleSnapshot snapshot)
     {
-        var result = LifecycleStateMachine.Apply(At(from), TransitionRequest.Advance(), snapshot);
+        var result = Sdlc.Apply(At(from), SdlcTransitions.Advance(), snapshot);
 
         Assert.Equal(ErrorCodes.PhasePreconditionFailed, result.Error!.Code);
         Assert.Contains(result.Error.Details, d => d.Contains(reasonFragment, StringComparison.OrdinalIgnoreCase));
@@ -424,7 +441,7 @@ public class LifecycleStateMachineTests
     {
         var snapshot = AllMet with { LatestReviewDecision = ReviewDecision.EscalationRequired, EscalationOutcome = EscalationDecision.Accept };
 
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Advance(), snapshot);
+        var result = Sdlc.Apply(At(Phase.Review), SdlcTransitions.Advance(), snapshot);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(Phase.Release, result.Value.To);
@@ -433,7 +450,7 @@ public class LifecycleStateMachineTests
     [Fact]
     public void Release_entry_ignores_the_pre_release_gate_itself_in_pending_gates()
     {
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Advance(), AllMet with { PendingGates = [SdlcGates.PreRelease] });
+        var result = Sdlc.Apply(At(Phase.Review), SdlcTransitions.Advance(), AllMet with { PendingGates = [SdlcGates.PreRelease] });
 
         Assert.True(result.IsSuccess);
     }
@@ -444,7 +461,7 @@ public class LifecycleStateMachineTests
     [InlineData(ApprovalMode.Advisory, Phase.Planning)]
     public void Ungated_entries_do_not_need_gate_approval(ApprovalMode mode, Phase from)
     {
-        var result = LifecycleStateMachine.Apply(At(from), TransitionRequest.Advance(), AllMet with { Mode = mode, EntryGateApproved = false });
+        var result = Sdlc.Apply(At(from), SdlcTransitions.Advance(), AllMet with { Mode = mode, EntryGateApproved = false });
 
         Assert.True(result.IsSuccess, result.Error?.Message);
     }
@@ -456,7 +473,7 @@ public class LifecycleStateMachineTests
     {
         var snapshot = new LifecycleSnapshot { Mode = ApprovalMode.Advisory, ProjectRequestLocked = true, TechnicalSpecificationLocked = true };
 
-        var result = LifecycleStateMachine.RequestAdvance(At(Phase.Specification), snapshot);
+        var result = Sdlc.RequestAdvance(At(Phase.Specification), snapshot);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(SdlcGates.SpecApproval, result.Value.GateRequired);
@@ -468,7 +485,7 @@ public class LifecycleStateMachineTests
     {
         var snapshot = new LifecycleSnapshot { Mode = ApprovalMode.Advisory, TechnicalSpecificationLocked = true, PendingGates = [SdlcGates.SpecApproval] };
 
-        var result = LifecycleStateMachine.RequestAdvance(At(Phase.Specification), snapshot);
+        var result = Sdlc.RequestAdvance(At(Phase.Specification), snapshot);
 
         Assert.Equal(ErrorCodes.GatePending, result.Error!.Code);
     }
@@ -478,7 +495,7 @@ public class LifecycleStateMachineTests
     {
         var snapshot = new LifecycleSnapshot { Mode = ApprovalMode.Autonomous, TechnicalSpecificationLocked = true };
 
-        var result = LifecycleStateMachine.RequestAdvance(At(Phase.Specification, 2), snapshot, "ready");
+        var result = Sdlc.RequestAdvance(At(Phase.Specification, 2), snapshot, "ready");
 
         Assert.Null(result.Value.GateRequired);
         Assert.Equal(Phase.Planning, result.Value.Transition!.To);
@@ -491,8 +508,8 @@ public class LifecycleStateMachineTests
     {
         var snapshot = AllMet with { EntryGateApproved = false };
 
-        Assert.Equal(SdlcGates.PlanApproval, LifecycleStateMachine.RequestAdvance(At(Phase.Planning), snapshot with { Mode = ApprovalMode.Strict }).Value.GateRequired);
-        Assert.Equal(Phase.Execution, LifecycleStateMachine.RequestAdvance(At(Phase.Planning), snapshot with { Mode = ApprovalMode.Advisory }).Value.Transition!.To);
+        Assert.Equal(SdlcGates.PlanApproval, Sdlc.RequestAdvance(At(Phase.Planning), snapshot with { Mode = ApprovalMode.Strict }).Value.GateRequired);
+        Assert.Equal(Phase.Execution, Sdlc.RequestAdvance(At(Phase.Planning), snapshot with { Mode = ApprovalMode.Advisory }).Value.Transition!.To);
     }
 
     [Fact]
@@ -500,7 +517,7 @@ public class LifecycleStateMachineTests
     {
         foreach (var mode in Enum.GetValues<ApprovalMode>())
         {
-            var result = LifecycleStateMachine.RequestAdvance(At(Phase.Review), AllMet with { Mode = mode, EntryGateApproved = false });
+            var result = Sdlc.RequestAdvance(At(Phase.Review), AllMet with { Mode = mode, EntryGateApproved = false });
 
             Assert.Equal(SdlcGates.PreRelease, result.Value.GateRequired);
         }
@@ -509,7 +526,7 @@ public class LifecycleStateMachineTests
     [Fact]
     public void FR11_RequestAdvance_preconditions_fail_before_any_gate_is_created()
     {
-        var result = LifecycleStateMachine.RequestAdvance(At(Phase.Specification), new LifecycleSnapshot { Mode = ApprovalMode.Strict });
+        var result = Sdlc.RequestAdvance(At(Phase.Specification), new LifecycleSnapshot { Mode = ApprovalMode.Strict });
 
         Assert.Equal(ErrorCodes.PhasePreconditionFailed, result.Error!.Code);
     }
@@ -517,7 +534,7 @@ public class LifecycleStateMachineTests
     [Fact]
     public void RequestAdvance_from_release_is_wrong_phase()
     {
-        var result = LifecycleStateMachine.RequestAdvance(At(Phase.Release), AllMet);
+        var result = Sdlc.RequestAdvance(At(Phase.Release), AllMet);
 
         Assert.Equal(ErrorCodes.WrongPhase, result.Error!.Code);
     }
@@ -530,18 +547,18 @@ public class LifecycleStateMachineTests
         var state = LifecycleState.Initial;
         foreach (var _ in Enumerable.Range(0, 5))
         {
-            state = LifecycleStateMachine.Apply(state, TransitionRequest.Advance(), AllMet).Value.NewState;
+            state = Sdlc.Apply(state, SdlcTransitions.Advance(), AllMet).Value.NewState;
         }
 
         Assert.Equal(new LifecycleState(Phase.Release, ProjectStatus.Releasing, 6), state);
-        Assert.Equal(6, LifecycleStateMachine.Apply(state, TransitionRequest.ReleaseNoop(), AllMet).Value.Version);
-        var released = LifecycleStateMachine.Apply(state, TransitionRequest.ReleaseCompleted(), AllMet).Value;
+        Assert.Equal(6, Sdlc.Apply(state, SdlcTransitions.ReleaseNoop(), AllMet).Value.Version);
+        var released = Sdlc.Apply(state, SdlcTransitions.ReleaseCompleted(), AllMet).Value;
         Assert.Equal(6, released.Version);
 
         // A new version starts again at checkpoint 1; the next forward transition is checkpoint 2.
-        var started = LifecycleStateMachine.Apply(released.NewState, TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).Value;
+        var started = Sdlc.NewVersion(released.NewState, LifecycleSnapshot.Empty).Value;
         Assert.Equal(new LifecycleState(Phase.Refinement, ProjectStatus.Active, 1), started.NewState);
-        Assert.Equal(2, LifecycleStateMachine.Apply(started.NewState, TransitionRequest.Advance(), AllMet).Value.Version);
+        Assert.Equal(2, Sdlc.Apply(started.NewState, SdlcTransitions.Advance(), AllMet).Value.Version);
     }
 
     [Fact]
@@ -550,10 +567,10 @@ public class LifecycleStateMachineTests
         var reviewing = At(Phase.Review, 5);
         var cycleMet = AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired, LatestReviewProjectVersion = 5 };
 
-        Assert.Equal(5, LifecycleStateMachine.Apply(reviewing, TransitionRequest.ReviewCycle(), cycleMet).Value.Version);
-        Assert.Equal(5, LifecycleStateMachine.Apply(reviewing, TransitionRequest.Fallback(Phase.Planning), LifecycleSnapshot.Empty).Value.Version);
-        Assert.Equal(5, LifecycleStateMachine.Apply(At(Phase.Release, 5), TransitionRequest.ReleaseNoop(), LifecycleSnapshot.Empty).Value.Version);
-        Assert.Equal(6, LifecycleStateMachine.Apply(reviewing, TransitionRequest.Advance(), AllMet).Value.Version);
+        Assert.Equal(5, Sdlc.Apply(reviewing, SdlcTransitions.ReviewCycle(), cycleMet).Value.Version);
+        Assert.Equal(5, Sdlc.Apply(reviewing, SdlcTransitions.Fallback(Phase.Planning), LifecycleSnapshot.Empty).Value.Version);
+        Assert.Equal(5, Sdlc.Apply(At(Phase.Release, 5), SdlcTransitions.ReleaseNoop(), LifecycleSnapshot.Empty).Value.Version);
+        Assert.Equal(6, Sdlc.Apply(reviewing, SdlcTransitions.Advance(), AllMet).Value.Version);
     }
 
     // ---- New version: release → refinement, only from released with nothing in development (§4.10, FR-60) ----
@@ -562,13 +579,13 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhaseStatusPairs))]
     public void S4_10_NewVersion_only_from_release_released(Phase phase, ProjectStatus status)
     {
-        var result = LifecycleStateMachine.Apply(new LifecycleState(phase, status, 6), TransitionRequest.NewVersion(), LifecycleSnapshot.Empty);
+        var result = Sdlc.NewVersion(new LifecycleState(phase, status, 6), LifecycleSnapshot.Empty);
 
         if (phase == Phase.Release && status == ProjectStatus.Released)
         {
             Assert.True(result.IsSuccess, result.Error?.Message);
-            Assert.Equal((Phase.Release, Phase.Refinement, ProjectStatus.Active, 1, TransitionKind.NewVersion),
-                (result.Value.From, result.Value.To, result.Value.Status, result.Value.Version, result.Value.Kind));
+            Assert.Equal((Phase.Release, Phase.Refinement, ProjectStatus.Active, 1, PhaseTransition.NewVersionEvent),
+                (result.Value.From, result.Value.To, result.Value.Status, result.Value.Version, result.Value.EventKind));
             Assert.True(result.Value.ClearsReviewState);
             Assert.True(result.Value.ClearsExecutionPause);
         }
@@ -582,8 +599,7 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhaseStatusPairs))]
     public void S4_10_NewVersion_is_refused_from_every_phase_and_status_while_a_version_is_in_development(Phase phase, ProjectStatus status)
     {
-        var result = LifecycleStateMachine.Apply(
-            new LifecycleState(phase, status, 6), TransitionRequest.NewVersion(), LifecycleSnapshot.Empty with { DevelopmentVersionExists = true });
+        var result = Sdlc.NewVersion(new LifecycleState(phase, status, 6), LifecycleSnapshot.Empty with { DevelopmentVersionExists = true });
 
         Assert.Equal(
             phase == Phase.Release && status == ProjectStatus.Released ? ErrorCodes.VersionInProgress : ErrorCodes.NotReleased,
@@ -594,8 +610,8 @@ public class LifecycleStateMachineTests
     [MemberData(nameof(AllPhasePairs))]
     public void S4_10_NewVersion_matrix_allows_only_release_to_refinement(Phase from, Phase to)
     {
-        var status = from == Phase.Release ? ProjectStatus.Released : PhaseOrder.StatusFor(from);
-        var result = LifecycleStateMachine.Apply(new LifecycleState(from, status, 6), new TransitionRequest(TransitionKind.NewVersion, to), LifecycleSnapshot.Empty);
+        var status = from == Phase.Release ? ProjectStatus.Released : Sdlc.StatusFor(from);
+        var result = Sdlc.NewVersion(new LifecycleState(from, status, 6), LifecycleSnapshot.Empty, to);
 
         if (from == Phase.Release && to == Phase.Refinement)
         {
@@ -612,18 +628,18 @@ public class LifecycleStateMachineTests
     {
         var released = new LifecycleState(Phase.Release, ProjectStatus.Released, 6);
 
-        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(released, TransitionRequest.Advance(), AllMet).Error!.Code);
-        Assert.Equal(ErrorCodes.WrongPhase, LifecycleStateMachine.Apply(released, TransitionRequest.AdvanceTo(Phase.Refinement), AllMet).Error!.Code);
-        Assert.True(LifecycleStateMachine.Apply(released, TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).IsSuccess);
+        Assert.Equal(ErrorCodes.WrongPhase, Sdlc.Apply(released, SdlcTransitions.Advance(), AllMet).Error!.Code);
+        Assert.Equal(ErrorCodes.WrongPhase, Sdlc.Apply(released, SdlcTransitions.AdvanceTo(Phase.Refinement), AllMet).Error!.Code);
+        Assert.True(Sdlc.NewVersion(released, LifecycleSnapshot.Empty).IsSuccess);
     }
 
     [Fact]
     public void Reason_defaults_when_none_is_given()
     {
-        var result = LifecycleStateMachine.Apply(At(Phase.Review), TransitionRequest.Fallback(Phase.Planning), LifecycleSnapshot.Empty);
+        var result = Sdlc.Apply(At(Phase.Review), SdlcTransitions.Fallback(Phase.Planning), LifecycleSnapshot.Empty);
 
         Assert.False(string.IsNullOrWhiteSpace(result.Value.Reason));
-        Assert.Equal(TransitionKind.InvalidationFallback, result.Value.Kind);
+        Assert.Equal(PhaseTransition.FallbackEvent, result.Value.EventKind);
     }
 
     [Fact]
@@ -632,11 +648,11 @@ public class LifecycleStateMachineTests
         var reviewing = At(Phase.Review, 7);
         var cycleMet = AllMet with { LatestReviewDecision = ReviewDecision.ReviewRequired, LatestReviewProjectVersion = 7 };
 
-        Assert.True(LifecycleStateMachine.Apply(reviewing, TransitionRequest.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value.ClearsReviewState);
-        Assert.True(LifecycleStateMachine.Apply(reviewing, TransitionRequest.Fallback(Phase.Planning), LifecycleSnapshot.Empty).Value.ClearsReviewState);
-        Assert.False(LifecycleStateMachine.Apply(reviewing, TransitionRequest.ReviewCycle(), cycleMet).Value.ClearsReviewState);
-        Assert.False(LifecycleStateMachine.Apply(At(Phase.Planning, 3), TransitionRequest.Advance(), AllMet).Value.ClearsReviewState);
-        Assert.True(LifecycleStateMachine.Apply(new LifecycleState(Phase.Release, ProjectStatus.Released, 7), TransitionRequest.NewVersion(), LifecycleSnapshot.Empty).Value.ClearsReviewState);
-        Assert.False(LifecycleStateMachine.Apply(reviewing, TransitionRequest.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value.ClearsExecutionPause);
+        Assert.True(Sdlc.Apply(reviewing, SdlcTransitions.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value.ClearsReviewState);
+        Assert.True(Sdlc.Apply(reviewing, SdlcTransitions.Fallback(Phase.Planning), LifecycleSnapshot.Empty).Value.ClearsReviewState);
+        Assert.False(Sdlc.Apply(reviewing, SdlcTransitions.ReviewCycle(), cycleMet).Value.ClearsReviewState);
+        Assert.False(Sdlc.Apply(At(Phase.Planning, 3), SdlcTransitions.Advance(), AllMet).Value.ClearsReviewState);
+        Assert.True(Sdlc.NewVersion(new LifecycleState(Phase.Release, ProjectStatus.Released, 7), LifecycleSnapshot.Empty).Value.ClearsReviewState);
+        Assert.False(Sdlc.Apply(reviewing, SdlcTransitions.Rollback(Phase.Planning, 4), LifecycleSnapshot.Empty).Value.ClearsExecutionPause);
     }
 }

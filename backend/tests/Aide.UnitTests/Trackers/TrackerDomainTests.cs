@@ -6,6 +6,7 @@ using Aide.Domain.GitHub;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Agents;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Pack.Sdlc;
@@ -396,14 +397,14 @@ public class TrackerDomainTests
         foreach (var phase in Enum.GetValues<Phase>())
         {
             Assert.Equal(ErrorCodes.ArtifactLocked, SdlcArtifactRules.CanCreateDraft(SdlcArtifacts.SourceItems, phase, ProjectStatus.Active).Error!.Code);
-            var effect = InvalidationCascade.Effect(SdlcArtifacts.SourceItems, phase);
+            var effect = Sdlc.Cascade(SdlcArtifacts.SourceItems, phase);
             Assert.Equal((0, StepReset.None, (Phase?)null), (effect.InvalidatedTypes.Count, effect.StepReset, effect.FallbackPhase));
         }
     }
 
     [Fact]
     public void FR173_Approving_a_new_project_request_still_cascades_without_touching_the_snapshot() =>
-        Assert.DoesNotContain(SdlcArtifacts.SourceItems, InvalidationCascade.Effect(SdlcArtifacts.ProjectRequest, Phase.Planning).InvalidatedTypes);
+        Assert.DoesNotContain(SdlcArtifacts.SourceItems, Sdlc.Cascade(SdlcArtifacts.ProjectRequest, Phase.Planning).InvalidatedTypes);
 
     // ---------------------------------------------------------------- FR-172 waiting and traceability
 

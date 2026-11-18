@@ -5,6 +5,7 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Rollback;
@@ -102,12 +103,13 @@ public static class RollbackRules
     public static readonly TimeSpan MinimumInterval = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// The rollback's plan. <paramref name="apply"/> applies the lifecycle move (default: <see cref="LifecycleStateMachine.Apply"/>
-    /// with an empty snapshot); the host passes its parity machine (FR-291).
+    /// The rollback's plan. The lifecycle move is the engine's <c>rollback</c> with the SDLC <paramref name="definition"/>
+    /// (<see cref="SdlcMachine.Apply"/>, FR-292).
     /// </summary>
-    public static Result<RollbackPlan> Plan(RollbackRequest request, Func<LifecycleState, TransitionRequest, Result<PhaseTransition>>? apply = null)
+    public static Result<RollbackPlan> Plan(RollbackRequest request, PipelineDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(definition);
         var current = request.Current;
         var target = request.TargetVersion;
 
@@ -171,10 +173,8 @@ public static class RollbackRules
             });
         }
 
-        var rollback = TransitionRequest.Rollback(phase, target, request.Reason);
-        var transition = apply is null
-            ? LifecycleStateMachine.Apply(current, rollback, LifecycleSnapshot.Empty)
-            : apply(current, rollback);
+        var transition = SdlcMachine.Apply(
+            current, SdlcTransitions.Rollback(phase, target, request.Reason), LifecycleSnapshot.Empty, ReviewLoopState.None, definition);
         if (transition.IsFailure)
         {
             return Result.Failure<RollbackPlan>(transition.Error!);

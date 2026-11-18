@@ -13,9 +13,9 @@ public sealed record SdlcLifecycleFacts(LifecycleState State, LifecycleSnapshot 
 
 /// <summary>
 /// FR-290, §4.52: the SDLC guards of <c>sdlc.pipeline.yaml</c> (<see cref="SdlcGuardNames"/>), pure functions of the
-/// lifecycle state and snapshot returning 0.6.1's unmet reasons verbatim (<see cref="LifecycleStateMachine"/>). With the
-/// engine's built-ins (<c>artifact_locked</c>, <c>no_pending_gates</c>) in the order the definition declares them, they
-/// reproduce <see cref="LifecycleStateMachine.UnmetEntryConditions"/> without the gate, and
+/// lifecycle state and snapshot returning 0.6.1's unmet reasons verbatim. With the engine's built-ins
+/// (<c>artifact_locked</c>, <c>no_pending_gates</c>) in the order the definition declares them, they give 0.6.1's entry
+/// conditions without the gate (<see cref="SdlcMachine.UnmetEntryConditions"/>), and
 /// <see cref="ReviewCycleReady"/> the review cycle's reasons. The host adapts them to <c>IGuard</c> (D-0.7.0-23).
 /// </summary>
 public static class SdlcGuards

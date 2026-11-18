@@ -422,7 +422,7 @@ public sealed class GitProviderFlowTests(AideApiFactory factory)
                 ProjectApi.WithDbAsync(factory, async db =>
                 {
                     await db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(
-                        s => s.SetProperty(p => p.CurrentPhase, Phase.Planning).SetProperty(p => p.Status, PhaseOrder.StatusFor(Phase.Planning)).SetProperty(p => p.Checkpoint, 3), Ct);
+                        s => s.SetProperty(p => p.CurrentPhase, Phase.Planning).SetProperty(p => p.Status, ProjectStatus.Active).SetProperty(p => p.Checkpoint, 3), Ct);
                     await db.ExecutionSteps.Where(st => st.ProjectId == id).ExecuteUpdateAsync(st => st.SetProperty(x => x.Status, StepStatus.Pending), Ct);
                 }).GetAwaiter().GetResult();
                 return (HttpStatusCode.Created, $$"""{"number":42,"html_url":"{{PrUrl}}"}""");

@@ -257,7 +257,8 @@ artifacts:
 statuses:
   <name>: { generic: active|running|waiting_on_gate|completed|failed|cancelled }
 status_changes:
-  <name>: { stage, from: [<status>], to: <status>, completes_run?: bool, error_code: <CODE> }
+  <name>: { stage, from: [<status>], to: <status>, completes_run?: bool, error_code: <CODE>,
+            error_message?: <text>, reason?: <text>, wrong_stage_message?: <text> }   # D-0.7.0-29, D-0.7.0-31
 concurrency: { exclusive: [{ job_type, scope: project|run }] }
 stages:
   - id: <id>
@@ -272,7 +273,9 @@ stages:
     on_invalid?: { retry_with_feedback: bool, max_attempts: 1-10, then: escalate|fail }
     gate?: { type: <key>, modes: [...], approves?: <artifact key>, approval_links?: bool }
     on_success?: <stage> ; on_reject?: <stage>
-    loop?: { to: <earlier stage>, on: <outcome>, max_iterations: <1-100> | { setting: <name> } }
+    loop?: { to: <earlier stage>, on: <outcome>, max_iterations: <1-100> | { setting: <name> }, requires?: [...], title?: <text> }
+    enqueue_on_enter?: <job_type>      # D-0.7.0-27
+rollback_status?: <status>          # D-0.7.0-26
 ```
 
 Validator codes (reported together, each with its YAML path):
@@ -308,7 +311,7 @@ The hash is SHA-256 (lower-case hex) of the definition's **canonical JSON**: the
 | `loop` | stage → `loop.to` | unchanged | iteration +1; refused past the cap |
 | `rollback` | any → an earlier or same stage | set to the target checkpoint | status becomes the pack's rollback status if declared, else the stage status |
 | `fallback` | any → an earlier stage after a cascade | unchanged | status = the target stage's status |
-| `status_change` | same stage, named in `status_changes` | unchanged | `from` must match, else the declared `error_code` |
+| `status_change` | same stage, named in `status_changes` | unchanged | `from` must match, else the declared `error_code` (with `error_message`). A request naming another stage is refused with `WRONG_PHASE` and `wrong_stage_message` when that is set, and the target is ignored when it isn't (D-0.7.0-31) |
 | `noop` | same stage | unchanged | |
 
 A new run starts at checkpoint 1. These are 0.6.1's checkpoint rules, made generic.

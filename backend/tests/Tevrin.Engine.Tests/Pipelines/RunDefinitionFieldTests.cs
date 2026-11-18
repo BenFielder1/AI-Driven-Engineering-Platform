@@ -80,6 +80,27 @@ public class RunDefinitionFieldTests
     }
 
     [Fact]
+    public void FR293_wrong_stage_message_is_optional_round_trips_and_counts_in_the_hash()
+    {
+        var withMessage = Edit("error_code: NOT_WORKING }", "error_code: NOT_WORKING, wrong_stage_message: \"Stays in {change_stage}, not {target}.\" }");
+        var definition = Parse(withMessage);
+        var reread = PipelineDefinitionLoader.Parse(DefinitionHash.CanonicalJson(definition));
+
+        Assert.Null(Parse(Minimal).StatusChanges[0].WrongStageMessage);
+        Assert.Equal("Stays in {change_stage}, not {target}.", definition.StatusChanges[0].WrongStageMessage);
+        Assert.Empty(reread.Errors);
+        Assert.Equal("Stays in {change_stage}, not {target}.", reread.Definition!.StatusChanges[0].WrongStageMessage);
+        Assert.Equal(DefinitionHash.Compute(definition), DefinitionHash.Compute(reread.Definition));
+        Assert.NotEqual(DefinitionHash.Compute(Parse(Minimal)), DefinitionHash.Compute(definition));
+    }
+
+    [Fact]
+    public void FR293_DEF_PARSE_an_empty_wrong_stage_message() =>
+        Assert.Contains(
+            (DefinitionErrorCodes.Parse, "status_changes.finish.wrong_stage_message"),
+            Errors(Edit("error_code: NOT_WORKING }", "error_code: NOT_WORKING, wrong_stage_message: \" \" }")));
+
+    [Fact]
     public void FR287_humanise_turns_a_key_into_words() =>
         Assert.Equal(("Release completed", "Merge poll"), (KeyWords.Humanise("release_completed"), KeyWords.Humanise("merge-poll")));
 }

@@ -1,6 +1,7 @@
 using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Pack.Sdlc;
 
@@ -27,7 +28,7 @@ public class GateRulesTests
     [InlineData(ApprovalMode.Autonomous, Phase.Specification, null)]
     [InlineData(ApprovalMode.Autonomous, Phase.Review, null)]
     public void S4_2_Required_gate_by_mode_and_entered_phase(ApprovalMode mode, Phase entering, string? expected) =>
-        Assert.Equal(expected, GateRules.RequiredGate(mode, entering));
+        Assert.Equal(expected, Sdlc.RequiredGate(mode, entering));
 
     [Theory]
     [InlineData(SdlcGates.SpecApproval)]
@@ -157,7 +158,7 @@ public class GateRulesTests
     [InlineData(SdlcGates.PreRelease, true)]
     [InlineData(EngineGates.Escalation, false)]
     public void FR48_Approval_links_only_for_spec_plan_and_pre_release_gates(string type, bool supported) =>
-        Assert.Equal(supported, GateRules.SupportsApprovalLinks(type));
+        Assert.Equal(supported, SdlcStages.SupportsApprovalLinks(Sdlc.Definition, type));
 
     [Theory]
     [InlineData(GateStatus.Pending, GateStatus.Cancelled)]

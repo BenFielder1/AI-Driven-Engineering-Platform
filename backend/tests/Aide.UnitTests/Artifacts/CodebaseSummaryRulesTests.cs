@@ -1,6 +1,7 @@
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Lifecycle;
+using Aide.UnitTests.Lifecycle;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Pack.Sdlc;
 
@@ -48,7 +49,7 @@ public class CodebaseSummaryRulesTests
     [Fact]
     public void FR70_A_new_summary_invalidates_nothing_and_a_corrupted_one_reruns_no_agent_kind()
     {
-        var effect = InvalidationCascade.Effect(SdlcArtifacts.CodebaseSummary, Phase.Planning);
+        var effect = Sdlc.Cascade(SdlcArtifacts.CodebaseSummary, Phase.Planning);
         Assert.Equal((0, StepReset.None, (Phase?)null), (effect.InvalidatedTypes.Count, effect.StepReset, effect.FallbackPhase));
 
         var change = SdlcArtifactRules.OnIntegrityCheck(SdlcArtifacts.CodebaseSummary, ArtifactStatus.Locked, "changed", ContentHash.Compute("original"));

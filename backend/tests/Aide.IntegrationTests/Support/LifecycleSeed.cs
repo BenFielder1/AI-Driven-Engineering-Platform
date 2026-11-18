@@ -6,6 +6,7 @@ using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Support;
@@ -36,15 +37,19 @@ public static class LifecycleSeed
     /// 0.6.1 part 2; the build check tests pass a value.
     /// </summary>
     public static Task SetProjectAsync(
-        WebApplicationFactory<Program> factory, Guid projectId, Phase phase, int version, ApprovalMode mode, ProjectStatus? status = null, int reviewCycle = 0, int maxBuildFixAttempts = 0) =>
-        ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == projectId).ExecuteUpdateAsync(
+        WebApplicationFactory<Program> factory, Guid projectId, Phase phase, int version, ApprovalMode mode, ProjectStatus? status = null, int reviewCycle = 0, int maxBuildFixAttempts = 0)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        var entered = status ?? SdlcStages.StatusFor(factory.Services.GetRequiredService<Aide.Api.Pipelines.SdlcLifecycle>().Definition, phase);
+        return ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == projectId).ExecuteUpdateAsync(
             s => s.SetProperty(p => p.CurrentPhase, phase)
                 .SetProperty(p => p.Checkpoint, version)
                 .SetProperty(p => p.ApprovalMode, mode)
-                .SetProperty(p => p.Status, status ?? PhaseOrder.StatusFor(phase))
+                .SetProperty(p => p.Status, entered)
                 .SetProperty(p => p.ReviewCycle, reviewCycle)
                 .SetProperty(p => p.MaxBuildFixAttempts, maxBuildFixAttempts),
             Ct));
+    }
 
     public static Task<Artifact> AddArtifactAsync(
         WebApplicationFactory<Program> factory,

@@ -2,6 +2,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
+using Aide.UnitTests.Lifecycle;
 
 namespace Aide.UnitTests.Releases;
 
@@ -89,11 +90,11 @@ public class ReleaseRulesTests
     [Fact]
     public void D4_amended_by_S4_10_Released_is_set_only_by_release_completion_which_keeps_the_checkpoint()
     {
-        var completed = LifecycleStateMachine.Apply(Releasing, TransitionRequest.ReleaseCompleted(), LifecycleSnapshot.Empty);
+        var completed = Sdlc.Apply(Releasing, SdlcTransitions.ReleaseCompleted(), LifecycleSnapshot.Empty);
 
         Assert.True(completed.IsSuccess);
         Assert.Equal((Phase.Release, ProjectStatus.Released, 7), (completed.Value.To, completed.Value.Status, completed.Value.Version));
-        var again = LifecycleStateMachine.Apply(completed.Value.NewState, TransitionRequest.ReleaseCompleted(), LifecycleSnapshot.Empty);
+        var again = Sdlc.Apply(completed.Value.NewState, SdlcTransitions.ReleaseCompleted(), LifecycleSnapshot.Empty);
         Assert.Equal(ErrorCodes.NotReleasing, again.Error!.Code);
     }
 
