@@ -19,11 +19,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-261 | Snapshot freeze: diff on change, CI check from M54 | 3.1 | backend + CI | M54 | done | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
 | FR-262 | `Tevrin.Engine.*`, `Tevrin.Pack.Sdlc`, `Tevrin.Engine.Tests` projects | 3.2 | backend | M55 | done | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
 | FR-263 | Architecture tests (engine never references Aide/Pack) | 3.2 | backend | M55 | done | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
-| FR-264 | Job queue moved to the engine | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
-| FR-265 | LLM layer + Fake provider moved | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
-| FR-266 | Generic artifact rules moved | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
-| FR-267 | Gate mechanics, notifications, audit, redaction, prompt template moved | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
-| FR-268 | AgentRun and rules moved to run log | 3.2 | backend | M55 | partial | [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) (rest in M56/M58, D-0.7.0-21) |
+| FR-264 | Job queue moved to the engine | 3.2 | backend | M55 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) (SDLC-specific rules stay in the SDLC side by design: D-0.7.0-21, -25, -31) |
+| FR-265 | LLM layer + Fake provider moved | 3.2 | backend | M55 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) (SDLC-specific rules stay in the SDLC side by design: D-0.7.0-21, -25, -31) |
+| FR-266 | Generic artifact rules moved | 3.2 | backend | M55 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) (SDLC-specific rules stay in the SDLC side by design: D-0.7.0-21, -25, -31) |
+| FR-267 | Gate mechanics, notifications, audit, redaction, prompt template moved | 3.2 | backend | M55 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) (SDLC-specific rules stay in the SDLC side by design: D-0.7.0-21, -25, -31) |
+| FR-268 | AgentRun and rules moved to run log | 3.2 | backend | M55 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) (SDLC-specific rules stay in the SDLC side by design: D-0.7.0-21, -25, -31) |
 | FR-269 | Agent string keys (`SdlcAgents`) | 3.3 | backend | M56 | done | [CI 44160448308](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44160448308) |
 | FR-270 | Artifact string keys (`SdlcArtifacts`) | 3.3 | backend | M56 | done | [CI 44160448308](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44160448308) |
 | FR-271 | Gate string keys (`SdlcGates`, engine `escalation`) | 3.3 | backend | M56 | done | [CI 44160448308](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44160448308) |
@@ -52,8 +52,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-294 | `pipeline_runs` + backfill | 3.5, 5 | backend + data | M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
 | FR-295 | `AgentStageRunner`, context providers, tools | 3.6 | backend | M59 | todo | |
 | FR-296 | Validate / retry with feedback / escalate | 3.6, 4.55 | backend | M59 | todo | |
-| FR-297 | Run logging: input, latency, stage executions, totals | 3.6, 5 | backend + data | M59 | todo | |
-| FR-298 | Prompt comparison stats | 3.6, 6 | backend | M59 | todo | |
+| FR-297 | Run logging: input, latency, stage executions, totals | 3.6, 5 | backend + data | M59 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) |
+| FR-298 | Prompt comparison stats | 3.6, 6 | backend | M59 | partial | query [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853); endpoint in M60 |
 | FR-299 | Definition endpoints | 3.7, 6 | backend | M60 | todo | |
 | FR-300 | Run, stages, timeline endpoints | 3.7, 6 | backend | M60 | todo | |
 | FR-301 | Run artifacts, diff, gates, gate decisions | 3.7, 6 | backend | M60 | todo | |
@@ -72,7 +72,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M56 String keys (FR-269–FR-274) and the remaining lift: 39b7f24, efb38aa, ade145d, [CI 44170479903](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44170479903). FR-264–FR-268 finish in M58 for the types that still need `Phase`
 - [x] M57 Definitions and packs (FR-275–FR-286, FR-290): 13f282d, 15d4ff7, [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638)
 - [x] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294): M58a runs, dual write and backfill; M58b engine machine; M58c parity (6,271,314 combinations); M58d switch-over and removal (9213cafb, a725469, 2012cf2, ac894a2, 7f479da, [CI 44364665535](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44364665535)). Build note: CA1859 only fires in Release builds, so briefs ask for `dotnet build -c Release -warnaserror`
-- [ ] M59 Stage execution and run logging (FR-295–FR-298)
+- [ ] M59 Stage execution and run logging (FR-295–FR-298): M59a run logging done (cd28064, [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853)); M59b stage runner next
 - [ ] M60 Generic API (FR-299–FR-303)
 - [ ] M61 Engine UI (FR-304–FR-308)
 - [ ] M62 Release 0.7.0 (FR-309), after Ben confirms on preview
