@@ -200,7 +200,10 @@ public static class PipelineStateMachine
         }
 
         unmet.AddRange(UnmetRequirements(loop.Requires, facts, definition));
-        if (ResolveCap(loop.MaxIterations, facts) is { } cap && state.IterationsOf(current.Id) >= cap)
+
+        // The cap is a backstop (§4.51): it refuses a loop that would otherwise be allowed, and adds no reason to a loop
+        // already refused, so a refused SDLC review cycle reports exactly 0.6.1's reasons (FR-291 parity).
+        if (unmet.Count == 0 && ResolveCap(loop.MaxIterations, facts) is { } cap && state.IterationsOf(current.Id) >= cap)
         {
             unmet.Add(TransitionMessages.LoopLimit(loop, cap));
         }

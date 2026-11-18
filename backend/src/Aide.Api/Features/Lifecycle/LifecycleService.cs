@@ -1,6 +1,7 @@
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Git;
 using Aide.Api.Logging;
+using Aide.Api.Pipelines;
 using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
@@ -26,6 +27,7 @@ public sealed partial class LifecycleService(
     LifecycleWriter writer,
     WorkingCopyPreparer workingCopies,
     PullRequestJobs pullRequests,
+    ParityStateMachine parity,
     TimeProvider time,
     ILogger<LifecycleService> logger)
 {
@@ -57,7 +59,6 @@ public sealed partial class LifecycleService(
             prepared = (await workingCopies.PrepareAsync(project.Id, cancellationToken)).IsSuccess;
         }
 
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
         var snapshot = await snapshots.LoadAsync(project, cancellationToken);
         if (prepared is { } ready)
         {
@@ -65,7 +66,7 @@ public sealed partial class LifecycleService(
         }
 
         var cleanReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
-        var outcome = LifecycleStateMachine.RequestAdvance(state, snapshot, cleanReason);
+        var outcome = parity.RequestAdvance(project, snapshot, cleanReason);
         if (outcome.IsFailure)
         {
             LogAdvanceRefused(logger, project.Id, outcome.Error!.Code);

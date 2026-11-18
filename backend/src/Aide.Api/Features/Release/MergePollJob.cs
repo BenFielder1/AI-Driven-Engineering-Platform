@@ -375,7 +375,8 @@ public sealed partial class MergePollJobHandler(
 /// A merge poll that ended without succeeding (its completion's retries ran out) fails the project's awaiting attempts with
 /// its last (token-free) error and puts the project back to <c>releasing</c>, so an Owner can retry the release.
 /// </summary>
-public sealed class MergePollJobEndedHook(TimeProvider time, JobTypeRegistry jobTypes, ILogger<JobEnqueuer> enqueuerLogger) : IJobEndedHook
+public sealed class MergePollJobEndedHook(
+    TimeProvider time, JobTypeRegistry jobTypes, Pipelines.ParityStateMachine parity, ILogger<JobEnqueuer> enqueuerLogger) : IJobEndedHook
 {
     public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
@@ -404,7 +405,7 @@ public sealed class MergePollJobEndedHook(TimeProvider time, JobTypeRegistry job
         if (project is not null)
         {
             var writer = new LifecycleWriter(db, new JobEnqueuer(db, time, AideJobPayloadSerializer.Instance, jobTypes, enqueuerLogger));
-            await ReleaseCompletion.BackToReleasingAsync(db, writer, project, $"Release failed: {ErrorCodes.GitError}", now, cancellationToken);
+            await ReleaseCompletion.BackToReleasingAsync(db, writer, parity, project, $"Release failed: {ErrorCodes.GitError}", now, cancellationToken);
         }
     }
 }

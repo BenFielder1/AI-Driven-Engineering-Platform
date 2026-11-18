@@ -225,6 +225,14 @@ public class PipelineStateMachineTests
     }
 
     [Fact]
+    public void FR291_the_loop_cap_is_a_backstop_and_adds_no_reason_to_a_loop_already_refused()
+    {
+        var error = Failed(PipelineStateMachine.Apply(At("check", "checking", checkIterations: 5), Transition.Loop("passed"), Facts(), Definition));
+
+        Assert.Equal(["The check outcome is passed, not needs_redraft."], error.Details);
+    }
+
+    [Fact]
     public void FR287_a_loop_cap_setting_the_caller_did_not_resolve_fails_loudly() =>
         Assert.Throws<InvalidOperationException>(() =>
             PipelineStateMachine.Apply(At("check", "checking"), Transition.Loop("needs_redraft"), Facts() with { Settings = new Dictionary<string, int>() }, Definition));

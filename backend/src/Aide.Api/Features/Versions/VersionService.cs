@@ -35,6 +35,7 @@ public sealed partial class VersionService(
     IStackCatalog catalog,
     ProjectStackService stacks,
     Trackers.SourceImportService imports,
+    Pipelines.ParityStateMachine parity,
     TimeProvider time,
     ILogger<VersionService> logger)
 {
@@ -105,8 +106,8 @@ public sealed partial class VersionService(
             : versions.FirstOrDefault(v => ReleaseVersionRules.IsReleased(v.Status) && SemVer.TryParse(v.Version, out var parsed) && parsed == released);
 
         // FR-186, §4.27: an inference version starts in analysis at the new base commit (STACK_INFER_NO_CODE without one).
-        var transition = LifecycleStateMachine.Apply(
-            new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint),
+        var transition = parity.Apply(
+            project,
             TransitionRequest.NewVersionInto(infer ? Phase.Analysis : Phase.Refinement, $"Started version {version}"),
             new LifecycleSnapshot
             {

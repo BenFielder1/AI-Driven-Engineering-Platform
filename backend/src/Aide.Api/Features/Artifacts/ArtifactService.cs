@@ -3,6 +3,7 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Api.Logging;
+using Aide.Api.Pipelines;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -40,6 +41,7 @@ public sealed partial class ArtifactService(
     ProjectStackService projectStacks,
     Analysis.StackProfileBaseReader profileBases,
     IStackCatalog catalogs,
+    ParityStateMachine parity,
     TimeProvider time,
     ILogger<ArtifactService> logger)
 {
@@ -367,7 +369,8 @@ public sealed partial class ArtifactService(
             artifact.Type,
             project.CurrentPhase,
             [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.CheckpointAtCreation))],
-            [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))]);
+            [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))],
+            (type, phase) => parity.CascadeEffect(project.Id, type, phase));
 
         db.AddEvent(
             EventTypes.ArtifactApproved,
@@ -423,9 +426,8 @@ public sealed partial class ArtifactService(
         var fellBack = false;
         if (cascade.Effect.FallbackPhase is { } fallback)
         {
-            var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
             var reason = $"{artifact.Type} v{artifact.Version} approved; downstream work invalidated";
-            var transition = LifecycleStateMachine.Apply(state, TransitionRequest.Fallback(fallback, reason), LifecycleSnapshot.Empty);
+            var transition = parity.Apply(project, TransitionRequest.Fallback(fallback, reason), LifecycleSnapshot.Empty);
             if (transition.IsFailure)
             {
                 return Result.Failure<Artifact>(transition.Error!);
@@ -788,9 +790,8 @@ public sealed partial class ArtifactService(
                 ? steps.Count(s => s.PlanArtifactId == plan.Id && s.Status is not StepStatus.Invalidated and not StepStatus.Completed)
                 : 0,
         };
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
-        var cycle = LifecycleStateMachine.Apply(
-            state,
+        var cycle = parity.Apply(
+            project,
             TransitionRequest.ReviewCycle($"optimization_plan v{plan.Version} approved: re-entering execution"),
             snapshot);
         if (cycle.IsSuccess)

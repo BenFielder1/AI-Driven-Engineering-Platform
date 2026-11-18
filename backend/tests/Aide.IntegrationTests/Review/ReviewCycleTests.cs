@@ -423,6 +423,29 @@ public sealed class ReviewCycleTests(AideApiFactory factory)
         Assert.Equal([5], trend.Series.Select(p => p.Checkpoint));
     }
 
+    // ---------- D-0.7.0-30 the engine's review_cycles never drops below the current cycle + 1 ----------
+
+    /// <summary>
+    /// D-0.7.0-30, FR-291: cycle 1 is review_required, then an Owner lowers max_review_cycles to 1 (the current cycle).
+    /// 0.6.1 still starts the cycle when the optimisation plan is approved; in parity mode (Throw on in tests) the engine
+    /// must agree, because the SDLC's review_cycles setting is at least the current cycle + 1.
+    /// </summary>
+    [Fact]
+    public async Task D_0_7_0_30_lowering_max_review_cycles_never_refuses_a_cycle_0_6_1_allows()
+    {
+        var app = App(factory, FakeCodeReviewScript.Default);
+        using var fixture = await ReviewedAsync(app);
+        var id = fixture.Project.Id;
+        Assert.Equal(ReviewDecision.ReviewRequired, (await ReportsAsync(app, id))[^1].Decision);
+        await ProjectApi.WithDbAsync(app, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.MaxReviewCycles, 1), Ct));
+
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan), a => a.Status == ArtifactStatus.Draft);
+        await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
+
+        var project = await LifecycleSeed.ProjectAsync(app, id);
+        Assert.Equal((Phase.Execution, ProjectStatus.Building, 1, 1), (project.CurrentPhase, project.Status, project.ReviewCycle, project.MaxReviewCycles));
+    }
+
     // ---------- FR-14 continue at max cycles after an executed optimisation plan ----------
 
     /// <summary>

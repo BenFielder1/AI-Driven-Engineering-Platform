@@ -143,9 +143,17 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Cascade hook:** `IInvalidationHook` gains `FallbackStages`; the real SDLC step-reset hook comes in M58d.
   - **Not machine moves:** entering `analysis` and starting a new version go through `start`, the start selector and the SDLC service.
   - **For the parity test:** keep the `review` iteration count below `review_cycles`, because the engine's loop cap is a backstop 0.6.1 doesn't have. Pass `review_required` as the review-cycle outcome.
+- **D-0.7.0-30** (Build, M58c, Claude, assumed): the review loop's cap never refuses what 0.6.1 allows (FR-291, FR-292).
+  - **Engine:** a loop's `max_iterations` cap refuses only a loop that would otherwise be allowed. A loop already refused (outcome, `loop.requires`) gets no extra "limit reached" reason, so a refused SDLC review cycle reports exactly 0.6.1's reasons (e.g. approving the cycle-3 optimisation plan before the max-cycles escalation is decided).
+  - **SDLC:** `review_cycles` (`SdlcRunSettingsProvider`, and the parity mapper through `SdlcReviewLoop`) is `max(maxReviewCycles + extraReviewCycles, review_cycle + 1)`, so the backstop never refuses a cycle 0.6.1 allows (e.g. after an Owner lowers `maxReviewCycles` below the current cycle). The review decision rules (escalation at the max) stay the real limit.
+
 
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.
 - Pipeline tab and replay on a real run; gate inbox.
 - Docker Desktop redeploy and smoke test.
+  - **M58c review notes for M58d:**
+    - With `review_cycles` at least `review_cycle + 1`, the engine's loop cap never binds for the SDLC, so the backstop is effectively off there. The SDLC review decision rules remain the only limit, as in 0.6.1.
+    - `projects.review_cycle` stays the authoritative review counter. The review job counts it up and rollback restores it, as in 0.6.1, and it is mirrored into `pipeline_runs.iterations`. M58d must not derive it from the engine's `RunTransition.Iterations`, which counts entries into `review` and isn't compared by parity.
+    - **Accepted exception to FR-291's "every lifecycle move":** the dev seed (`DevSeeder.cs`) writes phase and status directly. It is dev-only and predates 0.7.0.

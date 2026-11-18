@@ -118,6 +118,8 @@ public sealed class AideApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         // FR-48 links are signed with a test key; no SMTP server: email channels are skipped unless a test fakes the transport.
         builder.UseSetting("Approvals:SigningKey", TestSigningKey);
         builder.UseSetting("Smtp:Host", string.Empty);
+        // FR-291 (M58 parity mode): a difference between the old lifecycle machine and the engine fails the test.
+        builder.UseSetting("Pipelines:Parity:Throw", "true");
         // Capture logs for assertions instead of writing JSON to the test console.
         builder.ConfigureLogging(logging =>
         {

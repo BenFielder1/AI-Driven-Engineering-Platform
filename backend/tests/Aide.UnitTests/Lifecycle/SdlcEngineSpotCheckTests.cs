@@ -3,6 +3,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
+using Microsoft.Extensions.DependencyInjection;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Pipelines;
@@ -13,7 +14,7 @@ namespace Aide.UnitTests.Lifecycle;
 
 /// <summary>
 /// FR-287–FR-289 with the SDLC definition: spot checks of the engine against 0.6.1's <see cref="LifecycleStateMachine"/>
-/// and <see cref="InvalidationCascade"/> (the exhaustive §4.56 parity test is M58's next step), and FR-290's
+/// and <see cref="InvalidationCascade"/> (the exhaustive §4.56 parity test is <see cref="LifecycleParityCombinationTests"/>), and FR-290's
 /// <c>enqueue_on_enter</c> against <see cref="PhaseJobs"/>.
 /// </summary>
 public class SdlcEngineSpotCheckTests
@@ -157,29 +158,43 @@ public class SdlcEngineSpotCheckTests
     }
 
     [Fact]
-    public void FR289_the_SDLC_cascade_with_the_step_reset_hook_equals_InvalidationCascade_for_every_artifact_and_phase()
+    public void FR289_the_SDLC_cascade_with_the_SDLC_hook_equals_InvalidationCascade_for_every_artifact_and_phase()
     {
-        var hook = new StepResetHookStub();
         var mismatches = new List<string>();
 
         foreach (var approved in SdlcArtifacts.All)
         {
             foreach (var current in PhaseOrder.All)
             {
-                var expected = InvalidationCascade.Effect(approved, current);
-                var actual = DefinitionCascade.Effect(approved, current.ToWire(), Definition, hook);
-                if (!expected.InvalidatedTypes.SequenceEqual(actual.InvalidatedArtifactKeys)
-                    || expected.FallbackPhase?.ToWire() != actual.FallbackStage
-                    || (expected.StepReset != StepReset.None) != (actual.PackFallbackStages.Count > 0))
+                var check = LifecycleParity.CascadeEffect(approved, current, Definition);
+                if (!check.Agrees)
                 {
-                    mismatches.Add($"{approved} in {current.ToWire()}: expected [{string.Join(",", expected.InvalidatedTypes)}] → {expected.FallbackPhase?.ToWire()}, "
-                        + $"got [{string.Join(",", actual.InvalidatedArtifactKeys)}] → {actual.FallbackStage}");
+                    mismatches.Add($"{approved} in {current.ToWire()}: {string.Join("; ", check.Differences)}");
                 }
             }
         }
 
         Assert.Empty(mismatches);
     }
+
+    [Theory]
+    [InlineData(SdlcArtifacts.ProjectRequest, StepReset.AllSteps)]
+    [InlineData(SdlcArtifacts.TechnicalSpecification, StepReset.AllSteps)]
+    [InlineData(SdlcArtifacts.ImplementationPlan, StepReset.StepsOfOtherPlans)]
+    [InlineData(SdlcArtifacts.OptimizationPlan, StepReset.None)]
+    [InlineData(SdlcArtifacts.CodebaseSummary, StepReset.None)]
+    [InlineData(SdlcArtifacts.SourceItems, StepReset.None)]
+    [InlineData(SdlcArtifacts.StackProfile, StepReset.AllSteps)]
+    public void FR289_the_SDLC_hook_resets_the_steps_of_4_54_and_counts_them_as_produced_in_execution(string approved, StepReset reset)
+    {
+        Assert.Equal(reset, SdlcInvalidationHook.StepResetFor(approved));
+        Assert.Equal(InvalidationCascade.Effect(approved, Phase.Release).StepReset, SdlcInvalidationHook.StepResetFor(approved));
+        Assert.Equal(reset == StepReset.None ? [] : ["execution"], SdlcInvalidationHook.Instance.FallbackStages(approved, []));
+    }
+
+    [Fact]
+    public void FR289_the_SDLC_hook_is_registered_for_the_sdlc_pipeline() =>
+        Assert.Equal(SdlcPack.PipelineId, Assert.Single(Services.GetServices<IInvalidationHook>()).PipelineId);
 
     [Theory]
     [InlineData(SdlcArtifacts.ProjectRequest, "specification")]
@@ -190,7 +205,7 @@ public class SdlcEngineSpotCheckTests
     [InlineData(SdlcArtifacts.SourceItems, null)]
     [InlineData(SdlcArtifacts.StackProfile, "analysis")]
     public void FR289_each_4_54_row_falls_back_as_specified_from_release(string approved, string? fallback) =>
-        Assert.Equal(fallback, DefinitionCascade.Effect(approved, "release", Definition, new StepResetHookStub()).FallbackStage);
+        Assert.Equal(fallback, DefinitionCascade.Effect(approved, "release", Definition, SdlcInvalidationHook.Instance).FallbackStage);
 
     /// <summary>Runs both machines and asserts the same outcome: success, code, message, reasons, stage, status,
     /// checkpoint and reason.</summary>
@@ -221,45 +236,14 @@ public class SdlcEngineSpotCheckTests
         Assert.True(expected.Details.SequenceEqual(actual.Details), label);
     }
 
-    private static RunState RunStateOf(LifecycleState state, int reviewCycle = 1) =>
-        new(state.Phase.ToWire(), state.Status.ToWire(), state.Version, new Dictionary<string, int>(StringComparer.Ordinal) { [Phase.Review.ToWire()] = reviewCycle });
+    private static RunState RunStateOf(LifecycleState state, int reviewCycle = 1) => LifecycleParityMapper.RunStateOf(state, reviewCycle);
 
-    /// <summary>The run facts the SDLC caller computes: every SDLC guard evaluated on the lifecycle state and snapshot.</summary>
-    private static RunFacts FactsOf(LifecycleState state, LifecycleSnapshot snapshot) => new()
-    {
-        Mode = snapshot.Mode,
-        LockedArtifacts =
-        [
-            .. new (bool Locked, string Key)[]
-            {
-                (snapshot.ProjectRequestLocked, SdlcArtifacts.ProjectRequest),
-                (snapshot.TechnicalSpecificationLocked, SdlcArtifacts.TechnicalSpecification),
-                (snapshot.ImplementationPlanLocked, SdlcArtifacts.ImplementationPlan),
-                (snapshot.StackProfileLocked, SdlcArtifacts.StackProfile),
-            }.Where(x => x.Locked).Select(x => x.Key),
-        ],
-        PendingGates = snapshot.PendingGates,
-        EntryGateApproved = snapshot.EntryGateApproved,
-        Guards = SdlcGuardNames.All.ToDictionary(
-            name => name,
-            name => SdlcGuards.Evaluate(name, state, snapshot) is { Count: > 0 } reasons ? new GuardResult(false, reasons) : GuardResult.Pass,
-            StringComparer.Ordinal),
-        Settings = new Dictionary<string, int>(StringComparer.Ordinal) { [SdlcPack.ReviewCycles] = ReviewCycles },
-    };
+    /// <summary>The run facts the SDLC caller computes (<see cref="LifecycleParityMapper.FactsOf"/>).</summary>
+    private static RunFacts FactsOf(LifecycleState state, LifecycleSnapshot snapshot) => LifecycleParityMapper.FactsOf(state, snapshot, ReviewCycles);
 
-    /// <summary>0.6.1's request as the engine's transition (the SDLC caller's mapping, §4.51).</summary>
-    private static Transition TransitionOf(TransitionRequest request) => request.Kind switch
-    {
-        TransitionKind.Advance => new Transition(RunTransitionKind.Advance, request.TargetPhase?.ToWire(), Reason: request.Reason),
-        TransitionKind.ReviewCycle => new Transition(RunTransitionKind.Loop, request.TargetPhase?.ToWire(), LoopOutcome: ReviewDecision.ReviewRequired.ToWire(), Reason: request.Reason),
-        TransitionKind.Rollback => new Transition(RunTransitionKind.Rollback, request.TargetPhase?.ToWire(), request.TargetVersion, Reason: request.Reason),
-        TransitionKind.InvalidationFallback => new Transition(RunTransitionKind.Fallback, request.TargetPhase?.ToWire(), Reason: request.Reason),
-        TransitionKind.ReleaseNoop => new Transition(RunTransitionKind.Noop, request.TargetPhase?.ToWire(), Reason: request.Reason),
-        TransitionKind.ReleaseCompleted => Transition.Change("release_completed", request.Reason),
-        TransitionKind.ReleaseAwaitingMerge => Transition.Change("release_awaiting_merge", request.Reason),
-        TransitionKind.ReleaseMergeAbandoned => Transition.Change("release_merge_abandoned", request.Reason),
-        _ => throw new ArgumentOutOfRangeException(nameof(request), request.Kind, "A new version is a new run, not a transition."),
-    };
+    /// <summary>0.6.1's request as the engine's transition (<see cref="LifecycleParityMapper.TransitionOf"/>, §4.51).</summary>
+    private static Transition TransitionOf(TransitionRequest request) =>
+        LifecycleParityMapper.TransitionOf(request) ?? throw new ArgumentOutOfRangeException(nameof(request), request.Kind, "A new version is a new run, not a transition.");
 
     private static readonly LifecycleSnapshot AllTrue = new()
     {
@@ -279,20 +263,4 @@ public class SdlcEngineSpotCheckTests
         StackCompositionPinned = true,
         StackProfileGeneralist = true,
     };
-
-    /// <summary>
-    /// An SDLC-like <see cref="IInvalidationHook"/> (§4.54's step-reset column): approving a project request, technical
-    /// specification, implementation plan or stack profile resets steps, which count as produced in execution.
-    /// </summary>
-    private sealed class StepResetHookStub : IInvalidationHook
-    {
-        public string PipelineId => SdlcPack.PipelineId;
-
-        public IReadOnlyList<string> FallbackStages(string approvedArtifactKey, IReadOnlyList<string> invalidatedArtifactKeys) =>
-            approvedArtifactKey is SdlcArtifacts.ProjectRequest or SdlcArtifacts.TechnicalSpecification or SdlcArtifacts.ImplementationPlan or SdlcArtifacts.StackProfile
-                ? [Phase.Execution.ToWire()]
-                : [];
-
-        public Task OnInvalidatedAsync(InvalidationContext context, CancellationToken cancellationToken) => Task.CompletedTask;
-    }
 }

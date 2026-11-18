@@ -1,5 +1,4 @@
 using Aide.Domain.Lifecycle;
-using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Pipelines;
@@ -9,7 +8,8 @@ namespace Aide.Api.Pipelines;
 
 /// <summary>
 /// FR-14, FR-278, §4.51: the SDLC's run settings. <see cref="SdlcPack.ReviewCycles"/> is the project's
-/// <c>maxReviewCycles + extraReviewCycles</c>, so the engine's loop cap equals today's.
+/// <c>maxReviewCycles + extraReviewCycles</c>, never below its current review cycle + 1 (<see cref="SdlcReviewLoop"/>,
+/// D-0.7.0-30), so the engine's loop cap never refuses a cycle 0.6.1 allows.
 /// </summary>
 public sealed class SdlcRunSettingsProvider(AideDbContext db) : IRunSettingsProvider
 {
@@ -24,9 +24,9 @@ public sealed class SdlcRunSettingsProvider(AideDbContext db) : IRunSettingsProv
 
         var cycles = await db.Projects.AsNoTracking()
             .Where(p => p.Id == projectId)
-            .Select(p => new { p.MaxReviewCycles, p.ExtraReviewCycles })
+            .Select(p => new { p.MaxReviewCycles, p.ExtraReviewCycles, p.ReviewCycle })
             .SingleOrDefaultAsync(cancellationToken);
-        return cycles is null ? null : ReviewCycleRules.EffectiveMaxCycles(cycles.MaxReviewCycles, cycles.ExtraReviewCycles);
+        return cycles is null ? null : SdlcReviewLoop.ReviewCycles(cycles.MaxReviewCycles, cycles.ExtraReviewCycles, cycles.ReviewCycle);
     }
 }
 

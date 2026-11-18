@@ -28,6 +28,7 @@ public sealed partial class ReleaseCompletion(
     LifecycleWriter writer,
     JobEnqueuer jobs,
     Deployments.RolloutScheduler rollouts,
+    Pipelines.ParityStateMachine parity,
     TimeProvider time,
     ILogger<ReleaseCompletion> logger)
 {
@@ -65,7 +66,7 @@ public sealed partial class ReleaseCompletion(
         var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
         if (IsReleasing(project, release.Checkpoint))
         {
-            var completed = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseCompleted(CompletedReason), LifecycleSnapshot.Empty);
+            var completed = parity.Apply(project, TransitionRequest.ReleaseCompleted(CompletedReason), LifecycleSnapshot.Empty);
             if (completed.IsFailure)
             {
                 throw new JobFailedException(completed.Error!.Message, transient: true, completed.Error.Code);
@@ -169,7 +170,7 @@ public sealed partial class ReleaseCompletion(
             return;
         }
 
-        var awaiting = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseAwaitingMerge(AwaitingReason), LifecycleSnapshot.Empty);
+        var awaiting = parity.Apply(project, TransitionRequest.ReleaseAwaitingMerge(AwaitingReason), LifecycleSnapshot.Empty);
         if (awaiting.IsFailure)
         {
             throw new JobFailedException(awaiting.Error!.Message, transient: true, awaiting.Error.Code);
@@ -232,7 +233,7 @@ public sealed partial class ReleaseCompletion(
         var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
         if (project.Checkpoint == release.Checkpoint)
         {
-            await BackToReleasingAsync(db, writer, project, $"Release failed: {errorCode}", now, cancellationToken);
+            await BackToReleasingAsync(db, writer, parity, project, $"Release failed: {errorCode}", now, cancellationToken);
         }
 
         await SaveAsync(cancellationToken);
@@ -245,17 +246,18 @@ public sealed partial class ReleaseCompletion(
     /// Any other project state is left alone.
     /// </summary>
     public static async Task BackToReleasingAsync(
-        AideDbContext db, LifecycleWriter writer, Project project, string reason, DateTimeOffset now, CancellationToken cancellationToken)
+        AideDbContext db, LifecycleWriter writer, Pipelines.ParityStateMachine parity, Project project, string reason, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(parity);
         ArgumentNullException.ThrowIfNull(project);
         if (project.CurrentPhase != Phase.Release || project.Status != ProjectStatus.AwaitingMerge)
         {
             return;
         }
 
-        var abandoned = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseMergeAbandoned(reason), LifecycleSnapshot.Empty);
+        var abandoned = parity.Apply(project, TransitionRequest.ReleaseMergeAbandoned(reason), LifecycleSnapshot.Empty);
         if (abandoned.IsFailure)
         {
             throw new JobFailedException(abandoned.Error!.Message, transient: true, abandoned.Error.Code);
@@ -295,8 +297,6 @@ public sealed partial class ReleaseCompletion(
             throw new JobFailedException(saved.Error!.Message, transient: true, saved.Error.Code);
         }
     }
-
-    private static LifecycleState State(Project project) => new(project.CurrentPhase, project.Status, project.Checkpoint);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Release completion did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);

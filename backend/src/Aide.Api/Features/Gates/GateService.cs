@@ -3,6 +3,7 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
 using Aide.Api.Logging;
+using Aide.Api.Pipelines;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -32,6 +33,7 @@ public sealed partial class GateService(
     JobEnqueuer jobs,
     WorkingCopyPreparer workingCopies,
     BuildChecks.BuildCheckService buildChecks,
+    ParityStateMachine parity,
     TimeProvider time,
     ILogger<GateService> logger)
 {
@@ -93,7 +95,7 @@ public sealed partial class GateService(
                     };
                     var advanceReason = await AdvanceReasonAsync(project.Id, gate.Id, cancellationToken);
                     var reason = GatedAdvanceReason(gate.Type, advanceReason, comment);
-                    var applied = LifecycleStateMachine.Apply(state, TransitionRequest.Advance(reason), snapshot);
+                    var applied = parity.Apply(project.Id, state, TransitionRequest.Advance(reason), snapshot, ParityStateMachine.LoopOf(project));
                     if (applied.IsFailure)
                     {
                         return Result.Failure<ApprovalGate>(applied.Error!);
@@ -115,7 +117,7 @@ public sealed partial class GateService(
                     // steps still to run). If it already is, the cycle starts now; if its draft is waiting, approving it
                     // starts the cycle (Decisions: review cycle); with no plan at all, the extra cycle is a new review.
                     var snapshot = await snapshots.LoadAsync(project, cancellationToken) with { EscalationOutcome = EscalationDecision.Continue };
-                    var cycle = LifecycleStateMachine.Apply(state, TransitionRequest.ReviewCycle("Escalation: continue with another review cycle"), snapshot);
+                    var cycle = parity.Apply(project.Id, state, TransitionRequest.ReviewCycle("Escalation: continue with another review cycle"), snapshot, ParityStateMachine.LoopOf(project));
                     if (cycle.IsSuccess)
                     {
                         await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);

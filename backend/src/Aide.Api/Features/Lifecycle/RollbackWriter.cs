@@ -27,7 +27,7 @@ namespace Aide.Api.Features.Lifecycle;
 /// whose job was queued fail as <c>RELEASE_CANCELLED</c>. Used by the escalation <c>rollback</c> decision and by
 /// <c>POST /rollback</c>.
 /// </summary>
-public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, BuildChecks.BuildCheckService buildChecks)
+public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, BuildChecks.BuildCheckService buildChecks, Pipelines.ParityStateMachine parity)
 {
     /// <summary>
     /// Rolls the tracked <paramref name="project"/> back to checkpoint <paramref name="targetVersion"/> of its current release
@@ -102,7 +102,8 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
             ReleasePartiallyApplied = releasePartiallyApplied,
             VersionReleased = project.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
             AwaitingMerge = versionStatus == ReleaseVersionStatus.AwaitingMerge,
-        });
+        },
+        (state, rollback) => parity.Apply(project.Id, state, rollback, LifecycleSnapshot.Empty, Pipelines.ParityStateMachine.LoopOf(project)));
         if (planned.IsFailure)
         {
             return Result.Failure<RollbackEvent>(planned.Error!);

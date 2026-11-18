@@ -85,18 +85,22 @@ public static class InvalidationCascade
         return new InvalidationEffect(types, steps, fallback);
     }
 
-    /// <summary>Selects the rows to invalidate and reset when <paramref name="approvedArtifactId"/> is approved.</summary>
+    /// <summary>
+    /// Selects the rows to invalidate and reset when <paramref name="approvedArtifactId"/> is approved. <paramref name="effectOf"/>
+    /// computes the effect (default: <see cref="Effect"/>); the host passes its parity machine (FR-291).
+    /// </summary>
     public static InvalidationPlan Plan(
         Guid approvedArtifactId,
         string approvedType,
         Phase currentPhase,
         IEnumerable<ArtifactRef> artifacts,
-        IEnumerable<StepRef> steps)
+        IEnumerable<StepRef> steps,
+        Func<string, Phase, InvalidationEffect>? effectOf = null)
     {
         ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(steps);
 
-        var effect = Effect(approvedType, currentPhase);
+        var effect = effectOf is null ? Effect(approvedType, currentPhase) : effectOf(approvedType, currentPhase);
         var artifactIds = artifacts
             .Where(a => a.Id != approvedArtifactId && effect.InvalidatedTypes.Contains(a.Type) && ArtifactRules.ShouldInvalidate(a.Status))
             .Select(a => a.Id)

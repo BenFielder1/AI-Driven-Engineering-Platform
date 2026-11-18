@@ -1,3 +1,4 @@
+using Aide.Domain.Lifecycle;
 using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Pipelines;
 using Tevrin.Pack.Sdlc;
@@ -7,7 +8,8 @@ namespace Aide.Api.Pipelines;
 /// <summary>
 /// FR-278, FR-290: the pipeline registry with the SDLC pack, its guards (composed from <c>Aide.Domain</c> rules,
 /// D-0.7.0-23), its run settings and its start selector. In 0.7.0 M57 the registry is only loaded, validated and
-/// health-checked (<see cref="PipelineDefinitionsHealthCheck"/>); lifecycle decisions still use the SDLC state machine.
+/// health-checked (<see cref="PipelineDefinitionsHealthCheck"/>); in M58 parity mode every lifecycle decision also runs
+/// through the engine (<see cref="ParityStateMachine"/>, FR-291), while the SDLC state machine still decides.
 /// </summary>
 public static class SdlcPipelineRegistration
 {
@@ -26,6 +28,11 @@ public static class SdlcPipelineRegistration
 
         services.AddScoped<IRunSettingsProvider, SdlcRunSettingsProvider>();
         services.AddScoped<IRunStartSelector, SdlcRunStartSelector>();
+        services.AddSingleton<IInvalidationHook>(SdlcInvalidationHook.Instance);
+
+        // FR-291 (M58 parity mode): every lifecycle decision runs through both machines; Throw is on in the test hosts only.
+        services.AddOptions<ParityOptions>().BindConfiguration(ParityOptions.SectionName);
+        services.AddSingleton<ParityStateMachine>();
         return services;
     }
 }

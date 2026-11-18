@@ -101,7 +101,11 @@ public static class RollbackRules
 
     public static readonly TimeSpan MinimumInterval = TimeSpan.FromMinutes(1);
 
-    public static Result<RollbackPlan> Plan(RollbackRequest request)
+    /// <summary>
+    /// The rollback's plan. <paramref name="apply"/> applies the lifecycle move (default: <see cref="LifecycleStateMachine.Apply"/>
+    /// with an empty snapshot); the host passes its parity machine (FR-291).
+    /// </summary>
+    public static Result<RollbackPlan> Plan(RollbackRequest request, Func<LifecycleState, TransitionRequest, Result<PhaseTransition>>? apply = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         var current = request.Current;
@@ -167,10 +171,10 @@ public static class RollbackRules
             });
         }
 
-        var transition = LifecycleStateMachine.Apply(
-            current,
-            TransitionRequest.Rollback(phase, target, request.Reason),
-            LifecycleSnapshot.Empty);
+        var rollback = TransitionRequest.Rollback(phase, target, request.Reason);
+        var transition = apply is null
+            ? LifecycleStateMachine.Apply(current, rollback, LifecycleSnapshot.Empty)
+            : apply(current, rollback);
         if (transition.IsFailure)
         {
             return Result.Failure<RollbackPlan>(transition.Error!);
