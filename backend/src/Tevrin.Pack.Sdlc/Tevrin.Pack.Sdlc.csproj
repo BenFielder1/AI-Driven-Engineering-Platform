@@ -10,4 +10,9 @@
     <ProjectReference Include="..\Tevrin.Engine.Domain\Tevrin.Engine.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- FR-290: the SDLC pipeline definition, registered by SdlcPack from this resource. -->
+    <EmbeddedResource Include="Definitions/*.yaml" LogicalName="Definitions/%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

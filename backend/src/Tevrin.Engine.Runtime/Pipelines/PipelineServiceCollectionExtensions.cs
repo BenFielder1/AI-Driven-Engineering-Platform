@@ -7,12 +7,18 @@ namespace Tevrin.Engine.Runtime.Pipelines;
 /// <summary>FR-278: DI registration of packs, named pipeline components and the <see cref="PipelineRegistry"/>.</summary>
 public static class PipelineServiceCollectionExtensions
 {
-    /// <summary>The <see cref="PipelineRegistry"/> singleton and its readiness check type (registering the check with
-    /// <c>AddHealthChecks()</c> is the host's choice).</summary>
+    /// <summary>
+    /// The <see cref="PipelineRegistry"/> singleton, built once by <see cref="PipelineRegistryHost"/> (which keeps a
+    /// construction failure for readiness), <see cref="PipelineRegistryStartup"/> to build it and log its errors when the
+    /// host starts, and the readiness check type (registering the check with <c>AddHealthChecks()</c> is the host's
+    /// choice). Resolving <see cref="PipelineRegistry"/> after a failed build throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     public static IServiceCollection AddPipelineRegistry(this IServiceCollection services)
     {
-        services.TryAddSingleton<PipelineRegistry>();
+        services.TryAddSingleton<PipelineRegistryHost>();
+        services.TryAddSingleton(sp => sp.GetRequiredService<PipelineRegistryHost>().GetRegistry());
         services.TryAddSingleton<PipelineDefinitionsHealthCheck>();
+        services.AddHostedService<PipelineRegistryStartup>();
         return services;
     }
 

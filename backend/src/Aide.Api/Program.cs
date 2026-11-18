@@ -37,6 +37,7 @@ using Aide.Api.Hosting;
 using Aide.Api.Jobs;
 using Aide.Api.Json;
 using Aide.Api.Logging;
+using Aide.Api.Pipelines;
 using Aide.Api.Seed;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Security;
@@ -46,6 +47,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Notifications;
+using Tevrin.Engine.Runtime.Pipelines;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -158,6 +160,10 @@ builder.Services.AddScoped<GateReader>();
 builder.Services.AddAideJobs();
 builder.Services.AddSdlcJobHandlers();
 
+// Pipeline definitions (FR-275–FR-278, FR-290): the SDLC pack, its guards and providers. Loaded, validated and
+// health-checked only; lifecycle decisions still go through the SDLC state machine (M58).
+builder.Services.AddSdlcPipeline();
+
 // Artifacts: versions, approval, cascade, integrity, diff (FR-16–FR-21).
 builder.Services.AddScoped<ArtifactIntegrityGuard>();
 builder.Services.AddScoped<ArtifactReader>();
@@ -211,7 +217,8 @@ builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.Section
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag])
-    .AddCheck<StackCatalogHealthCheck>("stack-catalog", tags: [HealthEndpoints.ReadyTag]);
+    .AddCheck<StackCatalogHealthCheck>("stack-catalog", tags: [HealthEndpoints.ReadyTag])
+    .AddCheck<PipelineDefinitionsHealthCheck>("pipeline-definitions", tags: [HealthEndpoints.ReadyTag]);
 
 var app = builder.Build();
 

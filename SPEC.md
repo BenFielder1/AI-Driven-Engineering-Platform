@@ -391,7 +391,7 @@ SDLC result (must equal 0.6.1 §4.4, unit test per row):
 | --- | --- | --- | --- |
 | project_request | technical_specification, implementation_plan, optimization_plan | all steps | specification |
 | technical_specification | implementation_plan, optimization_plan | all steps | planning |
-| implementation_plan | optimization_plan | steps of other plans | review |
+| implementation_plan | optimization_plan | steps of other plans | execution (the step reset counts as produced in execution, as in 0.6.1) |
 | optimization_plan | — | none | — |
 | codebase_summary (`none`) | — | none | — |
 | source_items (`none`) | — | none | — |

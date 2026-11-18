@@ -112,6 +112,19 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Deferred to M59:** checking prompt names against the prompts the pack registers (a readiness check).
   - **Validator:** values that fit no specific code are `DEF_PARSE`. M57a review fixes: a backward `on_success` is `DEF_UNCAPPED_LOOP`; schema `$ref`s must resolve; `escalation` can't be an entry gate; canonical JSON escapes only the quote, backslash and C0 controls (so the hash doesn't depend on the .NET version); M58 must read stored canonical JSON back with a JSON reader, not the YAML loader, because YAML treats U+2028 as a line break. Previously: `"`, `\` and C0 controls. The loader reads YAML through the event parser only, with no tags, alias expansion capped at 1 MB, a nesting depth of 64 and one document.
 
+- **D-0.7.0-27** (Build, M57b, Claude, assumed): how the SDLC definition and guards are put together.
+  - **Facts:** guards read an `SdlcLifecycleFacts(LifecycleState, LifecycleSnapshot)` fact, which M58 loads with `LifecycleSnapshotLoader`.
+  - **When `requires:` runs:** only on `advance` and `loop`. Never at run start, rollback, fallback or a new version, because `sdlc.start-only` always fails.
+  - **Loops (M57b review):**
+    - A `loop` checks only `loop.requires` (`sdlc.review-cycle-ready`). It never checks the target stage's `requires:` or its entry gate, so a strict-mode review cycle needs no `plan_approval`, as in 0.6.1.
+    - The caller supplies the loop's outcome. For the SDLC, the `review` loop also fires on escalation `continue` (`GateFollowUp.StartReviewCycle`) while the decision is `escalation_required`, so `loop.on` isn't matched against the review decision alone.
+    - The loop counter for the `review_cycles` cap is `projects.review_cycle`, which rollback restores and a new version resets to 0. The run's iteration count must follow the same rules, not count up forever.
+  - **Inputs:** stage `inputs` follow what the 0.6.1 handlers actually read. Refinement lists `stack_profile`, so the cascade reaches `project_request`.
+  - **Jobs on entering a stage:** the model has no "job on entry" setting, and 0.6.1 enqueues `release` on entering the manual release stage while enqueuing nothing for refinement or analysis. M58 adds an optional stage field `enqueue_on_enter: <job_type>`; the SDLC definition sets it to match `PhaseJobs`, and the engine never assumes "agent stage means enqueue".
+  - **Spec fix:** in §4.54, approving an implementation plan falls back to `execution`, not `review`, as in 0.6.1 (corrected). The SDLC `IInvalidationHook` supplies the step reset.
+  - **Missing inputs:** M59's context builder must allow one (`stack_profile` doesn't exist for versions that don't infer their stack).
+  - **Testing:** `SdlcRunSettingsProvider` needs an integration test.
+
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.
