@@ -45,8 +45,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-290 | `sdlc.pipeline.yaml`, SDLC guards, readiness check | 3.4, 4.51, 4.52 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
 | FR-287 | `PipelineStateMachine.Apply` | 3.5, 4.51 | backend | M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
 | FR-288 | `RequestAdvance` parity (gate needed, GATE_PENDING, unmet reasons) | 3.5, 4.52 | backend | M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
-| FR-289 | Definition-driven cascade + SDLC invalidation hook | 3.5, 4.54 | backend | M58 | partial | engine [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125); SDLC hook in M58c |
-| FR-291 | Parity mode + combinatorial parity test | 3.5, 4.56 | backend | M58 | todo | |
+| FR-289 | Definition-driven cascade + SDLC invalidation hook | 3.5, 4.54 | backend | M58 | done | [CI 44318219243](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44318219243) |
+| FR-291 | Parity mode + combinatorial parity test | 3.5, 4.56 | backend | M58 | done | [CI 44318219243](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44318219243) (6,271,314 combinations; integration suite with Throw=true) |
 | FR-292 | Switch-over: run is source of truth, project columns copied | 3.5 | backend + data | M58 | partial | dual write [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125); switch-over in M58d |
 | FR-293 | Old state machine removed, transition tests rewritten | 3.5 | backend | M58 | todo | |
 | FR-294 | `pipeline_runs` + backfill | 3.5, 5 | backend + data | M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
@@ -71,7 +71,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M55 Engine projects and the lift (FR-262–FR-268): a483584, 2312ec8, CI green [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760). Types keyed by SDLC enums finish in M56/M58 (D-0.7.0-21)
 - [x] M56 String keys (FR-269–FR-274) and the remaining lift: 39b7f24, efb38aa, ade145d, [CI 44170479903](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44170479903). FR-264–FR-268 finish in M58 for the types that still need `Phase`
 - [x] M57 Definitions and packs (FR-275–FR-286, FR-290): 13f282d, 15d4ff7, [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638)
-- [ ] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294): M58a runs, dual write and backfill + M58b engine machine done (9213caf, a725469, 2012cf2, [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125)); M58c parity and M58d switch-over next. Build note: CA1859 only fires in Release builds, so briefs now ask for `dotnet build -c Release -warnaserror`
+- [ ] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294): M58a runs, dual write and backfill + M58b engine machine done (9213caf, a725469, 2012cf2, [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125)); M58c parity done (ac894a2, [CI 44318219243](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44318219243)); M58d switch-over next. Build note: CA1859 only fires in Release builds, so briefs now ask for `dotnet build -c Release -warnaserror`
 - [ ] M59 Stage execution and run logging (FR-295–FR-298)
 - [ ] M60 Generic API (FR-299–FR-303)
 - [ ] M61 Engine UI (FR-304–FR-308)
