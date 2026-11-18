@@ -246,7 +246,7 @@ public static class TevrinEngineModel
             new SortedDictionary<string, int>(iterations.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal), StringComparer.Ordinal),
             IterationsJson);
 
-    private static IReadOnlyDictionary<string, int> DeserializeIterations(string json) =>
+    private static Dictionary<string, int> DeserializeIterations(string json) =>
         JsonSerializer.Deserialize<Dictionary<string, int>>(json, IterationsJson) is { } parsed
             ? new Dictionary<string, int>(parsed, StringComparer.Ordinal)
             : new Dictionary<string, int>(StringComparer.Ordinal);
