@@ -62,8 +62,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-304 | `src/engine/` + lint boundary | 3.8 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-305 | Definition-driven components | 3.8 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
-| FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | todo | |
-| FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | todo | |
+| FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
+| FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump: [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
 
 ## Phases
@@ -74,7 +74,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294): M58a runs, dual write and backfill; M58b engine machine; M58c parity (6,271,314 combinations); M58d switch-over and removal (9213cafb, a725469, 2012cf2, ac894a2, 7f479da, [CI 44364665535](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44364665535)). Build note: CA1859 only fires in Release builds, so briefs ask for `dotnet build -c Release -warnaserror`
 - [x] M59 Stage execution and run logging (FR-295–FR-298): run logging (cd28064), engine agent runner (34d9fd0), SDLC golden prompt tests with the SDLC keeping its runner (b593268, D-0.7.0-34), [CI 44495561155](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44495561155). The FR-298 endpoint comes in M60
 - [x] M60 Generic API (FR-299–FR-303, FR-298 endpoint): 8b28f8d, [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557)
-- [ ] M61 Engine UI (FR-304–FR-308)
+- [x] M61 Engine UI (FR-304–FR-308): M61a 6f82a51 ([CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906)), M61b d7a8f59 ([CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349))
 - [ ] M62 Release 0.7.0 (FR-309), after Ben confirms on preview
 
 ## Decisions
