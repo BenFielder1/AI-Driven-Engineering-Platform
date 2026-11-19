@@ -120,6 +120,8 @@ public sealed class PipelineRegistry
             Schemas = [.. pack.Schemas.Keys],
             InvalidSchemas = invalidSchemas,
             ProducedArtifacts = [.. all.SelectMany(p => p.ProducedArtifacts).Distinct(StringComparer.Ordinal)],
+            Prompts = pack.Prompts.Count == 0 ? null : pack.Prompts,
+            ContextNames = [.. pack.ContextNames],
         };
     }
 

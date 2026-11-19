@@ -44,6 +44,10 @@ public interface IPackRegistry
     /// <summary>A prompt template an agent stage's <c>prompt</c> can name.</summary>
     void AddPrompt(string name, string promptTemplate);
 
+    /// <summary>FR-295: a context section name the pack's <see cref="IAgentContextProvider"/>s supply (e.g.
+    /// <c>codebase_summary</c>), so a prompt may require its placeholder.</summary>
+    void AddContextName(string name);
+
     /// <summary>An <see cref="IGuard"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>).</summary>
     void AddGuard(string name);
 

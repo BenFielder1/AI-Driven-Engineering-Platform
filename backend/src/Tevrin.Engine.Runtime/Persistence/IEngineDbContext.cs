@@ -34,6 +34,12 @@ public interface IEngineDbContext
     /// <summary>FR-297: per-stage timings of pipeline runs.</summary>
     DbSet<StageExecution> StageExecutions { get; }
 
+    /// <summary>FR-295: artifact versions (the agent stage runner reads inputs and stores outputs).</summary>
+    DbSet<Artifact> Artifacts { get; }
+
+    /// <summary>FR-296: approval gates (the agent stage runner raises <c>escalation</c> gates).</summary>
+    DbSet<ApprovalGate> ApprovalGates { get; }
+
     DatabaseFacade Database { get; }
 
     ChangeTracker ChangeTracker { get; }

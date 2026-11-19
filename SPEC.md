@@ -294,6 +294,7 @@ Validator codes (reported together, each with its YAML path):
 | `DEF_ARTIFACT_NO_PRODUCER` | An artifact is in some `inputs` but no stage outputs it and no pack handler declares it |
 | `DEF_UNKNOWN_SETTING` | `{ setting: x }` names a setting not in `settings` |
 | `DEF_TRIGGER_NOT_SUPPORTED` | `trigger.kind` is `schedule` or `webhook` (0.7.0) |
+| `DEF_UNKNOWN_PROMPT` | An agent stage's prompt (`agent.prompt`, else the agent key) isn't one its pack registered, doesn't parse, requires `{{FEEDBACK}}`, or requires a placeholder that is neither a stage input nor a registered context name; checked only for a pack that registers prompts (D-0.7.0-33) |
 
 Example: a definition with `loop: { to: draft }` on stage `check`, no `max_iterations`, and `validate: [{ guard: fixture.missing }]` → two errors: `DEF_UNCAPPED_LOOP` at `stages[1].loop` and `DEF_UNKNOWN_GUARD` at `stages[1].validate[0].guard`.
 

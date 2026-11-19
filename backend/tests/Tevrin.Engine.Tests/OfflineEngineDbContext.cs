@@ -25,6 +25,10 @@ internal sealed class OfflineEngineDbContext : DbContext, IEngineDbContext
 
     public DbSet<StageExecution> StageExecutions => Set<StageExecution>();
 
+    public DbSet<Artifact> Artifacts => Set<Artifact>();
+
+    public DbSet<ApprovalGate> ApprovalGates => Set<ApprovalGate>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseNpgsql("Host=unused.invalid;Database=unused");
 

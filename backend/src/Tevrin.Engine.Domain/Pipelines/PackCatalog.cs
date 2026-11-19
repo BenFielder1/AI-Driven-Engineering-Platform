@@ -30,6 +30,15 @@ public sealed record PackCatalog
     /// <summary>Embedded schemas that aren't valid JSON Schema: name → reason (checked by the runtime).</summary>
     public IReadOnlyDictionary<string, string> InvalidSchemas { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
 
+    /// <summary>FR-295, D-0.7.0-33: the defining pack's prompts (name → template), checked against every agent stage's
+    /// prompt (<c>DEF_UNKNOWN_PROMPT</c>); <c>null</c> when the pack registers no prompts (its prompts live in the host),
+    /// so the check is skipped.</summary>
+    public IReadOnlyDictionary<string, string>? Prompts { get; init; }
+
+    /// <summary>FR-295: the context section names the pack's <see cref="IAgentContextProvider"/>s supply, which a prompt's
+    /// required placeholders may use.</summary>
+    public IReadOnlyCollection<string> ContextNames { get; init; } = [];
+
     /// <summary>Artifact keys a pack handler (not a stage) produces, e.g. an import job's output.</summary>
     public IReadOnlyCollection<string> ProducedArtifacts { get; init; } = [];
 

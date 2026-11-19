@@ -59,26 +59,58 @@ public sealed class RunLogQueries(IEngineDbContext db)
 
     private async Task<IReadOnlyList<PromptStats>> PromptStatsAsync(IQueryable<PipelineRun> runs, CancellationToken cancellationToken)
     {
+        var groups = await GroupsQuery(runs).ToListAsync(cancellationToken);
+        return RunLogStats.Summarise(groups.Select(g => new PromptRunSums(
+            g.Agent, g.PromptVersion, g.Runs, g.Finished, g.Failed, g.Input, g.Output, g.Cost, g.LatencyRuns, g.Latency, g.Duration)));
+    }
 
-        var groups = await db.AgentRuns.AsNoTracking()
+    /// <summary>
+    /// The per-(agent, prompt version) sums. A failure is a <c>failed</c> run or a <c>succeeded</c> run whose output
+    /// validation rejected (<see cref="StageValidationRules.RejectedErrorPrefix"/>, D-0.7.0-33).
+    /// </summary>
+    internal IQueryable<PromptGroupRow> GroupsQuery(IQueryable<PipelineRun> runs) =>
+        db.AgentRuns.AsNoTracking()
             .Join(runs, r => r.PipelineRunId, p => (Guid?)p.Id, (r, p) => r)
             .GroupBy(r => new { r.Agent, r.PromptVersion })
-            .Select(g => new
+            .Select(g => new PromptGroupRow
             {
-                g.Key.Agent,
-                g.Key.PromptVersion,
+                Agent = g.Key.Agent,
+                PromptVersion = g.Key.PromptVersion,
                 Runs = g.Count(),
                 Finished = g.Count(r => r.Status == AgentRunStatus.Succeeded || r.Status == AgentRunStatus.Failed),
-                Failed = g.Count(r => r.Status == AgentRunStatus.Failed),
+                Failed = g.Count(r => r.Status == AgentRunStatus.Failed
+                    || (r.Status == AgentRunStatus.Succeeded && r.Error != null && r.Error.StartsWith(StageValidationRules.RejectedErrorPrefix))),
                 Input = g.Sum(r => (long)r.InputTokens),
                 Output = g.Sum(r => (long)r.OutputTokens),
                 Cost = g.Sum(r => r.CostEstimate),
                 LatencyRuns = g.Count(r => r.LatencyMs != null),
                 Latency = g.Sum(r => r.LatencyMs ?? 0),
                 Duration = g.Sum(r => r.DurationMs),
-            })
-            .ToListAsync(cancellationToken);
-        return RunLogStats.Summarise(groups.Select(g => new PromptRunSums(
-            g.Agent, g.PromptVersion, g.Runs, g.Finished, g.Failed, g.Input, g.Output, g.Cost, g.LatencyRuns, g.Latency, g.Duration)));
-    }
+            });
+}
+
+/// <summary>One row of <see cref="RunLogQueries.GroupsQuery"/>.</summary>
+internal sealed class PromptGroupRow
+{
+    public string Agent { get; init; } = string.Empty;
+
+    public string PromptVersion { get; init; } = string.Empty;
+
+    public int Runs { get; init; }
+
+    public int Finished { get; init; }
+
+    public int Failed { get; init; }
+
+    public long Input { get; init; }
+
+    public long Output { get; init; }
+
+    public decimal Cost { get; init; }
+
+    public int LatencyRuns { get; init; }
+
+    public long Latency { get; init; }
+
+    public long Duration { get; init; }
 }

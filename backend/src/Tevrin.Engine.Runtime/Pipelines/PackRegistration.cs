@@ -27,6 +27,7 @@ public sealed class PackRegistration : IPackRegistry
     private readonly List<PackDefinitionSource> _definitions = [];
     private readonly Dictionary<string, string> _schemas = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _prompts = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _contextNames = new(StringComparer.Ordinal);
     private readonly HashSet<string> _guards = new(StringComparer.Ordinal);
     private readonly HashSet<string> _handlers = new(StringComparer.Ordinal);
     private readonly HashSet<string> _tools = new(StringComparer.Ordinal);
@@ -51,6 +52,8 @@ public sealed class PackRegistration : IPackRegistry
     public IReadOnlyDictionary<string, string> Schemas => _schemas;
 
     public IReadOnlyDictionary<string, string> Prompts => _prompts;
+
+    public IReadOnlyCollection<string> ContextNames => _contextNames;
 
     public IReadOnlyCollection<string> Guards => _guards;
 
@@ -90,6 +93,12 @@ public sealed class PackRegistration : IPackRegistry
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(promptTemplate);
         _prompts[name] = promptTemplate;
+    }
+
+    public void AddContextName(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        _contextNames.Add(name);
     }
 
     public void AddGuard(string name) => _guards.Add(Namespaced(name));

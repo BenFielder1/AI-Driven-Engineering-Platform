@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Gates;
 
@@ -294,6 +295,29 @@ public static partial class PipelineDefinitionValidator
             }
         }
 
+        /// <summary>FR-295, D-0.7.0-33: an agent stage's prompt (<c>agent.prompt</c>, else the agent key) must be one the
+        /// pack registered, and its required placeholders must be filled by the stage's inputs or the pack's context
+        /// (<see cref="AgentPromptPlaceholders.Problem"/>); skipped when the catalog doesn't list prompts
+        /// (<see cref="PackCatalog.Prompts"/> null).</summary>
+        private void CheckPrompt(StageDefinition stage, AgentStageDefinition agent, string path)
+        {
+            if (catalog.Prompts is not { } prompts || string.IsNullOrEmpty(agent.Key))
+            {
+                return;
+            }
+
+            var name = agent.Prompt ?? agent.Key;
+            var at = agent.Prompt is null ? path + ".agent.key" : path + ".agent.prompt";
+            if (!prompts.TryGetValue(name, out var source))
+            {
+                Add(DefinitionErrorCodes.UnknownPrompt, at, $"No pack registered prompt '{name}'.");
+            }
+            else if (AgentPromptPlaceholders.Problem(stage, source, catalog.ContextNames) is { } problem)
+            {
+                Add(DefinitionErrorCodes.UnknownPrompt, at, $"Prompt '{name}' can't be rendered for stage '{stage.Id}': {problem}.");
+            }
+        }
+
         private void ValidateKind(StageDefinition stage, string path)
         {
             if (stage.Agent is not null && stage.Handler is not null)
@@ -318,6 +342,7 @@ public static partial class PipelineDefinitionValidator
                 }
 
                 CheckJobType(agent.JobType, path + ".agent.job_type");
+                CheckPrompt(stage, agent, path);
             }
 
             if (stage.EnqueueOnEnter is { } enqueue)

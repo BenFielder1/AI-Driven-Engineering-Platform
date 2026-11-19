@@ -30,12 +30,15 @@ public static class DefinitionErrorCodes
     public const string UnknownSetting = "DEF_UNKNOWN_SETTING";
     public const string TriggerNotSupported = "DEF_TRIGGER_NOT_SUPPORTED";
 
+    /// <summary>FR-295, D-0.7.0-33: an agent stage's prompt isn't one its pack registered.</summary>
+    public const string UnknownPrompt = "DEF_UNKNOWN_PROMPT";
+
     /// <summary>Every code, in §4.49 table order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
         UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
-        UnknownSetting, TriggerNotSupported,
+        UnknownSetting, TriggerNotSupported, UnknownPrompt,
     ];
 
     /// <summary>
