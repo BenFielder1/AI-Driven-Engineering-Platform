@@ -35,7 +35,7 @@ describe('FR-53: app shell', () => {
     expect(within(nav).getByRole('list', { name: 'Workspace' })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'Projects' })).toHaveAttribute('aria-current', 'page')
     // FR-206: Home leads the Workspace items, and the logo goes Home (FR-207).
-    expect(within(nav).getAllByRole('link').map((l) => l.textContent)).toEqual(['Home', 'Projects', 'Notifications', 'Connections'])
+    expect(within(nav).getAllByRole('link').map((l) => l.textContent)).toEqual(['Home', 'Projects', 'Notifications', 'Gates', 'Connections'])
     expect(within(nav).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/home')
     expect(within(aside).getByRole('link', { name: 'Tevrin home' })).toHaveAttribute('href', '/home')
     // FR-206: the page's primary action sits in the header's slot.

@@ -23895,7 +23895,8 @@
           "gate",
           "projectName",
           "pipelineId",
-          "pipelineTitle"
+          "pipelineTitle",
+          "canDecide"
         ],
         "type": "object",
         "properties": {
@@ -23910,9 +23911,12 @@
           },
           "pipelineTitle": {
             "type": "string"
+          },
+          "canDecide": {
+            "type": "boolean"
           }
         },
-        "description": "FR-302: a pending gate in the inbox, with its project and pipeline."
+        "description": "FR-302: a pending gate in the inbox, with its project and pipeline. `canDecide` is whether the caller\n            may approve or reject it (the decision endpoints' rule; FR-307: today only project Owners and Admins)."
       },
       "PipelineGateInboxPageDto": {
         "required": [

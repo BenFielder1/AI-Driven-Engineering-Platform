@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { api, type Schemas } from '../../api/client'
+import { engineKeys } from '../../engine/api/keys'
 import { invalidateProject } from '../lifecycle/lifecycle-api'
 import { projectKeys, unwrap } from '../projects/projects-api'
 
@@ -33,6 +34,14 @@ interface DecideVariables {
   body: DecideGateRequest
 }
 
+/** A project gate decision also changes the Gate inbox (0.7.0 FR-307), which doesn't follow project events live. */
+function invalidateAfterDecision(queryClient: QueryClient, id: string) {
+  return Promise.all([
+    invalidateProject(queryClient, id),
+    queryClient.invalidateQueries({ queryKey: engineKeys.gateInboxAll() }),
+  ])
+}
+
 /**
  * FR-13/FR-14: approve a pending gate (Owner). Escalation gates send `decision` (and `targetCheckpoint` for a rollback).
  * Both outcomes refresh the project: success applies the transition, GATE_NOT_PENDING means our list is stale.
@@ -42,7 +51,7 @@ export function useApproveGate(id: string) {
   return useMutation({
     mutationFn: async ({ gateId, body }: DecideVariables) =>
       unwrap(await api.POST('/api/projects/{id}/gates/{gateId}/approve', { params: { path: { id, gateId } }, body })),
-    onSettled: () => invalidateProject(queryClient, id),
+    onSettled: () => invalidateAfterDecision(queryClient, id),
   })
 }
 
@@ -52,6 +61,6 @@ export function useRejectGate(id: string) {
   return useMutation({
     mutationFn: async ({ gateId, body }: DecideVariables) =>
       unwrap(await api.POST('/api/projects/{id}/gates/{gateId}/reject', { params: { path: { id, gateId } }, body })),
-    onSettled: () => invalidateProject(queryClient, id),
+    onSettled: () => invalidateAfterDecision(queryClient, id),
   })
 }

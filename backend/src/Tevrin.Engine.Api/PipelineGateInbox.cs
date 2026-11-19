@@ -15,6 +15,7 @@ namespace Tevrin.Engine.Api;
 public sealed class PipelineGateInbox(
     IEngineDbContext db,
     IRunAccessPolicy access,
+    IGateDecisionService decisions,
     PipelineRunReader runs,
     PipelineDefinitionResolver definitions)
 {
@@ -60,13 +61,28 @@ public sealed class PipelineGateInbox(
             titles[run.Id] = (run.PipelineId, title);
         }
 
-        var names = await access.ProjectNamesAsync([.. gates.Select(g => g.ProjectId).Distinct()], cancellationToken);
-        var items = gates.Select(g =>
-        {
-            var pipeline = titles.TryGetValue(g.RunId, out var p) ? p : (string.Empty, string.Empty);
-            return new PipelineGateInboxItemDto(g, names.GetValueOrDefault(g.ProjectId) ?? string.Empty, pipeline.Item1, pipeline.Item2);
-        }).ToList();
+        var projectIds = gates.Select(g => g.ProjectId).Distinct().ToList();
+        var names = await access.ProjectNamesAsync(projectIds, cancellationToken);
+        var decidable = projectIds.Count == 0 ? new HashSet<Guid>() : await decisions.DecidableProjectsAsync(projectIds, cancellationToken);
+        var items = gates.Select(g => ToItem(g, names, titles, decidable)).ToList();
         var next = ordered.Count > limit ? RunTimeline.Encode(page[^1].Key) : null;
         return new PipelineGateInboxPageDto(items, next);
+    }
+
+    /// <summary>An inbox item: the gate with its project name, pipeline id and title, and whether the caller may decide
+    /// it (its project is in <paramref name="decidable"/>; escalation gates follow the same rule).</summary>
+    public static PipelineGateInboxItemDto ToItem(
+        PipelineGateDto gate,
+        IReadOnlyDictionary<Guid, string> projectNames,
+        IReadOnlyDictionary<Guid, (string Id, string Title)> pipelines,
+        IReadOnlySet<Guid> decidable)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        ArgumentNullException.ThrowIfNull(projectNames);
+        ArgumentNullException.ThrowIfNull(pipelines);
+        ArgumentNullException.ThrowIfNull(decidable);
+        (string Id, string Title) pipeline = pipelines.TryGetValue(gate.RunId, out var p) ? p : (string.Empty, string.Empty);
+        return new PipelineGateInboxItemDto(
+            gate, projectNames.GetValueOrDefault(gate.ProjectId) ?? string.Empty, pipeline.Id, pipeline.Title, decidable.Contains(gate.ProjectId));
     }
 }

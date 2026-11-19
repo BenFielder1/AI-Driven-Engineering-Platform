@@ -5,7 +5,7 @@ import { toApiError } from '../../lib/errors'
 import { engineKeys } from './keys'
 
 /** The data of an openapi-fetch result, or the API error (ProblemDetails → `ApiError`, mapped to copy in lib/errors). */
-function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
+export function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
   if (result.data !== undefined) {
     return result.data
   }

@@ -6006,12 +6006,16 @@ export interface components {
             targetCheckpoint: null | number;
             overdue: boolean;
         };
-        /** @description FR-302: a pending gate in the inbox, with its project and pipeline. */
+        /**
+         * @description FR-302: a pending gate in the inbox, with its project and pipeline. `canDecide` is whether the caller
+         *                 may approve or reject it (the decision endpoints' rule; FR-307: today only project Owners and Admins).
+         */
         PipelineGateInboxItemDto: {
             gate: components["schemas"]["PipelineGateDto"];
             projectName: string;
             pipelineId: string;
             pipelineTitle: string;
+            canDecide: boolean;
         };
         /** @description A page of the gate inbox; `next` is the cursor of the following page, or `null`. */
         PipelineGateInboxPageDto: {

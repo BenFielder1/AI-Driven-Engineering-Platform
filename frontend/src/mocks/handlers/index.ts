@@ -15,6 +15,7 @@ import { lifecycleHandlers } from './lifecycle'
 import { llmHandlers } from './llm'
 import { migrationHandlers } from './migrations'
 import { notificationHandlers } from './notifications'
+import { pipelineGateHandlers } from './pipeline-gates'
 import { pipelineHandlers } from './pipelines'
 import { platformConnectionHandlers } from './platform-connections'
 import { projectHandlers } from './projects'
@@ -45,6 +46,8 @@ export const handlers = [
   ...runHandlers,
   // 0.7.0 FR-299–FR-303: the engine's pipeline routes.
   ...pipelineHandlers,
+  // 0.7.0 FR-302, FR-307: the gate inbox and the engine's gate decisions.
+  ...pipelineGateHandlers,
   ...refinementHandlers,
   ...executionHandlers,
   ...reviewHandlers,

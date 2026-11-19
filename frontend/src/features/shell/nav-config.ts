@@ -34,6 +34,7 @@ import {
   Sun,
   User,
   Users,
+  ShieldCheck,
   Workflow,
   type LucideIcon,
 } from 'lucide-react'
@@ -87,6 +88,8 @@ const WORKSPACE: NavSection = {
     { key: 'home', label: 'Home', to: '/home', icon: House, exact: true, keywords: ['dashboard', 'start', 'setup', 'checklist'] },
     { key: 'projects', label: 'Projects', to: '/projects', icon: FolderKanban, keywords: ['list'] },
     { key: 'notifications', label: 'Notifications', to: '/notifications', icon: Bell, badge: 'unread', keywords: ['inbox', 'unread'] },
+    // 0.7.0 FR-307: the Gate inbox, pending gates across the projects the user can see.
+    { key: 'gates', label: 'Gates', to: '/gates', icon: ShieldCheck, keywords: ['approvals', 'approve', 'reject', 'pending', 'inbox', 'review'] },
     {
       key: 'connections',
       label: 'Connections',

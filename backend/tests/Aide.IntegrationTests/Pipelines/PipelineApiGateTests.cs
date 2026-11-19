@@ -142,6 +142,12 @@ public sealed class PipelineApiGateTests(AideApiFactory factory)
             await mine.Viewer.Client.GetAsync(new Uri("/api/pipeline-gates?status=pending&gateType=plan_approval&limit=200", UriKind.Relative), Ct));
 
         Assert.Contains(page.Items, i => i.Gate.Id == visible.Id && i.ProjectName == mine.Project.Name && i.PipelineId == SdlcPack.PipelineId);
+        Assert.False(page.Items.Single(i => i.Gate.Id == visible.Id).CanDecide);
+
+        // FR-307: only the Owner may decide, by the decision endpoints' rule.
+        var owners = await ProjectApi.ReadAsync<PipelineGateInboxPageDto>(
+            await mine.Owner.Client.GetAsync(new Uri("/api/pipeline-gates?gateType=plan_approval&limit=200", UriKind.Relative), Ct));
+        Assert.True(owners.Items.Single(i => i.Gate.Id == visible.Id).CanDecide);
         Assert.DoesNotContain(page.Items, i => i.Gate.Id == hidden.Id);
         Assert.All(page.Items, i => Assert.Equal(GateStatus.Pending, i.Gate.Status));
         Assert.DoesNotContain((await ProjectApi.ReadAsync<PipelineGateInboxPageDto>(

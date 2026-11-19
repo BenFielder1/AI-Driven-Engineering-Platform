@@ -47,12 +47,34 @@ internal sealed class ProjectRunAccessPolicy(IProjectAccess access, AideDbContex
 
 /// <summary>FR-301: engine gate decisions call <see cref="GateService"/> with the project gate endpoints' rule
 /// (<see cref="ProjectAction.DecideGate"/>), so rules, errors, follow-ups and audit are identical.</summary>
-internal sealed class ProjectGateDecisionService(IProjectAccess access, ICurrentUser currentUser, GateService gates) : IGateDecisionService
+internal sealed class ProjectGateDecisionService(
+    IProjectAccess access, ICurrentUser currentUser, GateService gates, AideDbContext db, SystemRoleLookup roles) : IGateDecisionService
 {
     public async Task<DomainError?> CheckDecideAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var grant = await access.CheckAsync(projectId, ProjectAction.DecideGate, cancellationToken);
         return grant.IsFailure ? grant.Error : null;
+    }
+
+    public async Task<IReadOnlySet<Guid>> DecidableProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(projectIds);
+        if (currentUser.UserId is not { } userId || projectIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var systemRole = await roles.GetAsync(userId, cancellationToken) ?? SystemRole.User;
+        var ids = projectIds.ToList();
+        var memberships = await db.ProjectMembers.AsNoTracking()
+            .Where(m => m.UserId == userId && ids.Contains(m.ProjectId))
+            .Select(m => new { m.ProjectId, m.Role })
+            .ToDictionaryAsync(m => m.ProjectId, m => (ProjectRole?)m.Role, cancellationToken);
+
+        // The same matrix as IProjectAccess.CheckAsync(projectId, ProjectAction.DecideGate) for each listed project.
+        return ids
+            .Where(id => ProjectPermissions.Check(systemRole, memberships.GetValueOrDefault(id), ProjectAction.DecideGate) == AccessDecision.Allowed)
+            .ToHashSet();
     }
 
     public Task<Result<ApprovalGate>> ApproveAsync(Guid projectId, Guid gateId, PipelineGateDecision decision, CancellationToken cancellationToken) =>

@@ -221,7 +221,7 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 | FR-304 | `frontend/src/engine/` holds the engine UI (stand-in for the future `@tevrin/engine-ui` package): API hooks, `RunTimeline`, `StageList`, `ArtifactViewer`, `ArtifactDiff`, `GateInbox`, `GateDecision`, `RunReplay`, `PromptComparison`. An ESLint rule forbids imports from `src/features/**` and `src/app/**` into `src/engine/**`. Generic pieces used by both (diff view, Markdown view) move into `src/engine/` and the SDLC features import them from there | frontend |
 | FR-305 | Every engine component renders from the definition and the run data only. Labels come from definition `title`s; there is no stage, artifact or gate name in `src/engine/` | frontend |
 | FR-306 | A **Pipeline** tab on the project (`/projects/[projectId]/pipeline`) shows the current run's stage list, run summary (status, checkpoint, cost, tokens), timeline and artifacts, with a run picker for earlier runs. **Replay** (`/projects/[projectId]/pipeline/replay?runId=`) steps through the timeline one entry at a time, showing each agent run's input and output and each artifact version with its diff to the previous version | frontend |
-| FR-307 | A **Gate inbox** page (`/gates`, nav item "Gates") lists pending gates across projects with approve and reject actions (comment required on reject, as today). Escalation gates link to the project, as their notifications do | frontend |
+| FR-307 | A **Gate inbox** page (`/gates`, nav item "Gates") lists pending gates across projects with approve and reject actions (the reject comment is optional, as today: 0.1.0 FR-13). Escalation gates link to the project, as their notifications do | frontend |
 | FR-308 | The SDLC stage stepper and stage navigation read the stage list, order and titles from the SDLC definition instead of a hard-coded phase list. Every existing SDLC page, route and copy is unchanged | frontend |
 
 **FR-305 acceptance**
@@ -482,7 +482,7 @@ Every other error is an existing code with its existing status (`PHASE_PRECONDIT
 | --- | --- | --- | --- |
 | `/projects/[projectId]/pipeline` | Pipeline | Run picker, summary (pipeline title, status badge, checkpoint, cost, tokens, hash short form), stage list with states and timings, timeline, artifacts list → viewer and diff | loading · empty ("No runs yet") · error · not found |
 | `/projects/[projectId]/pipeline/replay?runId=` | Replay | Previous/next stepper and a scrubber over the timeline; agent entries show input and output side by side (scrolling monospace blocks); artifact entries show the diff to the previous version | loading · error · not found |
-| `/gates` | Gate inbox | Pending gates (project, pipeline, gate title, artifact link, age, overdue badge), approve / reject dialogs (reuse `gate-dialogs`) | loading · empty · error |
+| `/gates` | Gate inbox | Pending gates (project, pipeline, gate title, artifact link, age, overdue badge), approve and reject dialogs (an engine `GateDecision` dialog with the same copy as `gate-dialogs`, which the engine boundary can't import) | loading · empty · error |
 | Existing SDLC pages | unchanged | Stepper reads stages from the definition (FR-308) | unchanged |
 
 Prompt comparison shows as a section on the Pipeline page ("Prompt versions"): a table per agent key. Devices: desktop-first, usable at 360px (tables scroll inside their card). Accessibility: WCAG 2.2 AA, keyboard-operable stepper and scrubber, live region for new timeline entries. Styles follow the 0.6.0 design system.

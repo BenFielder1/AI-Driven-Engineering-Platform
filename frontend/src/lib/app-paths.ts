@@ -47,6 +47,8 @@ export const appPaths = [
   '/account/connections',
   '/connections',
   '/notifications',
+  // 0.7.0 FR-307: the Gate inbox.
+  '/gates',
   '/approvals/$token',
   '/admin',
   '/admin/dead-letters',

@@ -59,9 +59,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-301 | Run artifacts, diff, gates, gate decisions | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
 | FR-302 | Gate inbox endpoint + hub events | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
 | FR-303 | Replay endpoint | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
-| FR-304 | `src/engine/` + lint boundary | 3.8 | frontend | M61 | todo | |
-| FR-305 | Definition-driven components | 3.8 | frontend | M61 | todo | |
-| FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | todo | |
+| FR-304 | `src/engine/` + lint boundary | 3.8 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
+| FR-305 | Definition-driven components | 3.8 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
+| FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | todo | |
 | FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | todo | |
 | FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump: [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
@@ -192,6 +192,13 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Availability (`DEFINITION_UNAVAILABLE`):** a pinned hash is available when it is registered, or when its stored definition (checked against its hash) names only guards, handlers and tools this build registers.
   - **Timeline:** one flat item type with a `kind`; ties at the same time are broken by a fixed kind rank, then the row id in uuid order; the cursor is (time, kind, id). The replay caps each agent run's input and output at 200,000 characters (`inputTruncated`, `outputTruncated`). Gate decisions go through the same checks in the project route's order, then the definition check.
   - **Indexes:** migration `PipelineTimelineIndexes` adds (`pipeline_run_id`, `created_at`) on `agent_runs`, `approval_gates`, `artifacts` and `state_transitions` (expand only; the single-column foreign-key indexes stay).
+
+- **D-0.7.0-36** (Build, M61b, Claude, assumed): Gate inbox details (FR-307).
+  - **Reject comment:** optional, as today (0.1.0 FR-13). This corrects FR-307's wording.
+  - **Dialog:** the engine `GateDecision` dialog reuses `gate-dialogs`' copy, but not its code, because of the engine import boundary.
+  - **Escalation gates:** a gate whose type isn't declared on any stage of its pipeline is treated as an escalation and shows "Open project". While the definition is loading or unavailable, every row shows that link.
+  - **Live updates:** the page joins the live groups of at most 10 listed projects.
+  - **Lifecycle list:** the sidebar's Lifecycle list still comes from the hard-coded phases. FR-308 covers the stepper and the Previous/Next stage buttons, which read the definition and fall back to the hard-coded list while it loads or on error.
 
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).

@@ -134,8 +134,9 @@ public sealed record DecidePipelineGateRequest
     public int? TargetCheckpoint { get; init; }
 }
 
-/// <summary>FR-302: a pending gate in the inbox, with its project and pipeline.</summary>
-public sealed record PipelineGateInboxItemDto(PipelineGateDto Gate, string ProjectName, string PipelineId, string PipelineTitle);
+/// <summary>FR-302: a pending gate in the inbox, with its project and pipeline. <c>canDecide</c> is whether the caller
+/// may approve or reject it (the decision endpoints' rule; FR-307: today only project Owners and Admins).</summary>
+public sealed record PipelineGateInboxItemDto(PipelineGateDto Gate, string ProjectName, string PipelineId, string PipelineTitle, bool CanDecide);
 
 /// <summary>A page of the gate inbox; <c>next</c> is the cursor of the following page, or <c>null</c>.</summary>
 public sealed record PipelineGateInboxPageDto(IReadOnlyList<PipelineGateInboxItemDto> Items, string? Next);

@@ -36,6 +36,10 @@ public interface IGateDecisionService
     /// (<c>FORBIDDEN</c>).</summary>
     Task<DomainError?> CheckDecideAsync(Guid projectId, CancellationToken cancellationToken);
 
+    /// <summary>FR-302, FR-307: which of <paramref name="projectIds"/> the caller may decide gates on, by the same rule as
+    /// <see cref="CheckDecideAsync"/>, in one query.</summary>
+    Task<IReadOnlySet<Guid>> DecidableProjectsAsync(IReadOnlyCollection<Guid> projectIds, CancellationToken cancellationToken);
+
     Task<Result<ApprovalGate>> ApproveAsync(Guid projectId, Guid gateId, PipelineGateDecision decision, CancellationToken cancellationToken);
 
     Task<Result<ApprovalGate>> RejectAsync(Guid projectId, Guid gateId, PipelineGateDecision decision, CancellationToken cancellationToken);

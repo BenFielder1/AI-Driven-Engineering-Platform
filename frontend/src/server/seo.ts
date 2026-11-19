@@ -12,6 +12,8 @@ export const APP_ROUTE_PREFIXES = [
   '/account',
   '/connections',
   '/notifications',
+  // 0.7.0 FR-307: the Gate inbox.
+  '/gates',
   '/approvals',
   '/admin',
 ] as const

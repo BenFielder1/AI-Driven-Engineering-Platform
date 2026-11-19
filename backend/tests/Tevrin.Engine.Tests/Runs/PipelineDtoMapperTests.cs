@@ -107,5 +107,30 @@ public class PipelineDtoMapperTests
         Assert.Equal((false, true), (longOutput.InputTruncated, longOutput.OutputTruncated));
     }
 
+    [Fact]
+    public void FR302_an_inbox_item_can_be_decided_only_on_projects_the_caller_may_decide()
+    {
+        var definition = Fixture();
+        var ownProject = Guid.CreateVersion7();
+        var viewedProject = Guid.CreateVersion7();
+        var runId = Guid.CreateVersion7();
+        var names = new Dictionary<Guid, string> { [ownProject] = "Mine", [viewedProject] = "Theirs" };
+        var pipelines = new Dictionary<Guid, (string Id, string Title)> { [runId] = ("fixture-review", "Fixture review") };
+        HashSet<Guid> decidable = [ownProject];
+        PipelineGateDto Gate(Guid projectId, string type) =>
+            PipelineDtoMapper.ToGateDto(new ApprovalGate { ProjectId = projectId, Type = type, CreatedAt = DateTimeOffset.UnixEpoch }, runId, definition, null, null);
+
+        var mine = PipelineGateInbox.ToItem(Gate(ownProject, "report_approval"), names, pipelines, decidable);
+        var escalation = PipelineGateInbox.ToItem(Gate(ownProject, "escalation"), names, pipelines, decidable);
+        var theirs = PipelineGateInbox.ToItem(Gate(viewedProject, "report_approval"), names, pipelines, decidable);
+
+        Assert.Equal((true, "Mine", "fixture-review", "Fixture review"), (mine.CanDecide, mine.ProjectName, mine.PipelineId, mine.PipelineTitle));
+        Assert.True(escalation.CanDecide);
+        Assert.Equal((false, "Theirs"), (theirs.CanDecide, theirs.ProjectName));
+        var unknownRun = PipelineGateInbox.ToItem(
+            PipelineDtoMapper.ToGateDto(new ApprovalGate { ProjectId = ownProject, Type = "x" }, Guid.CreateVersion7(), null, null, null), names, pipelines, decidable);
+        Assert.Equal((string.Empty, string.Empty), (unknownRun.PipelineId, unknownRun.PipelineTitle));
+    }
+
     private static ApprovalGate WithType(string type) => new() { Type = type, CreatedAt = DateTimeOffset.UnixEpoch };
 }

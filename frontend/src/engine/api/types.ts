@@ -28,3 +28,6 @@ export type PipelineLiveEvent =
   | { type: 'pipelineRunUpdated'; run: PipelineRun }
   | { type: 'stageUpdated'; stage: RunStage }
   | { type: 'gateUpdated'; gate: RunGate }
+/** FR-302: a pending gate in the inbox, with its project and pipeline, and a page of them. */
+export type GateInboxItem = Schemas['PipelineGateInboxItemDto']
+export type GateInboxPage = Schemas['PipelineGateInboxPageDto']

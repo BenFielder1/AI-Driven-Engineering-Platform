@@ -27,11 +27,14 @@ export interface StoredPipelineRun {
 export const pipelinesDb = {
   runs: [] as StoredPipelineRun[],
   promptStats: [] as (Schemas['PromptStatsDto'] & { pipelineId: string; projectId: string })[],
+  /** FR-301 test knob: runs whose pinned definition this build can't run (decisions answer DEFINITION_UNAVAILABLE). */
+  unavailableRuns: new Set<string>(),
 }
 
 export function resetPipelinesDb() {
   pipelinesDb.runs = []
   pipelinesDb.promptStats = []
+  pipelinesDb.unavailableRuns = new Set()
 }
 
 let clock = Date.parse('2026-11-01T09:00:00Z')
@@ -50,7 +53,17 @@ export interface RunScript {
   /** Timeline entries in order, a minute apart; ids and times are filled in. */
   timeline: Omit<Item, 'id' | 'at'>[]
   artifacts: { key: string; versions: { status: Schemas['ArtifactStatus']; content: string; intact?: boolean }[] }[]
-  gates?: { type: string; status?: Gate['status']; artifactKey?: string; artifactVersion?: number }[]
+  gates?: {
+    type: string
+    status?: Gate['status']
+    artifactKey?: string
+    artifactVersion?: number
+    /** Defaults to the type in words ("Spec approval"). */
+    title?: string
+    overdue?: boolean
+    /** Defaults to just after the run's last timeline entry. */
+    createdAt?: string
+  }[]
 }
 
 export function seedPipelineRun(project: StoredProject, script: RunScript, overrides: Partial<Run> = {}): StoredPipelineRun {
@@ -120,19 +133,19 @@ export function seedPipelineRun(project: StoredProject, script: RunScript, overr
       runId,
       projectId: project.id,
       type: g.type,
-      title: g.type.charAt(0).toUpperCase() + g.type.slice(1).replaceAll('_', ' '),
+      title: g.title ?? g.type.charAt(0).toUpperCase() + g.type.slice(1).replaceAll('_', ' '),
       stageId: declaring?.id ?? null,
       status: g.status ?? 'pending',
       artifactId: artifact?.summary.id ?? null,
       artifactKey: g.artifactKey ?? null,
       artifactVersion: g.artifactVersion ?? null,
-      createdAt: at(start, timeline.length),
+      createdAt: g.createdAt ?? at(start, timeline.length),
       decidedAt: null,
       decidedByUserId: null,
       comment: null,
       decision: null,
       targetCheckpoint: null,
-      overdue: false,
+      overdue: g.overdue ?? false,
     }
   })
   // Gate timeline entries point at the stored gates.
@@ -158,4 +171,31 @@ export function addTimelineEntries(stored: StoredPipelineRun, count: number, sta
 /** Records prompt comparison rows for a pipeline on a project (FR-298). */
 export function seedPromptStats(project: StoredProject, pipelineId: string, rows: Schemas['PromptStatsDto'][]) {
   pipelinesDb.promptStats.push(...rows.map((r) => ({ ...r, pipelineId, projectId: project.id })))
+}
+
+/**
+ * FR-307: adds a pending gate to a seeded run, e.g. an escalation raised by a guard (no stage declares its type, so
+ * `stageId` is null). Returns the stored gate.
+ */
+export function addPipelineGate(stored: StoredPipelineRun, gate: Partial<Gate> & Pick<Gate, 'type' | 'title'>): Gate {
+  const added: Gate = {
+    id: nextId(),
+    runId: stored.run.id,
+    projectId: stored.run.projectId,
+    stageId: null,
+    status: 'pending',
+    artifactId: null,
+    artifactKey: null,
+    artifactVersion: null,
+    createdAt: new Date(Date.parse(stored.run.startedAt) + 3_600_000).toISOString(),
+    decidedAt: null,
+    decidedByUserId: null,
+    comment: null,
+    decision: null,
+    targetCheckpoint: null,
+    overdue: false,
+    ...gate,
+  }
+  stored.gates.push(added)
+  return added
 }

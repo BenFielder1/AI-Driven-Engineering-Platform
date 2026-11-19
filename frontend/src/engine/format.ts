@@ -47,3 +47,24 @@ export function humanise(key: string): string {
 
 /** Prompt versions are bare numbers in the template front matter: show them as "v1". */
 export const formatPromptVersion = (version: string) => (/^\d+$/.test(version) ? `v${version}` : version)
+
+const relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+const relativeUnits: readonly [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 31_536_000],
+  ['month', 2_592_000],
+  ['week', 604_800],
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+]
+
+/** How long ago `iso` was: "3 hours ago", "yesterday", "just now". */
+export function formatAge(iso: string, now: number = Date.now()): string {
+  const seconds = Math.round((new Date(iso).getTime() - now) / 1000)
+  for (const [unit, size] of relativeUnits) {
+    if (Math.abs(seconds) >= size) {
+      return relativeFormat.format(Math.trunc(seconds / size), unit)
+    }
+  }
+  return 'just now'
+}

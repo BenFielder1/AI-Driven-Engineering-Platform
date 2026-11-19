@@ -755,6 +755,12 @@ export const contextualErrorMessages = {
     NOT_FOUND: "That user no longer exists. The list now shows the latest.",
     FORBIDDEN: "Only administrators can change system roles, and only from a browser session.",
   },
+  /** POST /api/pipeline-runs/:runId/gates/:gateId/approve|reject from the gate inbox (0.7.0 FR-307). */
+  pipelineGateDecision: {
+    FORBIDDEN: "Only project Owners can decide this gate.",
+    GATE_NOT_PENDING: "This gate was already decided or cancelled, so nothing changed. The list now shows the gates still waiting.",
+    NOT_FOUND: "This gate's project or run is no longer available to you. The list now shows the gates still waiting.",
+  },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>;
 
 export type ErrorContext = keyof typeof contextualErrorMessages;

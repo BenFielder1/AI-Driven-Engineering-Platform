@@ -29,10 +29,10 @@ function hasPage(to: string): boolean {
 }
 
 describe('FR-53: workspace navigation', () => {
-  it('FR53_nav_config / FR-206: Home, Projects, Notifications and Connections for everyone; Admin with its six pages for admins only', () => {
-    expect(labels(workspaceSections(user))).toEqual([{ label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Connections'] }])
+  it('FR53_nav_config / FR-206 / FR-307: Home, Projects, Notifications, Gates and Connections for everyone; Admin with its six pages for admins only', () => {
+    expect(labels(workspaceSections(user))).toEqual([{ label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Gates', 'Connections'] }])
     expect(labels(workspaceSections(admin))).toEqual([
-      { label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Connections'] },
+      { label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Gates', 'Connections'] },
       { label: 'Admin', items: ['Overview', 'Users', 'Events', 'Agent runs', 'Dead letters', 'Integrations'] },
     ])
   })
@@ -124,9 +124,9 @@ describe('FR-53: breadcrumbs come from nav-config', () => {
 })
 
 describe('FR-53: the command palette lists the same pages', () => {
-  it('FR53_palette / FR-209: workspace pages plus Account (Home and New project are actions); admin pages for admins only', () => {
+  it('FR53_palette / FR-209 / FR-307: workspace pages (with Gates) plus Account (Home and New project are actions); admin pages for admins only', () => {
     const forUser = paletteEntries(user).map((e) => e.label)
-    expect(forUser).toEqual(['Projects', 'Notifications', 'Connections', 'Account'])
+    expect(forUser).toEqual(['Projects', 'Notifications', 'Gates', 'Connections', 'Account'])
     expect(paletteEntries(admin).map((e) => e.href)).toContain('/admin/integrations')
   })
 
