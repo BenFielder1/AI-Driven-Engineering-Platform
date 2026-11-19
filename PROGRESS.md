@@ -50,8 +50,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-292 | Switch-over: run is source of truth, project columns copied | 3.5 | backend + data | M58 | done | [CI 44364665535](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44364665535) |
 | FR-293 | Old state machine removed, transition tests rewritten | 3.5 | backend | M58 | done | [CI 44364665535](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44364665535) |
 | FR-294 | `pipeline_runs` + backfill | 3.5, 5 | backend + data | M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
-| FR-295 | `AgentStageRunner`, context providers, tools | 3.6 | backend | M59 | todo | |
-| FR-296 | Validate / retry with feedback / escalate | 3.6, 4.55 | backend | M59 | todo | |
+| FR-295 | `AgentStageRunner`, context providers, tools | 3.6 | backend | M59 | done | engine runner [CI 44490362504](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44490362504); SDLC keeps its runner (D-0.7.0-34) |
+| FR-296 | Validate / retry with feedback / escalate | 3.6, 4.55 | backend | M59 | done | engine [CI 44490362504](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44490362504); SDLC plan validation unchanged (D-0.7.0-34) |
 | FR-297 | Run logging: input, latency, stage executions, totals | 3.6, 5 | backend + data | M59 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) |
 | FR-298 | Prompt comparison stats | 3.6, 6 | backend | M59 | partial | query [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853); endpoint in M60 |
 | FR-299 | Definition endpoints | 3.7, 6 | backend | M60 | todo | |
@@ -174,6 +174,16 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Tools:** a stage's `agent.tools` are resolved by name from DI and run in `LlmToolLoop`; the model sees each tool's `Spec.Name`. Calls are recorded in `tool_calls` as `{tool, arguments, isError}`.
 
 - **Watch (flaky test):** `DeliveryTimeoutTests.FR49_An_SMTP_server_that_never_answers_times_out_as_a_transient_failure` failed twice in local unit runs on this memory-starved machine and passes on its own. It is green on CI so far; if it fails there, give it a `FakeTimeProvider` or wider margins (the M58c review also flagged wall-clock tests in `LlmStreamingTests`, `LlmKeyCheckTests` and `CheckFailureLogTests`).
+
+- **D-0.7.0-34** (Ben, 2026-11-19, agreed): the SDLC agents keep their own runner in 0.7.0 (`AgentRunner`, `ArtifactAgentJob`). M59b2 moved no agent, because each move would change the characterisation snapshots. Golden prompt tests (`backend/tests/Aide.UnitTests/Agents/GoldenPromptTests.cs`, `Golden/*.txt`) pin all eight agents' templates and rendered prompts. Before the SDLC can move onto the engine runner, the engine needs:
+  - **Run ids:** supplied by the host, with redelivery that returns the stored reply.
+  - **Run events:** lifecycle hooks for `RUN_STARTED`, `RUN_COMPLETED`, `RUN_FAILED` and `BUDGET_EXCEEDED`.
+  - **Request options:** `MaxTokens` (FR-160) and `ContextTokens` (FR-162).
+  - **Run metadata:** catalogue version, packs and agent key, plus the full input-artifact list.
+  - **Content transform hook:** the SDLC renders the plan into Markdown with an `aide-plan` block and adds deploy-file steps.
+  - **Corrective-input hook:** previous output in `PREVIOUS_*`, with SDLC feedback wording and host error codes (`INVALID_PLAN`, `MISSING_SECTIONS`).
+  - **Transactions and failures:** a separate run and token transaction; a transient failure keeps the run running.
+  - **Host checks:** credential invalidation (FR-78), the provider-disabled check (FR-157), the source-items budget (FR-172), and the corruption alert and regeneration (FR-20).
 
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).

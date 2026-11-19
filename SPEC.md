@@ -181,7 +181,7 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 
 | ID | Requirement | Layer |
 | --- | --- | --- |
-| FR-295 | An engine `AgentStageRunner` runs any agent stage: load the pinned definition, collect the latest locked versions of the stage's `inputs`, ask registered `IAgentContextProvider`s for extra context, render the prompt, call the LLM through the resolver with the stage's tools, validate the output (FR-296), store it as a new draft (or auto-locked) artifact version, and record the agent run. The SDLC's repository and Git context (`AgentRepoContext`, iteration context, repo tools) become SDLC context providers and `IAgentTool`s. `AgentRunner`, `ArtifactAgentJob` and the SDLC agent job handlers call the engine runner; SDLC-specific job handlers (execution, repository and stack analysis, build check, release) stay in the SDLC side | backend |
+| FR-295 | An engine `AgentStageRunner` runs any agent stage: load the pinned definition, collect the latest locked versions of the stage's `inputs`, ask registered `IAgentContextProvider`s for extra context, render the prompt, call the LLM through the resolver with the stage's tools, validate the output (FR-296), store it as a new draft (or auto-locked) artifact version, and record the agent run. The SDLC's repository and Git context (`AgentRepoContext`, iteration context, repo tools) become SDLC context providers and `IAgentTool`s. `AgentRunner`, `ArtifactAgentJob` and the SDLC agent job handlers call the engine runner; SDLC-specific job handlers (execution, repository and stack analysis, build check, release) stay in the SDLC side | backend | *(Amended by D-0.7.0-34: in 0.7.0 the SDLC agents keep their own runner, pinned by golden prompt tests; the engine runner ships for new packs and is proven on the fixture pipeline.)*
 | FR-296 | `validate:` on an agent stage: when a guard or the schema rejects the output, the stage reruns the agent with the findings appended as feedback (trigger `validation_failed`) up to `max_attempts`, then follows `then:` (`escalate` raises an `escalation` gate; `fail` marks the agent run and job failed). Where the SDLC validates output today (plan validation, build-fix plans), it is expressed this way with today's attempt counts and end result (§4.55) | backend |
 | FR-297 | Run logging: `agent_runs` gains `pipeline_run_id`, `stage_id`, `input` (the rendered prompt and messages, redacted with `SecretRedaction`, capped at 1 MB with `input_truncated`) and `latency_ms` (time to first token, when streaming). A new `stage_executions` table records each entry into a stage (run, stage, iteration, checkpoint, entered and exited times, outcome). The run exposes a cost total (sum of its agent runs' `cost_estimate`) and a token total | backend + data |
 | FR-298 | **Prompt comparison**: an endpoint groups a pipeline's agent runs by agent key and prompt version, with counts and average tokens, cost, latency, duration and failure rate (§6) | backend |
@@ -407,7 +407,7 @@ Attempt n's output fails validation → if `retry_with_feedback` and n < `max_at
 
 Example (fixture): `max_attempts: 3`, `then: escalate`. Attempt 1 fails "weekly volume +25% > 10%", attempt 2 fails the same, attempt 3 fails "taper missing" → 3 agent runs, 2 with feedback, then one pending `escalation` gate on the run. With `then: fail`, the third agent run and its job end `failed`.
 
-SDLC: the plan generator's existing validation (`INVALID_PLAN`, one retry) becomes `validate: [{ guard: sdlc.plan-valid }]`, `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }`, with the same retry prompt text.
+SDLC: *(amended by D-0.7.0-34)* the plan generator keeps its own validation and corrective re-run in 0.7.0 (`INVALID_PLAN`, one retry). The equivalent definition is `validate: [{ guard: sdlc.plan-valid }]` with `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }`. It is adopted when the SDLC moves onto the engine runner.
 
 ### 4.56 Parity combinations (M58)
 
@@ -523,6 +523,7 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 | D-0.7.0-17 | Run replay is read-only. Re-executing a run against a new prompt version is future work | Claude | assumed |
 | D-0.7.0-18 | Parity mode throws in tests and logs in production, and exists only between M58's start and FR-293 | Claude | assumed |
 | D-0.7.0-19 | Fan-out, parallel stages, tool permission tiers, conversation stages, outcome scoring and the feedback store wait for the packs that need them | research notes / Ben | agreed |
+| D-0.7.0-34 | The SDLC's agents stay on their own runner in 0.7.0. Moving them would change recorded behaviour: run ids, run events, token options, retry wording, plan post-processing, and transaction and failure handling. Golden prompt tests pin all eight agents. The engine `AgentStageRunner` ships for new packs. The hooks it needs before the SDLC can move are listed in PROGRESS.md | Ben (2026-11-19) | agreed |
 
 ## 11. Open questions
 
