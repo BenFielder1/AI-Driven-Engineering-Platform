@@ -1,6 +1,6 @@
 import { ErrorState, LoadingState } from '../../components/ui/states'
 import { gitHostTerms } from '../../lib/git-host'
-import { MarkdownView } from '../artifacts/markdown-view'
+import { MarkdownView } from '../../engine/markdown/markdown-view'
 import type { ProjectState } from '../projects/projects-api'
 import { StageSection } from '../stages/stage-section'
 import { useReleaseNotes, useReleases, type Release } from './release-api'

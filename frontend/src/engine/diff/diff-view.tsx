@@ -1,5 +1,4 @@
-import type { ArtifactDiff } from './artifacts-api'
-import { diffStats, toSideBySide, type DiffCell, type LineRow, type SkippedRow } from './side-by-side'
+import { diffStats, toSideBySide, type DiffCell, type LineDiff, type LineRow, type SkippedRow } from './side-by-side'
 
 const plural = (n: number, word: string) => `${String(n)} ${word}${n === 1 ? '' : 's'}`
 
@@ -86,7 +85,7 @@ function SkippedLines({ row, from, to }: { row: SkippedRow; from: string; to: st
  * far from any change arrive as `skipped` runs ("⋯ N unchanged lines"); identical versions (a single skipped run)
  * say "No differences".
  */
-export function DiffView({ diff }: { diff: ArtifactDiff }) {
+export function DiffView({ diff }: { diff: LineDiff }) {
   const rows = toSideBySide(diff.lines)
   const { added, removed } = diffStats(diff.lines)
   const from = `v${String(diff.from)}`

@@ -15,6 +15,7 @@ import {
   FolderGit2,
   FolderKanban,
   Gauge,
+  GitBranch,
   House,
   Inbox,
   LayoutDashboard,
@@ -193,6 +194,8 @@ const PROJECT: NavSection = {
     { key: 'overview', label: 'Overview', to: '/projects/$projectId', icon: LayoutDashboard, exact: true },
     { key: 'artifacts', label: 'Artifacts', to: '/projects/$projectId/artifacts', icon: FileStack, keywords: ['spec', 'plan', 'versions'] },
     { key: 'runs', label: 'Agent runs', to: '/projects/$projectId/runs', icon: Bot, keywords: ['tokens', 'llm'] },
+    // 0.7.0 FR-306: the engine's view of the project's pipeline runs (stages, timeline, artifacts, replay, prompt versions).
+    { key: 'pipeline', label: 'Pipeline', to: '/projects/$projectId/pipeline', icon: GitBranch, keywords: ['run', 'stages', 'timeline', 'replay', 'prompts'] },
     { key: 'activity', label: 'Activity', to: '/projects/$projectId/activity', icon: Activity, keywords: ['events', 'history', 'audit'] },
     { key: 'settings', label: 'Settings', to: '/projects/$projectId/settings', icon: Settings, keywords: ['members', 'git', 'llm'] },
   ],
@@ -327,7 +330,9 @@ export function crumbsFor(pathname: string, viewer: NavViewer, context: { projec
             ? settingsTabLabels[section]
             : found.item.key === 'artifacts' && type in artifactTypeLabels
               ? artifactTypeLabels[type]
-              : 'Details',
+              : found.item.key === 'pipeline' && rest[0] === 'replay'
+                ? 'Replay'
+                : 'Details',
         })
       }
     }

@@ -29,8 +29,8 @@ import {
   type ArtifactSummary,
   type ArtifactType,
 } from './artifacts-api'
-import { DiffView } from './diff-view'
-import { MarkdownView } from './markdown-view'
+import { DiffView } from '../../engine/diff/diff-view'
+import { MarkdownView } from '../../engine/markdown/markdown-view'
 import { isPlanType } from './plan-block'
 import { PlanSteps } from './plan-steps'
 import { RestoreVersionAction } from './restore-version'

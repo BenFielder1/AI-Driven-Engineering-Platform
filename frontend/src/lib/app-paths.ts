@@ -32,6 +32,9 @@ export const appPaths = [
   '/projects/$projectId/deployments',
   '/projects/$projectId/execution',
   '/projects/$projectId/migrations',
+  // 0.7.0 FR-306: the engine's Pipeline tab and Replay.
+  '/projects/$projectId/pipeline',
+  '/projects/$projectId/pipeline/replay',
   '/projects/$projectId/planning',
   '/projects/$projectId/refinement',
   '/projects/$projectId/release',

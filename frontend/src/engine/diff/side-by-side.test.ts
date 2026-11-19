@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { lineDiff } from '../../mocks/handlers/artifacts'
-import type { DiffLine } from './artifacts-api'
-import { diffStats, toSideBySide } from './side-by-side'
+import { diffStats, toSideBySide, type DiffLine } from './side-by-side'
 
 const ctx = (oldLine: number, newLine: number, text: string): DiffLine => ({ kind: 'context', oldLine, newLine, text, skipped: null })
 const del = (oldLine: number, text: string): DiffLine => ({ kind: 'removed', oldLine, newLine: null, text, skipped: null })

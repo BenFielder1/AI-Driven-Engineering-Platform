@@ -1,8 +1,9 @@
 import { isValidElement, type ComponentPropsWithoutRef } from 'react'
-import Markdown, { defaultUrlTransform, type Components, type UrlTransform } from 'react-markdown'
+import Markdown, { defaultUrlTransform, type Components, type Options, type UrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-import { remarkHeadingIds } from './markdown-outline'
+/** Extra remark plugins, run after GitHub-flavoured Markdown (e.g. the SDLC's heading anchors). */
+export type RemarkPlugins = NonNullable<Options['remarkPlugins']>
 
 /**
  * react-markdown's default drops every URL scheme but http(s), mailto and a few others (so `javascript:` never
@@ -107,17 +108,20 @@ function SafeImage(props: ImageProps) {
 export function MarkdownView({
   content,
   label,
-  headingIds = false,
+  remarkPlugins = [],
 }: {
   content: string
   label: string
-  /** Give headings the anchor ids of `markdownOutline` (one document per page, so ids stay unique). */
-  headingIds?: boolean
+  /**
+   * Extra remark plugins after remark-gfm, e.g. the SDLC's `remarkHeadingIds` (the anchor ids of `markdownOutline`; one
+   * document per page, so ids stay unique).
+   */
+  remarkPlugins?: RemarkPlugins
 }) {
   return (
     <article aria-label={label} className="markdown-body">
       <Markdown
-        remarkPlugins={headingIds ? [remarkGfm, remarkHeadingIds] : [remarkGfm]}
+        remarkPlugins={[remarkGfm, ...remarkPlugins]}
         components={components}
         urlTransform={urlTransform}
         skipHtml

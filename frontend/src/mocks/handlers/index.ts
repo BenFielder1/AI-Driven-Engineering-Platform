@@ -15,6 +15,7 @@ import { lifecycleHandlers } from './lifecycle'
 import { llmHandlers } from './llm'
 import { migrationHandlers } from './migrations'
 import { notificationHandlers } from './notifications'
+import { pipelineHandlers } from './pipelines'
 import { platformConnectionHandlers } from './platform-connections'
 import { projectHandlers } from './projects'
 import { reviewHandlers } from './review'
@@ -42,6 +43,8 @@ export const handlers = [
   ...analysisHandlers,
   ...artifactHandlers,
   ...runHandlers,
+  // 0.7.0 FR-299–FR-303: the engine's pipeline routes.
+  ...pipelineHandlers,
   ...refinementHandlers,
   ...executionHandlers,
   ...reviewHandlers,

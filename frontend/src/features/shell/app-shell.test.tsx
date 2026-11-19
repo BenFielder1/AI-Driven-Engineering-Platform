@@ -436,6 +436,7 @@ describe('FR-54: project mode', () => {
       'Overview',
       'Artifacts',
       'Agent runs',
+      'Pipeline',
       'Activity',
       'Settings',
     ])

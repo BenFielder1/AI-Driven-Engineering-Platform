@@ -1,5 +1,7 @@
 import { act } from '@testing-library/react'
 
+import type { PipelineLiveEvent } from '../engine/api/types'
+
 import type {
   BuildCheckUpdatedMessage,
   LiveConnection,
@@ -18,6 +20,7 @@ export class FakeLiveConnection implements LiveConnection {
   failJoin = false
   private eventHandlers: Handler<[ProjectEventMessage]>[] = []
   private buildCheckHandlers: Handler<[BuildCheckUpdatedMessage]>[] = []
+  private pipelineHandlers: Handler<[PipelineLiveEvent]>[] = []
   private reconnectingHandlers: Handler[] = []
   private reconnectedHandlers: Handler[] = []
   private closeHandlers: Handler[] = []
@@ -43,6 +46,10 @@ export class FakeLiveConnection implements LiveConnection {
 
   onBuildCheckUpdated(handler: Handler<[BuildCheckUpdatedMessage]>) {
     this.buildCheckHandlers.push(handler)
+  }
+
+  onPipelineEvent(handler: Handler<[PipelineLiveEvent]>) {
+    this.pipelineHandlers.push(handler)
   }
 
   onReconnecting(handler: Handler) {
@@ -74,6 +81,15 @@ export class FakeLiveConnection implements LiveConnection {
     act(() => {
       for (const h of this.buildCheckHandlers) {
         h(message)
+      }
+    })
+  }
+
+  /** FR-302: a `pipelineRunUpdated`, `stageUpdated` or `gateUpdated` message. */
+  emitPipeline(event: PipelineLiveEvent) {
+    act(() => {
+      for (const h of this.pipelineHandlers) {
+        h(event)
       }
     })
   }

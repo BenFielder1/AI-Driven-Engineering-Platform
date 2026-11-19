@@ -1,4 +1,14 @@
-import type { DiffLine } from './artifacts-api'
+import type { Schemas } from '../../api/client'
+
+/** One line of a line diff (`LineDiff`): the engine's and the SDLC artifact diffs share this shape. */
+export type DiffLine = Schemas['PipelineDiffLineDto']
+
+/** A line diff between two versions, as the API returns it (only the fields the views read). */
+export interface LineDiff {
+  from: number
+  to: number
+  lines: readonly DiffLine[]
+}
 
 export interface DiffCell {
   line: number

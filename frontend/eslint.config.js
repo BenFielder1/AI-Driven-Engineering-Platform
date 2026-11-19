@@ -6,6 +6,8 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
+import { engineBoundary } from './eslint.engine-boundary.js'
+
 export default defineConfig([
   // Generated code is never linted (or hand-edited).
   globalIgnores([
@@ -47,4 +49,6 @@ export default defineConfig([
     files: ['server.ts', 'src/server/**/*.ts', 'e2e/**/*.ts', 'scripts/**/*.ts', '*.config.{ts,js,mjs}'],
     languageOptions: { globals: globals.node },
   },
+  // FR-304: the engine UI may not import the SDLC features or the routes.
+  engineBoundary,
 ])

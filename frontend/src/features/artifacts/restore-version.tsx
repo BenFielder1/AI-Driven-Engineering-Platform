@@ -9,7 +9,7 @@ import { artifactTypeLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { restoreBlockReason } from '../stages/stage-model'
 import { useArtifactDiff, useRestoreArtifact, type Artifact, type ArtifactSummary, type ArtifactType } from './artifacts-api'
-import { DiffView } from './diff-view'
+import { DiffView } from '../../engine/diff/diff-view'
 import { restoreBlockMessage, restoreErrorMessage } from './restore-copy'
 
 /** FR-58: the diff preview (the chosen version against the latest), then confirm. */
