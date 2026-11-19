@@ -2,7 +2,7 @@
 # AIDE API image: ASP.NET Core app + self-contained EF Core migration bundle (/app/efbundle).
 # Build context: backend/   (docker build -f backend/Dockerfile backend)
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 
 # Build-time OpenAPI generation (Microsoft.Extensions.ApiDescription.Server) is for the committed
