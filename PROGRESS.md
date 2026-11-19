@@ -72,7 +72,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M56 String keys (FR-269–FR-274) and the remaining lift: 39b7f24, efb38aa, ade145d, [CI 44170479903](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44170479903). FR-264–FR-268 finish in M58 for the types that still need `Phase`
 - [x] M57 Definitions and packs (FR-275–FR-286, FR-290): 13f282d, 15d4ff7, [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638)
 - [x] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294): M58a runs, dual write and backfill; M58b engine machine; M58c parity (6,271,314 combinations); M58d switch-over and removal (9213cafb, a725469, 2012cf2, ac894a2, 7f479da, [CI 44364665535](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44364665535)). Build note: CA1859 only fires in Release builds, so briefs ask for `dotnet build -c Release -warnaserror`
-- [ ] M59 Stage execution and run logging (FR-295–FR-298): M59a run logging done (cd28064, [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853)); M59b stage runner next
+- [ ] M59 Stage execution and run logging (FR-295–FR-298): M59a run logging done (cd28064, [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853)); M59b1 engine runner done (34d9fd0, [CI 44490362504](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44490362504)); M59b2 SDLC adoption next
 - [ ] M60 Generic API (FR-299–FR-303)
 - [ ] M61 Engine UI (FR-304–FR-308)
 - [ ] M62 Release 0.7.0 (FR-309), after Ben confirms on preview
