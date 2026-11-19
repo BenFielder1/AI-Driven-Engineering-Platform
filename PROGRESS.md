@@ -53,12 +53,12 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-295 | `AgentStageRunner`, context providers, tools | 3.6 | backend | M59 | done | engine runner [CI 44490362504](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44490362504); SDLC keeps its runner (D-0.7.0-34) |
 | FR-296 | Validate / retry with feedback / escalate | 3.6, 4.55 | backend | M59 | done | engine [CI 44490362504](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44490362504); SDLC plan validation unchanged (D-0.7.0-34) |
 | FR-297 | Run logging: input, latency, stage executions, totals | 3.6, 5 | backend + data | M59 | done | [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853) |
-| FR-298 | Prompt comparison stats | 3.6, 6 | backend | M59 | partial | query [CI 44407552853](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44407552853); endpoint in M60 |
-| FR-299 | Definition endpoints | 3.7, 6 | backend | M60 | todo | |
-| FR-300 | Run, stages, timeline endpoints | 3.7, 6 | backend | M60 | todo | |
-| FR-301 | Run artifacts, diff, gates, gate decisions | 3.7, 6 | backend | M60 | todo | |
-| FR-302 | Gate inbox endpoint + hub events | 3.7, 6 | backend | M60 | todo | |
-| FR-303 | Replay endpoint | 3.7, 6 | backend | M60 | todo | |
+| FR-298 | Prompt comparison stats | 3.6, 6 | backend | M59 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
+| FR-299 | Definition endpoints | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
+| FR-300 | Run, stages, timeline endpoints | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
+| FR-301 | Run artifacts, diff, gates, gate decisions | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
+| FR-302 | Gate inbox endpoint + hub events | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
+| FR-303 | Replay endpoint | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
 | FR-304 | `src/engine/` + lint boundary | 3.8 | frontend | M61 | todo | |
 | FR-305 | Definition-driven components | 3.8 | frontend | M61 | todo | |
 | FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | todo | |
@@ -73,7 +73,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M57 Definitions and packs (FR-275–FR-286, FR-290): 13f282d, 15d4ff7, [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638)
 - [x] M58 Generic state machine (FR-287–FR-289, FR-291–FR-294): M58a runs, dual write and backfill; M58b engine machine; M58c parity (6,271,314 combinations); M58d switch-over and removal (9213cafb, a725469, 2012cf2, ac894a2, 7f479da, [CI 44364665535](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44364665535)). Build note: CA1859 only fires in Release builds, so briefs ask for `dotnet build -c Release -warnaserror`
 - [x] M59 Stage execution and run logging (FR-295–FR-298): run logging (cd28064), engine agent runner (34d9fd0), SDLC golden prompt tests with the SDLC keeping its runner (b593268, D-0.7.0-34), [CI 44495561155](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44495561155). The FR-298 endpoint comes in M60
-- [ ] M60 Generic API (FR-299–FR-303)
+- [x] M60 Generic API (FR-299–FR-303, FR-298 endpoint): 8b28f8d, [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557)
 - [ ] M61 Engine UI (FR-304–FR-308)
 - [ ] M62 Release 0.7.0 (FR-309), after Ben confirms on preview
 
