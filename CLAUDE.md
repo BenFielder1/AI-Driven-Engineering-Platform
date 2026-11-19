@@ -44,7 +44,7 @@ Router, auth and background-work choices come from SPEC.md; if SPEC.md changes t
 backend/
   Aide.slnx
   src/Aide.Api/             endpoints, DI, auth, ProblemDetails, OpenAPI, hosted background workers
-  src/Aide.Domain/          pure business rules: lifecycle state machine, phase map, gate rules, versioning (no EF, no ASP.NET)
+  src/Aide.Domain/          pure SDLC rules: SDLC guards and machine adapter (`SdlcMachine`), review, gate and artifact rules, versioning (no EF, no ASP.NET)
   src/Aide.Infrastructure/  Persistence/AideDbContext + entity configs, Migrations/, LLM providers, Git providers, notification channels
                             Agents/Prompts/*.md — versioned prompt templates (SPEC FR-24)
   src/Tevrin.Engine.Domain/   pure engine: definition model, validator, hash, `PipelineStateMachine`, cascade, gate and artifact rules
@@ -213,7 +213,7 @@ never deploy. Promoting a pre-release to a full release doesn't deploy either (G
 
 1. `openapi/api.json` and `frontend/src/api/generated/` are generated. Regenerate them, and never hand-edit them. API changes are additive unless SPEC.md records a breaking-change decision.
 2. The frontend calls the backend only through the generated client, at same-origin `/api`. No hard-coded hosts.
-3. Business rules live in `Aide.Domain`, pure and unit-tested. Endpoints stay thin.
+3. Business rules live in `Aide.Domain` (SDLC) and `Tevrin.Engine.Domain` (engine), pure and unit-tested. Endpoints stay thin.
 4. Errors are ProblemDetails with an `errorCode` from the spec's error table. The frontend maps those codes to copy in one place.
 5. Every schema change is an EF Core migration. Never edit a committed migration, and never use `EnsureCreated` outside tests.
 6. Secrets are never committed: user-secrets for the dev loop, `deploy/k8s/overlays/local/secrets.env` (git-ignored) for Kubernetes. This includes LLM provider keys and GitHub credentials.
