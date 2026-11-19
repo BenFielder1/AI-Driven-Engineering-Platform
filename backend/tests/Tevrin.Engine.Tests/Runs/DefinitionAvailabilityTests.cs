@@ -67,6 +67,26 @@ public class DefinitionAvailabilityTests
     }
 
     [Fact]
+    public async Task FR277_a_cached_stored_only_hash_resolves_without_reading_pipeline_definitions()
+    {
+        var stored = Fixture() with { Title = "Stored only" };
+        var hash = DefinitionHash.Compute(stored);
+        var host = new PipelineRegistryHost([new FixturePack()], [], Array.Empty<JobHandlerRegistration>());
+        Assert.Null(host.Registry!.GetByHash(hash));
+        var cache = new PipelineDefinitionCache();
+        cache.Add(hash, new StoredPipelineDefinition("fixture", stored));
+
+        // The offline context can't connect: any query would throw.
+        using var db = new OfflineEngineDbContext();
+        var resolver = new PipelineDefinitionResolver(host, db, cache);
+        var first = await resolver.ResolveAsync(hash, TestContext.Current.CancellationToken);
+        var second = await resolver.ResolveAsync(hash, TestContext.Current.CancellationToken);
+
+        Assert.Equal(("fixture", "Stored only", true), (first!.PackId, first.Definition.Title, first.Available));
+        Assert.Same(first.Definition, second!.Definition);
+    }
+
+    [Fact]
     public void FR301_without_a_registry_nothing_is_runnable() =>
         Assert.False(PipelineDefinitionResolver.IsRunnable(null, Fixture()));
 

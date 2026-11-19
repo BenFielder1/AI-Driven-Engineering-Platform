@@ -6,15 +6,21 @@ using Tevrin.Engine.Runtime.Persistence;
 
 namespace Tevrin.Engine.Runtime.Pipelines;
 
-/// <summary>Parsed stored definitions by hash (singleton): a hash's content never changes, so it is parsed once (§8).</summary>
+/// <summary>
+/// Parsed stored definitions by hash, with their pack (singleton): a hash's content never changes, so it is read and parsed
+/// once (§8), and a run pinned to a stored-only hash doesn't query <c>pipeline_definitions</c> on every move.
+/// </summary>
 public sealed class PipelineDefinitionCache
 {
-    private readonly ConcurrentDictionary<string, PipelineDefinition> _byHash = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, StoredPipelineDefinition> _byHash = new(StringComparer.Ordinal);
 
-    public bool TryGet(string hash, out PipelineDefinition definition) => _byHash.TryGetValue(hash, out definition!);
+    public bool TryGet(string hash, out StoredPipelineDefinition stored) => _byHash.TryGetValue(hash, out stored!);
 
-    public void Add(string hash, PipelineDefinition definition) => _byHash.TryAdd(hash, definition);
+    public void Add(string hash, StoredPipelineDefinition stored) => _byHash.TryAdd(hash, stored);
 }
+
+/// <summary>A stored definition's pack and parsed model.</summary>
+public sealed record StoredPipelineDefinition(string PackId, PipelineDefinition Definition);
 
 /// <summary>A pinned definition and whether this build can run it.</summary>
 public sealed record ResolvedDefinition(string Hash, string PackId, PipelineDefinition Definition, bool Available);
@@ -38,27 +44,23 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
             return new ResolvedDefinition(hash, loaded.PackId, registered, true);
         }
 
-        var record = await db.PipelineDefinitions.AsNoTracking()
-            .Where(d => d.Hash == hash)
-            .Select(d => new { d.PackId, d.CanonicalJson })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (record is null)
+        if (!cache.TryGet(hash, out var stored))
         {
-            return null;
-        }
-
-        if (!cache.TryGet(hash, out var definition))
-        {
-            if (ParseStored(hash, record.CanonicalJson) is not { } parsed)
+            var record = await db.PipelineDefinitions.AsNoTracking()
+                .Where(d => d.Hash == hash)
+                .Select(d => new { d.PackId, d.CanonicalJson })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (record is null || ParseStored(hash, record.CanonicalJson) is not { } parsed)
             {
+                // Not cached: a missing row may be stored later, and a row that doesn't match its hash is never usable.
                 return null;
             }
 
-            definition = parsed;
-            cache.Add(hash, definition);
+            stored = new StoredPipelineDefinition(record.PackId, parsed);
+            cache.Add(hash, stored);
         }
 
-        return new ResolvedDefinition(hash, record.PackId, definition, IsRunnable(registry, definition));
+        return new ResolvedDefinition(hash, stored.PackId, stored.Definition, IsRunnable(registry, stored.Definition));
     }
 
     /// <summary>Every registered pipeline's current valid definition.</summary>

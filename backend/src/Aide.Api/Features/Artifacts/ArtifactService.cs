@@ -459,7 +459,7 @@ public sealed partial class ArtifactService(
 
         if (artifact.Type == SdlcArtifacts.OptimizationPlan && project.CurrentPhase == Phase.Review)
         {
-            await StartReviewCycleAsync(project, artifact, steps, actor, now, cancellationToken);
+            await StartReviewCycleAsync(project, SdlcLifecycle.Refresh(db, run, project), artifact, steps, actor, now, cancellationToken);
         }
 
         if (profileApproval is { } approval && profileVersion is not null)
@@ -787,7 +787,7 @@ public sealed partial class ArtifactService(
     /// has steps to run, working copy).
     /// </summary>
     private async Task StartReviewCycleAsync(
-        Project project, Artifact plan, IReadOnlyList<ExecutionStep> steps, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        Project project, SdlcRun run, Artifact plan, IReadOnlyList<ExecutionStep> steps, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         // Only the latest review's plan (its draft or a later version of it) starts the cycle; its new steps are all to run.
         var ofCycle = await snapshots.IsCyclePlanAsync(project, plan, cancellationToken);
@@ -798,12 +798,12 @@ public sealed partial class ArtifactService(
                 ? steps.Count(s => s.PlanArtifactId == plan.Id && s.Status is not StepStatus.Invalidated and not StepStatus.Completed)
                 : 0,
         };
-        var cycle = await lifecycle.ApplyAsync(
-            db,
+        // The run pinned at the cascade (one run read per move, FR-277).
+        var cycle = SdlcLifecycle.Apply(
+            run,
             project,
             SdlcTransitions.ReviewCycle($"optimization_plan v{plan.Version} approved: re-entering execution"),
-            snapshot,
-            cancellationToken);
+            snapshot);
         if (cycle.IsSuccess)
         {
             await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);

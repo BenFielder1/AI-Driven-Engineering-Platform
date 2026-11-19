@@ -14,6 +14,8 @@ Each pipeline run stores the hash of the definition it started with. The first t
 
 If an old run's stored definition names a guard, handler or tool that the new build no longer registers, moves on that run fail with 409 `DEFINITION_UNAVAILABLE`, and the missing names are logged. Reads and the Pipeline tab keep working. To fix it, redeploy a build that registers the names again.
 
+If a release or merge-poll job dead-letters with DEFINITION_UNAVAILABLE, redeploy a build that registers the missing names, then retry the dead letter.
+
 ## The readiness check
 
 `/api/health/ready` includes a `pipeline-definitions` check. It fails when:

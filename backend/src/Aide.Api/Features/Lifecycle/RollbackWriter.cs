@@ -33,6 +33,8 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
     /// Rolls the tracked <paramref name="project"/> back to checkpoint <paramref name="targetVersion"/> of its current release
     /// version (§4.10: only that version's transitions, artifacts and steps are read, so earlier versions' work is never
     /// touched). <paramref name="keepGateId"/> is a pending gate not to cancel (the escalation gate whose decision is this rollback).
+    /// <paramref name="pinned"/> is the run a caller already pinned in this unit of work (FR-277), so the move reads it once;
+    /// <c>null</c> pins it here.
     /// </summary>
     public async Task<Result<RollbackEvent>> ApplyAsync(
         Project project,
@@ -41,6 +43,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         string actor,
         DateTimeOffset now,
         Guid? keepGateId,
+        Pipelines.SdlcRun? pinned,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
@@ -89,13 +92,23 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
 
         // FR-292: the run is the source of truth for the position rolled back from; FR-277: its pinned definition decides
         // (409 DEFINITION_UNAVAILABLE when this build can't run it).
-        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
-        if (pinned.IsFailure)
+        Pipelines.SdlcRun run;
+        if (pinned is not null)
         {
-            return Result.Failure<RollbackEvent>(pinned.Error!);
+            run = Pipelines.SdlcLifecycle.Refresh(db, pinned, project);
+        }
+        else
+        {
+            var resolved = await lifecycle.PinnedAsync(db, project, cancellationToken);
+            if (resolved.IsFailure)
+            {
+                return Result.Failure<RollbackEvent>(resolved.Error!);
+            }
+
+            run = resolved.Value;
         }
 
-        var current = pinned.Value.State;
+        var current = run.State;
         var planned = RollbackRules.Plan(new RollbackRequest(
             current,
             targetVersion,
@@ -112,7 +125,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
             VersionReleased = current.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
             AwaitingMerge = versionStatus == ReleaseVersionStatus.AwaitingMerge,
         },
-        pinned.Value.Definition);
+        run.Definition);
         if (planned.IsFailure)
         {
             return Result.Failure<RollbackEvent>(planned.Error!);

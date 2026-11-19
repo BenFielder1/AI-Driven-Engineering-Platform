@@ -67,6 +67,9 @@ public static class DependencyInjection
 
             // FR-292, FR-294: the project's pipeline run follows it, and new rows get their run (after the version stamping).
             options.AddInterceptors(sp.GetRequiredService<PipelineRunSyncInterceptor>());
+
+            // §8: a span per stage execution once the save that closes it commits (after the run sync, which closes them).
+            options.AddInterceptors(sp.GetRequiredService<StageExecutionTracingInterceptor>());
         });
 
         // D-0.7.0-20: the engine reaches its tables through the same scoped context (one unit of work).
@@ -77,6 +80,7 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<NotificationOutboxInterceptor>();
         services.TryAddSingleton<ReleaseVersionStampingInterceptor>();
+        services.TryAddSingleton<StageExecutionTracingInterceptor>();
         services.TryAddSingleton(sp => new PipelineRunSyncInterceptor(sp.GetService<PipelineRegistryHost>(), sp.GetRequiredService<TimeProvider>()));
 
         // FR-79: fills last4 of LLM keys migrated from 0.1.0 projects (needs ISecretProtector from AddAideDataProtection).

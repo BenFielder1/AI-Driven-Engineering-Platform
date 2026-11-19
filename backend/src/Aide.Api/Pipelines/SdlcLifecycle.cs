@@ -104,10 +104,22 @@ public sealed partial class SdlcLifecycle(PipelineRegistryHost registries, Pipel
                     ? string.Join(", ", PipelineDefinitionResolver.MissingNames(registry, resolved.Definition))
                     : "(no pipeline registry)";
             LogDefinitionUnavailable(logger, project.Id, run.Id, run.DefinitionHash, missing);
-            return Result.Failure<SdlcRun>(new DomainError(ErrorCodes.DefinitionUnavailable, DefinitionUnavailableMessage));
+            return Result.Failure<SdlcRun>(new DomainError(ErrorCodes.DefinitionUnavailable, DefinitionUnavailableMessage) { Details = [missing] });
         }
 
         return Result.Success(new SdlcRun(state, resolved.Definition, run.Id, run.DefinitionHash));
+    }
+
+    /// <summary>
+    /// <paramref name="run"/> (already pinned in this unit of work) after the moves applied since: the project's copy once
+    /// its lifecycle columns are set, as <see cref="StateAsync"/> would return, so a follow-up move reads the run only once.
+    /// </summary>
+    public static SdlcRun Refresh(AideDbContext db, SdlcRun run, Project project)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(project);
+        return Unsaved(db, project) ? run with { State = CopyOf(project) } : run;
     }
 
     /// <summary>Applies <paramref name="move"/> to <paramref name="run"/> with its pinned definition.</summary>

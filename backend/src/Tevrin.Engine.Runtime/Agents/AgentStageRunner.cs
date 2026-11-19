@@ -46,7 +46,13 @@ public sealed partial class AgentStageRunner(
         }
         catch (JobFailedException ex)
         {
-            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.ErrorCode ?? nameof(JobFailedException));
+            // An error span is described by its error code, or else the exception type, never the message (NFR-SEC).
+            EngineTelemetry.SetError(activity, ex.ErrorCode ?? nameof(JobFailedException));
+            throw;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            EngineTelemetry.SetError(activity, ex.GetType().Name);
             throw;
         }
     }

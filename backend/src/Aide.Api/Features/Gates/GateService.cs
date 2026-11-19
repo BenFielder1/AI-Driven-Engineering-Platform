@@ -176,6 +176,7 @@ public sealed partial class GateService(
                         actor,
                         now,
                         keepGateId: gate.Id,
+                        pinned: run,
                         cancellationToken);
                     if (rolledBack.IsFailure)
                     {
