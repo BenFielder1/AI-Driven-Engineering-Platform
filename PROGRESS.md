@@ -1,6 +1,6 @@
 # Build progress (0.7.0)
 
-Spec: `SPEC.md` (0.7.0; 0.1.0–0.6.1 in `docs/`) · Research: `docs/0.7.0/tevrin-engine-extraction.md` · Stack: `STACK.md` · Branch: `build/tevrin-0.7.0` · Started: 2026-11-17
+Spec: `SPEC.md` (0.7.0; 0.1.0–0.6.1 in `docs/`) · Research: `docs/0.7.0/tevrin-engine-extraction.md` · Stack: `STACK.md` · Branch: `build/tevrin-0.7.0` (build PR #50) · Started: 2026-11-17
 
 **Gate:** GitHub Actions CI on the pushed head commit, after a static `stack-reviewer` pass (CLAUDE.md "Commit gate").
 Agents never run the full gate, Docker, Testcontainers or E2E locally.
@@ -85,7 +85,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - the §8 observability and performance items;
 - a SPEC amendment for FR-265–FR-267.
 
-CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR opened next.
+CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR [#50](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/50) is open, with every check green, including the docs-site build and internal link check. It waits for Ben to merge; then comes the preview test, then M62 release prep after Ben confirms.
 
 ## Decisions
 See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
