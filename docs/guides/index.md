@@ -21,3 +21,4 @@ Task-based guides for connecting Tevrin to the services it works with. Start wit
 | [Deployments and databases](deployments-and-databases.md) | Deploy generated projects and provision databases |
 | [Notifications](notifications.md) | Email, Slack, Teams and signed webhooks |
 | [CLI](cli.md) | Drive Tevrin from a terminal |
+| [Pipelines and packs](pipelines-and-packs.md) | Understand the pipeline engine, definitions and packs |

@@ -30,6 +30,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
   - Pages are client components (SPEC D-V3-2), and routing goes through `src/lib/navigation.ts`.
   - The web server is `frontend/server.ts`, a custom Node server run with Node 24 type stripping. It serves Next, proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL` read at runtime, sets the CSP nonce and security headers, and writes redacted JSON request logs.
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 18 via Npgsql (SPEC D-V5-1) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
+- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; don't upgrade without a decision, SPEC Q4). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*` (architecture test).
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` (after green CI on `main`) and `production` (when a GitHub release `x.y.z` is published, or by dispatch), deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
@@ -46,16 +47,23 @@ backend/
   src/Aide.Domain/          pure business rules: lifecycle state machine, phase map, gate rules, versioning (no EF, no ASP.NET)
   src/Aide.Infrastructure/  Persistence/AideDbContext + entity configs, Migrations/, LLM providers, Git providers, notification channels
                             Agents/Prompts/*.md — versioned prompt templates (SPEC FR-24)
+  src/Tevrin.Engine.Domain/   pure engine: definition model, validator, hash, `PipelineStateMachine`, cascade, gate and artifact rules
+  src/Tevrin.Engine.Runtime/  YAML loader, pipeline registry, job queue, LLM providers, artifact store, gates, notifications, run log, `AgentStageRunner`
+  src/Tevrin.Engine.Api/      generic endpoints (definitions, pipeline runs, timeline, replay, gate inbox) and hub events
+  src/Tevrin.Pack.Sdlc/       the SDLC pack: Definitions/sdlc.pipeline.yaml, key constants (`SdlcAgents`, `SdlcArtifacts`, `SdlcGates`, `SdlcJobTypes`), `SdlcPack`
   src/Aide.Cli/             `tevrin` .NET global tool, package Tevrin.Cli (SPEC FR-52, D-V6-2)
   src/Aide.Cli.Alias/       deprecated `aide` command (package Aide.Cli), same sources as Aide.Cli
   tests/Aide.UnitTests/     domain + application tests
+  tests/Tevrin.Engine.Tests/ engine tests: definitions, state machine, agent stages, architecture rules; fixtures in Fixtures/ (`fixture-review.pipeline.yaml`)
   tests/Aide.IntegrationTests/ WebApplicationFactory + Testcontainers
+    Characterisation/       SDLC end-to-end snapshots (Snapshots/*.json), frozen since 0.7.0 M54: CI runs scripts/ci/check-snapshots-frozen.sh
   openapi/api.json          GENERATED contract — commit, never hand-edit
   Directory.Build.props · Directory.Packages.props · global.json · dotnet-tools.json
 frontend/
   src/api/generated/        GENERATED client — never hand-edit
   src/features/<feature>/   pages, components, hooks, tests (projects, artifacts, gates, execution, review, admin)
   src/app/                  Next.js App Router: (public) and (app) route groups, thin 'use client' pages that render feature pages
+  src/engine/               engine UI (Pipeline tab, replay, gate inbox, prompt comparison): renders any definition; may not import src/features or src/app (ESLint boundary)
   src/server/               web-server helpers for server.ts (proxy, headers, CSP nonce, log redaction)
   server.ts                 custom Node server (dev and production)
   src/lib/                  errors, permissions, config, query client
@@ -70,6 +78,7 @@ deploy/
   railway/                  Railway ops docs (README.md) and variable inventory (variables.md)
 .railway/                   Railway IaC (railway.ts), applied with `railway config plan|apply`
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
+scripts/ci/check-snapshots-frozen.sh  CI: fails if a characterisation snapshot differs from the M54 commit
 scripts/ci/check-version.sh    CI + release deploy: the three version sources agree (and equal the release tag)
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on a published release or dispatch)
@@ -209,7 +218,7 @@ never deploy. Promoting a pre-release to a full release doesn't deploy either (G
 5. Every schema change is an EF Core migration. Never edit a committed migration, and never use `EnsureCreated` outside tests.
 6. Secrets are never committed: user-secrets for the dev loop, `deploy/k8s/overlays/local/secrets.env` (git-ignored) for Kubernetes. This includes LLM provider keys and GitHub credentials.
 7. Deploy scripts target only the `docker-desktop` Kubernetes context.
-8. Project lifecycle changes go only through the domain state machine. Every allowed and forbidden phase/status transition has a unit test.
+8. Project lifecycle changes go only through the engine state machine running the SDLC definition (`sdlc.pipeline.yaml`). Every allowed and forbidden SDLC phase/status transition has a unit test (`SdlcLifecycleTransitionTests`).
 9. Artifacts are immutable once `locked`. New content means a new version with a content hash and parent version; invalidation and rollback never rewrite history.
 10. Agent (LLM) calls sit behind one provider abstraction, are never made from endpoints directly, and are faked in tests — no test hits a real provider API.
 

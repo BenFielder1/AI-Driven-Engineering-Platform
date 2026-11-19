@@ -19,6 +19,14 @@ conventions.
 | Local | `local-docker-desktop-k8s` | `deploy/k8s/`, `deploy/scripts/` | app URL: http://localhost:8080. Kept from 0.2.0; the `web` image becomes the Next.js standalone server |
 | Docs | Jekyll + `just-the-docs`, published to GitHub Pages | `docs/`, `.github/workflows/docs.yml` | Added in 0.6.0 (SPEC FR-225, FR-226). No stack pack: a static site built in CI |
 
+## Engine (0.7.0)
+0.7.0 adds no pack. It extracts the orchestration into new projects inside the same `be-aspnet` and `fe-nextjs` layers:
+- **Backend projects** (`backend/`): `Tevrin.Engine.Domain` (pure), `Tevrin.Engine.Runtime`, `Tevrin.Engine.Api`, `Tevrin.Pack.Sdlc` and `tests/Tevrin.Engine.Tests`. Dependency arrows: pack → engine, `Aide.*` → engine and pack, engine → nothing of ours. Architecture tests enforce it.
+- **New packages** (`Directory.Packages.props`, referenced by `Tevrin.Engine.Runtime` only): `YamlDotNet` 18.1.0 for definitions, and `JsonSchema.Net` **8.0.5** for artifact schemas. 8.0.5 is the last MIT release, and 9.x uses the commercial OSMF licence (SPEC D-0.7.0-26, Q4). Upgrading past 8.x needs a decision.
+- **Frontend:** `frontend/src/engine/` is the engine UI. An ESLint rule (`frontend/eslint.engine-boundary.js`) forbids imports from `src/features/**` and `src/app/**` into it (SPEC D-0.7.0-14).
+- **Characterisation snapshots:** the committed SDLC snapshots in `backend/tests/Aide.IntegrationTests/Characterisation/Snapshots/` are frozen for 0.7.0. The CI step `scripts/ci/check-snapshots-frozen.sh` fails if one differs from the M54 commit. Updating one needs `UPDATE_SNAPSHOTS=1` and a decision.
+- **No new gates, services, accounts or secrets.**
+
 ## Conventions shared by every pack
 - **API prefix:** backend routes live under `/api`, including SignalR hubs at `/api/hubs/`. Health: `/api/health/live`
   and `/api/health/ready` (the ready check fails while migrations are pending).

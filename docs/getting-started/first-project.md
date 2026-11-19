@@ -39,6 +39,14 @@ flowchart LR
 
 After a merged release you can start the next version.
 
+## Follow a run: Pipeline, Replay and Gates
+
+- **Pipeline tab.** Each project has a Pipeline tab showing the current run: its status, checkpoint, cost and tokens so far, the stages with their timings, a timeline, and the artifacts with their versions and diffs. A picker switches to earlier runs. A "Prompt versions" table compares prompt versions by runs, tokens, cost, latency and failure rate.
+- **Replay.** From the Pipeline tab, Replay steps through a run one event at a time. Each agent run shows its input and output side by side, and each artifact version shows its diff to the previous one. Replay only reads; it never re-runs anything. Agent inputs are stored with secrets redacted and are kept only for runs from 0.7.0 on.
+- **Gate inbox.** **Gates** in the navigation lists every approval waiting for you across the projects you can see. Approve or reject from the list. The reject comment is optional. Escalations open the project instead.
+
+These views work for any pipeline definition, not only the software lifecycle. See [Pipelines and packs](../guides/pipelines-and-packs.md).
+
 ## Where next
 
 | To | Read |
