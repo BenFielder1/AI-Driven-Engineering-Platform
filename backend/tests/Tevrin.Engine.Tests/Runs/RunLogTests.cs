@@ -158,7 +158,8 @@ public class RunLogTests
     {
         var methods = typeof(RunLogQueries).GetMethods().Where(m => m.Name.StartsWith("PromptStats", StringComparison.Ordinal)).ToList();
 
-        Assert.Equal(["PromptStatsAsync", "PromptStatsForAllProjectsAsync"], methods.Select(m => m.Name).Order(StringComparer.Ordinal));
+        // M60: the visible-projects overload takes the caller's visibility query (composed in SQL); still fail-closed.
+        Assert.Equal(["PromptStatsAsync", "PromptStatsForAllProjectsAsync", "PromptStatsForVisibleProjectsAsync"], methods.Select(m => m.Name).Order(StringComparer.Ordinal));
         var scoped = methods.Single(m => m.Name == "PromptStatsAsync").GetParameters().Single(p => p.Name == "projectIds");
         Assert.Equal(System.Reflection.NullabilityState.NotNull, new System.Reflection.NullabilityInfoContext().Create(scoped).ReadState);
     }

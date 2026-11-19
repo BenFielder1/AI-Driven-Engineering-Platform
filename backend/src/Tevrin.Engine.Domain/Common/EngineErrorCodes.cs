@@ -23,4 +23,10 @@ public static class EngineErrorCodes
 
     /// <summary>A tool result (not an API error): the run used its tool calls or bytes and must answer with what it has.</summary>
     public const string ToolLimit = "TOOL_LIMIT";
+
+    // FR-299–FR-303: the generic API's codes (the host's values).
+    public const string NotFound = "NOT_FOUND";
+    public const string Forbidden = "FORBIDDEN";
+    public const string Unauthenticated = "UNAUTHENTICATED";
+    public const string DefinitionUnavailable = "DEFINITION_UNAVAILABLE";
 }

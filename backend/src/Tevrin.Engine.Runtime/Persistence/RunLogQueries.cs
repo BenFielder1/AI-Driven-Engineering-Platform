@@ -49,6 +49,19 @@ public sealed class RunLogQueries(IEngineDbContext db)
             cancellationToken);
     }
 
+    /// <summary>FR-298: <see cref="PromptStatsAsync(string, IReadOnlyCollection{Guid}, CancellationToken)"/> over the
+    /// projects in <paramref name="visibleProjectIds"/>, a query composed into the aggregation as a subquery (§8: filtered
+    /// in SQL; an empty query gives nothing).</summary>
+    public Task<IReadOnlyList<PromptStats>> PromptStatsForVisibleProjectsAsync(
+        string pipelineId, IQueryable<Guid> visibleProjectIds, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(pipelineId);
+        ArgumentNullException.ThrowIfNull(visibleProjectIds);
+        return PromptStatsAsync(
+            db.PipelineRuns.AsNoTracking().Where(p => p.PipelineId == pipelineId && visibleProjectIds.Contains(p.ProjectId)),
+            cancellationToken);
+    }
+
     /// <summary>FR-298: <see cref="PromptStatsAsync(string, IReadOnlyCollection{Guid}, CancellationToken)"/> over every
     /// project. For administrators only: the caller must have checked that.</summary>
     public Task<IReadOnlyList<PromptStats>> PromptStatsForAllProjectsAsync(string pipelineId, CancellationToken cancellationToken)

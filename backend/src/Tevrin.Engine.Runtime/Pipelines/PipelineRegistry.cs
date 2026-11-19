@@ -94,6 +94,16 @@ public sealed class PipelineRegistry
     /// canonical content for older hashes).</summary>
     public LoadedPipelineDefinition? GetByHash(string hash) => _byHash.GetValueOrDefault(hash);
 
+    /// <summary>FR-301: whether a pack declares <paramref name="name"/> or DI binds it (as when validating).</summary>
+    public bool Registers(PipelineComponentKind kind, string name) =>
+        ImplementationOf(kind, name) is not null
+        || Packs.Any(p => (kind switch
+        {
+            PipelineComponentKind.Guard => p.Guards,
+            PipelineComponentKind.StageHandler => p.Handlers,
+            _ => p.Tools,
+        }).Contains(name));
+
     /// <summary>The DI implementation type bound to <paramref name="name"/>, or <c>null</c>.</summary>
     public Type? ImplementationOf(PipelineComponentKind kind, string name) =>
         Components.FirstOrDefault(c => c.Kind == kind && c.Name == name)?.ImplementationType;

@@ -25,6 +25,7 @@ public static class LiveEndpoints
             o.PayloadSerializerOptions.NumberHandling = JsonNumberHandling.Strict;
         });
         services.AddSingleton<ProjectViewerRegistry>();
+        services.AddSingleton<PipelineLivePublisher>();
 
         // Committed project events (from any writer) are pushed to the project's group.
         services.RemoveAll<IProjectEventPublisher>();
@@ -46,7 +47,8 @@ public static class LiveEndpoints
 /// </summary>
 internal sealed class LiveContractDocumentTransformer : IOpenApiDocumentTransformer
 {
-    private static readonly Type[] MessageTypes = [typeof(ProjectEventMessage), typeof(BuildChecks.BuildCheckUpdatedMessage)];
+    private static readonly Type[] MessageTypes = [typeof(ProjectEventMessage), typeof(BuildChecks.BuildCheckUpdatedMessage),
+        typeof(Tevrin.Engine.Api.PipelineRunDto), typeof(Tevrin.Engine.Api.PipelineStageDto), typeof(Tevrin.Engine.Api.PipelineGateDto)];
 
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
     {

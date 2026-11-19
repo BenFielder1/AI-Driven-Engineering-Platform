@@ -253,6 +253,12 @@ internal sealed class StateTransitionConfiguration : IEntityTypeConfiguration<St
 
         // FR-294, §4.51: the run and the generic transition kind (nullable in 0.7.0, D-0.7.0-28).
         builder.HasOne<PipelineRun>().WithMany().HasForeignKey(t => t.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
+
+        // §8: the run timeline reads by run in time order (FR-300).
+        builder.HasIndex(t => new { t.PipelineRunId, t.CreatedAt });
+
+        // Kept explicitly: the composite index would otherwise replace the foreign-key index (expand only).
+        builder.HasIndex(t => t.PipelineRunId);
         builder.Property(t => t.Kind).HasMaxLength(AideDbContext.EnumMaxLength);
         builder.HasIndex(t => new { t.ProjectId, t.CreatedAt });
         builder.HasIndex(t => new { t.ProjectId, t.ReleaseVersionId });

@@ -13393,6 +13393,140 @@
         }
       }
     },
+    "/api/pipeline-gates": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "FR-302: gates (default pending) on every project the caller can see, newest first, cursor-paged (limit 1-200, default 50), filterable by pipelineId and gateType. 400 VALIDATION for a bad status, cursor or limit.",
+        "operationId": "ListPipelineGateInbox",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gateType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineGateInboxPageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-runs": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-300: the project's pipeline runs, newest first (project viewer).",
+        "operationId": "ListPipelineRuns",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineRunDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/notifications": {
       "get": {
         "tags": [
@@ -13824,6 +13958,911 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipelines": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "FR-299: the registered pipelines (id, title, version, current definition hash, pack).",
+        "operationId": "ListPipelines",
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipelines/{pipelineId}/definitions/{hash}": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses. 404 NOT_FOUND for an unknown hash.",
+        "operationId": "GetPipelineDefinition",
+        "parameters": [
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineDefinitionDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipelines/{pipelineId}/prompt-stats": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "FR-298: the pipeline's agent runs grouped by agent key and prompt version, over projectId (project viewer) or every project the caller can see. 404 NOT_FOUND for an unknown pipeline or project.",
+        "operationId": "GetPipelinePromptStats",
+        "parameters": [
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromptStatsDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-300: a run with its stage, pack and generic status, checkpoint, definition hash, times, cost and token totals.",
+        "operationId": "GetPipelineRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineRunDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/stages": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-300: the run's stages in definition order with state, iterations (entries) and timings.",
+        "operationId": "ListPipelineRunStages",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineStageDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/timeline": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-300: the run's transitions, stage entries, agent runs, gate events and artifact versions in time order, cursor-paged (limit 1-200, default 50). 400 VALIDATION for a bad cursor or limit.",
+        "operationId": "GetPipelineRunTimeline",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineTimelinePageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/replay": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-303: the run's timeline with each agent run's input and output. Read-only. 400 VALIDATION for a bad cursor or limit.",
+        "operationId": "GetPipelineRunReplay",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineTimelinePageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/artifacts": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-301: the run's artifacts by key with their versions, newest first.",
+        "operationId": "ListPipelineRunArtifacts",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineArtifactDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/artifacts/{key}/versions/{version}": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-301: one version of a run's artifact, with its content.",
+        "operationId": "GetPipelineRunArtifactVersion",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/artifacts/{key}/diff": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-301: the line diff between versions from and to of a run's artifact. 400 VALIDATION for missing versions or versions too large to diff.",
+        "operationId": "DiffPipelineRunArtifact",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineArtifactDiffDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/gates": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-301: the run's gates, newest first.",
+        "operationId": "ListPipelineRunGates",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineGateDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/gates/{gateId}/approve": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-301: approve a pending gate of the run, exactly as the project gate endpoint (same rules, errors, follow-ups and audit). 403 FORBIDDEN, 409 GATE_NOT_PENDING, PHASE_PRECONDITION_FAILED, WRONG_PHASE, ROLLBACK_BLOCKED, CONFLICT or DEFINITION_UNAVAILABLE, 400 VALIDATION, INVALID_DECISION or INVALID_TARGET_VERSION, 429 RATE_LIMITED.",
+        "operationId": "ApprovePipelineRunGate",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "gateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecidePipelineGateRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineGateDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/gates/{gateId}/reject": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-301: reject a pending gate of the run, exactly as the project gate endpoint. 403 FORBIDDEN, 409 GATE_NOT_PENDING, CONFLICT or DEFINITION_UNAVAILABLE, 400 VALIDATION or INVALID_DECISION.",
+        "operationId": "RejectPipelineRunGate",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "gateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecidePipelineGateRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineGateDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -15496,6 +16535,12 @@
           }
         },
         "description": "One artifact version with its Markdown content (FR-16, §4.3). `contentHash` is the lowercase hex SHA-256 of the\nnormalised content; `integrity` is `corrupted` when it no longer matches (FR-20). `approvedBy` and\n`approvedAt` are set once approved (status `locked`); `rejectionComment` once rejected (FR-17).\n`releaseVersionId` and `checkpointAtCreation` say where it was created (§4.10; D-V2-11: was\n`projectVersionAtCreation`); `releaseVersion` is that release version's semver (FR-59).\n`restoredFromVersion` is the version whose content a restore copied (FR-58), else `null`.\n`warnings` are non-blocking findings about the version (FR-76, §4.13): for an `implementation_plan`,\n`UNCOVERED_REQUIREMENTS` when its steps' `covers` miss a `[new]`/`[changed]` requirement of the\nrelease version's locked specification (`ids` lists them); empty otherwise."
+      },
+      "ArtifactFormat": {
+        "enum": [
+          "markdown",
+          "json"
+        ]
       },
       "ArtifactIntegrity": {
         "enum": [
@@ -17895,6 +18940,38 @@
         },
         "description": "Approve or reject a pending gate (FR-13, FR-14). `comment` is optional (on reject it is the feedback for the\nre-run agent). Escalation gates are approved with a `decision`; `rollback` also needs a\n`targetCheckpoint` (a checkpoint of the release version in development). Other gates take neither (400 `INVALID_DECISION`), and escalation gates can't be rejected."
       },
+      "DecidePipelineGateRequest": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "maxLength": 4000,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationDecision"
+              }
+            ]
+          },
+          "targetCheckpoint": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "Approve or reject a gate through the engine (FR-301): the same fields and limits as the project gate endpoints."
+      },
       "DeclaredFileDto": {
         "required": [
           "path",
@@ -19986,6 +21063,17 @@
           "pre_release",
           "escalation"
         ]
+      },
+      "GenericRunStatus": {
+        "enum": [
+          "active",
+          "running",
+          "waiting_on_gate",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "description": "§4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final."
       },
       "GitBindingDto": {
         "required": [
@@ -22408,6 +23496,1080 @@
         ],
         "description": "The lifecycle phases, in order (§4.1; 0.5.0 §4.27 adds Phase.Analysis first). Stored as snake_case strings, so the\nnumeric values only give the order (PhaseOrder) and may be renumbered."
       },
+      "PipelineArtifactDefinitionDto": {
+        "required": [
+          "key",
+          "title",
+          "format"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/components/schemas/ArtifactFormat"
+          }
+        },
+        "description": "An artifact a definition produces or reads."
+      },
+      "PipelineArtifactDiffDto": {
+        "required": [
+          "key",
+          "from",
+          "to",
+          "unifiedDiff",
+          "lines"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "from": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "to": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unifiedDiff": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineDiffLineDto"
+            }
+          }
+        },
+        "description": "FR-301: the line diff between two versions of a run's artifact."
+      },
+      "PipelineArtifactDto": {
+        "required": [
+          "key",
+          "title",
+          "versions"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineArtifactVersionSummaryDto"
+            }
+          }
+        },
+        "description": "FR-301: an artifact key of a run with its versions (newest first)."
+      },
+      "PipelineArtifactVersionDto": {
+        "required": [
+          "id",
+          "key",
+          "title",
+          "version",
+          "parentVersion",
+          "status",
+          "hash",
+          "intact",
+          "content",
+          "agentRunId",
+          "createdAt",
+          "approvedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "parentVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "intact": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "string"
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "FR-301: one artifact version with its content. `intact` is false when the content no longer matches its\n            hash (FR-20)."
+      },
+      "PipelineArtifactVersionSummaryDto": {
+        "required": [
+          "id",
+          "version",
+          "status",
+          "hash",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "One artifact version in a run's artifact list."
+      },
+      "PipelineDefinitionDto": {
+        "required": [
+          "pipelineId",
+          "title",
+          "version",
+          "hash",
+          "packId",
+          "start",
+          "stages",
+          "artifacts",
+          "statuses"
+        ],
+        "type": "object",
+        "properties": {
+          "pipelineId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "packId": {
+            "type": "string"
+          },
+          "start": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineStageDefinitionDto"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineArtifactDefinitionDto"
+            }
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineStatusDefinitionDto"
+            }
+          }
+        },
+        "description": "FR-299: a pipeline definition by hash: its stages, artifacts and statuses."
+      },
+      "PipelineDiffLineDto": {
+        "required": [
+          "kind",
+          "oldLine",
+          "newLine",
+          "text",
+          "skipped"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DiffLineKind"
+          },
+          "oldLine": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "newLine": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "text": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "A line of an artifact diff (FR-21); `skipped` counts the unchanged lines a `skipped` entry stands for."
+      },
+      "PipelineGateDto": {
+        "required": [
+          "id",
+          "runId",
+          "projectId",
+          "type",
+          "title",
+          "stageId",
+          "status",
+          "artifactId",
+          "artifactKey",
+          "artifactVersion",
+          "createdAt",
+          "decidedAt",
+          "decidedByUserId",
+          "comment",
+          "decision",
+          "targetCheckpoint",
+          "overdue"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "stageId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "cancelled"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "artifactKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decidedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "decidedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "decision": {
+            "enum": [
+              "continue",
+              "rollback",
+              "accept",
+              null
+            ]
+          },
+          "targetCheckpoint": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "overdue": {
+            "type": "boolean"
+          }
+        },
+        "description": "FR-301: a gate of a run. `stageId` is the stage that declares the gate type (when one does);\n`artifactKey`/`artifactVersion` name the gated artifact. Decided gates carry `decidedAt`,\n`decidedByUserId`, `comment` and an escalation's `decision`."
+      },
+      "PipelineGateInboxItemDto": {
+        "required": [
+          "gate",
+          "projectName",
+          "pipelineId",
+          "pipelineTitle"
+        ],
+        "type": "object",
+        "properties": {
+          "gate": {
+            "$ref": "#/components/schemas/PipelineGateDto"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "pipelineTitle": {
+            "type": "string"
+          }
+        },
+        "description": "FR-302: a pending gate in the inbox, with its project and pipeline."
+      },
+      "PipelineGateInboxPageDto": {
+        "required": [
+          "items",
+          "next"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineGateInboxItemDto"
+            }
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A page of the gate inbox; `next` is the cursor of the following page, or `null`."
+      },
+      "PipelineRunDto": {
+        "required": [
+          "id",
+          "projectId",
+          "pipelineId",
+          "pipelineTitle",
+          "definitionHash",
+          "hashShort",
+          "currentStage",
+          "currentStageTitle",
+          "packStatus",
+          "status",
+          "checkpoint",
+          "startedAt",
+          "completedAt",
+          "cost",
+          "inputTokens",
+          "outputTokens",
+          "tokens",
+          "agentRuns"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "pipelineTitle": {
+            "type": "string"
+          },
+          "definitionHash": {
+            "type": "string"
+          },
+          "hashShort": {
+            "type": "string"
+          },
+          "currentStage": {
+            "type": "string"
+          },
+          "currentStageTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "packStatus": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "running",
+              "waiting_on_gate",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "description": "§4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final."
+          },
+          "checkpoint": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "cost": {
+            "type": "number",
+            "format": "double"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "agentRuns": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-300: a pipeline run. `status` is the generic status derived on read (§4.57); `packStatus` the pack's own.\n`hashShort` is the first 12 characters of the pinned definition hash. `cost` and the token totals sum the\nrun's agent runs."
+      },
+      "PipelineStageDefinitionDto": {
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "status",
+          "agentKey",
+          "inputs",
+          "output",
+          "gate",
+          "transitions"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/StageKind"
+          },
+          "status": {
+            "type": "string"
+          },
+          "agentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "output": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "gate": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PipelineStageGateDto"
+              }
+            ]
+          },
+          "transitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineStageTransitionDto"
+            }
+          }
+        },
+        "description": "A stage of a definition. `kind` is `agent`, `code` or `manual`; `transitions` lists\n            where it can go next."
+      },
+      "PipelineStageDto": {
+        "required": [
+          "runId",
+          "id",
+          "title",
+          "state",
+          "iterations",
+          "enteredAt",
+          "exitedAt",
+          "durationMs"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "completed",
+              "skipped"
+            ],
+            "description": "FR-300: a stage's state in a run's stage list."
+          },
+          "iterations": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "enteredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "durationMs": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          }
+        },
+        "description": "FR-300: a stage of a run (D-0.7.0-32: iterations count entries). `runId` identifies the run in live\n            `stageUpdated` messages."
+      },
+      "PipelineStageGateDto": {
+        "required": [
+          "type",
+          "modes",
+          "approves"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalMode"
+            }
+          },
+          "approves": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The gate a stage raises: type key, the approval modes it applies in and the artifact it approves."
+      },
+      "PipelineStageTransitionDto": {
+        "required": [
+          "kind",
+          "to",
+          "on",
+          "title",
+          "maxIterations",
+          "maxIterationsSetting"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "on": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxIterations": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "maxIterationsSetting": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A way out of a stage: `kind` is `next`, `on_success`, `on_reject` or `loop`.\n            `on` is a loop's outcome; `maxIterations` its fixed cap, or `maxIterationsSetting` the setting that\n            holds it."
+      },
+      "PipelineStatusDefinitionDto": {
+        "required": [
+          "name",
+          "generic"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "generic": {
+            "$ref": "#/components/schemas/GenericRunStatus"
+          }
+        },
+        "description": "A pack status and the generic status it maps to (§4.57)."
+      },
+      "PipelineSummaryDto": {
+        "required": [
+          "id",
+          "title",
+          "version",
+          "hash",
+          "packId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "packId": {
+            "type": "string"
+          }
+        },
+        "description": "FR-299: a registered pipeline: id, title, version, current definition hash and pack."
+      },
+      "PipelineTimelineItemDto": {
+        "required": [
+          "id",
+          "at",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PipelineTimelineKind"
+          },
+          "fromStage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toStage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transitionKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "checkpoint": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stageId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "iteration": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agentKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agentRunStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentRunStatus"
+              }
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "promptVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inputTokens": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "outputTokens": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "cost": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "durationMs": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          },
+          "latencyMs": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "input": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Replay only: the rendered prompt and messages, redacted (D-0.7.0-16); `null` for runs before 0.7.0."
+          },
+          "inputTruncated": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Replay only: the stored input was capped (1 MB, D-0.7.0-16) or this response cut it at\n            int TimelineItems.MaxReplayTextLength characters."
+          },
+          "output": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Replay only: the agent's output text (at most int TimelineItems.MaxReplayTextLength characters)."
+          },
+          "outputTruncated": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Replay only: the output was cut at int TimelineItems.MaxReplayTextLength characters."
+          },
+          "gateId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "gateType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "gateStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GateStatus"
+              }
+            ]
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationDecision"
+              }
+            ]
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "artifactKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "artifactStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ArtifactStatus"
+              }
+            ]
+          },
+          "contentHash": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "            FR-300, FR-303: one timeline entry. Every entry has `id` (its source row), `at` and `kind`; the other\n            fields belong to kinds:\n            * transition: fromStage, toStage, transitionKind, checkpoint, reason.\n* stage_entered: stageId, iteration, checkpoint, exitedAt, outcome.\n* agent_run: stageId, agentKey, agentRunStatus, model, promptVersion,\n            tokens, cost, durationMs, latencyMs, error; in the replay also input,\n            inputTruncated, output and outputTruncated.\n* gate_created / gate_decided: gateId, gateType, gateStatus, decision,\n            comment.\n* artifact_version: artifactId, artifactKey, artifactVersion, artifactStatus,\n            contentHash, agentRunId."
+      },
+      "PipelineTimelineKind": {
+        "enum": [
+          "transition",
+          "stage_entered",
+          "agent_run",
+          "gate_created",
+          "gate_decided",
+          "artifact_version"
+        ],
+        "description": "FR-300: the kinds of a run's timeline entries."
+      },
+      "PipelineTimelinePageDto": {
+        "required": [
+          "items",
+          "next"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineTimelineItemDto"
+            }
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "A page of a run's timeline (FR-300) or replay (FR-303); `next` is the cursor of the following page, or `null`."
+      },
       "PlanRunStatus": {
         "enum": [
           "pending",
@@ -23555,6 +25717,60 @@
           }
         },
         "description": "A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;\n`releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in\ndevelopment); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`\nare history (FR-129: the retired preset the current version was migrated from; `null`: none); `stackPacks` the pack ids of the current version's\nstack composition (FR-117, the `pack` filter; empty: no stack)."
+      },
+      "PromptStatsDto": {
+        "required": [
+          "agentKey",
+          "promptVersion",
+          "runs",
+          "avgInputTokens",
+          "avgOutputTokens",
+          "avgCost",
+          "avgLatencyMs",
+          "avgDurationMs",
+          "failureRate"
+        ],
+        "type": "object",
+        "properties": {
+          "agentKey": {
+            "type": "string"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "runs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "avgInputTokens": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgOutputTokens": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgCost": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgLatencyMs": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "avgDurationMs": {
+            "type": "number",
+            "format": "double"
+          },
+          "failureRate": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "description": "FR-298: one (agent key, prompt version) group of a pipeline's agent runs."
       },
       "PullRequestCommitDto": {
         "required": [
@@ -26958,6 +29174,23 @@
         },
         "description": "The VCS layer: the pack id, the GitLab host instance, and whether it is self-managed (R9)."
       },
+      "StageKind": {
+        "enum": [
+          "agent",
+          "code",
+          "manual"
+        ],
+        "description": "FR-280: what does a stage's work."
+      },
+      "StageState": {
+        "enum": [
+          "pending",
+          "active",
+          "completed",
+          "skipped"
+        ],
+        "description": "FR-300: a stage's state in a run's stage list."
+      },
       "StartRefinementRequest": {
         "type": "object",
         "properties": {
@@ -28174,6 +30407,12 @@
     },
     {
       "name": "Stack"
+    },
+    {
+      "name": "Pipelines"
+    },
+    {
+      "name": "Pipeline runs"
     },
     {
       "name": "Notifications"

@@ -2258,6 +2258,9 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("ReleaseVersionId")
                         .HasDatabaseName("ix_state_transitions_release_version_id");
 
+                    b.HasIndex("PipelineRunId", "CreatedAt")
+                        .HasDatabaseName("ix_state_transitions_pipeline_run_id_created_at");
+
                     b.HasIndex("ProjectId", "CreatedAt")
                         .HasDatabaseName("ix_state_transitions_project_id_created_at");
 
@@ -2924,6 +2927,9 @@ namespace Aide.Infrastructure.Migrations
                     b.HasIndex("StepId")
                         .HasDatabaseName("ix_agent_runs_step_id");
 
+                    b.HasIndex("PipelineRunId", "CreatedAt")
+                        .HasDatabaseName("ix_agent_runs_pipeline_run_id_created_at");
+
                     b.HasIndex("ProjectId", "CreatedAt")
                         .HasDatabaseName("ix_agent_runs_project_id_created_at");
 
@@ -3027,6 +3033,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("ReviewerId")
                         .HasDatabaseName("ix_approval_gates_reviewer_id");
+
+                    b.HasIndex("PipelineRunId", "CreatedAt")
+                        .HasDatabaseName("ix_approval_gates_pipeline_run_id_created_at");
 
                     b.HasIndex("ProjectId", "ReleaseVersionId")
                         .HasDatabaseName("ix_approval_gates_project_id_release_version_id");
@@ -3193,6 +3202,9 @@ namespace Aide.Infrastructure.Migrations
 
                     b.HasIndex("ReleaseVersionId")
                         .HasDatabaseName("ix_artifacts_release_version_id");
+
+                    b.HasIndex("PipelineRunId", "CreatedAt")
+                        .HasDatabaseName("ix_artifacts_pipeline_run_id_created_at");
 
                     b.HasIndex("ProjectId", "ReleaseVersionId")
                         .HasDatabaseName("ix_artifacts_project_id_release_version_id");

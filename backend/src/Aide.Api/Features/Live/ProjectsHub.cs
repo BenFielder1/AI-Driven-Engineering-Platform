@@ -48,6 +48,15 @@ public sealed class ProjectsHub(AideDbContext db, SystemRoleLookup roles, Projec
     /// <summary>FR-259: the client method name of the <c>buildCheckUpdated</c> message (<see cref="BuildChecks.BuildCheckUpdatedMessage"/>).</summary>
     public const string BuildCheckUpdatedMethod = "buildCheckUpdated";
 
+    /// <summary>FR-302: a pipeline run changed; the payload is the run DTO (<c>PipelineRunDto</c>).</summary>
+    public const string PipelineRunUpdatedMethod = "pipelineRunUpdated";
+
+    /// <summary>FR-302: a stage of a run changed; the payload is the stage DTO (<c>PipelineStageDto</c>).</summary>
+    public const string StageUpdatedMethod = "stageUpdated";
+
+    /// <summary>FR-302: a gate of a run changed; the payload is the gate DTO (<c>PipelineGateDto</c>).</summary>
+    public const string GateUpdatedMethod = "gateUpdated";
+
     /// <summary>The hub error message for a join the caller isn't allowed to make.</summary>
     public const string ForbiddenError = ErrorCodes.Forbidden;
 

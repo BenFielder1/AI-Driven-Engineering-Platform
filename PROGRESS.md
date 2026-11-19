@@ -185,6 +185,14 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Transactions and failures:** a separate run and token transaction; a transient failure keeps the run running.
   - **Host checks:** credential invalidation (FR-78), the provider-disabled check (FR-157), the source-items budget (FR-172), and the corruption alert and regeneration (FR-20).
 
+- **D-0.7.0-35** (Build, M60, Claude, assumed): the generic API (FR-298–FR-303).
+  - **Where:** endpoints, DTOs and readers live in `Tevrin.Engine.Api` (no SDLC types); the host plugs in project permissions, the gate service, the transitions table, job filtering and ProblemDetails through `IRunAccessPolicy`, `IGateDecisionService`, `IPipelineTransitionSource`, `IRunActivityPolicy` and `IEngineProblems` (`Aide.Api/Features/PipelineRuns`).
+  - **Stage states:** the current stage is `active` while the run isn't final, and every later stage is `pending`, also after a rollback or a loop (e.g. `review` after looping back to `execution`); its earlier entries still count in iterations and timings and stay in the timeline. Earlier stages are `completed` when entered, else `skipped`. Stages with no `stage_executions` rows (runs before M59) take their entries from the run's transitions.
+  - **Running:** a queued or running job of the run's project makes a non-final run `running`, except job types the host ignores (SDLC: `notification`, as the rollback's active-job check).
+  - **Availability (`DEFINITION_UNAVAILABLE`):** a pinned hash is available when it is registered, or when its stored definition (checked against its hash) names only guards, handlers and tools this build registers.
+  - **Timeline:** one flat item type with a `kind`; ties at the same time are broken by a fixed kind rank, then the row id in uuid order; the cursor is (time, kind, id). The replay caps each agent run's input and output at 200,000 characters (`inputTruncated`, `outputTruncated`). Gate decisions go through the same checks in the project route's order, then the definition check.
+  - **Indexes:** migration `PipelineTimelineIndexes` adds (`pipeline_run_id`, `created_at`) on `agent_runs`, `approval_gates`, `artifacts` and `state_transitions` (expand only; the single-column foreign-key indexes stay).
+
 ## Manual checks (Ben)
 - A full SDLC project on preview behaves as on 0.6.1 (strict and advisory).
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.

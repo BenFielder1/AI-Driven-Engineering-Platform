@@ -49,6 +49,15 @@ public sealed class ProjectViewerRegistry
         }
     }
 
+    /// <summary>Whether any connection views <paramref name="projectId"/> (FR-302: live reads are skipped otherwise).</summary>
+    public bool HasViewers(Guid projectId)
+    {
+        lock (_lock)
+        {
+            return _connections.Values.Any(c => c.Projects.Contains(projectId));
+        }
+    }
+
     /// <summary>Removes and returns the connections of <paramref name="userId"/> viewing <paramref name="projectId"/>.</summary>
     public IReadOnlyList<string> RemoveViewer(Guid userId, Guid projectId)
     {
@@ -71,6 +80,7 @@ public sealed class ProjectViewerRegistry
 public sealed partial class SignalRProjectEventPublisher(
     IHubContext<ProjectsHub> hub,
     ProjectViewerRegistry viewers,
+    PipelineLivePublisher pipelineLive,
     ILogger<SignalRProjectEventPublisher> logger) : IProjectEventPublisher
 {
     public async Task PublishAsync(IReadOnlyList<AuditEvent> events, CancellationToken cancellationToken)
@@ -116,6 +126,9 @@ public sealed partial class SignalRProjectEventPublisher(
                 LogPublishFailed(logger, ex, projectId, entry.Type);
             }
         }
+
+        // FR-302: the engine's pipelineRunUpdated, stageUpdated and gateUpdated messages, after the projectEvent messages.
+        await pipelineLive.PublishAsync(events, cancellationToken);
     }
 
     private static BuildChecks.BuildCheckDto? BuildCheckOf(string type, JsonObject payload)

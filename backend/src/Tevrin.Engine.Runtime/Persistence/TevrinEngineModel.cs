@@ -153,6 +153,12 @@ public static class TevrinEngineModel
 
             // FR-294: rows of the same project; they go together through the project cascade (NO ACTION, as for versions).
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(a => a.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
+
+            // §8: the run timeline reads by run in time order (FR-300).
+            b.HasIndex(a => new { a.PipelineRunId, a.CreatedAt });
+
+            // Kept explicitly: the composite index would otherwise replace the foreign-key index (expand only).
+            b.HasIndex(a => a.PipelineRunId);
         });
 
         builder.Entity<ApprovalGate>(b =>
@@ -167,6 +173,12 @@ public static class TevrinEngineModel
 
             b.HasOne<Artifact>().WithMany().HasForeignKey(g => g.ArtifactId).OnDelete(DeleteBehavior.NoAction);
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(g => g.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
+
+            // §8: the run timeline reads by run in time order (FR-300).
+            b.HasIndex(g => new { g.PipelineRunId, g.CreatedAt });
+
+            // Kept explicitly: the composite index would otherwise replace the foreign-key index (expand only).
+            b.HasIndex(g => g.PipelineRunId);
 
             // At most one pending gate per (project, type) — enforced by the database (§4.2).
             b.HasIndex(g => new { g.ProjectId, g.Type })
@@ -218,6 +230,12 @@ public static class TevrinEngineModel
             b.Property(r => r.InputTruncated).HasDefaultValue(false).IsRequired();
 
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
+
+            // §8: the run timeline reads by run in time order (FR-300).
+            b.HasIndex(r => new { r.PipelineRunId, r.CreatedAt });
+
+            // Kept explicitly: the composite index would otherwise replace the foreign-key index (expand only).
+            b.HasIndex(r => r.PipelineRunId);
 
             b.HasIndex(r => new { r.ProjectId, r.CreatedAt });
             b.HasIndex(r => new { r.Status, r.CreatedAt });

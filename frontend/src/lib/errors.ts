@@ -50,6 +50,8 @@ export const errorMessages = {
     "This artifact version is locked. Create a new version instead.",
   GATE_NOT_PENDING: "This gate has already been decided.",
   INVALID_DECISION: "That decision isn't valid for this gate.",
+  DEFINITION_UNAVAILABLE:
+    "This run uses a pipeline definition this version of Tevrin can't run. Ask an admin to check the deployment.",
   REFINEMENT_IN_PROGRESS:
     "A refinement round is already queued or running. Wait for it to finish, then answer its questions.",
   // Review, release, rollback
