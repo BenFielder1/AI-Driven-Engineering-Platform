@@ -27,7 +27,7 @@ rollback_status: rolled_back
 
 concurrency:
   exclusive:
-    - { job_type: agent.run, scope: run }
+    - { job_type: agent.run, scope: project }
 
 stages:
   - id: draft

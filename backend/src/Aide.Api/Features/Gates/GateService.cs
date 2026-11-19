@@ -57,7 +57,17 @@ public sealed partial class GateService(
         var resolution = resolved.Value;
         var now = time.GetUtcNow();
         var comment = Clean(request.Comment);
-        var state = await lifecycle.StateAsync(db, project, cancellationToken);
+
+        // FR-277: the decision and its follow-up use the definition the project's run is pinned to (409
+        // DEFINITION_UNAVAILABLE when this build can't run it).
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            return Result.Failure<ApprovalGate>(pinned.Error!);
+        }
+
+        var run = pinned.Value;
+        var state = run.State;
         Decide(gate, resolution.NewStatus, resolution.Decision, resolution.TargetVersion, reviewerId, comment, now);
         project.UpdatedAt = now;
 
@@ -70,8 +80,8 @@ public sealed partial class GateService(
         {
             case GateFollowUp.ApplyTransition:
                 {
-                    var entry = SdlcStages.GuardedEntry(lifecycle.Definition, gate.Type);
-                    if (lifecycle.Next(state.Phase) != entry)
+                    var entry = SdlcStages.GuardedEntry(run.Definition, gate.Type);
+                    if (SdlcLifecycle.Next(run) != entry)
                     {
                         return Result.Failure<ApprovalGate>(new DomainError(
                             ErrorCodes.WrongPhase,
@@ -95,7 +105,7 @@ public sealed partial class GateService(
                     };
                     var advanceReason = await AdvanceReasonAsync(project.Id, gate.Id, cancellationToken);
                     var reason = GatedAdvanceReason(gate.Type, advanceReason, comment);
-                    var applied = lifecycle.Apply(state, project, SdlcTransitions.Advance(reason), snapshot);
+                    var applied = SdlcLifecycle.Apply(run, project, SdlcTransitions.Advance(reason), snapshot);
                     if (applied.IsFailure)
                     {
                         return Result.Failure<ApprovalGate>(applied.Error!);
@@ -117,7 +127,7 @@ public sealed partial class GateService(
                     // steps still to run). If it already is, the cycle starts now; if its draft is waiting, approving it
                     // starts the cycle (Decisions: review cycle); with no plan at all, the extra cycle is a new review.
                     var snapshot = await snapshots.LoadAsync(project, cancellationToken) with { EscalationOutcome = EscalationDecision.Continue };
-                    var cycle = lifecycle.Apply(state, project, SdlcTransitions.ReviewCycle("Escalation: continue with another review cycle"), snapshot);
+                    var cycle = SdlcLifecycle.Apply(run, project, SdlcTransitions.ReviewCycle("Escalation: continue with another review cycle"), snapshot);
                     if (cycle.IsSuccess)
                     {
                         await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);
@@ -274,6 +284,13 @@ public sealed partial class GateService(
             return Result.Failure<ApprovalGate>(new DomainError(
                 ErrorCodes.InvalidDecision,
                 $"Rejecting a {gate.Type} gate takes no escalation decision or target version."));
+        }
+
+        // FR-277: a decision on a run whose pinned definition this build can't run is refused, as on approve.
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            return Result.Failure<ApprovalGate>(pinned.Error!);
         }
 
         var resolution = resolved.Value;

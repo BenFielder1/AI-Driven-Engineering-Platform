@@ -159,6 +159,7 @@ public sealed partial class AgentRunner(
         {
             var outcome = await RunCoreAsync(request, runId, cancellationToken);
             activity?.SetTag(AideTelemetry.RunStatusTag, AgentRunStatus.Succeeded.ToWire());
+            TagPipelineRun(activity, runId);
             activity?.SetStatus(ActivityStatusCode.Ok);
             return outcome;
         }
@@ -166,20 +167,35 @@ public sealed partial class AgentRunner(
         {
             // NFR-OBS: a failed (or retried) run is an error span, described by its error code — never the message.
             activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            TagPipelineRun(activity, runId);
             AideTelemetry.SetError(activity, ex.ErrorCode ?? nameof(JobFailedException));
             throw;
         }
         catch (OperationCanceledException)
         {
             activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            TagPipelineRun(activity, runId);
             throw;
         }
         catch (Exception ex)
         {
             activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            TagPipelineRun(activity, runId);
             AideTelemetry.SetError(activity, ex.GetType().Name);
             throw;
         }
+    }
+
+    /// <summary>§8: tags the span with the run's pipeline run and stage (set by the run sync when the run row is saved).</summary>
+    private void TagPipelineRun(Activity? activity, Guid runId)
+    {
+        if (activity is null || db.AgentRuns.Local.FirstOrDefault(r => r.Id == runId) is not { } run)
+        {
+            return;
+        }
+
+        activity.SetTag(AideTelemetry.PipelineRunIdTag, run.PipelineRunId?.ToString());
+        activity.SetTag(AideTelemetry.StageTag, run.Stage);
     }
 
     /// <summary>The run's status as this runner last left it, or <c>not_started</c> when it has no row.</summary>

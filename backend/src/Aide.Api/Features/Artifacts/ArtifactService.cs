@@ -19,6 +19,7 @@ using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Pack.Sdlc;
 
@@ -363,11 +364,18 @@ public sealed partial class ArtifactService(
         artifact.ApprovedAt = now;
         project.UpdatedAt = now;
 
-        // §4.4 cascade.
-        var state = await lifecycle.StateAsync(db, project, cancellationToken);
+        // §4.4 cascade, from the definition the project's run is pinned to (FR-277: 409 DEFINITION_UNAVAILABLE when this
+        // build can't run it).
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            return Result.Failure<Artifact>(pinned.Error!);
+        }
+
+        var run = pinned.Value;
         var cascade = InvalidationCascade.Plan(
             artifact.Id,
-            lifecycle.CascadeEffect(artifact.Type, state.Phase),
+            SdlcLifecycle.CascadeEffect(artifact.Type, run),
             [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.CheckpointAtCreation))],
             [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))]);
 
@@ -426,7 +434,7 @@ public sealed partial class ArtifactService(
         if (cascade.Effect.FallbackPhase is { } fallback)
         {
             var reason = $"{artifact.Type} v{artifact.Version} approved; downstream work invalidated";
-            var transition = lifecycle.Apply(state, project, SdlcTransitions.Fallback(fallback, reason), LifecycleSnapshot.Empty);
+            var transition = SdlcLifecycle.Apply(run, project, SdlcTransitions.Fallback(fallback, reason), LifecycleSnapshot.Empty);
             if (transition.IsFailure)
             {
                 return Result.Failure<Artifact>(transition.Error!);
@@ -436,7 +444,7 @@ public sealed partial class ArtifactService(
             fellBack = true;
         }
 
-        await CancelStaleGatesAsync(project, artifact, invalidated, fellBack, actor, now, cancellationToken);
+        await CancelStaleGatesAsync(project, artifact, invalidated, fellBack, run.Definition, actor, now, cancellationToken);
         if (reset.Count > 0)
         {
             await CancelQueuedExecutionAsync(projectId, now, cancellationToken);
@@ -734,13 +742,13 @@ public sealed partial class ArtifactService(
     }
 
     private async Task CancelStaleGatesAsync(
-        Project project, Artifact approved, IReadOnlyCollection<Guid> invalidated, bool fellBack, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        Project project, Artifact approved, IReadOnlyCollection<Guid> invalidated, bool fellBack, PipelineDefinition definition, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var pending = await db.ApprovalGates
             .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending)
             .ToListAsync(cancellationToken);
         var stale = GateRules.StaleAfterArtifactApproval(
-            lifecycle.Definition,
+            definition,
             approved.Id,
             approved.Type,
             invalidated,

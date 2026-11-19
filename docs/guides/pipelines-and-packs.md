@@ -62,7 +62,7 @@ stages:
 | `statuses` | The pack's own statuses, each mapped to a generic run status |
 | `status_changes` | Named status-only moves (below) |
 | `rollback_status` | Status a rollback sets. Without it, the target stage's status is used |
-| `concurrency` | `exclusive: [{ job_type, scope: project or run }]`. A second active job of that type in that scope is refused |
+| `concurrency` | `exclusive: [{ job_type, scope: project }]`. A second active job of that type in the same project is refused. `scope: run` is refused by the validator in 0.7.0 (`DEF_PARSE`, D-0.7.0-37) |
 | `stages` | The stages, in order |
 
 ### Artifacts

@@ -87,8 +87,15 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         var runInProgress = await db.AgentRuns.AsNoTracking()
             .AnyAsync(r => r.ProjectId == id && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.Running), cancellationToken);
 
-        // FR-292: the run is the source of truth for the position rolled back from.
-        var current = await lifecycle.StateAsync(db, project, cancellationToken);
+        // FR-292: the run is the source of truth for the position rolled back from; FR-277: its pinned definition decides
+        // (409 DEFINITION_UNAVAILABLE when this build can't run it).
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            return Result.Failure<RollbackEvent>(pinned.Error!);
+        }
+
+        var current = pinned.Value.State;
         var planned = RollbackRules.Plan(new RollbackRequest(
             current,
             targetVersion,
@@ -105,7 +112,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
             VersionReleased = current.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
             AwaitingMerge = versionStatus == ReleaseVersionStatus.AwaitingMerge,
         },
-        lifecycle.Definition);
+        pinned.Value.Definition);
         if (planned.IsFailure)
         {
             return Result.Failure<RollbackEvent>(planned.Error!);

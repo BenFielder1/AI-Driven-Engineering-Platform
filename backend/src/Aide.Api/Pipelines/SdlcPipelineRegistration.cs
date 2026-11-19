@@ -1,4 +1,5 @@
 using Aide.Domain.Lifecycle;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Pipelines;
 using Tevrin.Pack.Sdlc;
@@ -32,6 +33,8 @@ public static class SdlcPipelineRegistration
 
         // FR-292: every lifecycle decision runs on the engine with the SDLC definition.
         services.AddLogging();
+        // FR-277: moves resolve the run's pinned definition; stored definitions are parsed once per hash (§8).
+        services.TryAddSingleton<PipelineDefinitionCache>();
         services.AddSingleton<SdlcLifecycle>();
         return services;
     }

@@ -91,12 +91,26 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
 
     /// <summary>§6 <c>DEFINITION_UNAVAILABLE</c>: whether every guard (in <c>requires</c>, <c>validate</c> and
     /// <c>loop.requires</c>), handler and tool <paramref name="definition"/> names is registered; never without a registry.</summary>
-    public static bool IsRunnable(PipelineRegistry? registry, PipelineDefinition definition)
+    public static bool IsRunnable(PipelineRegistry? registry, PipelineDefinition definition) =>
+        registry is not null && MissingNames(registry, definition).Count == 0;
+
+    /// <summary>
+    /// FR-277 acceptance: the guards, handlers and tools <paramref name="definition"/> names that <paramref name="registry"/>
+    /// doesn't register, as <c>guard:&lt;name&gt;</c>, <c>handler:&lt;name&gt;</c> and <c>tool:&lt;name&gt;</c> (distinct,
+    /// in stage order), for the <c>DEFINITION_UNAVAILABLE</c> log. Empty when the definition is runnable.
+    /// </summary>
+    public static IReadOnlyList<string> MissingNames(PipelineRegistry registry, PipelineDefinition definition)
     {
+        ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(definition);
-        if (registry is null)
+        var missing = new List<string>();
+        void Check(PipelineComponentKind kind, string prefix, string name)
         {
-            return false;
+            var label = $"{prefix}:{name}";
+            if (!registry.Registers(kind, name) && !missing.Contains(label, StringComparer.Ordinal))
+            {
+                missing.Add(label);
+            }
         }
 
         foreach (var stage in definition.Stages)
@@ -104,14 +118,22 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
             var guards = stage.Requires.OfType<GuardRequirement>().Select(r => r.Guard)
                 .Concat(stage.Validate.Select(v => v.Guard))
                 .Concat(stage.Loop?.Requires.OfType<GuardRequirement>().Select(r => r.Guard) ?? []);
-            if (guards.Any(g => !registry.Registers(PipelineComponentKind.Guard, g))
-                || (stage.Handler is { } handler && !registry.Registers(PipelineComponentKind.StageHandler, handler))
-                || (stage.Agent?.Tools ?? []).Any(t => !registry.Registers(PipelineComponentKind.Tool, t)))
+            foreach (var guard in guards)
             {
-                return false;
+                Check(PipelineComponentKind.Guard, "guard", guard);
+            }
+
+            if (stage.Handler is { } handler)
+            {
+                Check(PipelineComponentKind.StageHandler, "handler", handler);
+            }
+
+            foreach (var tool in stage.Agent?.Tools ?? [])
+            {
+                Check(PipelineComponentKind.Tool, "tool", tool);
             }
         }
 
-        return true;
+        return missing;
     }
 }

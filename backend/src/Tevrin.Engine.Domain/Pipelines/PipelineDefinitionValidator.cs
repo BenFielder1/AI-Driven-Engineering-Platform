@@ -244,6 +244,12 @@ public static partial class PipelineDefinitionValidator
                 }
 
                 CheckJobType(exclusive[i].JobType, path);
+
+                // D-0.7.0-37: jobs carry no run id, so run-scoped exclusivity can't be enforced yet.
+                if (exclusive[i].Scope == ConcurrencyScope.Run)
+                {
+                    Add(DefinitionErrorCodes.Parse, $"concurrency.exclusive[{i}].scope", "run-scoped concurrency is not supported in 0.7.0");
+                }
             }
         }
 

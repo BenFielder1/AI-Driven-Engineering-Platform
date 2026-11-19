@@ -35,11 +35,30 @@ public sealed partial class AgentStageRunner(
     public async Task<AgentStageOutcome> RunAsync(AgentStageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // §8: one span per agent stage attempt, tagged with the run, stage, agent and attempt.
+        using var activity = EngineTelemetry.StartAgentStage(request.RunId, request.StageId, null, request.Attempt);
+        try
+        {
+            var outcome = await RunAttemptAsync(request, activity, cancellationToken);
+            activity?.SetTag(EngineTelemetry.OutcomeTag, outcome.Valid ? "valid" : "invalid");
+            return outcome;
+        }
+        catch (JobFailedException ex)
+        {
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.ErrorCode ?? nameof(JobFailedException));
+            throw;
+        }
+    }
+
+    private async Task<AgentStageOutcome> RunAttemptAsync(AgentStageRequest request, System.Diagnostics.Activity? activity, CancellationToken cancellationToken)
+    {
         var run = await store.FindRunAsync(request.RunId, cancellationToken) ?? throw Permanent($"Pipeline run {request.RunId} does not exist.");
         var loaded = registry.GetByHash(run.DefinitionHash) ?? throw Permanent($"The definition {run.DefinitionHash} of run {run.Id} is not registered.");
         var definition = loaded.Definition!;
         var stage = definition.FindStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
         var agent = stage.Agent ?? throw Permanent($"Stage '{stage.Id}' is not an agent stage.");
+        activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
 
         // A locked input whose content no longer matches its hash (FR-20) is absent, never fed to the model.
         var inputs = (await store.LatestLockedAsync(run, stage.Inputs, cancellationToken))

@@ -10,6 +10,7 @@ using Npgsql;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Pipelines;
 
 namespace Aide.Api.Features.Lifecycle;
 
@@ -43,8 +44,16 @@ public sealed partial class LifecycleService(
             return Result.Failure<AdvanceResult>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
         }
 
-        // FR-292: the run is the source of truth for the phase the project is in.
-        var state = await lifecycle.StateAsync(db, project, cancellationToken);
+        // FR-292: the run is the source of truth for the phase the project is in; FR-277: its pinned definition decides.
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            LogAdvanceRefused(logger, project.Id, pinned.Error!.Code);
+            return Result.Failure<AdvanceResult>(pinned.Error!);
+        }
+
+        var run = pinned.Value;
+        var state = run.State;
         if (expectedFrom is { } expected && state.Phase != expected)
         {
             LogAdvanceRefused(logger, project.Id, ErrorCodes.WrongPhase);
@@ -53,7 +62,7 @@ public sealed partial class LifecycleService(
         }
 
         bool? prepared = null;
-        if (lifecycle.Next(state.Phase) == Phase.Execution)
+        if (SdlcLifecycle.Next(run) == Phase.Execution)
         {
             // FR-35, §4.1: prepare the working copy and project branch before execution is entered (idempotent). The
             // outcome is the "working copy prepared" condition: a failure leaves it unmet, which the state machine reports.
@@ -67,7 +76,7 @@ public sealed partial class LifecycleService(
         }
 
         var cleanReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
-        var outcome = lifecycle.RequestAdvance(state, project, snapshot, cleanReason);
+        var outcome = SdlcLifecycle.RequestAdvance(run, project, snapshot, cleanReason);
         if (outcome.IsFailure)
         {
             LogAdvanceRefused(logger, project.Id, outcome.Error!.Code);
@@ -77,7 +86,7 @@ public sealed partial class LifecycleService(
         var now = time.GetUtcNow();
         if (outcome.Value.GateRequired is { } gateType)
         {
-            var artifactId = await GatedArtifactIdAsync(project.Id, gateType, cancellationToken);
+            var artifactId = await GatedArtifactIdAsync(project.Id, gateType, run.Definition, cancellationToken);
             var gate = writer.AddGate(project, gateType, artifactId, actor, now, cleanReason);
             var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
             if (saved.IsFailure)
@@ -104,14 +113,15 @@ public sealed partial class LifecycleService(
             return Result.Failure<AdvanceResult>(result.Error!);
         }
 
-        LogAdvanced(logger, project.Id, transition.From, transition.To, transition.Version);
+        LogAdvanced(logger, project.Id, transition.From, transition.To, transition.Version, run.RunId, transition.Kind, run.DefinitionHash);
         return Result.Success(new AdvanceResult(transition, null));
     }
 
-    /// <summary>The latest locked version of the artifact a gate approves (spec or plan), if any.</summary>
-    internal async Task<Guid?> GatedArtifactIdAsync(Guid projectId, string type, CancellationToken cancellationToken)
+    /// <summary>The latest locked version of the artifact a gate approves (spec or plan) in <paramref name="definition"/>
+    /// (the run's pinned one), if any.</summary>
+    internal async Task<Guid?> GatedArtifactIdAsync(Guid projectId, string type, PipelineDefinition definition, CancellationToken cancellationToken)
     {
-        if (SdlcStages.GatedArtifact(lifecycle.Definition, type) is not { } artifactType)
+        if (SdlcStages.GatedArtifact(definition, type) is not { } artifactType)
         {
             return null;
         }
@@ -130,8 +140,10 @@ public sealed partial class LifecycleService(
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} needs a {GateType} gate before advancing; gate created")]
     private static partial void LogGateCreated(ILogger logger, Guid projectId, LoggedKey gateType);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} moved {FromPhase} → {ToPhase} (checkpoint {Checkpoint})")]
-    private static partial void LogAdvanced(ILogger logger, Guid projectId, Phase fromPhase, Phase toPhase, int checkpoint);
+    // §8: the transition log carries the run, the generic kind and the pinned definition hash (appended to 0.6.1's text).
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} moved {FromPhase} → {ToPhase} (checkpoint {Checkpoint}); run {PipelineRunId}, kind {TransitionKind}, definition {DefinitionHash}")]
+    private static partial void LogAdvanced(
+        ILogger logger, Guid projectId, Phase fromPhase, Phase toPhase, int checkpoint, Guid? pipelineRunId, string transitionKind, string definitionHash);
 }
 
 /// <summary>Saves a lifecycle unit of work, mapping concurrency clashes to the spec's error codes.</summary>

@@ -51,7 +51,18 @@ public class DefinitionValidatorGateTests
     public void FR286_a_job_type_listed_twice_in_concurrency_is_a_duplicate() =>
         Assert.Equal(
             [(DefinitionErrorCodes.DuplicateId, "concurrency.exclusive[1].job_type")],
-            Errors(Edit("stages:\n", "concurrency: { exclusive: [{ job_type: agent.run, scope: run }, { job_type: agent.run, scope: project }] }\nstages:\n")));
+            Errors(Edit("stages:\n", "concurrency: { exclusive: [{ job_type: agent.run, scope: project }, { job_type: agent.run, scope: project }] }\nstages:\n")));
+
+    [Fact]
+    public void FR286_D_0_7_0_37_run_scoped_concurrency_is_refused_as_a_parse_error()
+    {
+        var yaml = Edit("stages:\n", "concurrency: { exclusive: [{ job_type: agent.run, scope: run }] }\nstages:\n");
+
+        Assert.Equal([(DefinitionErrorCodes.Parse, "concurrency.exclusive[0].scope")], Errors(yaml));
+        Assert.Contains(
+            PipelineDefinitionLoaderErrors(yaml),
+            e => e.Message == "run-scoped concurrency is not supported in 0.7.0");
+    }
 
     private static IReadOnlyList<DefinitionError> PipelineDefinitionLoaderErrors(string yaml) =>
         Runtime.Pipelines.PipelineDefinitionLoader.ParseAndValidate(yaml, Catalog).Errors;

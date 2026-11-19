@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Domain.Pipelines;
+using Tevrin.Engine.Runtime.Pipelines;
 
 namespace Tevrin.Engine.Runtime.Jobs;
 
@@ -80,21 +82,47 @@ public sealed record JobHandlerRegistration(string JobType, Func<IServiceProvide
 
 /// <summary>
 /// FR-272: the job types with a registered handler (<see cref="JobHandlerRegistration"/>): the engine's
-/// (<c>EngineJobTypes</c>) once it handles them, plus every type a pack registers. A type is one per project when its
-/// registration says so.
+/// (<c>EngineJobTypes</c>) once it handles them, plus every type a pack registers. FR-286, §4.59: a type is one per project
+/// when a registered definition lists it in <c>concurrency.exclusive</c> with <c>scope: project</c>; the registration's
+/// <see cref="JobHandlerRegistration.OnePerProject"/> flag is the fallback for job types no definition mentions.
 /// </summary>
 public sealed class JobTypeRegistry
 {
     private readonly Dictionary<string, bool> _types = new(StringComparer.Ordinal);
 
     public JobTypeRegistry(IEnumerable<JobHandlerRegistration> registrations)
+        : this(registrations, [])
+    {
+    }
+
+    /// <param name="registrations">The registered handlers.</param>
+    /// <param name="exclusive">The <c>concurrency.exclusive</c> entries of the registered, valid definitions
+    /// (<see cref="ExclusiveOf"/>); only <c>scope: project</c> entries are enforced (the validator refuses <c>run</c>,
+    /// D-0.7.0-37).</param>
+    public JobTypeRegistry(IEnumerable<JobHandlerRegistration> registrations, IEnumerable<ExclusiveJob> exclusive)
     {
         ArgumentNullException.ThrowIfNull(registrations);
+        ArgumentNullException.ThrowIfNull(exclusive);
         foreach (var registration in registrations)
         {
             _types[registration.JobType] = registration.OnePerProject || (_types.TryGetValue(registration.JobType, out var one) && one);
         }
+
+        foreach (var entry in exclusive.Where(e => e.Scope == ConcurrencyScope.Project))
+        {
+            if (_types.ContainsKey(entry.JobType))
+            {
+                _types[entry.JobType] = true;
+            }
+        }
     }
+
+    /// <summary>FR-286: the <c>concurrency.exclusive</c> entries of every valid definition in <paramref name="host"/>'s
+    /// registry (none without a registry).</summary>
+    public static IReadOnlyList<ExclusiveJob> ExclusiveOf(PipelineRegistryHost? host) =>
+        host?.Registry is { } registry
+            ? [.. registry.Definitions.Where(d => d.IsValid).SelectMany(d => d.Definition!.Concurrency.Exclusive)]
+            : [];
 
     /// <summary>Every registered job type.</summary>
     public IReadOnlyCollection<string> Types => _types.Keys;
@@ -129,7 +157,8 @@ public static class JobServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddTevrinJobQueue(this IServiceCollection services)
     {
-        services.AddSingleton<JobTypeRegistry>();
+        services.AddSingleton(sp => new JobTypeRegistry(
+            sp.GetServices<JobHandlerRegistration>(), JobTypeRegistry.ExclusiveOf(sp.GetService<PipelineRegistryHost>())));
         services.AddScoped<JobEnqueuer>();
         services.AddSingleton<JobWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<JobWorker>());

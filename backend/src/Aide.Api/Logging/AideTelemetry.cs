@@ -19,6 +19,10 @@ public static class AideTelemetry
     public const string AgentTag = "aide.agent";
     public const string UserIdTag = "aide.user_id";
 
+    /// <summary>§8: the pipeline run an agent run belongs to, and its stage.</summary>
+    public const string PipelineRunIdTag = "aide.pipeline_run_id";
+    public const string StageTag = "aide.stage";
+
     /// <summary>How a job attempt ended: one of <see cref="Tevrin.Engine.Runtime.Jobs.JobOutcomes"/>.</summary>
     public const string JobOutcomeTag = "aide.job_outcome";
 

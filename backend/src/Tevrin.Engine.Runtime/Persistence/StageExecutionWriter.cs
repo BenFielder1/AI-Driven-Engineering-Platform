@@ -88,6 +88,7 @@ public static class StageExecutionWriter
         {
             open.ExitedAt = at < open.EnteredAt ? open.EnteredAt : at;
             open.Outcome = outcome;
+            EngineTelemetry.TraceStageExecution(open); // §8: one span per stage execution, with its real times
         }
     }
 }

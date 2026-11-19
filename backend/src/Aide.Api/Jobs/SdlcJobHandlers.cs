@@ -15,7 +15,8 @@ namespace Aide.Api.Jobs;
 /// <summary>
 /// FR-272: the SDLC's job handlers, one for every <see cref="SdlcJobTypes"/> value (the 0.6.1 job type strings), in one
 /// place so the set the SDLC enqueues and the set it registers can't drift apart. Only registered types can be enqueued
-/// (<see cref="JobEnqueuer"/>) and claimed. <c>execution</c> is one per project (§4.9).
+/// (<see cref="JobEnqueuer"/>) and claimed. <c>execution</c> is one per project (§4.9) because <c>sdlc.pipeline.yaml</c>
+/// declares it exclusive per project (FR-286).
 /// </summary>
 public static class SdlcJobHandlers
 {
@@ -25,7 +26,8 @@ public static class SdlcJobHandlers
         services.AddJobHandler<IdeaRefinementJobHandler>(SdlcJobTypes.IdeaRefinement);
         services.AddJobHandler<SpecGenerationJobHandler>(SdlcJobTypes.SpecGeneration);
         services.AddJobHandler<PlanGenerationJobHandler>(SdlcJobTypes.PlanGeneration);
-        services.AddJobHandler<ExecutionJobHandler>(SdlcJobTypes.Execution, onePerProject: true);
+        // One per project from the SDLC definition's concurrency block (FR-286), not a code flag.
+        services.AddJobHandler<ExecutionJobHandler>(SdlcJobTypes.Execution);
         services.AddJobHandler<RepositoryAnalysisJobHandler>(SdlcJobTypes.RepositoryAnalysis);
         services.AddJobHandler<StackAnalysisJobHandler>(SdlcJobTypes.StackAnalysis);
 

@@ -136,7 +136,7 @@ public class DefinitionLoaderTests
 
     [Fact]
     public void FR286_concurrency_lists_exclusive_job_types_by_scope() =>
-        Assert.Equal([new ExclusiveJob(EngineJobTypes.AgentRun, ConcurrencyScope.Run)], Fixture.Concurrency.Exclusive);
+        Assert.Equal([new ExclusiveJob(EngineJobTypes.AgentRun, ConcurrencyScope.Project)], Fixture.Concurrency.Exclusive);
 
     [Fact]
     public void FR275_an_unknown_key_is_a_parse_error_at_its_path()

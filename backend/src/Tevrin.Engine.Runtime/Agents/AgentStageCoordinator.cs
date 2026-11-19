@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
@@ -13,7 +14,8 @@ namespace Tevrin.Engine.Runtime.Agents;
 /// attempt is below <c>max_attempts</c>; then <c>escalate</c> raises a pending <c>escalation</c> gate on the run, and
 /// <c>fail</c> marks the last agent run failed (the job layer fails the job with <see cref="AgentStageResult.ThrowIfFailed"/>).
 /// </summary>
-public sealed class AgentStageCoordinator(AgentStageRunner runner, IAgentStageStore store, IAgentStageHooks hooks, TimeProvider time)
+public sealed partial class AgentStageCoordinator(
+    AgentStageRunner runner, IAgentStageStore store, IAgentStageHooks hooks, TimeProvider time, ILogger<AgentStageCoordinator> logger)
 {
     public async Task<AgentStageResult> RunAsync(AgentStageRequest request, CancellationToken cancellationToken)
     {
@@ -32,6 +34,10 @@ public sealed class AgentStageCoordinator(AgentStageRunner runner, IAgentStageSt
             switch (StageValidationRules.OnInvalid(outcome.Stage.OnInvalid, current.Attempt))
             {
                 case InvalidOutputAction.Retry:
+                    // §8: each validation retry is logged with counts only, never the findings' content (NFR-SEC).
+                    var findingCount = FindingCount(outcome.Findings!);
+                    LogValidationRetry(logger, outcome.Run.Id, outcome.Stage.Id, current.Attempt + 1, findingCount);
+
                     // §4.55: the findings are appended to the request's own feedback (a rejection comment stays).
                     current = current with
                     {
@@ -52,6 +58,16 @@ public sealed class AgentStageCoordinator(AgentStageRunner runner, IAgentStageSt
             }
         }
     }
+
+    /// <summary>The number of findings (one per line, D-0.7.0-33's <c>pointer: message</c> list).</summary>
+    public static int FindingCount(string findings)
+    {
+        ArgumentNullException.ThrowIfNull(findings);
+        return findings.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId}: output invalid, retrying with feedback as attempt {Attempt} ({FindingCount} findings)")]
+    private static partial void LogValidationRetry(ILogger logger, Guid pipelineRunId, string stageId, int attempt, int findingCount);
 
     /// <summary>The run's pending escalation gate, else a new one on the run (with an audit hook carrying the findings).</summary>
     private async Task<ApprovalGate> EscalateAsync(PipelineRun run, string findings, CancellationToken cancellationToken)
@@ -89,6 +105,7 @@ public static class AgentStageServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddAgentStages(this IServiceCollection services)
     {
+        services.AddLogging(); // the coordinator logs validation retries (§8); idempotent
         services.TryAddScoped<IAgentStageStore, EngineAgentStageStore>();
         services.TryAddScoped<IAgentStageHooks, NoAgentStageHooks>();
         services.TryAddScoped<AgentStageRunner>();

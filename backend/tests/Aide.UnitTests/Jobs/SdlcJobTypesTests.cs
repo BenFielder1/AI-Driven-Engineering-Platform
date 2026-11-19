@@ -1,7 +1,9 @@
 using Aide.Api.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Pipelines;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Jobs;
@@ -33,12 +35,24 @@ public class SdlcJobTypesTests
     }
 
     [Fact]
-    public void FR272_only_execution_is_one_per_project()
+    public void FR272_FR286_only_execution_is_one_per_project_and_the_SDLC_definition_says_so()
     {
-        var registry = new JobTypeRegistry(Registrations());
+        var host = Aide.UnitTests.Lifecycle.SdlcPipelineFixture.Services.GetRequiredService<PipelineRegistryHost>();
+        var registry = new JobTypeRegistry(Registrations(), JobTypeRegistry.ExclusiveOf(host));
 
         Assert.Equal([SdlcJobTypes.Execution], SdlcJobTypes.All.Where(registry.IsOnePerProject));
+        Assert.Equal([new ExclusiveJob(SdlcJobTypes.Execution, ConcurrencyScope.Project)], JobTypeRegistry.ExclusiveOf(host));
+
+        // FR-286: the definition, not a code flag, makes it exclusive.
+        Assert.DoesNotContain(Registrations(), r => r.OnePerProject);
+        Assert.DoesNotContain(SdlcJobTypes.All, new JobTypeRegistry(Registrations()).IsOnePerProject);
     }
+
+    [Fact]
+    public void FR286_the_one_per_project_conflict_message_is_unchanged() =>
+        Assert.Equal(
+            "An execution job is already queued or running for this project; retry this dead letter after it finishes.",
+            JobPolicy.OnePerProjectActiveMessage(SdlcJobTypes.Execution));
 
     [Fact]
     public void FR272_SDLC_job_types_never_collide_with_the_engine_job_types() =>

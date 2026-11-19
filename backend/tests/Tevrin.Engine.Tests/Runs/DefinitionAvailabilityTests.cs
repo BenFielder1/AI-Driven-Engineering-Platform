@@ -53,6 +53,20 @@ public class DefinitionAvailabilityTests
     }
 
     [Fact]
+    public void FR277_the_missing_names_are_listed_once_each_by_kind_for_the_log()
+    {
+        var definition = EditStage(Fixture(), "check", s => s with
+        {
+            Requires = [.. s.Requires, new GuardRequirement("fixture.missing")],
+            Validate = [.. s.Validate, new StageValidation("fixture.missing")],
+        });
+        definition = EditStage(definition, "draft", s => s with { Agent = s.Agent! with { Tools = ["fixture.missing-tool"] } });
+
+        Assert.Empty(PipelineDefinitionResolver.MissingNames(Registry, Fixture()));
+        Assert.Equal(["tool:fixture.missing-tool", "guard:fixture.missing"], PipelineDefinitionResolver.MissingNames(Registry, definition));
+    }
+
+    [Fact]
     public void FR301_without_a_registry_nothing_is_runnable() =>
         Assert.False(PipelineDefinitionResolver.IsRunnable(null, Fixture()));
 

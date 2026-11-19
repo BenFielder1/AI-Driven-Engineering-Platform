@@ -70,7 +70,7 @@ public class SdlcLifecycleTests
         var lifecycle = Lifecycle();
         var project = new Project { CurrentPhase = Phase.Review, Status = ProjectStatus.Reviewing, Checkpoint = Checkpoint, ReviewCycle = 3, MaxReviewCycles = 1 };
 
-        var cycle = lifecycle.Apply(SdlcLifecycle.CopyOf(project), project, SdlcTransitions.ReviewCycle(), CycleDue);
+        var cycle = SdlcLifecycle.Apply(lifecycle.OnCurrent(SdlcLifecycle.CopyOf(project)), project, SdlcTransitions.ReviewCycle(), CycleDue);
 
         Assert.True(cycle.IsSuccess, cycle.Error?.Message);
         Assert.Equal((Phase.Execution, ProjectStatus.Building, Checkpoint), (cycle.Value.To, cycle.Value.Status, cycle.Value.Version));
@@ -90,6 +90,7 @@ public class SdlcLifecycleTests
     {
         var lifecycle = new SdlcLifecycle(
             new ServiceCollection().AddPipelineRegistry().BuildServiceProvider().GetRequiredService<PipelineRegistryHost>(),
+            new PipelineDefinitionCache(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SdlcLifecycle>.Instance);
 
         Assert.Throws<InvalidOperationException>(() => lifecycle.Start(infersStack: false, baseHasCode: true));
