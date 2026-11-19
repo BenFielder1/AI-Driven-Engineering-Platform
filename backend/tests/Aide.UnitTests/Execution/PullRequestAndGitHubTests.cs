@@ -1,10 +1,10 @@
 using System.Net;
 using System.Text;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Execution;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Git;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Execution;
 
@@ -21,7 +21,7 @@ public class PullRequestAndGitHubTests
             5,
             spec,
             2,
-            ArtifactType.ImplementationPlan,
+            SdlcArtifacts.ImplementationPlan,
             3,
             steps.Length > 0
                 ? steps

@@ -1,12 +1,10 @@
 using Aide.Api.Features.GitHub;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHosts;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
@@ -15,9 +13,13 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Security;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Projects;
 
@@ -58,6 +60,7 @@ public sealed partial class ProjectCreator(
     ProjectStackService stacks,
     Trackers.SourceImportService imports,
     IOptions<LocalGitOptions> localGit,
+    Pipelines.SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<ProjectCreator> logger)
 {
@@ -159,7 +162,7 @@ public sealed partial class ProjectCreator(
         }
 
         // FR-178, §4.27: a version that infers its stack starts in analysis, and needs a base commit with code.
-        var initial = LifecycleStateMachine.Start(request.StackSource == StackSource.Infer, (start.Value.ReleasedCommit ?? start.Value.HeadCommit) is not null);
+        var initial = lifecycle.Start(request.StackSource == StackSource.Infer, (start.Value.ReleasedCommit ?? start.Value.HeadCommit) is not null);
         if (initial.IsFailure)
         {
             if (start.Value.LocalCopy)
@@ -294,7 +297,7 @@ public sealed partial class ProjectCreator(
         }
 
         var modelsByAgent = sentModels is not null
-            ? sentModels.Where(m => m.Model is not null).ToDictionary(m => m.Agent.ToWire(), m => m.Model!.Trim(), StringComparer.Ordinal)
+            ? sentModels.Where(m => m.Model is not null).ToDictionary(m => m.Agent, m => m.Model!.Trim(), StringComparer.Ordinal)
             : new Dictionary<string, string>(llm.DefaultAgentModels(choice.Provider), StringComparer.Ordinal);
         return Result.Success(new LlmPlan(choice.Provider, choice.DefaultModel.Trim(), modelsByAgent, binding, Defaulted: false));
     }
@@ -676,6 +679,7 @@ public sealed partial class ProjectCreator(
             Actor = actor,
             Reason = ProjectRules.CreatedReason,
             Checkpoint = project.Checkpoint,
+            Kind = PipelineTransitionKinds.Start,
             CreatedAt = now,
         });
         db.AddEvent(
@@ -700,7 +704,7 @@ public sealed partial class ProjectCreator(
         // FR-70: a version with existing code starts with the Repository Analyst.
         if (version.BaseCommitSha is not null)
         {
-            await jobs.EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, version.Id), project.Id, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, version.Id), project.Id, cancellationToken, now);
         }
 
         foreach (var planned in plannedImports)

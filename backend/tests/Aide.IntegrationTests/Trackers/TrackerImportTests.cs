@@ -4,11 +4,8 @@ using System.Text.Json;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Connections;
 using Aide.Api.Features.Trackers;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Security;
@@ -17,6 +14,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Trackers;
 
@@ -57,7 +55,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
     private static async Task<ProjectSourcesDto> SourcesAsync(ApiSession user, Guid projectId) =>
         await ProjectApi.ReadAsync<ProjectSourcesDto>(await user.Client.GetAsync(U(Sources(projectId)), Ct));
 
-    private Task<List<Artifact>> SnapshotsAsync(Guid projectId) => AgentJobs.ArtifactsAsync(_app, projectId, ArtifactType.SourceItems);
+    private Task<List<Artifact>> SnapshotsAsync(Guid projectId) => AgentJobs.ArtifactsAsync(_app, projectId, SdlcArtifacts.SourceItems);
 
     // ---------------------------------------------------------------- FR-165, FR-166 connections
 
@@ -269,7 +267,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var connection = await JiraAsync(fixture.Owner);
         await ImportAsync(fixture.Owner, fixture.Project.Id, Keys(connection.Id, "FAKE-1"));
         _app.Services.GetRequiredService<FakeTrackerScript>().RateLimitNext(TimeSpan.FromSeconds(60));
-        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == JobTypes.TrackerImport);
+        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == SdlcJobTypes.TrackerImport);
         var before = DateTimeOffset.UtcNow;
 
         Assert.True(await AgentJobs.RunCoreAsync(_app, job));
@@ -374,7 +372,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         await ProjectApi.WithDbAsync(_app, db => db.Database.ExecuteSqlRawAsync(install, Ct));
         try
         {
-            var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == JobTypes.TrackerImport);
+            var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == SdlcJobTypes.TrackerImport);
 
             Assert.False(await AgentJobs.RunCoreAsync(_app, job));
 
@@ -421,7 +419,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
                 Ct),
             HttpStatusCode.Created);
 
-        Assert.Single(await LifecycleSeed.JobsAsync(_app, created.Id), j => j.Type == JobTypes.TrackerImport);
+        Assert.Single(await LifecycleSeed.JobsAsync(_app, created.Id), j => j.Type == SdlcJobTypes.TrackerImport);
         await AgentJobs.RunQueuedAsync(_app, created.Id);
         Assert.Equal(5, Assert.Single((await SourcesAsync(user, created.Id)).Imports).ItemCount);
     }
@@ -525,7 +523,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
     {
         await ProjectApi.ReadAsync<Aide.Api.Features.Refinement.RefinementRoundDto>(await user.Client.PostAsJsonAsync($"/api/projects/{projectId}/refinement/run", new { }, Ct), HttpStatusCode.Accepted);
         await AgentJobs.RunQueuedAsync(_app, projectId);
-        return (await AgentJobs.RunsAsync(_app, projectId)).Last(r => r.Agent == AgentKind.IdeaRefinement);
+        return (await AgentJobs.RunsAsync(_app, projectId)).Last(r => r.Agent == SdlcAgents.IdeaRefinement);
     }
 
     [Fact]
@@ -540,7 +538,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
 
         var run = await RefineAsync(fixture.Owner, fixture.Project.Id);
 
-        Assert.Contains(run.InputArtifacts, a => a.Type == ArtifactType.SourceItems && a.Version == 2);
+        Assert.Contains(run.InputArtifacts, a => a.Type == SdlcArtifacts.SourceItems && a.Version == 2);
         var draft = (await SourcesAsync(fixture.Owner, fixture.Project.Id)).Draft!;
         Assert.Equal((2, false), (draft.BuiltFromSnapshotVersion, draft.BehindSnapshot));
 
@@ -559,7 +557,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var connection = await JiraAsync(fixture.Owner);
         await ImportAsync(fixture.Owner, fixture.Project.Id, Keys(connection.Id, "FAKE-1"));
         await ProjectApi.ReadAsync<Aide.Api.Features.Refinement.RefinementRoundDto>(await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{fixture.Project.Id}/refinement/run", new { }, Ct), HttpStatusCode.Accepted);
-        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == JobTypes.IdeaRefinement);
+        var job = (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Single(j => j.Type == SdlcJobTypes.IdeaRefinement);
 
         Assert.True(await AgentJobs.RunCoreAsync(_app, job));
 
@@ -575,13 +573,13 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var import = await ImportAsync(fixture.Owner, fixture.Project.Id, Keys(connection.Id, "FAKE-1"));
         await ProjectApi.WithDbAsync(_app, db => db.TrackerImports.Where(i => i.Id == import.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.CreatedAt, DateTimeOffset.UtcNow.AddMinutes(-11)), Ct));
-        await ProjectApi.WithDbAsync(_app, db => db.Jobs.Where(j => j.ProjectId == fixture.Project.Id && j.Type == JobTypes.TrackerImport)
+        await ProjectApi.WithDbAsync(_app, db => db.Jobs.Where(j => j.ProjectId == fixture.Project.Id && j.Type == SdlcJobTypes.TrackerImport)
             .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Cancelled), Ct));
 
         var run = await RefineAsync(fixture.Owner, fixture.Project.Id);
 
         Assert.Equal(AgentRunStatus.Succeeded, run.Status);
-        Assert.Contains(Aide.Domain.Agents.AgentRunWarnings.SourceItemsUnavailable, await WarningsOfAsync(fixture.Owner, fixture.Project.Id, run.Id));
+        Assert.Contains(Tevrin.Engine.Domain.Agents.AgentRunWarnings.SourceItemsUnavailable, await WarningsOfAsync(fixture.Owner, fixture.Project.Id, run.Id));
     }
 
     private static async Task<IReadOnlyList<string>> WarningsOfAsync(ApiSession user, Guid projectId, Guid runId)
@@ -594,15 +592,15 @@ public sealed class TrackerImportTests(AideApiFactory factory)
     public async Task FR172_Over_the_budget_for_the_model_at_run_time_the_run_fails_with_SOURCE_ITEMS_TOO_LARGE_and_nothing_is_drafted()
     {
         using var fixture = await ProjectApi.FixtureAsync(_app);
-        await LifecycleSeed.AddArtifactAsync(_app, fixture.Project.Id, ArtifactType.SourceItems, version: 1, content: new string('x', 900_000));
+        await LifecycleSeed.AddArtifactAsync(_app, fixture.Project.Id, SdlcArtifacts.SourceItems, version: 1, content: new string('x', 900_000));
 
         await ProjectApi.ReadAsync<Aide.Api.Features.Refinement.RefinementRoundDto>(await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{fixture.Project.Id}/refinement/run", new { }, Ct), HttpStatusCode.Accepted);
         await AgentJobs.RunQueuedAsync(_app, fixture.Project.Id);
 
-        var run = Assert.Single(await AgentJobs.RunsAsync(_app, fixture.Project.Id), r => r.Agent == AgentKind.IdeaRefinement);
+        var run = Assert.Single(await AgentJobs.RunsAsync(_app, fixture.Project.Id), r => r.Agent == SdlcAgents.IdeaRefinement);
         Assert.Equal(AgentRunStatus.Failed, run.Status);
         Assert.StartsWith(ErrorCodes.SourceItemsTooLarge, run.Error, StringComparison.Ordinal);
-        Assert.Empty(await AgentJobs.ArtifactsAsync(_app, fixture.Project.Id, ArtifactType.ProjectRequest));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(_app, fixture.Project.Id, SdlcArtifacts.ProjectRequest));
     }
 
     [Fact]
@@ -612,7 +610,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
         var connection = await JiraAsync(fixture.Owner);
         await ImportAsync(fixture.Owner, fixture.Project.Id, Keys(connection.Id, "FAKE-1", "FAKE-2", "FAKE-11"));
         await AgentJobs.RunQueuedAsync(_app, fixture.Project.Id);
-        await LifecycleSeed.AddArtifactAsync(_app, fixture.Project.Id, ArtifactType.TechnicalSpecification, version: 1, content: "### FR-1 Thing\nSource: FAKE-1\n");
+        await LifecycleSeed.AddArtifactAsync(_app, fixture.Project.Id, SdlcArtifacts.TechnicalSpecification, version: 1, content: "### FR-1 Thing\nSource: FAKE-1\n");
 
         var artifact = await ProjectApi.ReadAsync<ArtifactDto>(await fixture.Owner.Client.GetAsync(U($"/api/projects/{fixture.Project.Id}/artifacts/technical_specification/versions/1"), Ct));
 
@@ -662,7 +660,7 @@ public sealed class TrackerImportTests(AideApiFactory factory)
 
         Assert.Equal(retry.Id, duplicate.Id);
         Assert.Equal(retry.Id, ofRetry.Id);
-        Assert.Equal(2, (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Count(j => j.Type == JobTypes.TrackerImport));
+        Assert.Equal(2, (await LifecycleSeed.JobsAsync(_app, fixture.Project.Id)).Count(j => j.Type == SdlcJobTypes.TrackerImport));
 
         await AgentJobs.RunQueuedAsync(_app, fixture.Project.Id);
         var sources = await SourcesAsync(fixture.Owner, fixture.Project.Id);

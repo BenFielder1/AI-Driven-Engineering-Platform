@@ -5,8 +5,6 @@ using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Review;
@@ -15,6 +13,7 @@ using Aide.IntegrationTests.Releases;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.GitLab;
 
@@ -163,7 +162,7 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
         await ReleaseFlowTests.StartExecutionAsync(app, fixture);
         await AgentJobs.RunQueuedAsync(app, id);
 
-        var review = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Review);
+        var review = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Review);
         Assert.Equal((JobStatus.Queued, 0), (review.Status, review.Attempts));
         Assert.True(JsonDocument.Parse(review.Payload).RootElement.TryGetProperty("checksWaitSince", out _));
         Assert.Empty(await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().Where(r => r.ProjectId == id).ToListAsync(Ct)));
@@ -502,7 +501,7 @@ public sealed class GitLabReleaseTests(AideApiFactory factory)
     }
 
     private static Task<Job> PollJobAsync(WebApplicationFactory<Program> app, Guid id) =>
-        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.MergePoll, Ct));
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.MergePoll, Ct));
 
     private static Task<ReleaseVersion> VersionAsync(WebApplicationFactory<Program> app, Guid id) =>
         ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == id, Ct));

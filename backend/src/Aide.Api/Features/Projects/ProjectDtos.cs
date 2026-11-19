@@ -3,14 +3,16 @@ using System.Text.Json.Serialization;
 using Aide.Api.Features.Git;
 using Aide.Api.Features.Release;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Projects;
 
@@ -353,7 +355,7 @@ public sealed record UpdateProjectRequest
 
 /// <summary>Latest and current locked version of one artifact type (§6 project state).</summary>
 public sealed record ArtifactStateDto(
-    ArtifactType Type,
+    [WireEnum(typeof(SdlcArtifacts))] string Type,
     int? LatestVersion,
     ArtifactStatus? LatestStatus,
     int? CurrentLockedVersion);
@@ -371,7 +373,7 @@ public sealed record ReviewStateDto(
     ReviewRunStatus Status);
 
 /// <summary>A pending approval gate.</summary>
-public sealed record GateSummaryDto(Guid Id, GateType Type, DateTimeOffset CreatedAt, bool Overdue);
+public sealed record GateSummaryDto(Guid Id, [WireEnum(typeof(SdlcGates))] string Type, DateTimeOffset CreatedAt, bool Overdue);
 
 /// <summary>
 /// Deterministic project state for the overview page and the CLI (§6 <c>/api/projects/:id/state</c>). <c>tokensUsed</c>

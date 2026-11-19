@@ -4,8 +4,9 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Execution;
 
@@ -75,7 +76,7 @@ public static partial class PlanDocument
     /// steps. A plan whose text could forge or break the <c>```aide-plan</c> block is refused here with
     /// <c>INVALID_PLAN</c> instead of becoming a draft that can never be approved.
     /// </summary>
-    public static Result<string> RenderChecked(ArtifactType type, IReadOnlyList<PlanStep> steps, int? maxFilesPerStep, PlanAgents? agents = null)
+    public static Result<string> RenderChecked(string type, IReadOnlyList<PlanStep> steps, int? maxFilesPerStep, PlanAgents? agents = null)
     {
         ArgumentNullException.ThrowIfNull(steps);
         var markdown = Render(type, steps);
@@ -101,10 +102,10 @@ public static partial class PlanDocument
     /// text, so runs of three or more backticks or tildes in it are backslash-escaped (<see cref="Neutralise"/>): it can
     /// never open, close or forge a fenced block. Declared paths can't hold backticks or line breaks (<see cref="PathRules"/>).
     /// </summary>
-    public static string Render(ArtifactType type, IReadOnlyList<PlanStep> steps)
+    public static string Render(string type, IReadOnlyList<PlanStep> steps)
     {
         ArgumentNullException.ThrowIfNull(steps);
-        var title = type == ArtifactType.OptimizationPlan ? "Optimization plan" : "Implementation plan";
+        var title = type == SdlcArtifacts.OptimizationPlan ? "Optimization plan" : "Implementation plan";
         var sb = new StringBuilder();
         sb.Append("# ").Append(title).Append("\n\n");
         sb.Append(steps.Count.ToString(CultureInfo.InvariantCulture)).Append(steps.Count == 1 ? " step" : " steps")

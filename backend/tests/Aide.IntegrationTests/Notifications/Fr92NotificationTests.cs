@@ -8,7 +8,6 @@ using Aide.Api.Features.Notifications;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
@@ -16,6 +15,7 @@ using Aide.IntegrationTests.Live;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Notifications;
 
@@ -213,7 +213,7 @@ public sealed class Fr92NotificationTests(AideApiFactory factory)
             .ToListAsync(Ct));
         var source = eventId.First(e => e.Payload.Contains(userId.ToString(), StringComparison.Ordinal)).Id;
         var jobs = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == null && j.Type == JobTypes.Notification && j.Status == JobStatus.Queued)
+            .Where(j => j.ProjectId == null && j.Type == SdlcJobTypes.Notification && j.Status == JobStatus.Queued)
             .ToListAsync(Ct));
         var job = Assert.Single(jobs, j => AideJson.Deserialize<NotificationJobPayload>(j.Payload).SourceId == source);
         Assert.Equal(new NotificationJobPayload(null, NotificationType.ConnectionInvalid, source), AideJson.Deserialize<NotificationJobPayload>(job.Payload));

@@ -1,16 +1,12 @@
 using System.Collections.Concurrent;
-using Aide.Api.Jobs;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
-using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Support;
 
@@ -27,7 +23,7 @@ public static class AgentJobs
     {
         ArgumentNullException.ThrowIfNull(app);
         // Notification jobs (FR-47 outbox) are left queued: notification tests run them explicitly.
-        var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).Where(t => t != JobTypes.Notification).ToArray();
+        var types = app.Services.GetServices<JobHandlerRegistration>().Select(r => r.JobType).Where(t => t != SdlcJobTypes.Notification).ToArray();
         // A job that deferred itself (FR-70: waiting for the codebase summary) stays queued and isn't run again here.
         var deferred = new HashSet<Guid>();
         for (var round = 0; round < 25; round++)
@@ -150,11 +146,11 @@ public static class AgentJobs
     public static Task<List<AgentRun>> RunsAsync(WebApplicationFactory<Program> app, Guid projectId) =>
         ProjectApi.WithDbAsync(app, db => db.AgentRuns.AsNoTracking().Where(r => r.ProjectId == projectId).OrderBy(r => r.CreatedAt).ToListAsync(Ct));
 
-    public static Task<List<Artifact>> ArtifactsAsync(WebApplicationFactory<Program> app, Guid projectId, ArtifactType type) =>
+    public static Task<List<Artifact>> ArtifactsAsync(WebApplicationFactory<Program> app, Guid projectId, string type) =>
         ProjectApi.WithDbAsync(app, db => db.Artifacts.AsNoTracking().Where(a => a.ProjectId == projectId && a.Type == type).OrderBy(a => a.Version).ToListAsync(Ct));
 
     /// <summary>A valid plan document (FR-29 storage format) with <paramref name="count"/> chained steps.</summary>
-    public static string PlanMarkdown(int count, ArtifactType type = ArtifactType.ImplementationPlan) =>
+    public static string PlanMarkdown(int count, string type = SdlcArtifacts.ImplementationPlan) =>
         PlanDocument.Render(type, [.. Enumerable.Range(1, count).Select(n => new PlanStep(
             n,
             $"Step {n}",
@@ -178,11 +174,11 @@ public static class AgentJobs
 }
 
 /// <summary>A Fake responder that answers with the given replies in turn (the last one repeats) and records each request.</summary>
-public sealed class ScriptedResponder(AgentKind agent, params string[] replies) : IFakeAgentResponder
+public sealed class ScriptedResponder(string agent, params string[] replies) : IFakeAgentResponder
 {
     private readonly ConcurrentQueue<LlmRequest> _requests = new();
 
-    public AgentKind Agent => agent;
+    public string Agent => agent;
 
     public IReadOnlyList<LlmRequest> Requests => [.. _requests];
 
@@ -202,7 +198,7 @@ public sealed class CountingResponder(IFakeAgentResponder inner) : IFakeAgentRes
 {
     private int _calls;
 
-    public AgentKind Agent => inner.Agent;
+    public string Agent => inner.Agent;
 
     public int Calls => _calls;
 

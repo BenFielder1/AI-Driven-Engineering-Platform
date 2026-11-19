@@ -1,14 +1,16 @@
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -179,7 +181,7 @@ public sealed partial class DeploymentTargetService(
     private async Task<Job?> LatestSetupJobAsync(Guid projectId, DeploymentTarget row, CancellationToken cancellationToken)
     {
         var candidates = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DeploymentSetup)
             .OrderByDescending(j => j.CreatedAt)
             .Take(20)
             .ToListAsync(cancellationToken);

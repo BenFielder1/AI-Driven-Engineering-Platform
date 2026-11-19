@@ -8,12 +8,9 @@ using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Versions;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
@@ -21,6 +18,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Releases;
 
@@ -66,7 +64,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status);
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.Release).Status);
         // §4.10: release completion doesn't create a checkpoint (0.1.0 incremented the project version to 7).
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal((Phase.Release, ProjectStatus.Released, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
@@ -104,7 +102,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         using var fixture = await ReleasableAsync(app);
         var id = fixture.Project.Id;
         await ApproveReleaseGateAsync(app, fixture);
-        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.Release);
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == SdlcJobTypes.Release);
         var main = await GitAsync(id, "rev-parse", "main");
         var tagObject = await GitAsync(id, "rev-parse", Tag);
 
@@ -142,7 +140,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var mainBefore = await GitAsync(id, "rev-parse", "main");
         await ApproveReleaseGateAsync(app, fixture);
 
-        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.Release);
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == SdlcJobTypes.Release);
 
         Assert.Equal(JobStatus.Succeeded, job.Status); // the job ended; the release failed for good
         var failed = await LatestAsync(fixture.Viewer.Client, id);
@@ -208,7 +206,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         Assert.Equal((ReleaseVersionStatus.Released, "v1.0.0", 6, 6), (released.Status, released.Tag, released.Checkpoints.Current, released.Checkpoints.Max));
         var baseline = await ProjectApi.ReadAsync<List<Aide.Api.Features.Artifacts.ArtifactSummaryDto>>(
             await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/artifacts?releaseVersionId={released.Id}", UriKind.Relative), Ct));
-        Assert.Contains(baseline, a => a.Type == ArtifactType.ImplementationPlan && a.Status == ArtifactStatus.Locked);
+        Assert.Contains(baseline, a => a.Type == SdlcArtifacts.ImplementationPlan && a.Status == ArtifactStatus.Locked);
         Assert.Empty(await ProjectApi.ReadAsync<List<Aide.Api.Features.Artifacts.ArtifactSummaryDto>>(
             await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/artifacts", UriKind.Relative), Ct)));
         var oldReleases = await ProjectApi.ReadAsync<List<ReleaseDto>>(
@@ -237,7 +235,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await ApproveReleaseGateAsync(app, fixture);
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == JobTypes.Release).Status); // the job ended; the release failed
+        Assert.Equal(JobStatus.Succeeded, Assert.Single(jobs, j => j.Type == SdlcJobTypes.Release).Status); // the job ended; the release failed
         var failed = await LatestAsync(fixture.Viewer.Client, id);
         Assert.Equal((ReleaseStatus.Failed, ErrorCodes.MergeConflict, 1), (failed.Status, failed.ErrorCode, failed.Attempt));
         Assert.Equal(["src/part1.js"], failed.ConflictingFiles);
@@ -259,7 +257,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var retried = await ProjectApi.ReadAsync<ReleaseDto>(await RetryAsync(fixture.Owner.Client, id), HttpStatusCode.Accepted);
         Assert.Equal((ReleaseStatus.InProgress, 2, Tag, 6), (retried.Status, retried.Attempt, retried.Tag, retried.Checkpoint));
         await Problems.AssertAsync(await RetryAsync(fixture.Owner.Client, id), HttpStatusCode.Conflict, ErrorCodes.ReleaseInProgress);
-        var retryJob = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Release && j.Status == JobStatus.Queued);
+        var retryJob = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Release && j.Status == JobStatus.Queued);
         Assert.Equal(ReleaseRecords.Retried, LifecycleSeed.Payload(retryJob.Payload).GetProperty("trigger").GetString());
 
         await AgentJobs.RunQueuedAsync(app, id);
@@ -300,7 +298,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 1);
         await LifecycleSeed.AddReportAsync(factory, id, 5, Domain.Review.ReviewDecision.ReleaseEligible);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
 
         await Problems.AssertAsync(await RetryAsync(fixture.Owner.Client, id), HttpStatusCode.Conflict, ErrorCodes.ReleaseInProgress);
@@ -322,9 +320,9 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Execution, Phase.Review, 5, DateTimeOffset.UtcNow.AddMinutes(-10));
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Planning, Phase.Execution, 4, DateTimeOffset.UtcNow.AddMinutes(-20));
         await LifecycleSeed.AddReportAsync(factory, id, 5, Domain.Review.ReviewDecision.ReleaseEligible);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
-        var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.Release);
+        var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.Release);
 
         // Running: the merge can't be undone, so the rollback waits.
         await ProjectApi.WithDbAsync(factory, db => db.Jobs.Where(j => j.Id == job.Id).ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, JobStatus.Running), Ct));
@@ -349,7 +347,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await SeedQueuedReleaseAsync(fixture);
-        var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.Release);
+        var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.Release);
 
         // A worker's claim is in flight: its statement holds the job row (running, not committed yet).
         await using var scope = factory.Services.CreateAsyncScope();
@@ -385,7 +383,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         var lockFile = Path.Combine(WorkingCopy(id), ".git", "refs", "tags", Tag + ".lock");
         Directory.CreateDirectory(Path.GetDirectoryName(lockFile)!);
         await File.WriteAllTextAsync(lockFile, string.Empty, Ct);
-        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.Release);
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == SdlcJobTypes.Release);
         Assert.NotEqual(JobStatus.Succeeded, job.Status);
         var main = await GitAsync(id, "rev-parse", "main");
         var attempt = await LatestAsync(fixture.Viewer.Client, id);
@@ -521,9 +519,9 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
 
         // Delivered again with the tag on GitHub: a no-op, no second merge.
         await UnrecordAsync(app, id);
-        await RedeliverAsync(app, Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Release));
+        await RedeliverAsync(app, Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Release));
         Assert.Equal(1, api.Count(HttpMethod.Put, Pull + "/merge"));
-        var redelivered = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == JobTypes.Release);
+        var redelivered = Assert.Single(await LifecycleSeed.JobsAsync(app, id), j => j.Type == SdlcJobTypes.Release);
         Assert.True(redelivered.Status == JobStatus.Succeeded, redelivered.LastError);
         var again = await LatestAsync(fixture.Viewer.Client, id);
         Assert.True(again.Status == ReleaseStatus.Succeeded, $"{again.Status} {again.ErrorCode} {again.ErrorMessage}");
@@ -571,7 +569,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
         await ApproveReleaseGateAsync(app, fixture);
 
-        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.Release);
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == SdlcJobTypes.Release);
 
         // A transient failure (the next attempt fetches again); nothing was merged.
         Assert.Equal(JobStatus.Dead, job.Status); // the test runner dead-letters transient failures
@@ -590,7 +588,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Execution, Phase.Review, 5, DateTimeOffset.UtcNow.AddMinutes(-10));
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Planning, Phase.Execution, 4, DateTimeOffset.UtcNow.AddMinutes(-20));
         await LifecycleSeed.AddReportAsync(factory, id, 5, Domain.Review.ReviewDecision.ReleaseEligible);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
     }
 
@@ -631,9 +629,9 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     {
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.AddRange(Enumerable.Range(1, 2).Select(n => new ExecutionStep
@@ -655,7 +653,7 @@ public sealed class ReleaseFlowTests(AideApiFactory factory)
     internal static async Task ApproveReleaseGateAsync(WebApplicationFactory<Program> app, ProjectFixture fixture)
     {
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(app, fixture.Project.Id), g => g.Status == GateStatus.Pending);
-        Assert.Equal(GateType.PreRelease, gate.Type);
+        Assert.Equal(SdlcGates.PreRelease, gate.Type);
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, fixture.Project.Id, gate.Id, "approve"));
         var project = await LifecycleSeed.ProjectAsync(app, fixture.Project.Id);
         Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));

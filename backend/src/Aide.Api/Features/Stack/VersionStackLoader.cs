@@ -1,5 +1,3 @@
-using Aide.Api.Jobs;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
@@ -8,6 +6,9 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Stack;
 
@@ -50,14 +51,14 @@ public sealed record VersionStackContext(ReleaseVersion? Version, bool RepoEmpty
     public LegacyPlanAgents? Legacy { get; init; }
 
     /// <summary>The agents and rules plan validation uses for a plan of <paramref name="type"/> (FR-124, §4.23).</summary>
-    public PlanAgents PlanAgents(ArtifactType type)
+    public PlanAgents PlanAgents(string type)
     {
         if (Stack is not { } stack)
         {
             return Domain.Execution.PlanAgents.None;
         }
 
-        var agents = type == ArtifactType.OptimizationPlan
+        var agents = type == SdlcArtifacts.OptimizationPlan
             ? Domain.Execution.PlanAgents.ForStackOptimization(stack, BaseFiles)
             : Domain.Execution.PlanAgents.ForStack(stack, RepoEmpty, BaseFiles);
         return agents with { Legacy = Legacy };

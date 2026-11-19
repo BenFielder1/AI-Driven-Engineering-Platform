@@ -2,12 +2,12 @@ using System.ComponentModel.DataAnnotations;
 using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Api.Features.Projects;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
-using Aide.Domain.Jobs;
 using Aide.Domain.Trackers;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Trackers;
 
@@ -311,7 +311,6 @@ public static class TrackerServiceCollectionExtensions
         services.AddScoped<SourceSnapshotWriter>();
         services.AddScoped<SourceImportService>();
         services.AddScoped<IJobEndedHook, TrackerImportJobEndedHook>();
-        services.AddJobHandler<TrackerImportJobHandler>(JobTypes.TrackerImport);
         return services;
     }
 }

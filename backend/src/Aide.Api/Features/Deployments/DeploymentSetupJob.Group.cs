@@ -1,14 +1,16 @@
 using Aide.Api.Features.Databases;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -199,7 +201,7 @@ public sealed partial class DeploymentSetupJobHandler
             var linkHere = link is not null && (row.Environment == DeploymentEnvironment.Production || (group.Provider == DeploymentProvider.Railway && !access.UsesFake));
             var name = row.Environment == DeploymentEnvironment.Preview ? ManagedDatabaseRules.RenderPreviewName(production) : production;
             var job = jobs.Enqueue(
-                JobTypes.DatabaseProvisioning,
+                SdlcJobTypes.DatabaseProvisioning,
                 new DatabaseProvisioningPayload(
                     row.ProjectId, row.Id, linkHere ? DatabaseSetupMode.Link : DatabaseSetupMode.Create, name, group.Region, null, linkHere ? link : null, DatabaseProvisioningPayload.SetupPhase),
                 row.ProjectId,
@@ -248,7 +250,7 @@ public sealed partial class DeploymentSetupJobHandler
     private async Task<bool> IsNewestGroupJobAsync(Guid jobId, DeploymentSetupPayload payload, CancellationToken cancellationToken)
     {
         var candidates = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == payload.ProjectId && j.Type == JobTypes.DeploymentSetup)
+            .Where(j => j.ProjectId == payload.ProjectId && j.Type == SdlcJobTypes.DeploymentSetup)
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
             .Take(50)
             .ToListAsync(cancellationToken);

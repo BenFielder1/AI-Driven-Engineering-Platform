@@ -1,12 +1,12 @@
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
-using Aide.Domain.Entities;
+using Aide.Api.Features.Projects;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Runs;
 
 /// <summary>An artifact version a run used as input (FR-23).</summary>
-public sealed record RunInputArtifactDto(ArtifactType Type, int Version);
+public sealed record RunInputArtifactDto([WireEnum(typeof(SdlcArtifacts))] string Type, int Version);
 
 /// <summary>
 /// An agent run (FR-23): which agent ran in which phase (and step), on which provider and model, with which prompt
@@ -23,7 +23,7 @@ public sealed record RunInputArtifactDto(ArtifactType Type, int Version);
 public sealed record AgentRunDto(
     Guid Id,
     Guid? ReleaseVersionId,
-    AgentKind Agent,
+    [WireEnum(typeof(SdlcAgents))] string Agent,
     Phase Phase,
     Guid? StepId,
     LlmProvider Provider,
@@ -60,7 +60,7 @@ public sealed record AgentRunDto(
 public sealed record AgentRunDetailDto(
     Guid Id,
     Guid? ReleaseVersionId,
-    AgentKind Agent,
+    [WireEnum(typeof(SdlcAgents))] string Agent,
     Phase Phase,
     Guid? StepId,
     LlmProvider Provider,

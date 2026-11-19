@@ -1,0 +1,569 @@
+{
+  "agentRuns": [
+    {
+      "agent": "idea_refinement",
+      "id": "job#1",
+      "phase": "refinement",
+      "promptVersion": "6",
+      "status": "succeeded"
+    },
+    {
+      "agent": "spec_generator",
+      "id": "job#2",
+      "phase": "specification",
+      "promptVersion": "7",
+      "status": "succeeded"
+    },
+    {
+      "agent": "plan_generator",
+      "id": "job#3",
+      "phase": "planning",
+      "promptVersion": "7",
+      "status": "succeeded"
+    },
+    {
+      "agent": "code_generator",
+      "id": "agent_run#1",
+      "phase": "execution",
+      "promptVersion": "5",
+      "status": "succeeded"
+    }
+  ],
+  "artifacts": [
+    {
+      "agentRun": "job#1",
+      "checkpointAtCreation": 1,
+      "contentHash": "4861a5bb3fedee25eec17444cdf280c74f7ae35def1e63c732705f1b015462e5",
+      "createdBy": null,
+      "id": "artifact#1",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "locked",
+      "type": "project_request",
+      "version": 1
+    },
+    {
+      "agentRun": "job#2",
+      "checkpointAtCreation": 2,
+      "contentHash": "19f8947646beab808d3c861b159eb1281d98290c1251ad9242af48f740a8617e",
+      "createdBy": null,
+      "id": "artifact#2",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "invalidated",
+      "type": "technical_specification",
+      "version": 1
+    },
+    {
+      "agentRun": "job#3",
+      "checkpointAtCreation": 3,
+      "contentHash": "43fe15b236cb8ee184887461a8620b7c7c359061643392d68cf8e9986a9de5bc",
+      "createdBy": null,
+      "id": "artifact#3",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "invalidated",
+      "type": "implementation_plan",
+      "version": 1
+    },
+    {
+      "agentRun": null,
+      "checkpointAtCreation": 4,
+      "contentHash": "beb99454bd1c678e5982798ba17435f0a3ad18e03327d3d99372bc83ec945159",
+      "createdBy": "user:contributor",
+      "id": "artifact#4",
+      "parentVersion": 1,
+      "restoredFromVersion": null,
+      "status": "locked",
+      "type": "project_request",
+      "version": 2
+    }
+  ],
+  "events": [
+    {
+      "actor": "user:owner",
+      "id": "event#1",
+      "payload": {
+        "actor": "user:owner",
+        "catalogVersion": null,
+        "developmentVersion": "0.1.0",
+        "importedTag": null,
+        "name": "Todo API",
+        "projectId": "project#1",
+        "repoFullName": null,
+        "repoHasCode": null,
+        "source": "scratch",
+        "stackPacks": []
+      },
+      "type": "PROJECT_CREATED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#2",
+      "payload": {
+        "agent": "idea_refinement",
+        "agentKey": null,
+        "jobId": "job#1",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "6",
+        "provider": "fake",
+        "runId": "job#1",
+        "stack": null,
+        "stepId": null
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#3",
+      "payload": {
+        "agent": "idea_refinement",
+        "runId": "job#1",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#4",
+      "payload": {
+        "agentRunId": "job#1",
+        "artifactId": "artifact#1",
+        "author": "agent",
+        "parentVersion": null,
+        "type": "project_request",
+        "version": 1
+      },
+      "type": "ARTIFACT_CREATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#5",
+      "payload": {
+        "artifactId": "artifact#1",
+        "comment": null,
+        "createdStepCount": 0,
+        "invalidatedArtifactIds": [],
+        "resetStepIds": [],
+        "type": "project_request",
+        "version": 1
+      },
+      "type": "ARTIFACT_APPROVED"
+    },
+    {
+      "actor": "user:contributor",
+      "id": "event#6",
+      "payload": {
+        "checkpoint": 2,
+        "from": "refinement",
+        "kind": "advance",
+        "reason": "Advanced to specification",
+        "releaseVersionId": "release_version#1",
+        "status": "active",
+        "to": "specification"
+      },
+      "type": "PHASE_CHANGED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#7",
+      "payload": {
+        "agent": "spec_generator",
+        "agentKey": null,
+        "jobId": "job#2",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "7",
+        "provider": "fake",
+        "runId": "job#2",
+        "stack": null,
+        "stepId": null
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#8",
+      "payload": {
+        "agent": "spec_generator",
+        "runId": "job#2",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#9",
+      "payload": {
+        "agentRunId": "job#2",
+        "artifactId": "artifact#2",
+        "author": "agent",
+        "parentVersion": null,
+        "type": "technical_specification",
+        "version": 1
+      },
+      "type": "ARTIFACT_CREATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#10",
+      "payload": {
+        "artifactId": "artifact#2",
+        "comment": null,
+        "createdStepCount": 0,
+        "invalidatedArtifactIds": [],
+        "resetStepIds": [],
+        "type": "technical_specification",
+        "version": 1
+      },
+      "type": "ARTIFACT_APPROVED"
+    },
+    {
+      "actor": "user:contributor",
+      "id": "event#11",
+      "payload": {
+        "artifactId": "artifact#2",
+        "checkpoint": 2,
+        "gateId": "gate#1",
+        "reason": null,
+        "type": "spec_approval"
+      },
+      "type": "GATE_CREATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#12",
+      "payload": {
+        "checkpoint": 3,
+        "from": "specification",
+        "kind": "advance",
+        "reason": "spec_approval gate approved",
+        "releaseVersionId": "release_version#1",
+        "status": "active",
+        "to": "planning"
+      },
+      "type": "PHASE_CHANGED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#13",
+      "payload": {
+        "comment": null,
+        "decision": null,
+        "gateId": "gate#1",
+        "targetCheckpoint": null,
+        "type": "spec_approval"
+      },
+      "type": "GATE_APPROVED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#14",
+      "payload": {
+        "agent": "plan_generator",
+        "agentKey": null,
+        "jobId": "job#3",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "7",
+        "provider": "fake",
+        "runId": "job#3",
+        "stack": null,
+        "stepId": null
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#15",
+      "payload": {
+        "agent": "plan_generator",
+        "runId": "job#3",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#16",
+      "payload": {
+        "agentRunId": "job#3",
+        "artifactId": "artifact#3",
+        "author": "agent",
+        "parentVersion": null,
+        "type": "implementation_plan",
+        "version": 1
+      },
+      "type": "ARTIFACT_CREATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#17",
+      "payload": {
+        "artifactId": "artifact#3",
+        "comment": null,
+        "createdStepCount": 4,
+        "invalidatedArtifactIds": [],
+        "resetStepIds": [],
+        "type": "implementation_plan",
+        "version": 1
+      },
+      "type": "ARTIFACT_APPROVED"
+    },
+    {
+      "actor": "user:contributor",
+      "id": "event#18",
+      "payload": {
+        "checkpoint": 4,
+        "from": "planning",
+        "kind": "advance",
+        "reason": "Advanced to execution",
+        "releaseVersionId": "release_version#1",
+        "status": "building",
+        "to": "execution"
+      },
+      "type": "PHASE_CHANGED"
+    },
+    {
+      "actor": "user:contributor",
+      "id": "event#19",
+      "payload": {
+        "branch": "tevrin/<slug>/v0.1.0"
+      },
+      "type": "EXECUTION_STARTED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#20",
+      "payload": {
+        "attempt": 1,
+        "planArtifactId": "artifact#3",
+        "stepId": "step#1",
+        "stepNumber": 1,
+        "title": "Project skeleton and configuration"
+      },
+      "type": "STEP_STARTED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#21",
+      "payload": {
+        "agent": "code_generator",
+        "agentKey": null,
+        "jobId": "job#4",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "5",
+        "provider": "fake",
+        "runId": "agent_run#1",
+        "stack": null,
+        "stepId": "step#1"
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#22",
+      "payload": {
+        "agent": "code_generator",
+        "runId": "agent_run#1",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "aide-system",
+      "id": "event#23",
+      "payload": {
+        "attempt": 1,
+        "branch": "tevrin/<slug>/v0.1.0",
+        "commitSha": "sha#1",
+        "fileCount": 3,
+        "pushed": true,
+        "stepId": "step#1",
+        "stepNumber": 1,
+        "warningCount": 0
+      },
+      "type": "STEP_COMPLETED"
+    },
+    {
+      "actor": "user:contributor",
+      "id": "event#24",
+      "payload": {
+        "artifactId": "artifact#4",
+        "author": "user",
+        "parentVersion": 1,
+        "type": "project_request",
+        "version": 2
+      },
+      "type": "ARTIFACT_CREATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#25",
+      "payload": {
+        "artifactId": "artifact#4",
+        "comment": null,
+        "createdStepCount": 0,
+        "invalidatedArtifactIds": [
+          "artifact#2",
+          "artifact#3"
+        ],
+        "resetStepIds": [
+          "step#1",
+          "step#2",
+          "step#3",
+          "step#4"
+        ],
+        "type": "project_request",
+        "version": 2
+      },
+      "type": "ARTIFACT_APPROVED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#26",
+      "payload": {
+        "approvedArtifactId": "artifact#4",
+        "approvedType": "project_request",
+        "approvedVersion": 2,
+        "artifactId": "artifact#3",
+        "cause": "cascade",
+        "type": "implementation_plan",
+        "version": 1
+      },
+      "type": "ARTIFACT_INVALIDATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#27",
+      "payload": {
+        "approvedArtifactId": "artifact#4",
+        "approvedType": "project_request",
+        "approvedVersion": 2,
+        "artifactId": "artifact#2",
+        "cause": "cascade",
+        "type": "technical_specification",
+        "version": 1
+      },
+      "type": "ARTIFACT_INVALIDATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#28",
+      "payload": {
+        "checkpoint": 4,
+        "from": "execution",
+        "kind": "invalidation_fallback",
+        "reason": "project_request v2 approved; downstream work invalidated",
+        "releaseVersionId": "release_version#1",
+        "status": "active",
+        "to": "specification"
+      },
+      "type": "PHASE_CHANGED"
+    }
+  ],
+  "gates": [
+    {
+      "artifact": "artifact#2",
+      "decision": null,
+      "hasComment": false,
+      "id": "gate#1",
+      "reviewer": "user:owner",
+      "status": "approved",
+      "targetCheckpoint": null,
+      "type": "spec_approval"
+    }
+  ],
+  "jobs": [
+    {
+      "attempts": 1,
+      "id": "job#1",
+      "status": "succeeded",
+      "trigger": "user_requested",
+      "type": "idea_refinement"
+    },
+    {
+      "attempts": 1,
+      "id": "job#2",
+      "status": "succeeded",
+      "trigger": "stage_entered",
+      "type": "spec_generation"
+    },
+    {
+      "attempts": 1,
+      "id": "job#3",
+      "status": "succeeded",
+      "trigger": "stage_entered",
+      "type": "plan_generation"
+    },
+    {
+      "attempts": 1,
+      "id": "job#4",
+      "status": "succeeded",
+      "trigger": "start",
+      "type": "execution"
+    },
+    {
+      "attempts": 0,
+      "id": "job#5",
+      "status": "cancelled",
+      "trigger": "continue",
+      "type": "execution"
+    }
+  ],
+  "project": {
+    "approvalMode": "advisory",
+    "checkpoint": 4,
+    "developmentVersion": "0.1.0",
+    "extraReviewCycles": 0,
+    "phase": "specification",
+    "releasedVersion": null,
+    "reviewCycle": 0,
+    "status": "active"
+  },
+  "scenario": "new_project_request_approved_mid_execution",
+  "transitions": [
+    {
+      "actor": "user:owner",
+      "checkpoint": 1,
+      "from": null,
+      "id": "transition#1",
+      "reason": "project created",
+      "to": "refinement"
+    },
+    {
+      "actor": "user:contributor",
+      "checkpoint": 2,
+      "from": "refinement",
+      "id": "transition#2",
+      "reason": "Advanced to specification",
+      "to": "specification"
+    },
+    {
+      "actor": "user:owner",
+      "checkpoint": 3,
+      "from": "specification",
+      "id": "transition#3",
+      "reason": "spec_approval gate approved",
+      "to": "planning"
+    },
+    {
+      "actor": "user:contributor",
+      "checkpoint": 4,
+      "from": "planning",
+      "id": "transition#4",
+      "reason": "Advanced to execution",
+      "to": "execution"
+    },
+    {
+      "actor": "user:owner",
+      "checkpoint": 4,
+      "from": "execution",
+      "id": "transition#5",
+      "reason": "project_request v2 approved; downstream work invalidated",
+      "to": "specification"
+    }
+  ]
+}

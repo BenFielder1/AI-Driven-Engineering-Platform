@@ -4,11 +4,8 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Runs;
 using Aide.Api.Features.Stack;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
@@ -17,6 +14,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Stack;
 
@@ -64,9 +62,9 @@ public sealed class PresetRetirementTests(AideApiFactory factory)
         WebApplicationFactory<Program> app, Guid id, (PlanStep Step, string? LegacyAgentKey)[] plan, int completedThrough)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\nNext.js + Supabase.");
-        var planArtifact = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: PlanDocument.Render(ArtifactType.ImplementationPlan, [.. plan.Select(p => p.Step)]));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\nNext.js + Supabase.");
+        var planArtifact = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: PlanDocument.Render(SdlcArtifacts.ImplementationPlan, [.. plan.Select(p => p.Step)]));
         return await ProjectApi.WithDbAsync<IReadOnlyList<ExecutionStep>>(app, async db =>
         {
             var steps = plan.Select(p => new ExecutionStep
@@ -145,7 +143,7 @@ public sealed class PresetRetirementTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         var run = (await AgentJobs.RunsAsync(app, id)).Single(r => r.StepId == steps[3].Id);
-        Assert.Equal((AgentKind.CodeGenerator, "data-engineer", (string?)null), (run.Agent, run.AgentKey, run.PresetId));
+        Assert.Equal((SdlcAgents.CodeGenerator, "data-engineer", (string?)null), (run.Agent, run.AgentKey, run.PresetId));
         Assert.Contains("data-supabase", run.Packs, StringComparison.Ordinal);
         var system = recording.Requests[0].System;
         Assert.Contains("## Your role: Data engineer (data-engineer)", system, StringComparison.Ordinal);

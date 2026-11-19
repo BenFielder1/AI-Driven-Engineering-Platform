@@ -4,10 +4,8 @@ using Aide.Api.Features.Versions;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
@@ -15,6 +13,13 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Agents;
 
@@ -48,7 +53,7 @@ public sealed partial class StackAnalysisJobHandler(
         ArgumentNullException.ThrowIfNull(job);
         var payload = AgentJobInputs.Payload(job);
         var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
-        if (project is null || !AgentJobInputs.ShouldRun(payload, ArtifactType.StackProfile, project))
+        if (project is null || !AgentJobInputs.ShouldRun(payload, SdlcArtifacts.StackProfile, project))
         {
             AgentJobLog.Skipped(logger, job.Type, payload.Trigger, project?.CurrentPhase);
             return;
@@ -75,8 +80,8 @@ public sealed partial class StackAnalysisJobHandler(
         }
 
         var runIds = new[] { AgentRunRules.RunId(job.Id), AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey) };
-        if (payload.Trigger == LifecycleJobPayload.PhaseEntered && await db.Artifacts.AsNoTracking().AnyAsync(
-                a => a.ProjectId == project.Id && a.ReleaseVersionId == version.Id && a.Type == ArtifactType.StackProfile
+        if (payload.Trigger == LifecycleJobPayload.StageEntered && await db.Artifacts.AsNoTracking().AnyAsync(
+                a => a.ProjectId == project.Id && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.StackProfile
                     && (a.AgentRunId == null || !runIds.Contains(a.AgentRunId.Value)),
                 cancellationToken))
         {
@@ -84,8 +89,8 @@ public sealed partial class StackAnalysisJobHandler(
             return;
         }
 
-        var summary = await inputs.CurrentAsync(project.Id, ArtifactType.CodebaseSummary, cancellationToken);
-        var previous = await inputs.PreviousAsync(payload, ArtifactType.StackProfile, cancellationToken);
+        var summary = await inputs.CurrentAsync(project.Id, SdlcArtifacts.CodebaseSummary, cancellationToken);
+        var previous = await inputs.PreviousAsync(payload, SdlcArtifacts.StackProfile, cancellationToken);
         var repoBase = await bases.ReadAsync(version, detect: true, cancellationToken);
         await RecordDetectionAsync(project.Id, version, repoBase.Detection, job.Id, cancellationToken);
 
@@ -98,7 +103,7 @@ public sealed partial class StackAnalysisJobHandler(
         AgentRunRequest Request(string? feedback) => new()
         {
             ProjectId = project.Id,
-            Agent = AgentKind.StackAnalyst,
+            Agent = SdlcAgents.StackAnalyst,
             Job = job,
             Inputs = new Dictionary<string, string?>
             {
@@ -121,7 +126,7 @@ public sealed partial class StackAnalysisJobHandler(
         };
 
         var spec = new ArtifactAgentSpec(
-            ArtifactType.StackProfile,
+            SdlcArtifacts.StackProfile,
             text =>
             {
                 var reply = StackProfile.CheckReply(text, context);
@@ -211,22 +216,24 @@ public sealed partial class StackAnalysisJobHandler(
 
 /// <summary>
 /// FR-180: when a version's Repository Analyst ends — succeeded, skipped or failed — and that version infers its stack and is
-/// still in <c>analysis</c>, the Stack Analyst is queued (<c>stack_analysis</c>, trigger <c>phase_entered</c>), in the same
+/// still in <c>analysis</c>, the Stack Analyst is queued (<c>stack_analysis</c>, trigger <c>stage_entered</c>), in the same
 /// transaction as the job's final status. Idempotent: nothing is queued when a stack analysis was already queued for the version.
 /// </summary>
 public sealed class StackAnalysisTrigger(TimeProvider time) : IJobSucceededHook, IJobEndedHook
 {
-    public Task OnJobSucceededAsync(AideDbContext db, JobExecution job, CancellationToken cancellationToken)
+    public Task OnJobSucceededAsync(IEngineDbContext engineDb, JobExecution job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(job);
-        return job.Type == JobTypes.RepositoryAnalysis ? QueueAsync(db, job.Payload, cancellationToken) : Task.CompletedTask;
+        return job.Type == SdlcJobTypes.RepositoryAnalysis ? QueueAsync(db, job.Payload, cancellationToken) : Task.CompletedTask;
     }
 
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.RepositoryAnalysis)
+        if (job.JobType != SdlcJobTypes.RepositoryAnalysis)
         {
             return;
         }
@@ -269,8 +276,8 @@ public sealed class StackAnalysisTrigger(TimeProvider time) : IJobSucceededHook,
             return;
         }
 
-        var queued = db.ChangeTracker.Entries<Job>().Any(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.StackAnalysis && e.Entity.ProjectId == project.Id)
-            || await db.Jobs.AsNoTracking().AnyAsync(j => j.ProjectId == project.Id && j.Type == JobTypes.StackAnalysis && j.CreatedAt >= version.CreatedAt, cancellationToken);
+        var queued = db.ChangeTracker.Entries<Job>().Any(e => e.State == EntityState.Added && e.Entity.Type == SdlcJobTypes.StackAnalysis && e.Entity.ProjectId == project.Id)
+            || await db.Jobs.AsNoTracking().AnyAsync(j => j.ProjectId == project.Id && j.Type == SdlcJobTypes.StackAnalysis && j.CreatedAt >= version.CreatedAt, cancellationToken);
         if (queued)
         {
             return;
@@ -279,8 +286,8 @@ public sealed class StackAnalysisTrigger(TimeProvider time) : IJobSucceededHook,
         var now = time.GetUtcNow();
         db.Jobs.Add(new Job
         {
-            Type = JobTypes.StackAnalysis,
-            Payload = AideJson.Serialize(new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.PhaseEntered)),
+            Type = SdlcJobTypes.StackAnalysis,
+            Payload = AideJson.Serialize(new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.StageEntered)),
             ProjectId = project.Id,
             Status = JobStatus.Queued,
             Attempts = 0,
@@ -295,7 +302,6 @@ public static class StackAnalysisServiceCollectionExtensions
     /// <summary>FR-180–FR-185: the Stack Analyst job, its trigger after the Repository Analyst, and the Analysis page's services.</summary>
     public static IServiceCollection AddStackAnalysis(this IServiceCollection services)
     {
-        services.AddJobHandler<StackAnalysisJobHandler>(JobTypes.StackAnalysis);
         services.AddScoped<StackAnalysisTrigger>();
         services.AddScoped<IJobSucceededHook>(sp => sp.GetRequiredService<StackAnalysisTrigger>());
         services.AddScoped<IJobEndedHook>(sp => sp.GetRequiredService<StackAnalysisTrigger>());

@@ -2,22 +2,25 @@ using System.Text.Json;
 using Aide.Api.Agents;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Git;
 
-/// <summary>Payload of a <see cref="JobTypes.PullRequest"/> job (FR-36): the project, the plan whose steps all completed, and what queued it.</summary>
+/// <summary>Payload of a <see cref="SdlcJobTypes.PullRequest"/> job (FR-36): the project, the plan whose steps all completed, and what queued it.</summary>
 public sealed record PullRequestJobPayload(Guid ProjectId, Guid PlanArtifactId, string Trigger)
 {
     /// <summary>The last step of the plan completed (<see cref="GitCompletionHook"/>).</summary>
@@ -40,7 +43,7 @@ public sealed class PullRequestJobs(AideDbContext db, JobEnqueuer jobs)
     {
         if (!await PendingAsync(projectId, cancellationToken))
         {
-            await jobs.EnqueueAsync(JobTypes.PullRequest, new PullRequestJobPayload(projectId, planArtifactId, trigger), projectId, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.PullRequest, new PullRequestJobPayload(projectId, planArtifactId, trigger), projectId, cancellationToken, now);
         }
     }
 
@@ -63,7 +66,7 @@ public sealed class PullRequestJobs(AideDbContext db, JobEnqueuer jobs)
         var verdict = PullRequestRules.CanRequest(facts);
         if (verdict.IsSuccess)
         {
-            await jobs.EnqueueAsync(JobTypes.PullRequest, new PullRequestJobPayload(project.Id, planId!.Value, trigger), project.Id, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.PullRequest, new PullRequestJobPayload(project.Id, planId!.Value, trigger), project.Id, cancellationToken, now);
         }
 
         return verdict;
@@ -71,9 +74,9 @@ public sealed class PullRequestJobs(AideDbContext db, JobEnqueuer jobs)
 
     private async Task<bool> PendingAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.ChangeTracker.Entries<Job>()
-            .Any(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.PullRequest && e.Entity.ProjectId == projectId)
+            .Any(e => e.State == EntityState.Added && e.Entity.Type == SdlcJobTypes.PullRequest && e.Entity.ProjectId == projectId)
         || await db.Jobs.AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.PullRequest && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PullRequest && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken);
 }
 
@@ -117,7 +120,7 @@ public sealed partial class PullRequestJobHandler(
     LifecycleService lifecycle,
     Deployments.RolloutScheduler rollouts,
     BuildChecks.BuildCheckService buildChecks,
-    Microsoft.Extensions.Options.IOptions<Notifications.AppOptions> appOptions,
+    Microsoft.Extensions.Options.IOptions<Tevrin.Engine.Runtime.Notifications.AppOptions> appOptions,
     TimeProvider time,
     ILogger<PullRequestJobHandler> logger) : IJobHandler
 {
@@ -349,7 +352,7 @@ public sealed partial class PullRequestJobHandler(
 
     private async Task<PullRequestInput> DescriptionInputAsync(Project project, Guid planId, List<ExecutionStep> steps, CancellationToken cancellationToken)
     {
-        var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
         var plan = await db.Artifacts.AsNoTracking()
             .Where(a => a.Id == planId)
             .Select(a => new { a.Type, a.Version })
@@ -432,11 +435,12 @@ public sealed partial class PullRequestJobHandler(
 /// <summary>A pull request job that ended without succeeding records <c>PULL_REQUEST_FAILED</c> with its last (token-free) error.</summary>
 public sealed class PullRequestJobEndedHook(TimeProvider time) : IJobEndedHook
 {
-    public Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType == JobTypes.PullRequest && job.ProjectId is { } projectId)
+        if (job.JobType == SdlcJobTypes.PullRequest && job.ProjectId is { } projectId)
         {
             db.AddEvent(
                 EventTypes.PullRequestFailed,
@@ -502,7 +506,6 @@ public static class PullRequestServiceCollectionExtensions
         services.AddScoped<IExecutionCompletionHook, GitCompletionHook>();
         services.AddScoped<IJobEndedHook, PullRequestJobEndedHook>();
         services.AddScoped<PullRequestReader>();
-        services.AddJobHandler<PullRequestJobHandler>(JobTypes.PullRequest);
         return services;
     }
 }

@@ -3,10 +3,10 @@ using Aide.Api.Auth;
 using Aide.Api.Errors;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Llm;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Admin;
 

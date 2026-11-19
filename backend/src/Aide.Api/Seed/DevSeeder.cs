@@ -11,12 +11,9 @@ using Aide.Api.Features.Trackers;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
@@ -30,6 +27,12 @@ using Aide.Infrastructure.Stack;
 using Aide.Infrastructure.Trackers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Seed;
 
@@ -377,7 +380,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             && !await db.Releases.AnyAsync(r => r.ProjectId == id, cancellationToken)
             && !await db.RollbackEvents.AnyAsync(r => r.ProjectId == id, cancellationToken)
             && !await db.Deployments.AnyAsync(d => d.ProjectId == id, cancellationToken)
-            && !await db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type != JobTypes.Notification, cancellationToken)
+            && !await db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type != SdlcJobTypes.Notification, cancellationToken)
             && !await db.StateTransitions.AnyAsync(t => t.ProjectId == id && t.FromPhase != null, cancellationToken)
             && !await db.Events.AnyAsync(e => e.ProjectId == id && e.Type != EventTypes.ProjectCreated, cancellationToken);
     }
@@ -577,12 +580,12 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         version.PresetId = DemoPresetId;
         version.PresetVersion = DemoPresetVersion;
         const int planningCheckpoint = 3;
-        AddLockedArtifact(db, project, versionId, ArtifactType.ProjectRequest, 1, PresetDemoRequest(), admin.Id, now);
-        AddLockedArtifact(db, project, versionId, ArtifactType.TechnicalSpecification, 2, PresetDemoSpecification(await SpecSectionsAsync(services, version, cancellationToken)), admin.Id, now);
-        EnterPhase(db, project, versionId, Phase.Planning, planningCheckpoint, DemoPresetReason, now);
+        AddLockedArtifact(db, project, versionId, SdlcArtifacts.ProjectRequest, 1, PresetDemoRequest(), admin.Id, now);
+        AddLockedArtifact(db, project, versionId, SdlcArtifacts.TechnicalSpecification, 2, PresetDemoSpecification(await SpecSectionsAsync(services, version, cancellationToken)), admin.Id, now);
+        EnterPhase(services, db, project, versionId, Phase.Planning, planningCheckpoint, DemoPresetReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
-            JobTypes.PlanGeneration,
-            new LifecycleJobPayload(projectId, planningCheckpoint, LifecycleJobPayload.PhaseEntered),
+            SdlcJobTypes.PlanGeneration,
+            new LifecycleJobPayload(projectId, planningCheckpoint, LifecycleJobPayload.StageEntered),
             projectId,
             cancellationToken,
             now);
@@ -634,11 +637,11 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
         var versionId = project.CurrentReleaseVersionId!.Value;
         const int specificationCheckpoint = 2;
-        AddLockedArtifact(db, project, versionId, ArtifactType.ProjectRequest, 1, BaasDemoRequest(), admin.Id, now);
-        EnterPhase(db, project, versionId, Phase.Specification, specificationCheckpoint, DemoBaasReason, now);
+        AddLockedArtifact(db, project, versionId, SdlcArtifacts.ProjectRequest, 1, BaasDemoRequest(), admin.Id, now);
+        EnterPhase(services, db, project, versionId, Phase.Specification, specificationCheckpoint, DemoBaasReason, now);
         await services.GetRequiredService<JobEnqueuer>().EnqueueAsync(
-            JobTypes.SpecGeneration,
-            new LifecycleJobPayload(projectId, specificationCheckpoint, LifecycleJobPayload.PhaseEntered),
+            SdlcJobTypes.SpecGeneration,
+            new LifecycleJobPayload(projectId, specificationCheckpoint, LifecycleJobPayload.StageEntered),
             projectId,
             cancellationToken,
             now);
@@ -701,7 +704,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         // Rule 8, FR-178: like a project created with "Infer", the version starts in analysis: its creation transition (from no
         // phase) goes into analysis, and no refinement → analysis transition is recorded.
         project.CurrentPhase = Phase.Analysis;
-        project.Status = PhaseOrder.StatusFor(Phase.Analysis);
+        project.Status = SdlcStages.StatusFor(services.GetRequiredService<Pipelines.SdlcLifecycle>().Definition, Phase.Analysis);
         project.UpdatedAt = now;
         var creation = await db.StateTransitions.SingleAsync(t => t.ProjectId == projectId && t.ReleaseVersionId == versionId && t.FromPhase == null, cancellationToken);
         creation.ToPhase = Phase.Analysis;
@@ -711,7 +714,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         {
             ProjectId = projectId,
             ReleaseVersionId = versionId,
-            Type = ArtifactType.StackProfile,
+            Type = SdlcArtifacts.StackProfile,
             Version = 1,
             Content = profile,
             ContentHash = ContentHash.Compute(profile),
@@ -862,10 +865,10 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     }
 
     /// <summary>The seed shortcut into <paramref name="phase"/> at <paramref name="checkpoint"/>: one seeded transition from refinement.</summary>
-    private static void EnterPhase(AideDbContext db, Project project, Guid versionId, Phase phase, int checkpoint, string reason, DateTimeOffset now)
+    private static void EnterPhase(IServiceProvider services, AideDbContext db, Project project, Guid versionId, Phase phase, int checkpoint, string reason, DateTimeOffset now)
     {
         project.CurrentPhase = phase;
-        project.Status = PhaseOrder.StatusFor(phase);
+        project.Status = SdlcStages.StatusFor(services.GetRequiredService<Pipelines.SdlcLifecycle>().Definition, phase);
         project.Checkpoint = checkpoint;
         project.UpdatedAt = now;
         db.StateTransitions.Add(new StateTransition
@@ -877,6 +880,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             Actor = SystemActor.Name,
             Reason = reason,
             Checkpoint = checkpoint,
+            Kind = PipelineTransitionKinds.Advance, // a seeded forward shortcut
             CreatedAt = now,
         });
     }
@@ -888,7 +892,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
         return resolved.Stack is { } stack ? [.. StackGuidance.SpecSections(stack).Select(t => t.Title)] : [];
     }
 
-    private static void AddLockedArtifact(AideDbContext db, Project project, Guid versionId, ArtifactType type, int checkpoint, string content, Guid authorId, DateTimeOffset now) =>
+    private static void AddLockedArtifact(AideDbContext db, Project project, Guid versionId, string type, int checkpoint, string content, Guid authorId, DateTimeOffset now) =>
         db.Artifacts.Add(new Artifact
         {
             ProjectId = project.Id,
@@ -988,6 +992,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
             Actor = SystemActor.Name,
             Reason = DemoReleasedReason,
             Checkpoint = tracked.Checkpoint,
+            Kind = PipelineTransitionKinds.Advance, // a seeded forward shortcut
             CreatedAt = now,
         });
         db.Releases.Add(new Release

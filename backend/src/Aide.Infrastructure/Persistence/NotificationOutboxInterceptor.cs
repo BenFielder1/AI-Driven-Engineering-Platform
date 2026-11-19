@@ -1,11 +1,12 @@
 using System.Text.Json;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Infrastructure.Persistence;
 
@@ -49,7 +50,7 @@ public sealed class NotificationOutboxInterceptor(TimeProvider time) : SaveChang
         }
 
         var queued = context.ChangeTracker.Entries<Job>()
-            .Where(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.Notification)
+            .Where(e => e.State == EntityState.Added && e.Entity.Type == SdlcJobTypes.Notification)
             .Select(e => e.Entity.Payload)
             .ToList();
         var now = time.GetUtcNow();
@@ -78,7 +79,7 @@ public sealed class NotificationOutboxInterceptor(TimeProvider time) : SaveChang
             queued.Add(payload);
             context.Set<Job>().Add(new Job
             {
-                Type = JobTypes.Notification,
+                Type = SdlcJobTypes.Notification,
                 Payload = payload,
                 ProjectId = entry.ProjectId,
                 Status = JobStatus.Queued,

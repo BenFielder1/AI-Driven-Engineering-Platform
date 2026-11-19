@@ -2,10 +2,12 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Notifications;
-using Aide.Infrastructure.Notifications;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Engine.Runtime.Notifications;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Notifications;
 
@@ -98,11 +100,11 @@ public class NotificationRulesTests
     }
 
     [Theory]
-    [InlineData(GateType.SpecApproval, true)]
-    [InlineData(GateType.PlanApproval, true)]
-    [InlineData(GateType.PreRelease, true)]
-    [InlineData(GateType.Escalation, false)]
-    public void FR48_One_click_links_exist_only_for_spec_plan_and_pre_release_gates(GateType type, bool expected) =>
+    [InlineData(SdlcGates.SpecApproval, true)]
+    [InlineData(SdlcGates.PlanApproval, true)]
+    [InlineData(SdlcGates.PreRelease, true)]
+    [InlineData(EngineGates.Escalation, false)]
+    public void FR48_One_click_links_exist_only_for_spec_plan_and_pre_release_gates(string type, bool expected) =>
         Assert.Equal(expected, NotificationRules.OffersApprovalLinks(type));
 
     [Fact]
@@ -120,7 +122,7 @@ public class NotificationRulesTests
     [Fact]
     public void FR47_Messages_keep_names_on_one_line_and_bound_their_length()
     {
-        var text = NotificationMessages.Compose(new NotificationFacts(NotificationType.GateRequired, "Shop\nInjected: line") { GateType = GateType.PlanApproval });
+        var text = NotificationMessages.Compose(new NotificationFacts(NotificationType.GateRequired, "Shop\nInjected: line") { GateType = SdlcGates.PlanApproval });
         Assert.Equal("Shop Injected: line: The plan approval needs a decision", text.Title);
         Assert.DoesNotContain('\n', text.Body);
 

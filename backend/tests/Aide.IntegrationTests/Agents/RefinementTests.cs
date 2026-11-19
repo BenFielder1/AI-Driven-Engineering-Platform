@@ -2,15 +2,12 @@ using System.Net;
 using System.Net.Http.Json;
 using Aide.Api.Features.Refinement;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;
 
@@ -27,7 +24,7 @@ public sealed class RefinementTests(AideApiFactory factory)
         var id = fixture.Project.Id;
 
         var queued = await ProjectApi.ReadAsync<RefinementRoundDto>(await StartAsync(fixture.Contributor.Client, id), HttpStatusCode.Accepted);
-        Assert.Equal((AgentRunStatus.Queued, (AgentJobTrigger?)AgentJobTrigger.UserRequested, queued.JobId), (queued.Status, queued.Trigger, queued.RunId));
+        Assert.Equal((AgentRunStatus.Queued, (string?)JobTriggers.UserRequested, queued.JobId), (queued.Status, queued.Trigger, queued.RunId));
         var before = await GetAsync(fixture.Viewer.Client, id);
         Assert.Equal((AgentRunStatus.Queued, (Guid?)null), (before.LatestRound!.Status, before.QuestionsRunId));
         Assert.Null(before.LatestDraft);
@@ -73,7 +70,7 @@ public sealed class RefinementTests(AideApiFactory factory)
 
         await AgentJobs.RunQueuedAsync(factory, id);
 
-        var versions = await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.ProjectRequest);
+        var versions = await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.ProjectRequest);
         Assert.Equal([(1, ArtifactStatus.Superseded), (2, ArtifactStatus.Draft)], versions.Select(v => (v.Version, v.Status)));
         Assert.Equal((int?)1, versions[1].ParentVersion);
         Assert.Equal(second.RunId, versions[1].AgentRunId);
@@ -83,7 +80,7 @@ public sealed class RefinementTests(AideApiFactory factory)
         var run = (await AgentJobs.RunsAsync(factory, id)).Single(r => r.Id == second.RunId);
         Assert.Contains("A: Small teams, with sign-in", run.UserFeedback, StringComparison.Ordinal);
         Assert.Contains("A: API only", run.UserFeedback, StringComparison.Ordinal);
-        Assert.Equal([new InputArtifactRef(versions[0].Id, ArtifactType.ProjectRequest, 1)], run.InputArtifacts);
+        Assert.Equal([new InputArtifactRef(versions[0].Id, SdlcArtifacts.ProjectRequest, 1)], run.InputArtifacts);
 
         var state = await GetAsync(fixture.Viewer.Client, id);
         Assert.Equal(["q3"], state.Questions.Select(q => q.Id));
@@ -231,7 +228,7 @@ public sealed class RefinementTests(AideApiFactory factory)
     [Fact]
     public async Task FR27_An_unreadable_reply_is_re_run_once_then_fails_with_INVALID_OUTPUT_and_no_draft()
     {
-        var responder = new ScriptedResponder(AgentKind.IdeaRefinement, "Sorry, here is some prose instead of JSON.");
+        var responder = new ScriptedResponder(SdlcAgents.IdeaRefinement, "Sorry, here is some prose instead of JSON.");
         await using var app = AgentJobs.WithResponders(factory, responder);
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
@@ -245,7 +242,7 @@ public sealed class RefinementTests(AideApiFactory factory)
         var runs = await AgentJobs.RunsAsync(app, id);
         Assert.Equal([(round.RunId, AgentRunStatus.Succeeded), (AgentRunRules.RunId(round.JobId, AgentOutput.CorrectiveRunKey), AgentRunStatus.Failed)], runs.Select(r => (r.Id, r.Status)));
         Assert.StartsWith("INVALID_OUTPUT: ", runs[1].Error, StringComparison.Ordinal);
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ProjectRequest));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ProjectRequest));
 
         var state = await GetAsync(fixture.Viewer.Client, id);
         Assert.Equal((AgentRunStatus.Failed, runs[1].Id), (state.LatestRound!.Status, state.LatestRound.RunId));
@@ -261,20 +258,20 @@ public sealed class RefinementTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await ProjectApi.ReadAsync<RefinementRoundDto>(await StartAsync(fixture.Contributor.Client, id), HttpStatusCode.Accepted);
         await AgentJobs.RunQueuedAsync(app, id);
-        var v1 = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ProjectRequest));
+        var v1 = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ProjectRequest));
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, v1.Id, "reject", "Mention offline use."));
         await AgentJobs.RunQueuedAsync(app, id);
 
-        var versions = await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ProjectRequest);
+        var versions = await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ProjectRequest);
         Assert.Equal([(1, ArtifactStatus.Rejected), (2, ArtifactStatus.Draft)], versions.Select(v => (v.Version, v.Status)));
         Assert.Contains("Reviewer feedback addressed: Mention offline use.", versions[1].Content, StringComparison.Ordinal);
         var rerun = (await AgentJobs.RunsAsync(app, id)).Single(r => r.Id == versions[1].AgentRunId);
         Assert.Equal("Feedback:\nMention offline use.", rerun.UserFeedback);
-        Assert.Equal([new InputArtifactRef(v1.Id, ArtifactType.ProjectRequest, 1)], rerun.InputArtifacts);
+        Assert.Equal([new InputArtifactRef(v1.Id, SdlcArtifacts.ProjectRequest, 1)], rerun.InputArtifacts);
 
         var state = await GetAsync(fixture.Viewer.Client, id);
-        Assert.Equal((AgentJobTrigger?)AgentJobTrigger.ArtifactRejected, state.LatestRound!.Trigger);
+        Assert.Equal((string?)JobTriggers.ArtifactRejected, state.LatestRound!.Trigger);
         Assert.Equal("Mention offline use.", state.LatestRound.Feedback);
         Assert.Equal(2, responder.Calls);
     }

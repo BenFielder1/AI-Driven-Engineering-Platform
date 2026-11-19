@@ -1,16 +1,19 @@
 using Aide.Api.Features.Deployments;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Databases;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Databases;
 
@@ -359,11 +362,12 @@ public sealed partial class DatabaseProvisioningJobHandler(
 /// <summary>A provisioning job that ended without succeeding (retries used up) leaves its database <c>error</c>, not <c>provisioning</c>.</summary>
 public sealed class DatabaseProvisioningJobEndedHook(ManagedDatabaseSecrets secrets, TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.DatabaseProvisioning || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.DatabaseProvisioning || job.ProjectId is not { } projectId)
         {
             return;
         }

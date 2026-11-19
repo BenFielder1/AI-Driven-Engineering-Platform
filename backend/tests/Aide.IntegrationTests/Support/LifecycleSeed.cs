@@ -1,15 +1,13 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Support;
 
@@ -39,20 +37,24 @@ public static class LifecycleSeed
     /// 0.6.1 part 2; the build check tests pass a value.
     /// </summary>
     public static Task SetProjectAsync(
-        WebApplicationFactory<Program> factory, Guid projectId, Phase phase, int version, ApprovalMode mode, ProjectStatus? status = null, int reviewCycle = 0, int maxBuildFixAttempts = 0) =>
-        ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == projectId).ExecuteUpdateAsync(
+        WebApplicationFactory<Program> factory, Guid projectId, Phase phase, int version, ApprovalMode mode, ProjectStatus? status = null, int reviewCycle = 0, int maxBuildFixAttempts = 0)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        var entered = status ?? SdlcStages.StatusFor(factory.Services.GetRequiredService<Aide.Api.Pipelines.SdlcLifecycle>().Definition, phase);
+        return ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == projectId).ExecuteUpdateAsync(
             s => s.SetProperty(p => p.CurrentPhase, phase)
                 .SetProperty(p => p.Checkpoint, version)
                 .SetProperty(p => p.ApprovalMode, mode)
-                .SetProperty(p => p.Status, status ?? PhaseOrder.StatusFor(phase))
+                .SetProperty(p => p.Status, entered)
                 .SetProperty(p => p.ReviewCycle, reviewCycle)
                 .SetProperty(p => p.MaxBuildFixAttempts, maxBuildFixAttempts),
             Ct));
+    }
 
     public static Task<Artifact> AddArtifactAsync(
         WebApplicationFactory<Program> factory,
         Guid projectId,
-        ArtifactType type,
+        string type,
         ArtifactStatus status = ArtifactStatus.Locked,
         int version = 1,
         int projectVersionAtCreation = 1,
@@ -61,7 +63,8 @@ public static class LifecycleSeed
         Guid? createdByUserId = null) =>
         ProjectApi.WithDbAsync(factory, async db =>
         {
-            content ??= $"# {type} v{version}";
+            // 0.6.1 seeded the ArtifactType member name (PascalCase); tests assert this content.
+            content ??= $"# {KeyNames.ToPascalCase(type)} v{version}";
             var artifact = new Artifact
             {
                 CreatedByUserId = createdByUserId,
@@ -133,8 +136,8 @@ public static class LifecycleSeed
             var run = new AgentRun
             {
                 ProjectId = projectId,
-                Agent = AgentKind.CodeReview,
-                Phase = Phase.Review,
+                Agent = SdlcAgents.CodeReview,
+                Stage = Phase.Review.ToWire(),
                 Provider = LlmProvider.Fake,
                 Model = "fake-1",
                 PromptVersion = "code-review@1",
@@ -160,7 +163,7 @@ public static class LifecycleSeed
         });
 
     public static Task<ApprovalGate> AddGateAsync(
-        WebApplicationFactory<Program> factory, Guid projectId, GateType type, Guid? artifactId = null, DateTimeOffset? createdAt = null) =>
+        WebApplicationFactory<Program> factory, Guid projectId, string type, Guid? artifactId = null, DateTimeOffset? createdAt = null) =>
         ProjectApi.WithDbAsync(factory, async db =>
         {
             var gate = new ApprovalGate { ProjectId = projectId, Type = type, ArtifactId = artifactId, CreatedAt = createdAt ?? DateTimeOffset.UtcNow };
@@ -175,12 +178,12 @@ public static class LifecycleSeed
     /// <summary>The project's jobs, oldest first, without <c>notification</c> jobs (FR-47 outbox; see <see cref="NotificationJobsAsync"/>).</summary>
     public static Task<List<Job>> JobsAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
         ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type != JobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
+            .Where(j => j.ProjectId == projectId && j.Type != SdlcJobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
 
     /// <summary>The project's <c>notification</c> jobs (FR-47), oldest first.</summary>
     public static Task<List<Job>> NotificationJobsAsync(WebApplicationFactory<Program> factory, Guid projectId) =>
         ProjectApi.WithDbAsync(factory, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Notification).OrderBy(j => j.CreatedAt).ToListAsync(Ct));
 
     public static Task<List<AuditEvent>> EventsAsync(WebApplicationFactory<Program> factory, Guid projectId, string type) =>
         ProjectApi.WithDbAsync(factory, db => db.Events.AsNoTracking()

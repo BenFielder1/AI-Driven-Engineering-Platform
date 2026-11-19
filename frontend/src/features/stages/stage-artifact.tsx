@@ -15,7 +15,8 @@ import { ArtifactDecisionDialog, type ArtifactDecision } from '../artifacts/arti
 import { corruptedCopy, isCurrentVersion } from '../artifacts/artifact-integrity'
 import { ArtifactVersionDetails } from '../artifacts/artifact-version-details'
 import { useArtifactHistory, useArtifactVersion, type Artifact, type ArtifactSummary, type ArtifactType } from '../artifacts/artifacts-api'
-import { MarkdownView } from '../artifacts/markdown-view'
+import { MarkdownView, type RemarkPlugins } from '../../engine/markdown/markdown-view'
+import { remarkHeadingIds } from '../artifacts/markdown-outline'
 import { artifactStatusLabels, artifactTypeLabels } from '../projects/labels'
 import { useProjectAccess } from '../projects/project-context'
 import { currentLockedVersion, stageProgress } from './stage-model'
@@ -25,6 +26,9 @@ type Phase = Schemas['Phase']
 
 /** How often a current stage with no artifact version yet re-checks its history while a draft is expected. */
 export const STAGE_EMPTY_POLL_MS = 10_000
+
+/** Headings get the anchor ids of `markdownOutline`, so the Specification panel's outline links land on them. */
+const headingAnchors: RemarkPlugins = [remarkHeadingIds]
 
 function versionOption(a: ArtifactSummary, newest: number | null, current: number | null) {
   const marks = [a.version === newest ? 'latest' : null, a.version === current ? 'current' : null].filter(Boolean)
@@ -231,7 +235,7 @@ export function StageArtifact({
             )}
             <ArtifactVersionDetails projectId={project.id} artifact={shown.data} />
             {children?.(shown.data)}
-            <MarkdownView content={shown.data.content} label={`${label} v${String(shown.data.version)}`} headingIds />
+            <MarkdownView content={shown.data.content} label={`${label} v${String(shown.data.version)}`} remarkPlugins={headingAnchors} />
           </>
         )}
       </>

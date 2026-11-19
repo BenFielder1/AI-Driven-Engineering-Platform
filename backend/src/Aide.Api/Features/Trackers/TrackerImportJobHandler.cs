@@ -1,17 +1,19 @@
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Trackers;
-using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Trackers;
 
@@ -182,7 +184,7 @@ public sealed partial class TrackerImportJobHandler(
     /// <summary>§4.26: the budget of the refinement model's catalog entry.</summary>
     private async Task<int> BudgetAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var model = await llm.ResolveAsync(projectId, AgentKind.IdeaRefinement, cancellationToken);
+        var model = await llm.ResolveAsync(projectId, SdlcAgents.IdeaRefinement, cancellationToken);
         var entry = LlmOutputLimits.Find(catalog.Catalog(model.Provider), model.Model);
         return SourceItemLimits.MaxRenderedBytes(entry?.ContextTokens);
     }
@@ -271,11 +273,12 @@ internal static class TrackerImportFailure
 /// <summary>A job that ended without succeeding (retries used up, or the lease expired): its import becomes <c>failed</c> if it hasn't already.</summary>
 public sealed class TrackerImportJobEndedHook(TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.TrackerImport)
+        if (job.JobType != SdlcJobTypes.TrackerImport)
         {
             return;
         }

@@ -7,12 +7,9 @@ using Aide.Api.Features.GitLab;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Stack;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.IntegrationTests.Support;
@@ -20,6 +17,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.GitLab;
 
@@ -285,7 +283,7 @@ public sealed class GitLabProjectTests(AideApiFactory factory)
         Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
-        var execution = Assert.Single(jobs, j => j.Type == JobTypes.Execution);
+        var execution = Assert.Single(jobs, j => j.Type == SdlcJobTypes.Execution);
         Assert.Equal(JobStatus.Failed, execution.Status);
         Assert.StartsWith(ErrorCodes.GitNotConnected, execution.LastError, StringComparison.Ordinal);
 
@@ -449,9 +447,9 @@ public sealed class GitLabProjectTests(AideApiFactory factory)
     private static async Task SeedExecutionAsync(WebApplicationFactory<Program> app, Guid id)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\nExpress API.");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(1));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\nExpress API.");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(1));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.Add(new ExecutionStep

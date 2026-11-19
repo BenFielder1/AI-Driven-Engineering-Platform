@@ -1,9 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Aide.Api.Jobs;
+using System.Text.RegularExpressions;
 using Aide.Api.Logging;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
@@ -12,6 +11,12 @@ using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Agents;
 
@@ -25,7 +30,7 @@ public sealed record AgentRunRequest
 {
     public required Guid ProjectId { get; init; }
 
-    public required AgentKind Agent { get; init; }
+    public required string Agent { get; init; }
 
     public required JobExecution Job { get; init; }
 
@@ -142,17 +147,19 @@ public sealed partial class AgentRunner(
         using var scope = logger.BeginScope(new Dictionary<string, object?>
         {
             ["RunId"] = runId,
-            ["Agent"] = request.Agent.ToWire(),
+            ["Agent"] = request.Agent,
             [ProjectLogScope.ProjectIdKey] = request.ProjectId,
         });
         using var activity = AideTelemetry.Source.StartActivity("agent run", ActivityKind.Internal);
         activity?.SetTag(AideTelemetry.RunIdTag, runId.ToString());
-        activity?.SetTag(AideTelemetry.AgentTag, request.Agent.ToWire());
+        // 0.6.1 tagged the AgentKind value, which exporters render by member name (IdeaRefinement).
+        activity?.SetTag(AideTelemetry.AgentTag, KeyNames.ToPascalCase(request.Agent));
         activity?.SetTag(AideTelemetry.ProjectIdTag, request.ProjectId.ToString());
         try
         {
             var outcome = await RunCoreAsync(request, runId, cancellationToken);
             activity?.SetTag(AideTelemetry.RunStatusTag, AgentRunStatus.Succeeded.ToWire());
+            TagPipelineRun(activity, runId);
             activity?.SetStatus(ActivityStatusCode.Ok);
             return outcome;
         }
@@ -160,20 +167,35 @@ public sealed partial class AgentRunner(
         {
             // NFR-OBS: a failed (or retried) run is an error span, described by its error code — never the message.
             activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            TagPipelineRun(activity, runId);
             AideTelemetry.SetError(activity, ex.ErrorCode ?? nameof(JobFailedException));
             throw;
         }
         catch (OperationCanceledException)
         {
             activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            TagPipelineRun(activity, runId);
             throw;
         }
         catch (Exception ex)
         {
             activity?.SetTag(AideTelemetry.RunStatusTag, TrackedStatus(runId));
+            TagPipelineRun(activity, runId);
             AideTelemetry.SetError(activity, ex.GetType().Name);
             throw;
         }
+    }
+
+    /// <summary>§8: tags the span with the run's pipeline run and stage (set by the run sync when the run row is saved).</summary>
+    private void TagPipelineRun(Activity? activity, Guid runId)
+    {
+        if (activity is null || db.AgentRuns.Local.FirstOrDefault(r => r.Id == runId) is not { } run)
+        {
+            return;
+        }
+
+        activity.SetTag(AideTelemetry.PipelineRunIdTag, run.PipelineRunId?.ToString());
+        activity.SetTag(AideTelemetry.StageTag, run.Stage);
     }
 
     /// <summary>The run's status as this runner last left it, or <c>not_started</c> when it has no row.</summary>
@@ -183,7 +205,13 @@ public sealed partial class AgentRunner(
     private async Task<AgentRunOutcome> RunCoreAsync(AgentRunRequest request, Guid runId, CancellationToken cancellationToken)
     {
         var template = prompts.Template(request.Agent);
-        var run = await db.AgentRuns.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
+        // FR-297: the recorded input isn't loaded (a retry records it again).
+        var run = await db.AgentRuns.AsNoTracking()
+            .Where(r => r.Id == runId)
+            .Select(AgentRunProjections.WithoutInput)
+            .FirstOrDefaultAsync(cancellationToken) is { } loaded
+            ? AgentRunProjections.Track(db, loaded)
+            : null;
         if (run is { Status: AgentRunStatus.Succeeded })
         {
             LogAlreadySucceeded(logger);
@@ -254,6 +282,8 @@ public sealed partial class AgentRunner(
         // FR-160: the output limit of the run's provider and model (catalog, Anthropic discovery, ceiling, fallback).
         var maxOutputTokens = request.MaxTokens ?? await outputLimits.ResolveAsync(run.Provider, run.Model, apiKey, cancellationToken);
 
+        // FR-297: the prompt and messages sent, redacted and capped (the request itself is unchanged).
+        RecordInput(run, rendered.Value, apiKey);
         run.Attempts++;
         await db.SaveChangesAsync(cancellationToken);
         LogCalling(logger, run.Provider, run.Model, run.Attempts, maxOutputTokens);
@@ -262,6 +292,7 @@ public sealed partial class AgentRunner(
         using var context = request.Repo == RepoScope.None
             ? RepoToolContext.Empty
             : await repoContext.OpenAsync(run.ProjectId, request.Repo, cancellationToken);
+        using var firstToken = LlmFirstTokenProbe.Start(time);
         var started = time.GetTimestamp();
         LlmCompletion completion;
         IReadOnlyList<string> loopWarnings;
@@ -310,13 +341,14 @@ public sealed partial class AgentRunner(
             // FR-26: the budget ran out between turns: the turns made are counted, the run stops with BUDGET_EXCEEDED.
             RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            RecordLatency(run, firstToken, started);
             await RecordPaidTurnsAsync(run, ex.Tokens);
             var used = budget.TokensUsed + run.InputTokens + run.OutputTokens;
             var message = TokenBudget.CheckCanStart(budget.TokenBudget, used).Error?.Message ?? "The project's token budget is used up.";
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 run.ProjectId,
-                new { agent = run.Agent.ToWire(), tokenBudget = budget.TokenBudget, tokensUsed = used, jobId = request.Job.Id, runId = run.Id },
+                new { agent = run.Agent, tokenBudget = budget.TokenBudget, tokensUsed = used, jobId = request.Job.Id, runId = run.Id },
                 SystemActor.Name,
                 time.GetUtcNow());
             LogBudgetExceeded(logger, used, budget.TokenBudget);
@@ -327,6 +359,7 @@ public sealed partial class AgentRunner(
         {
             RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            RecordLatency(run, firstToken, started);
             await RecordPaidTurnsAsync(run, paid);
             var message = SecretRedaction.SanitizeProviderError(ex.Message, apiKey);
             LogAttemptFailed(logger, run.Attempts, ex.Transient, ex.StatusCode, message);
@@ -348,6 +381,7 @@ public sealed partial class AgentRunner(
             // or it would stay running. Its text may quote the request (and the key), so only the exception type is kept.
             RecordToolCalls(run, context);
             run.DurationMs += Elapsed(started);
+            RecordLatency(run, firstToken, started);
             await RecordPaidTurnsAsync(run, paid);
             var transient = ex is HttpRequestException or TimeoutException or IOException;
             var message = $"{run.Provider.ToWire()} call failed unexpectedly ({ex.GetType().Name}).";
@@ -357,6 +391,7 @@ public sealed partial class AgentRunner(
         }
 
         RecordToolCalls(run, context);
+        RecordLatency(run, firstToken, started);
         IReadOnlyList<string> warnings =
         [
             .. request.Warnings
@@ -390,6 +425,35 @@ public sealed partial class AgentRunner(
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.TokensUsed, p => p.TokensUsed + tokens), CancellationToken.None);
         await db.SaveChangesAsync(CancellationToken.None);
         await transaction.CommitAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// FR-297, D-0.7.0-16: stores the rendered system prompt and user message as the run's input, redacted (the bound key
+    /// and key patterns) and capped at 1 MB. Recording never fails the run: input the redaction can't process in time is
+    /// left out.
+    /// </summary>
+    internal static void RecordInput(AgentRun run, RenderedPrompt prompt, string? apiKey)
+    {
+        try
+        {
+            var input = AgentRunInput.Record([new AgentInputMessage("system", prompt.System), new AgentInputMessage("user", prompt.User)], apiKey);
+            run.Input = input.Text;
+            run.InputTruncated = input.Truncated;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            run.Input = null;
+            run.InputTruncated = false;
+        }
+    }
+
+    /// <summary>FR-297: the time to the first streamed output of this attempt, when the provider streamed one.</summary>
+    private static void RecordLatency(AgentRun run, LlmFirstTokenProbe probe, long started)
+    {
+        if (probe.LatencyMs(started) is { } latency)
+        {
+            run.LatencyMs = latency;
+        }
     }
 
     /// <summary>FR-71: the tool calls the run made (refused ones included) as its <c>tool_calls</c> log.</summary>
@@ -457,7 +521,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 project.Id,
-                new { agent = request.Agent.ToWire(), tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, jobId = request.Job.Id },
+                new { agent = request.Agent, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, jobId = request.Job.Id },
                 SystemActor.Name,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -473,7 +537,7 @@ public sealed partial class AgentRunner(
             ProjectId = project.Id,
             ReleaseVersionId = project.CurrentReleaseVersionId,
             Agent = request.Agent,
-            Phase = project.CurrentPhase,
+            Stage = project.CurrentPhase.ToWire(),
             StepId = request.StepId,
             Provider = resolved.Provider,
             Model = resolved.Model,
@@ -489,7 +553,7 @@ public sealed partial class AgentRunner(
         db.AddEvent(
             EventTypes.RunStarted,
             project.Id,
-            new { runId, jobId = request.Job.Id, agent = request.Agent.ToWire(), provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey, legacyAgentKey = request.LegacyAgentKey },
+            new { runId, jobId = request.Job.Id, agent = request.Agent, provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey, legacyAgentKey = request.LegacyAgentKey },
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);
@@ -562,7 +626,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.RunCompleted,
                 run.ProjectId,
-                new { runId = run.Id, agent = run.Agent.ToWire(), inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs, warnings },
+                new { runId = run.Id, agent = run.Agent, inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs, warnings },
                 SystemActor.Name,
                 now);
         }
@@ -598,7 +662,7 @@ public sealed partial class AgentRunner(
         db.AddEvent(
             EventTypes.RunFailed,
             run.ProjectId,
-            new { runId = run.Id, agent = run.Agent.ToWire(), errorCode, error = run.Error, attempts = run.Attempts, deadLettered = deadLetter },
+            new { runId = run.Id, agent = run.Agent, errorCode, error = run.Error, attempts = run.Attempts, deadLettered = deadLetter },
             SystemActor.Name,
             now);
     }

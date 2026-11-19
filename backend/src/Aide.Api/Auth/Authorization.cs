@@ -3,6 +3,7 @@ using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Auth;
 

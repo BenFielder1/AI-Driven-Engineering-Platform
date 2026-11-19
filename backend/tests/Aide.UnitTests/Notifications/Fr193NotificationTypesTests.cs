@@ -2,6 +2,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Notifications;
 using Aide.Domain.Trackers;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.Notifications;
 

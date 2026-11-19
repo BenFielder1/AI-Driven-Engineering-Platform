@@ -1,18 +1,21 @@
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Lifecycle;
 
 /// <summary>
-/// Writes an applied lifecycle move (a <see cref="PhaseTransition"/> from the domain state machine) into the current unit of
-/// work: the project's phase, status and version, the <c>state_transitions</c> row, the <c>PHASE_CHANGED</c> event and,
-/// for a forward move, the follow-up job of the entered phase (<see cref="JobTypes.OnEnter"/>). Nothing is saved here: the
+/// Writes an applied lifecycle move (a <see cref="PhaseTransition"/> the engine decided, FR-292) into the current unit of
+/// work: the project's phase, status and version (the copy of the run, which the run sync writes onto the run in the same
+/// save), the <c>state_transitions</c> row, the <c>PHASE_CHANGED</c> event and, for a forward move, the entered stage's
+/// <c>enqueue_on_enter</c> job (<see cref="PhaseTransition.EnqueueOnEnter"/>). Nothing is saved here: the
 /// caller's single <c>SaveChanges</c> commits it all in one transaction, guarded by the project's <c>xmin</c> (FR-11, §4.9).
 /// </summary>
 public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
@@ -52,6 +55,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
             Actor = actor,
             Reason = transition.Reason,
             Checkpoint = transition.Version,
+            Kind = transition.Kind,
             CreatedAt = now,
         });
         db.AddEvent(
@@ -64,17 +68,17 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
                 status = transition.Status,
                 checkpoint = transition.Version,
                 releaseVersionId = project.CurrentReleaseVersionId,
-                kind = transition.Kind,
+                kind = transition.EventKind,
                 reason = transition.Reason,
             },
             actor,
             now);
 
-        if (transition.Kind == TransitionKind.Advance && JobTypes.OnEnter(transition.To) is { } jobType)
+        if (transition.EnqueueOnEnter is { } jobType)
         {
             await jobs.EnqueueAsync(
                 jobType,
-                new LifecycleJobPayload(project.Id, transition.Version, LifecycleJobPayload.PhaseEntered),
+                new LifecycleJobPayload(project.Id, transition.Version, LifecycleJobPayload.StageEntered),
                 project.Id,
                 cancellationToken,
                 now);
@@ -82,7 +86,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
             {
                 // FR-42: the release attempt is visible (in progress) from the moment the release job is queued.
                 await Features.Release.ReleaseRecords.AddAttemptAsync(
-                    db, project, Features.Release.ReleaseRecords.PhaseEntered, actor, now, cancellationToken);
+                    db, project, Features.Release.ReleaseRecords.StageEntered, actor, now, cancellationToken);
             }
         }
     }
@@ -103,7 +107,7 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
     /// </remarks>
     public ApprovalGate AddGate(
         Project project,
-        GateType type,
+        string type,
         Guid? artifactId,
         string actor,
         DateTimeOffset now,
@@ -139,10 +143,10 @@ public sealed class LifecycleWriter(AideDbContext db, JobEnqueuer jobs)
                 stepNumber = blockedStep.StepNumber,
             };
         db.AddEvent(EventTypes.GateCreated, project.Id, payload, actor, now);
-        if (type == GateType.PreRelease)
+        if (type == SdlcGates.PreRelease)
         {
             // FR-84: merge readiness is checked when the pre-release gate is created (stored for the gate and Release page).
-            jobs.Enqueue(JobTypes.MergeReadiness, new Features.Git.MergeReadinessJobPayload(project.Id, gate.Id), project.Id, now);
+            jobs.Enqueue(SdlcJobTypes.MergeReadiness, new Features.Git.MergeReadinessJobPayload(project.Id, gate.Id), project.Id, now);
         }
 
         return gate;

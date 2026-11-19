@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useContext, useEffect, useState } from 'react'
 
+import { pipelineLiveBus } from '../../engine/live/live-bus'
 import { applyBuildCheckUpdate } from '../execution/build-checks-api'
 import { notificationKeys } from '../notifications/notifications-api'
 import { LiveConnectionContext } from './live-connection'
@@ -76,6 +77,7 @@ export function useProjectLive(projectId: string): LiveStatus {
         // Events sent before the join completed (while the page was opening, or while disconnected) never reach this
         // client, so everything about the project is refetched now, the page's first-load queries included.
         void invalidateAfterJoin(queryClient, projectId)
+        pipelineLiveBus.resync(projectId)
         update('live')
       } catch {
         // FORBIDDEN (no longer a member) or the hub is unavailable: stay usable without live updates. After a
@@ -83,6 +85,7 @@ export function useProjectLive(projectId: string): LiveStatus {
         // tried again on the next reconnect).
         if (rejoin && !disposed) {
           void invalidateAfterJoin(queryClient, projectId)
+          pipelineLiveBus.resync(projectId)
         }
         update('offline')
       }
@@ -110,6 +113,14 @@ export function useProjectLive(projectId: string): LiveStatus {
     connection.onBuildCheckUpdated((message) => {
       if (!disposed && message.projectId === projectId) {
         applyBuildCheckUpdate(queryClient, projectId, message.check)
+      }
+    })
+    // FR-302: pipeline messages go to the engine views that are open (src/engine/live/live-bus.ts).
+    connection.onPipelineEvent((event) => {
+      const eventProject =
+        event.type === 'pipelineRunUpdated' ? event.run.projectId : event.type === 'gateUpdated' ? event.gate.projectId : projectId
+      if (!disposed && eventProject === projectId) {
+        pipelineLiveBus.publish(projectId, event)
       }
     })
     connection.onReconnecting(() => {

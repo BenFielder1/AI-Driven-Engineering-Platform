@@ -4,9 +4,9 @@ using Aide.Api.Features.GitHub;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.GitHub;
 
@@ -84,7 +84,7 @@ public sealed class GitHubImportTests(AideApiFactory factory)
         Assert.Equal("v2.3.0", versions[1].BaseTag);
         var git = await ProjectApi.WithDbAsync(harness.App, db => db.ProjectGitSettings.AsNoTracking().SingleAsync(s => s.ProjectId == project.Id, Ct));
         Assert.Equal((GitProvider.GithubApp, (long?)OrgInstallation, (long?)55, "acme/shop"), (git.Provider, git.InstallationId, git.RepoId, git.RepoFullName));
-        Assert.Contains(await LifecycleSeed.JobsAsync(harness.App, project.Id), j => j.Type == JobTypes.RepositoryAnalysis);
+        Assert.Contains(await LifecycleSeed.JobsAsync(harness.App, project.Id), j => j.Type == SdlcJobTypes.RepositoryAnalysis);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class GitHubImportTests(AideApiFactory factory)
 
         var version = await ProjectApi.WithDbAsync(harness.App, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.ProjectId == project.Id, Ct));
         Assert.Equal((Head, (string?)null), (version.BaseCommitSha, version.BaseTag));
-        var analysis = Assert.Single(await LifecycleSeed.JobsAsync(harness.App, project.Id), j => j.Type == JobTypes.RepositoryAnalysis);
+        var analysis = Assert.Single(await LifecycleSeed.JobsAsync(harness.App, project.Id), j => j.Type == SdlcJobTypes.RepositoryAnalysis);
         Assert.Equal(version.Id.ToString(), LifecycleSeed.Payload(analysis.Payload).GetProperty("releaseVersionId").GetString());
     }
 }

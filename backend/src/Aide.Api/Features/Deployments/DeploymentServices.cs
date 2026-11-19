@@ -1,5 +1,4 @@
-using Aide.Api.Jobs;
-using Aide.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -18,7 +17,6 @@ public static class DeploymentServiceCollectionExtensions
         services.AddScoped<DeploymentTargetService>();
         services.AddScoped<DeploymentGroupService>();
         services.AddScoped<IJobEndedHook, DeploymentSetupJobEndedHook>();
-        services.AddJobHandler<DeploymentSetupJobHandler>(JobTypes.DeploymentSetup);
         services.AddScoped<DeploymentScheduler>();
         services.AddScoped<RolloutScheduler>();
         services.AddScoped<RolloutReader>();
@@ -30,17 +28,11 @@ public static class DeploymentServiceCollectionExtensions
         services.AddScoped<Databases.MigrationRunReader>();
         services.AddScoped<Databases.MigrationRunService>();
         services.AddScoped<IJobEndedHook, Databases.DatabaseProvisioningJobEndedHook>();
-        services.AddJobHandler<Databases.DatabaseProvisioningJobHandler>(JobTypes.DatabaseProvisioning);
         services.AddScoped<Databases.DatabaseExpirySweepService>();
-        services.AddJobHandler<Databases.DatabaseExpirySweepJobHandler>(JobTypes.DatabaseExpirySweep);
         services.AddScoped<IJobEndedHook, DeploymentJobEndedHook>();
-        services.AddJobHandler<DeploymentJobHandler>(JobTypes.Deployment);
 
-        // FR-147, FR-148, FR-149: preview and production rollouts and the preview database reset.
-        services.AddJobHandler<RolloutJobHandler>(JobTypes.PreviewRollout);
-        services.AddJobHandler<RolloutJobHandler>(JobTypes.ProductionRollout);
+        // FR-147, FR-148, FR-149: the preview database reset.
         services.AddScoped<Databases.PreviewDatabaseResetService>();
-        services.AddJobHandler<Databases.PreviewDatabaseResetJobHandler>(JobTypes.PreviewDatabaseReset);
         return services;
     }
 }

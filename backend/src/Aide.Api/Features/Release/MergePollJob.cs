@@ -6,7 +6,6 @@ using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Git;
@@ -14,6 +13,10 @@ using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Release;
 
@@ -372,13 +375,15 @@ public sealed partial class MergePollJobHandler(
 /// A merge poll that ended without succeeding (its completion's retries ran out) fails the project's awaiting attempts with
 /// its last (token-free) error and puts the project back to <c>releasing</c>, so an Owner can retry the release.
 /// </summary>
-public sealed class MergePollJobEndedHook(TimeProvider time) : IJobEndedHook
+public sealed class MergePollJobEndedHook(
+    TimeProvider time, JobTypeRegistry jobTypes, Pipelines.SdlcLifecycle lifecycle, ILogger<JobEnqueuer> enqueuerLogger) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.MergePoll || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.MergePoll || job.ProjectId is not { } projectId)
         {
             return;
         }
@@ -399,8 +404,8 @@ public sealed class MergePollJobEndedHook(TimeProvider time) : IJobEndedHook
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
         if (project is not null)
         {
-            var writer = new LifecycleWriter(db, new JobEnqueuer(db, time));
-            await ReleaseCompletion.BackToReleasingAsync(db, writer, project, $"Release failed: {ErrorCodes.GitError}", now, cancellationToken);
+            var writer = new LifecycleWriter(db, new JobEnqueuer(db, time, AideJobPayloadSerializer.Instance, jobTypes, enqueuerLogger));
+            await ReleaseCompletion.BackToReleasingAsync(db, writer, lifecycle, project, $"Release failed: {ErrorCodes.GitError}", now, cancellationToken);
         }
     }
 }

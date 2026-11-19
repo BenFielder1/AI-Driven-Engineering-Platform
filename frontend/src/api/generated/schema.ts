@@ -2505,6 +2505,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/pipeline-gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-302: gates (default pending) on every project the caller can see, newest first, cursor-paged (limit 1-200, default 50), filterable by pipelineId and gateType. 400 VALIDATION for a bad status, cursor or limit. */
+        get: operations["ListPipelineGateInbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipeline-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-300: the project's pipeline runs, newest first (project viewer). */
+        get: operations["ListPipelineRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/notifications": {
         parameters: {
             query?: never;
@@ -2603,6 +2637,227 @@ export interface paths {
         put?: never;
         /** Confirm the link's decision (Owner of the gate's project, browser session): approves or rejects the gate exactly as the gate endpoints do, and uses up the link (and its sibling link for the same gate). */
         post: operations["ConfirmApprovalLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-299: the registered pipelines (id, title, version, current definition hash, pack). */
+        get: operations["ListPipelines"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/{pipelineId}/definitions/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses. 404 NOT_FOUND for an unknown hash. */
+        get: operations["GetPipelineDefinition"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipelines/{pipelineId}/prompt-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-298: the pipeline's agent runs grouped by agent key and prompt version, over projectId (project viewer) or every project the caller can see. 404 NOT_FOUND for an unknown pipeline or project. */
+        get: operations["GetPipelinePromptStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-300: a run with its stage, pack and generic status, checkpoint, definition hash, times, cost and token totals. */
+        get: operations["GetPipelineRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-300: the run's stages in definition order with state, iterations (entries) and timings. */
+        get: operations["ListPipelineRunStages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-300: the run's transitions, stage entries, agent runs, gate events and artifact versions in time order, cursor-paged (limit 1-200, default 50). 400 VALIDATION for a bad cursor or limit. */
+        get: operations["GetPipelineRunTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-303: the run's timeline with each agent run's input and output. Read-only. 400 VALIDATION for a bad cursor or limit. */
+        get: operations["GetPipelineRunReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-301: the run's artifacts by key with their versions, newest first. */
+        get: operations["ListPipelineRunArtifacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/artifacts/{key}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-301: one version of a run's artifact, with its content. */
+        get: operations["GetPipelineRunArtifactVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/artifacts/{key}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-301: the line diff between versions from and to of a run's artifact. 400 VALIDATION for missing versions or versions too large to diff. */
+        get: operations["DiffPipelineRunArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-301: the run's gates, newest first. */
+        get: operations["ListPipelineRunGates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/gates/{gateId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-301: approve a pending gate of the run, exactly as the project gate endpoint (same rules, errors, follow-ups and audit). 403 FORBIDDEN, 409 GATE_NOT_PENDING, PHASE_PRECONDITION_FAILED, WRONG_PHASE, ROLLBACK_BLOCKED, CONFLICT or DEFINITION_UNAVAILABLE, 400 VALIDATION, INVALID_DECISION or INVALID_TARGET_VERSION, 429 RATE_LIMITED. */
+        post: operations["ApprovePipelineRunGate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/gates/{gateId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-301: reject a pending gate of the run, exactly as the project gate endpoint. 403 FORBIDDEN, 409 GATE_NOT_PENDING, CONFLICT or DEFINITION_UNAVAILABLE, 400 VALIDATION or INVALID_DECISION. */
+        post: operations["RejectPipelineRunGate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3156,6 +3411,8 @@ export interface components {
             restoredFromVersion: null | number;
             warnings: components["schemas"]["ArtifactWarningDto"][];
         };
+        /** @enum {unknown} */
+        ArtifactFormat: "markdown" | "json";
         /**
          * @description Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no
          *     longer matches `content_hash` (§4.3), or the row is already marked ArtifactStatus.Corrupted.
@@ -4055,6 +4312,13 @@ export interface components {
             /** Format: int32 */
             targetCheckpoint?: null | number;
         };
+        /** @description Approve or reject a gate through the engine (FR-301): the same fields and limits as the project gate endpoints. */
+        DecidePipelineGateRequest: {
+            comment?: null | string;
+            decision?: null | components["schemas"]["EscalationDecision"];
+            /** Format: int32 */
+            targetCheckpoint?: null | number;
+        };
         /**
          * @description A file a step declares it creates or modifies (FR-29). `protected` marks a protected path (§4.6: .git/, .aide/, CI
          *     workflows, lockfiles, .env files) — only an Owner-edited plan can declare one; the step may then write it.
@@ -4733,6 +4997,11 @@ export interface components {
         };
         /** @enum {unknown} */
         GateType: "spec_approval" | "plan_approval" | "pre_release" | "escalation";
+        /**
+         * @description §4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final.
+         * @enum {unknown}
+         */
+        GenericRunStatus: "active" | "running" | "waiting_on_gate" | "completed" | "failed" | "cancelled";
         /**
          * @description The Git connection bound to a GitLab or Bitbucket project (FR-136), shown to Owners as e.g. "GitLab · connected by Ana
          *     (@ana)". Never contains a token. `connectionId` only lets the binding Owner recognise their own connection.
@@ -5621,6 +5890,332 @@ export interface components {
          * @enum {unknown}
          */
         Phase: "analysis" | "refinement" | "specification" | "planning" | "execution" | "review" | "release";
+        /** @description An artifact a definition produces or reads. */
+        PipelineArtifactDefinitionDto: {
+            key: string;
+            title: string;
+            format: components["schemas"]["ArtifactFormat"];
+        };
+        /** @description FR-301: the line diff between two versions of a run's artifact. */
+        PipelineArtifactDiffDto: {
+            key: string;
+            /** Format: int32 */
+            from: number;
+            /** Format: int32 */
+            to: number;
+            unifiedDiff: string;
+            lines: components["schemas"]["PipelineDiffLineDto"][];
+        };
+        /** @description FR-301: an artifact key of a run with its versions (newest first). */
+        PipelineArtifactDto: {
+            key: string;
+            title: string;
+            versions: components["schemas"]["PipelineArtifactVersionSummaryDto"][];
+        };
+        /**
+         * @description FR-301: one artifact version with its content. `intact` is false when the content no longer matches its
+         *                 hash (FR-20).
+         */
+        PipelineArtifactVersionDto: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+            /** Format: int32 */
+            parentVersion: null | number;
+            status: components["schemas"]["ArtifactStatus"];
+            hash: string;
+            intact: boolean;
+            content: string;
+            /** Format: uuid */
+            agentRunId: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            approvedAt: null | string;
+        };
+        /** @description One artifact version in a run's artifact list. */
+        PipelineArtifactVersionSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            version: number;
+            status: components["schemas"]["ArtifactStatus"];
+            hash: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description FR-299: a pipeline definition by hash: its stages, artifacts and statuses. */
+        PipelineDefinitionDto: {
+            pipelineId: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+            hash: string;
+            packId: string;
+            start: string[];
+            stages: components["schemas"]["PipelineStageDefinitionDto"][];
+            artifacts: components["schemas"]["PipelineArtifactDefinitionDto"][];
+            statuses: components["schemas"]["PipelineStatusDefinitionDto"][];
+        };
+        /** @description A line of an artifact diff (FR-21); `skipped` counts the unchanged lines a `skipped` entry stands for. */
+        PipelineDiffLineDto: {
+            kind: components["schemas"]["DiffLineKind"];
+            /** Format: int32 */
+            oldLine: null | number;
+            /** Format: int32 */
+            newLine: null | number;
+            text: string;
+            /** Format: int32 */
+            skipped: null | number;
+        };
+        /**
+         * @description FR-301: a gate of a run. `stageId` is the stage that declares the gate type (when one does);
+         *     `artifactKey`/`artifactVersion` name the gated artifact. Decided gates carry `decidedAt`,
+         *     `decidedByUserId`, `comment` and an escalation's `decision`.
+         */
+        PipelineGateDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            projectId: string;
+            type: string;
+            title: string;
+            stageId: null | string;
+            /** @enum {unknown} */
+            status: "pending" | "approved" | "rejected" | "cancelled";
+            /** Format: uuid */
+            artifactId: null | string;
+            artifactKey: null | string;
+            /** Format: int32 */
+            artifactVersion: null | number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            decidedAt: null | string;
+            /** Format: uuid */
+            decidedByUserId: null | string;
+            comment: null | string;
+            /** @enum {unknown} */
+            decision: "continue" | "rollback" | "accept" | null;
+            /** Format: int32 */
+            targetCheckpoint: null | number;
+            overdue: boolean;
+        };
+        /**
+         * @description FR-302: a pending gate in the inbox, with its project and pipeline. `canDecide` is whether the caller
+         *                 may approve or reject it (the decision endpoints' rule; FR-307: today only project Owners and Admins).
+         */
+        PipelineGateInboxItemDto: {
+            gate: components["schemas"]["PipelineGateDto"];
+            projectName: string;
+            pipelineId: string;
+            pipelineTitle: string;
+            canDecide: boolean;
+        };
+        /** @description A page of the gate inbox; `next` is the cursor of the following page, or `null`. */
+        PipelineGateInboxPageDto: {
+            items: components["schemas"]["PipelineGateInboxItemDto"][];
+            next: null | string;
+        };
+        /**
+         * @description FR-300: a pipeline run. `status` is the generic status derived on read (§4.57); `packStatus` the pack's own.
+         *     `hashShort` is the first 12 characters of the pinned definition hash. `cost` and the token totals sum the
+         *     run's agent runs.
+         */
+        PipelineRunDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            pipelineId: string;
+            pipelineTitle: string;
+            definitionHash: string;
+            hashShort: string;
+            currentStage: string;
+            currentStageTitle: null | string;
+            packStatus: string;
+            /**
+             * @description §4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final.
+             * @enum {unknown}
+             */
+            status: "active" | "running" | "waiting_on_gate" | "completed" | "failed" | "cancelled";
+            /** Format: int32 */
+            checkpoint: number;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
+            /** Format: double */
+            cost: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            /** Format: int64 */
+            tokens: number;
+            /** Format: int32 */
+            agentRuns: number;
+        };
+        /**
+         * @description A stage of a definition. `kind` is `agent`, `code` or `manual`; `transitions` lists
+         *                 where it can go next.
+         */
+        PipelineStageDefinitionDto: {
+            id: string;
+            title: string;
+            kind: components["schemas"]["StageKind"];
+            status: string;
+            agentKey: null | string;
+            inputs: string[];
+            output: null | string;
+            gate: null | components["schemas"]["PipelineStageGateDto"];
+            transitions: components["schemas"]["PipelineStageTransitionDto"][];
+        };
+        /**
+         * @description FR-300: a stage of a run (D-0.7.0-32: iterations count entries). `runId` identifies the run in live
+         *                 `stageUpdated` messages.
+         */
+        PipelineStageDto: {
+            /** Format: uuid */
+            runId: string;
+            id: string;
+            title: string;
+            /**
+             * @description FR-300: a stage's state in a run's stage list.
+             * @enum {unknown}
+             */
+            state: "pending" | "active" | "completed" | "skipped";
+            /** Format: int32 */
+            iterations: number;
+            /** Format: date-time */
+            enteredAt: null | string;
+            /** Format: date-time */
+            exitedAt: null | string;
+            /** Format: int64 */
+            durationMs: null | number;
+        };
+        /** @description The gate a stage raises: type key, the approval modes it applies in and the artifact it approves. */
+        PipelineStageGateDto: {
+            type: string;
+            modes: components["schemas"]["ApprovalMode"][];
+            approves: null | string;
+        };
+        /**
+         * @description A way out of a stage: `kind` is `next`, `on_success`, `on_reject` or `loop`.
+         *                 `on` is a loop's outcome; `maxIterations` its fixed cap, or `maxIterationsSetting` the setting that
+         *                 holds it.
+         */
+        PipelineStageTransitionDto: {
+            kind: string;
+            to: string;
+            on: null | string;
+            title: null | string;
+            /** Format: int32 */
+            maxIterations: null | number;
+            maxIterationsSetting: null | string;
+        };
+        /** @description A pack status and the generic status it maps to (§4.57). */
+        PipelineStatusDefinitionDto: {
+            name: string;
+            generic: components["schemas"]["GenericRunStatus"];
+        };
+        /** @description FR-299: a registered pipeline: id, title, version, current definition hash and pack. */
+        PipelineSummaryDto: {
+            id: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+            hash: string;
+            packId: string;
+        };
+        /**
+         * @description FR-300, FR-303: one timeline entry. Every entry has `id` (its source row), `at` and `kind`; the other
+         *                 fields belong to kinds:
+         *                 * transition: fromStage, toStage, transitionKind, checkpoint, reason.
+         *     * stage_entered: stageId, iteration, checkpoint, exitedAt, outcome.
+         *     * agent_run: stageId, agentKey, agentRunStatus, model, promptVersion,
+         *                 tokens, cost, durationMs, latencyMs, error; in the replay also input,
+         *                 inputTruncated, output and outputTruncated.
+         *     * gate_created / gate_decided: gateId, gateType, gateStatus, decision,
+         *                 comment.
+         *     * artifact_version: artifactId, artifactKey, artifactVersion, artifactStatus,
+         *                 contentHash, agentRunId.
+         */
+        PipelineTimelineItemDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            kind: components["schemas"]["PipelineTimelineKind"];
+            fromStage?: null | string;
+            toStage?: null | string;
+            transitionKind?: null | string;
+            /** Format: int32 */
+            checkpoint?: null | number;
+            reason?: null | string;
+            stageId?: null | string;
+            /** Format: int32 */
+            iteration?: null | number;
+            /** Format: date-time */
+            exitedAt?: null | string;
+            outcome?: null | string;
+            agentKey?: null | string;
+            agentRunStatus?: null | components["schemas"]["AgentRunStatus"];
+            model?: null | string;
+            promptVersion?: null | string;
+            /** Format: int32 */
+            inputTokens?: null | number;
+            /** Format: int32 */
+            outputTokens?: null | number;
+            /** Format: double */
+            cost?: null | number;
+            /** Format: int64 */
+            durationMs?: null | number;
+            /** Format: int64 */
+            latencyMs?: null | number;
+            error?: null | string;
+            /** @description Replay only: the rendered prompt and messages, redacted (D-0.7.0-16); `null` for runs before 0.7.0. */
+            input?: null | string;
+            /**
+             * @description Replay only: the stored input was capped (1 MB, D-0.7.0-16) or this response cut it at
+             *                 int TimelineItems.MaxReplayTextLength characters.
+             */
+            inputTruncated?: null | boolean;
+            /** @description Replay only: the agent's output text (at most int TimelineItems.MaxReplayTextLength characters). */
+            output?: null | string;
+            /** @description Replay only: the output was cut at int TimelineItems.MaxReplayTextLength characters. */
+            outputTruncated?: null | boolean;
+            /** Format: uuid */
+            gateId?: null | string;
+            gateType?: null | string;
+            gateStatus?: null | components["schemas"]["GateStatus"];
+            decision?: null | components["schemas"]["EscalationDecision"];
+            comment?: null | string;
+            /** Format: uuid */
+            artifactId?: null | string;
+            artifactKey?: null | string;
+            /** Format: int32 */
+            artifactVersion?: null | number;
+            artifactStatus?: null | components["schemas"]["ArtifactStatus"];
+            contentHash?: null | string;
+            /** Format: uuid */
+            agentRunId?: null | string;
+        };
+        /**
+         * @description FR-300: the kinds of a run's timeline entries.
+         * @enum {unknown}
+         */
+        PipelineTimelineKind: "transition" | "stage_entered" | "agent_run" | "gate_created" | "gate_decided" | "artifact_version";
+        /** @description A page of a run's timeline (FR-300) or replay (FR-303); `next` is the cursor of the following page, or `null`. */
+        PipelineTimelinePageDto: {
+            items: components["schemas"]["PipelineTimelineItemDto"][];
+            next: null | string;
+        };
         /**
          * @description The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),
          *     `running`, `paused`, `completed` (every step completed), `blocked` (a step awaits an escalation
@@ -6015,6 +6610,25 @@ export interface components {
             presetName: null | string;
             presetVersion: null | string;
             stackPacks: string[];
+        };
+        /** @description FR-298: one (agent key, prompt version) group of a pipeline's agent runs. */
+        PromptStatsDto: {
+            agentKey: string;
+            promptVersion: string;
+            /** Format: int32 */
+            runs: number;
+            /** Format: double */
+            avgInputTokens: number;
+            /** Format: double */
+            avgOutputTokens: number;
+            /** Format: double */
+            avgCost: number;
+            /** Format: double */
+            avgLatencyMs: null | number;
+            /** Format: double */
+            avgDurationMs: number;
+            /** Format: double */
+            failureRate: number;
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -7059,6 +7673,16 @@ export interface components {
             instanceId?: null | string;
             selfManaged?: boolean;
         };
+        /**
+         * @description FR-280: what does a stage's work.
+         * @enum {unknown}
+         */
+        StageKind: "agent" | "code" | "manual";
+        /**
+         * @description FR-300: a stage's state in a run's stage list.
+         * @enum {unknown}
+         */
+        StageState: "pending" | "active" | "completed" | "skipped";
         /** @description Start a refinement round (FR-27), optionally answering some or all clarifying questions of the latest round. */
         StartRefinementRequest: {
             answers?: null | components["schemas"]["RefinementAnswerRequest"][];
@@ -17329,6 +17953,90 @@ export interface operations {
             };
         };
     };
+    ListPipelineGateInbox: {
+        parameters: {
+            query?: {
+                status?: string;
+                pipelineId?: string;
+                gateType?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineGateInboxPageDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelineRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRunDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListMyNotifications: {
         parameters: {
             query?: {
@@ -17674,6 +18382,630 @@ export interface operations {
             };
             /** @description LINK_EXPIRED: the link is older than 72 hours. */
             410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineSummaryDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPipelineDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pipelineId: string;
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineDefinitionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPipelinePromptStats: {
+        parameters: {
+            query?: {
+                projectId?: string;
+            };
+            header?: never;
+            path: {
+                pipelineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptStatsDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPipelineRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRunDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelineRunStages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineStageDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPipelineRunTimeline: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineTimelinePageDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPipelineRunReplay: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineTimelinePageDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelineRunArtifacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineArtifactDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetPipelineRunArtifactVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+                key: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineArtifactVersionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DiffPipelineRunArtifact: {
+        parameters: {
+            query?: {
+                from?: number;
+                to?: number;
+            };
+            header?: never;
+            path: {
+                runId: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineArtifactDiffDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelineRunGates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineGateDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ApprovePipelineRunGate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+                gateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["DecidePipelineGateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineGateDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RejectPipelineRunGate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+                gateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["DecidePipelineGateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineGateDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

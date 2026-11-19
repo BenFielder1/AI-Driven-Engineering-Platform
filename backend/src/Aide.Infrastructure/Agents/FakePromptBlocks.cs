@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Aide.Domain.Stack;
+using Tevrin.Engine.Runtime.Llm;
 
 namespace Aide.Infrastructure.Agents;
 

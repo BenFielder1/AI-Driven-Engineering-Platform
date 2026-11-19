@@ -1,21 +1,43 @@
 using Aide.Api.Features.Git;
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Release;
 
 /// <summary>Payload of the <c>merge_poll</c> job (§4.14): the project, the awaiting attempt and the PR's last ETag.</summary>
 public sealed record MergePollJobPayload(Guid ProjectId, Guid ReleaseId, string? ETag = null);
+
+/// <summary>How a release lifecycle move refused in a job fails the job.</summary>
+public static class ReleaseMoveFailure
+{
+    /// <summary>
+    /// FR-277: <c>DEFINITION_UNAVAILABLE</c> fails the job permanently (no retry can succeed until a build that registers the
+    /// missing names is deployed; an Admin then retries the dead letter), with the missing names in the message. Any other
+    /// refusal stays transient, as in 0.6.1.
+    /// </summary>
+    public static JobFailedException Of(Tevrin.Engine.Domain.Common.DomainError error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        if (error.Code != ErrorCodes.DefinitionUnavailable)
+        {
+            return new JobFailedException(error.Message, transient: true, error.Code);
+        }
+
+        var missing = error.Details.Count > 0 ? $" Missing: {string.Join(", ", error.Details)}." : string.Empty;
+        return new JobFailedException(
+            $"{error.Message}{missing} Redeploy a build that registers them, then retry the dead letter.", transient: false, error.Code);
+    }
+}
 
 /// <summary>
 /// FR-64, FR-65: how a release attempt ends, shared by the release job and the merge poll. Each method writes one unit of
@@ -28,9 +50,12 @@ public sealed partial class ReleaseCompletion(
     LifecycleWriter writer,
     JobEnqueuer jobs,
     Deployments.RolloutScheduler rollouts,
+    Pipelines.SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<ReleaseCompletion> logger)
 {
+    private static JobFailedException MoveFailed(Tevrin.Engine.Domain.Common.DomainError error) => ReleaseMoveFailure.Of(error);
+
     public const string CompletedReason = "Release completed: merged and tagged";
 
     public const string AwaitingReason = "Release awaiting merge on GitHub";
@@ -65,10 +90,10 @@ public sealed partial class ReleaseCompletion(
         var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
         if (IsReleasing(project, release.Checkpoint))
         {
-            var completed = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseCompleted(CompletedReason), LifecycleSnapshot.Empty);
+            var completed = await lifecycle.ApplyAsync(db, project, SdlcTransitions.ReleaseCompleted(CompletedReason), LifecycleSnapshot.Empty, cancellationToken);
             if (completed.IsFailure)
             {
-                throw new JobFailedException(completed.Error!.Message, transient: true, completed.Error.Code);
+                throw MoveFailed(completed.Error!);
             }
 
             await writer.ApplyAsync(project, completed.Value, SystemActor.Name, now, cancellationToken);
@@ -169,10 +194,10 @@ public sealed partial class ReleaseCompletion(
             return;
         }
 
-        var awaiting = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseAwaitingMerge(AwaitingReason), LifecycleSnapshot.Empty);
+        var awaiting = await lifecycle.ApplyAsync(db, project, SdlcTransitions.ReleaseAwaitingMerge(AwaitingReason), LifecycleSnapshot.Empty, cancellationToken);
         if (awaiting.IsFailure)
         {
-            throw new JobFailedException(awaiting.Error!.Message, transient: true, awaiting.Error.Code);
+            throw MoveFailed(awaiting.Error!);
         }
 
         release.Status = ReleaseStatus.AwaitingMerge;
@@ -206,7 +231,7 @@ public sealed partial class ReleaseCompletion(
             },
             SystemActor.Name,
             now);
-        jobs.Enqueue(JobTypes.MergePoll, new MergePollJobPayload(project.Id, release.Id), project.Id, now, MergePollRules.NextPollAt(now, now));
+        jobs.Enqueue(SdlcJobTypes.MergePoll, new MergePollJobPayload(project.Id, release.Id), project.Id, now, MergePollRules.NextPollAt(now, now));
         await SaveAsync(cancellationToken);
         LogAwaiting(logger, project.Id, release.Tag, reasons.Count);
     }
@@ -232,7 +257,7 @@ public sealed partial class ReleaseCompletion(
         var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
         if (project.Checkpoint == release.Checkpoint)
         {
-            await BackToReleasingAsync(db, writer, project, $"Release failed: {errorCode}", now, cancellationToken);
+            await BackToReleasingAsync(db, writer, lifecycle, project, $"Release failed: {errorCode}", now, cancellationToken);
         }
 
         await SaveAsync(cancellationToken);
@@ -245,20 +270,21 @@ public sealed partial class ReleaseCompletion(
     /// Any other project state is left alone.
     /// </summary>
     public static async Task BackToReleasingAsync(
-        AideDbContext db, LifecycleWriter writer, Project project, string reason, DateTimeOffset now, CancellationToken cancellationToken)
+        AideDbContext db, LifecycleWriter writer, Pipelines.SdlcLifecycle lifecycle, Project project, string reason, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(lifecycle);
         ArgumentNullException.ThrowIfNull(project);
         if (project.CurrentPhase != Phase.Release || project.Status != ProjectStatus.AwaitingMerge)
         {
             return;
         }
 
-        var abandoned = LifecycleStateMachine.Apply(State(project), TransitionRequest.ReleaseMergeAbandoned(reason), LifecycleSnapshot.Empty);
+        var abandoned = await lifecycle.ApplyAsync(db, project, SdlcTransitions.ReleaseMergeAbandoned(reason), LifecycleSnapshot.Empty, cancellationToken);
         if (abandoned.IsFailure)
         {
-            throw new JobFailedException(abandoned.Error!.Message, transient: true, abandoned.Error.Code);
+            throw MoveFailed(abandoned.Error!);
         }
 
         await writer.ApplyAsync(project, abandoned.Value, SystemActor.Name, now, cancellationToken);
@@ -295,8 +321,6 @@ public sealed partial class ReleaseCompletion(
             throw new JobFailedException(saved.Error!.Message, transient: true, saved.Error.Code);
         }
     }
-
-    private static LifecycleState State(Project project) => new(project.CurrentPhase, project.Status, project.Checkpoint);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Release completion did nothing: {Reason}")]
     private static partial void LogSkipped(ILogger logger, string reason);

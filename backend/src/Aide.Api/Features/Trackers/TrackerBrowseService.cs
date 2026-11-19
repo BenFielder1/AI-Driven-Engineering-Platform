@@ -1,4 +1,3 @@
-using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
 using Aide.Domain.Trackers;
@@ -8,6 +7,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Trackers;
 

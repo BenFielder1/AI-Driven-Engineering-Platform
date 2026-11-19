@@ -4,7 +4,6 @@ using Aide.Api.Features.Deployments;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -13,6 +12,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Deployments;
 
@@ -47,7 +47,7 @@ public sealed class DeploymentSafeguardTests(AideApiFactory factory)
             await DeploymentHarness.PutTargetAsync(ben.Client, id, "frontend", new { provider = "vercel", connectionId = anas, link = new { resourceId = "prj_other" } }),
             HttpStatusCode.Forbidden,
             ErrorCodes.CredentialNotOwner);
-        Assert.False(await ProjectApi.WithDbAsync(app, db => db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type == JobTypes.DeploymentSetup, Ct)));
+        Assert.False(await ProjectApi.WithDbAsync(app, db => db.Jobs.AnyAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.DeploymentSetup, Ct)));
         Assert.Empty(vercel.Requests);
 
         // With his own connection: allowed, and the binding becomes his.

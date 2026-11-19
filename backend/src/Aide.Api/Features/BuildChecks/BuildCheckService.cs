@@ -1,16 +1,17 @@
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.BuildChecks;
 
-/// <summary>Payload of a <see cref="JobTypes.BuildCheck"/> job: the check, and when the preview and the checks started being
+/// <summary>Payload of a <see cref="SdlcJobTypes.BuildCheck"/> job: the check, and when the preview and the checks started being
 /// waited for (§4.47; kept across deferrals, <c>null</c> before the first wait). D-0.6.1-23: whether the check already logged
 /// its warning about unreadable branch rules and about unreadable checks (one warning each per check).</summary>
 public sealed record BuildCheckJobPayload(
@@ -21,7 +22,7 @@ public sealed record BuildCheckJobPayload(
     bool RulesWarned = false,
     bool UnreadableWarned = false);
 
-/// <summary>Payload of a <see cref="JobTypes.BuildFix"/> job: the failed check to plan fix steps for (FR-256).</summary>
+/// <summary>Payload of a <see cref="SdlcJobTypes.BuildFix"/> job: the failed check to plan fix steps for (FR-256).</summary>
 public sealed record BuildFixJobPayload(Guid ProjectId, Guid BuildCheckId);
 
 /// <summary>What the pull request job does about the build check after execution (FR-254, FR-258, §4.47).</summary>
@@ -124,7 +125,7 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
             return check;
         }
 
-        jobs.Enqueue(JobTypes.BuildCheck, new BuildCheckJobPayload(project.Id, check.Id), project.Id, now);
+        jobs.Enqueue(SdlcJobTypes.BuildCheck, new BuildCheckJobPayload(project.Id, check.Id), project.Id, now);
         return check;
     }
 
@@ -252,7 +253,7 @@ public sealed partial class BuildCheckService(AideDbContext db, JobEnqueuer jobs
         if (open.Count > 0)
         {
             var queued = await db.Jobs
-                .Where(j => j.ProjectId == projectId && (j.Type == JobTypes.BuildCheck || j.Type == JobTypes.BuildFix) && j.Status == JobStatus.Queued)
+                .Where(j => j.ProjectId == projectId && (j.Type == SdlcJobTypes.BuildCheck || j.Type == SdlcJobTypes.BuildFix) && j.Status == JobStatus.Queued)
                 .ToListAsync(cancellationToken);
             foreach (var job in queued)
             {
@@ -370,8 +371,6 @@ public static class BuildCheckServiceCollectionExtensions
     {
         services.AddScoped<BuildCheckService>();
         services.AddScoped<IJobEndedHook, BuildCheckJobEndedHook>();
-        services.AddJobHandler<BuildCheckJobHandler>(JobTypes.BuildCheck);
-        services.AddJobHandler<BuildFixJobHandler>(JobTypes.BuildFix);
         return services;
     }
 }

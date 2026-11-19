@@ -7,6 +7,7 @@ using Aide.Domain.Common;
 using Aide.Domain.GitHosts;
 using Aide.Infrastructure.GitLab;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.GitLab;
 

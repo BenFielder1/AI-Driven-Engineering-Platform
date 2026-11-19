@@ -5,12 +5,16 @@ using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Refinement;
 
@@ -64,7 +68,7 @@ public sealed partial class RefinementService(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 projectId,
-                new { agent = AgentKind.IdeaRefinement.ToWire(), tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
+                new { agent = SdlcAgents.IdeaRefinement, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
                 actor,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -72,7 +76,7 @@ public sealed partial class RefinementService(
         }
 
         if (await db.Jobs.AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.IdeaRefinement && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken))
         {
             return Result.Failure<RefinementRoundDto>(new DomainError(
@@ -89,7 +93,7 @@ public sealed partial class RefinementService(
         }
 
         var job = await jobs.EnqueueAsync(
-            JobTypes.IdeaRefinement,
+            SdlcJobTypes.IdeaRefinement,
             new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.UserRequested, Answers: resolved.Value),
             projectId,
             cancellationToken,
@@ -106,7 +110,7 @@ public sealed partial class RefinementService(
         return Result.Success(new RefinementRoundDto(
             AgentRunRules.RunId(job.Id),
             job.Id,
-            AgentJobTrigger.UserRequested,
+            LifecycleJobPayload.UserRequested,
             AgentRunStatus.Queued,
             null,
             [.. resolved.Value.Select(a => new RefinementAnswerDto(a.QuestionId, a.Question, a.Answer))],
@@ -121,7 +125,7 @@ public sealed partial class RefinementService(
     public async Task<RefinementDto> GetAsync(Guid projectId, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
         var versionId = releaseVersionId ?? await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-        var latestDraft = await artifacts.LatestSummaryAsync(projectId, ArtifactType.ProjectRequest, versionId, cancellationToken);
+        var latestDraft = await artifacts.LatestSummaryAsync(projectId, SdlcArtifacts.ProjectRequest, versionId, cancellationToken);
         var rounds = await LoadRoundsAsync(projectId, cancellationToken, versionId);
         var latest = rounds.Count == 0 ? null : rounds[0];
         var completed = LatestCompleted(rounds);
@@ -206,7 +210,7 @@ public sealed partial class RefinementService(
         }
 
         var summary = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == ArtifactType.CodebaseSummary)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.CodebaseSummary)
             .OrderByDescending(a => a.Version)
             .Select(a => new { a.Id, a.Version, a.AgentRunId })
             .FirstOrDefaultAsync(cancellationToken);
@@ -244,7 +248,7 @@ public sealed partial class RefinementService(
             .Select(v => (DateTimeOffset?)v.CreatedAt)
             .MinAsync(cancellationToken) ?? DateTimeOffset.MaxValue;
         var roundJobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement && j.CreatedAt >= since && j.CreatedAt < until)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.IdeaRefinement && j.CreatedAt >= since && j.CreatedAt < until)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Take(RoundsRead)
@@ -257,14 +261,15 @@ public sealed partial class RefinementService(
         // FR-55: round numbers count every round of the version, also those older than the ones read.
         var total = roundJobs.Count < RoundsRead
             ? roundJobs.Count
-            : await db.Jobs.CountAsync(j => j.ProjectId == projectId && j.Type == JobTypes.IdeaRefinement && j.CreatedAt >= since && j.CreatedAt < until, cancellationToken);
+            : await db.Jobs.CountAsync(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.IdeaRefinement && j.CreatedAt >= since && j.CreatedAt < until, cancellationToken);
 
         var runIds = roundJobs.SelectMany(j => new[] { AgentRunRules.RunId(j.Id), AgentRunRules.RunId(j.Id, AgentOutput.CorrectiveRunKey) }).ToList();
         var runs = await db.AgentRuns.AsNoTracking()
             .Where(r => r.ProjectId == projectId && runIds.Contains(r.Id))
+            .Select(r => new AgentRun { Id = r.Id, Status = r.Status, Output = r.Output, Error = r.Error, CompletedAt = r.CompletedAt })
             .ToDictionaryAsync(r => r.Id, cancellationToken);
         var drafts = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == ArtifactType.ProjectRequest && a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))
+            .Where(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.ProjectRequest && a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))
             .Select(a => new { a.Id, a.Version, RunId = a.AgentRunId!.Value })
             .ToListAsync(cancellationToken);
 
@@ -292,7 +297,7 @@ public sealed partial class RefinementService(
                 new RefinementRoundDto(
                     final?.Id ?? AgentRunRules.RunId(job.Id),
                     job.Id,
-                    payload?.TriggerKind,
+                    AgentJobTriggerWire.ToWireOrNull(payload?.Trigger),
                     status,
                     error,
                     [.. (payload?.Answers ?? []).Select(a => new RefinementAnswerDto(a.QuestionId, a.Question, a.Answer))],

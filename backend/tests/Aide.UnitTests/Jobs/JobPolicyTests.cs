@@ -1,5 +1,6 @@
 using Aide.Domain.Common;
-using Aide.Domain.Jobs;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Jobs;
 
@@ -85,30 +86,32 @@ public class JobPolicyTests
     [Fact]
     public void FR51_Retrying_a_dead_execution_job_while_another_is_active_is_a_conflict()
     {
-        var dead = new JobSnapshot(Guid.NewGuid(), JobTypes.Execution, "{}", Guid.NewGuid(), JobStatus.Dead);
+        var dead = new JobSnapshot(Guid.NewGuid(), SdlcJobTypes.Execution, "{}", Guid.NewGuid(), JobStatus.Dead);
 
-        var result = JobPolicy.RetryDeadLetter(dead, Now, executionJobActive: true);
+        var result = JobPolicy.RetryDeadLetter(dead, Now, onePerProject: true, sameTypeActive: true);
 
         Assert.Equal(ErrorCodes.Conflict, result.Error!.Code);
+        Assert.Equal("An execution job is already queued or running for this project; retry this dead letter after it finishes.", result.Error.Message);
     }
 
     [Fact]
     public void FR51_An_active_execution_job_does_not_block_retrying_other_job_types()
     {
-        var dead = new JobSnapshot(Guid.NewGuid(), JobTypes.Review, "{}", Guid.NewGuid(), JobStatus.Dead);
+        var dead = new JobSnapshot(Guid.NewGuid(), SdlcJobTypes.Review, "{}", Guid.NewGuid(), JobStatus.Dead);
 
-        var result = JobPolicy.RetryDeadLetter(dead, Now, executionJobActive: true);
+        // FR-272: only a type registered as one per project (execution) is blocked by an active job of its type.
+        var result = JobPolicy.RetryDeadLetter(dead, Now, onePerProject: false, sameTypeActive: true);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(JobTypes.Review, result.Value.Replacement.Type);
+        Assert.Equal(SdlcJobTypes.Review, result.Value.Replacement.Type);
     }
 
     [Fact]
     public void FR51_A_dead_execution_job_is_retried_when_none_is_active()
     {
-        var dead = new JobSnapshot(Guid.NewGuid(), JobTypes.Execution, "{\"trigger\":\"start\"}", Guid.NewGuid(), JobStatus.Dead);
+        var dead = new JobSnapshot(Guid.NewGuid(), SdlcJobTypes.Execution, "{\"trigger\":\"start\"}", Guid.NewGuid(), JobStatus.Dead);
 
-        var result = JobPolicy.RetryDeadLetter(dead, Now, executionJobActive: false);
+        var result = JobPolicy.RetryDeadLetter(dead, Now, onePerProject: true, sameTypeActive: false);
 
         Assert.Equal((JobStatus.Retried, JobStatus.Queued, 0), (result.Value.DeadJobStatus, result.Value.Replacement.Status, result.Value.Replacement.Attempts));
     }

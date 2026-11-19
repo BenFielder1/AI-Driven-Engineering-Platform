@@ -2,15 +2,13 @@ using System.Net;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Projects;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Gates;
 
@@ -40,7 +38,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         Assert.Equal(project.CurrentReleaseVersionId, decided.ReleaseVersionId);
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.GateApproved));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.PhaseChanged));
-        Assert.Equal([JobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.PlanGeneration], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -83,7 +81,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await SeedReadyForExecutionAsync(id, ApprovalMode.Strict);
         var gate = (await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id))).Gate!;
-        Assert.Equal(GateType.PlanApproval, gate.Type);
+        Assert.Equal(SdlcGates.PlanApproval, gate.Type);
 
         var decided = await ProjectApi.ReadAsync<GateDto>(
             await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "reject", new { comment = "split step 4" }));
@@ -93,7 +91,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         Assert.Equal((Phase.Planning, 3), (project.CurrentPhase, project.Checkpoint));
 
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal((JobTypes.PlanGeneration, JobStatus.Queued), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, JobStatus.Queued), (job.Type, job.Status));
         var payload = LifecycleSeed.Payload(job.Payload);
         Assert.Equal("split step 4", payload.GetProperty("feedback").GetString());
         Assert.Equal(gate.Id.ToString(), payload.GetProperty("gateId").GetString());
@@ -112,7 +110,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, fixture.Project.Id, gate.Id, "reject", new { comment = "Add auth" }));
 
-        Assert.Equal([JobTypes.SpecGeneration], (await LifecycleSeed.JobsAsync(factory, fixture.Project.Id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.SpecGeneration], (await LifecycleSeed.JobsAsync(factory, fixture.Project.Id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -122,13 +120,13 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 1);
         await LifecycleSeed.AddReportAsync(factory, id, 5, ReviewDecision.ReleaseEligible);
-        var gate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
 
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve"));
 
         var project = await LifecycleSeed.ProjectAsync(factory, id);
         Assert.Equal((Phase.Release, ProjectStatus.Releasing, 6), (project.CurrentPhase, project.Status, project.Checkpoint));
-        Assert.Equal([JobTypes.Release], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
+        Assert.Equal([SdlcJobTypes.Release], (await LifecycleSeed.JobsAsync(factory, id)).Select(j => j.Type));
     }
 
     [Fact]
@@ -137,7 +135,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         var gate = await PendingSpecGateAsync(fixture);
-        await ProjectApi.WithDbAsync(factory, db => db.Artifacts.Where(a => a.ProjectId == id && a.Type == ArtifactType.TechnicalSpecification)
+        await ProjectApi.WithDbAsync(factory, db => db.Artifacts.Where(a => a.ProjectId == id && a.Type == SdlcArtifacts.TechnicalSpecification)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, ArtifactStatus.Invalidated), Ct));
 
         var response = await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve");
@@ -179,11 +177,11 @@ public sealed class GateDecisionTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        var old = await LifecycleSeed.AddGateAsync(factory, id, GateType.SpecApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-73));
+        var old = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.SpecApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-73));
         await ProjectApi.WithDbAsync(factory, db => db.ApprovalGates.Where(g => g.Id == old.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.Status, GateStatus.Rejected), Ct));
-        var overdue = await LifecycleSeed.AddGateAsync(factory, id, GateType.PlanApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-73));
-        var fresh = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var overdue = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PlanApproval, createdAt: DateTimeOffset.UtcNow.AddHours(-73));
+        var fresh = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
 
         var all = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates", UriKind.Relative), Ct));
         var pending = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates?status=pending", UriKind.Relative), Ct));
@@ -203,8 +201,8 @@ public sealed class GateDecisionTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        var current = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
-        var earlier = await LifecycleSeed.AddGateAsync(factory, id, GateType.SpecApproval, createdAt: DateTimeOffset.UtcNow.AddDays(-6));
+        var current = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
+        var earlier = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.SpecApproval, createdAt: DateTimeOffset.UtcNow.AddDays(-6));
         var currentVersion = Guid.Empty;
         var releasedVersion = Guid.Empty;
         await ProjectApi.WithDbAsync(factory, async db =>
@@ -262,7 +260,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         var gate = await EscalatedReviewAsync(id);
-        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.OptimizationPlan, projectVersionAtCreation: 5);
+        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, projectVersionAtCreation: 5);
         await LifecycleSeed.AddStepsAsync(factory, id, optimisation.Id, 2);
         await LifecycleSeed.PrepareWorkingCopyAsync(factory, id);
 
@@ -284,7 +282,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
         Assert.Equal(((EscalationDecision?)EscalationDecision.Accept, "Good enough for v1"), (decided.Decision, decided.Comment));
         var preRelease = Assert.Single(await LifecycleSeed.GatesAsync(factory, id), g => g.Status == GateStatus.Pending);
-        Assert.Equal(GateType.PreRelease, preRelease.Type);
+        Assert.Equal(SdlcGates.PreRelease, preRelease.Type);
 
         // The accepted escalation satisfies the release entry condition (§4.1).
         await ProjectApi.ReadAsync<GateDto>(await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, preRelease.Id, "approve"));
@@ -302,17 +300,17 @@ public sealed class GateDecisionTests(AideApiFactory factory)
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Specification, Phase.Planning, 3, start.AddMinutes(20));
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Planning, Phase.Execution, 4, start.AddMinutes(30));
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Execution, Phase.Review, 5, start.AddMinutes(40));
-        var spec = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+        var spec = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
         var planSteps = await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 2, StepStatus.Completed);
-        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.OptimizationPlan, projectVersionAtCreation: 5);
+        var optimisation = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, projectVersionAtCreation: 5);
         var optimisationSteps = await LifecycleSeed.AddStepsAsync(factory, id, optimisation.Id, 2);
         var gate = await EscalatedReviewAsync(id);
-        var otherGate = await LifecycleSeed.AddGateAsync(factory, id, GateType.PreRelease);
+        var otherGate = await LifecycleSeed.AddGateAsync(factory, id, SdlcGates.PreRelease);
         await ProjectApi.WithDbAsync(factory, db => db.Projects.Where(p => p.Id == id).ExecuteUpdateAsync(s => s.SetProperty(p => p.ExtraReviewCycles, 2), Ct));
         await ProjectApi.WithDbAsync(factory, async db =>
         {
-            db.Jobs.Add(new Aide.Domain.Entities.Job { Type = JobTypes.Review, ProjectId = id, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
+            db.Jobs.Add(new Tevrin.Engine.Domain.Entities.Job { Type = SdlcJobTypes.Review, ProjectId = id, RunAfter = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync(Ct);
         });
 
@@ -345,7 +343,7 @@ public sealed class GateDecisionTests(AideApiFactory factory)
 
             Assert.Equal(GateStatus.Cancelled, (await db.ApprovalGates.SingleAsync(g => g.Id == otherGate.Id, Ct)).Status);
             Assert.Equal(GateStatus.Approved, (await db.ApprovalGates.SingleAsync(g => g.Id == gate.Id, Ct)).Status);
-            Assert.All(await db.Jobs.Where(j => j.ProjectId == id && j.Type != JobTypes.Notification).ToListAsync(Ct), j => Assert.Equal(JobStatus.Cancelled, j.Status));
+            Assert.All(await db.Jobs.Where(j => j.ProjectId == id && j.Type != SdlcJobTypes.Notification).ToListAsync(Ct), j => Assert.Equal(JobStatus.Cancelled, j.Status));
         });
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.RollbackCompleted));
         Assert.Equal(Phase.Planning, (await LifecycleSeed.TransitionsAsync(factory, id))[^1].ToPhase);
@@ -417,24 +415,24 @@ public sealed class GateDecisionTests(AideApiFactory factory)
     {
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
         var result = await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id, reason));
         return result.Gate!;
     }
 
     /// <summary>Review at version 5, cycle 3 of 3, an escalating (max cycles) report and its pending escalation gate.</summary>
-    private async Task<Aide.Domain.Entities.ApprovalGate> EscalatedReviewAsync(Guid id)
+    private async Task<Tevrin.Engine.Domain.Entities.ApprovalGate> EscalatedReviewAsync(Guid id)
     {
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory, reviewCycle: 3);
         await LifecycleSeed.AddReportAsync(factory, id, 5, ReviewDecision.EscalationRequired, EscalationReason.MaxCycles, DateTimeOffset.UtcNow.AddMinutes(-10));
-        return await LifecycleSeed.AddGateAsync(factory, id, GateType.Escalation, createdAt: DateTimeOffset.UtcNow.AddMinutes(-5));
+        return await LifecycleSeed.AddGateAsync(factory, id, EngineGates.Escalation, createdAt: DateTimeOffset.UtcNow.AddMinutes(-5));
     }
 
     private async Task SeedReadyForExecutionAsync(Guid id, ApprovalMode mode)
     {
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, mode);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
         await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 2);
         await LifecycleSeed.PrepareWorkingCopyAsync(factory, id);
     }

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- FR-262: the engine's generic endpoints and SignalR contract (added in M60). Never references Aide.* or
+       Tevrin.Pack.* (FR-263). -->
+  <PropertyGroup>
+    <RootNamespace>Tevrin.Engine.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tevrin.Engine.Domain\Tevrin.Engine.Domain.csproj" />
+    <ProjectReference Include="..\Tevrin.Engine.Runtime\Tevrin.Engine.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>

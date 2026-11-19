@@ -1,8 +1,9 @@
 using System.Globalization;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
-using Aide.Domain.Gates;
 using Aide.Domain.GitHosts;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Notifications;
 
@@ -13,7 +14,7 @@ namespace Aide.Domain.Notifications;
 /// </summary>
 public sealed record NotificationFacts(NotificationType Type, string ProjectName)
 {
-    public GateType? GateType { get; init; }
+    public string? GateType { get; init; }
 
     /// <summary>The artifact's type (wire value), for gates and drafts.</summary>
     public string? ArtifactType { get; init; }
@@ -180,12 +181,12 @@ public static class NotificationMessages
         return new NotificationText(Truncate(title, TitleMaxLength), Truncate(body, BodyMaxLength));
     }
 
-    public static string GateName(GateType type) => type switch
+    public static string GateName(string type) => type switch
     {
-        GateType.SpecApproval => "The specification approval",
-        GateType.PlanApproval => "The plan approval",
-        GateType.PreRelease => "The pre-release approval",
-        GateType.Escalation => "An escalation",
+        SdlcGates.SpecApproval => "The specification approval",
+        SdlcGates.PlanApproval => "The plan approval",
+        SdlcGates.PreRelease => "The pre-release approval",
+        EngineGates.Escalation => "An escalation",
         _ => "An approval",
     };
 

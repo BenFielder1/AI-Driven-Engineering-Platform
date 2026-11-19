@@ -7,7 +7,6 @@ using Aide.Api.Features.Tokens;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
@@ -15,6 +14,7 @@ using Aide.Infrastructure.Security;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Git;
 
@@ -159,7 +159,7 @@ public sealed class CommitCreditTests(AideApiFactory factory)
             {
                 ProjectId = fixture.Project.Id,
                 ReleaseVersionId = versionId,
-                Type = GateType.PlanApproval,
+                Type = SdlcGates.PlanApproval,
                 Status = GateStatus.Approved,
                 ReviewerId = fixture.Contributor.User!.Id,
                 DecidedAt = DateTimeOffset.UtcNow,
@@ -409,7 +409,7 @@ public sealed class CommitCreditTests(AideApiFactory factory)
             {
                 ProjectId = fixture.Project.Id,
                 ReleaseVersionId = versionId,
-                Type = GateType.PreRelease,
+                Type = SdlcGates.PreRelease,
                 Status = status,
                 ReviewerId = reviewer.User!.Id,
                 DecidedAt = DateTimeOffset.UtcNow,

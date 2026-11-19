@@ -1,6 +1,5 @@
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Stack;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
@@ -9,6 +8,10 @@ using Aide.Domain.Specs;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Artifacts;
 
@@ -25,11 +28,12 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId
                 && a.Version == db.Artifacts.Where(b => b.ProjectId == projectId && b.ReleaseVersionId == releaseVersionId && b.Type == a.Type).Max(b => b.Version))
             .ToListAsync(cancellationToken);
-        return await SummariesAsync([.. latest.OrderBy(a => a.Type)], cancellationToken);
+        // Type order is the 0.6.1 enum order (SdlcArtifacts.All), not alphabetical.
+        return await SummariesAsync([.. latest.OrderBy(a => SdlcArtifacts.Order(a.Type))], cancellationToken);
     }
 
     /// <summary>Every version of a type in release version <paramref name="releaseVersionId"/>, newest first.</summary>
-    public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAsync(Guid projectId, ArtifactType type, Guid? releaseVersionId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAsync(Guid projectId, string type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
         var versions = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type)
@@ -39,7 +43,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     }
 
     /// <summary>FR-59: every version of a type across all the project's release versions, newest first.</summary>
-    public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAcrossReleaseVersionsAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAcrossReleaseVersionsAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
         var versions = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == type)
@@ -49,7 +53,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     }
 
     /// <summary>The highest version of a type in release version <paramref name="releaseVersionId"/>, without its content, or <c>null</c>.</summary>
-    public async Task<ArtifactSummaryDto?> LatestSummaryAsync(Guid projectId, ArtifactType type, Guid? releaseVersionId, CancellationToken cancellationToken)
+    public async Task<ArtifactSummaryDto?> LatestSummaryAsync(Guid projectId, string type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
         var versionId = releaseVersionId;
         var artifact = await db.Artifacts.AsNoTracking()
@@ -60,7 +64,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     }
 
     /// <summary>The highest version of a type in release version <paramref name="releaseVersionId"/>, or <c>null</c>.</summary>
-    public async Task<ArtifactDto?> LatestAsync(Guid projectId, ArtifactType type, Guid? releaseVersionId, CancellationToken cancellationToken)
+    public async Task<ArtifactDto?> LatestAsync(Guid projectId, string type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
         var artifact = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type)
@@ -70,7 +74,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     }
 
     /// <summary>One version of a type, or <c>null</c>.</summary>
-    public async Task<ArtifactDto?> VersionAsync(Guid projectId, ArtifactType type, int version, CancellationToken cancellationToken)
+    public async Task<ArtifactDto?> VersionAsync(Guid projectId, string type, int version, CancellationToken cancellationToken)
     {
         var artifact = await FindAsync(projectId, type, version, cancellationToken);
         return artifact is null ? null : await ToDtoAsync(artifact, cancellationToken);
@@ -80,18 +84,18 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     /// FR-21: the line diff between two versions; <c>NOT_FOUND</c> if either doesn't exist, <c>VALIDATION</c> if they are
     /// too large to diff (<see cref="LineDiff.MaxTotalLines"/>).
     /// </summary>
-    public async Task<Result<ArtifactDiffDto>> DiffAsync(Guid projectId, ArtifactType type, int from, int to, CancellationToken cancellationToken)
+    public async Task<Result<ArtifactDiffDto>> DiffAsync(Guid projectId, string type, int from, int to, CancellationToken cancellationToken)
     {
         var older = await FindAsync(projectId, type, from, cancellationToken);
         var newer = from == to ? older : await FindAsync(projectId, type, to, cancellationToken);
         if (older is null || newer is null)
         {
             var missing = older is null ? from : to;
-            return Result.Failure<ArtifactDiffDto>(new DomainError(ErrorCodes.NotFound, $"Version {missing} of the {type.ToWire()} was not found."));
+            return Result.Failure<ArtifactDiffDto>(new DomainError(ErrorCodes.NotFound, $"Version {missing} of the {type} was not found."));
         }
 
         await integrity.CheckAsync(from == to ? [older] : [older, newer], cancellationToken);
-        var diff = LineDiff.Diff(older.Content, newer.Content, $"{type.ToWire()} v{from}", $"{type.ToWire()} v{to}");
+        var diff = LineDiff.Diff(older.Content, newer.Content, $"{type} v{from}", $"{type} v{to}");
         if (diff.IsFailure)
         {
             return Result.Failure<ArtifactDiffDto>(diff.Error!);
@@ -142,12 +146,12 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
     /// </summary>
     private async Task<IReadOnlyList<ArtifactWarningDto>> WarningsAsync(Artifact artifact, CancellationToken cancellationToken)
     {
-        if (artifact.Type == ArtifactType.TechnicalSpecification)
+        if (artifact.Type == SdlcArtifacts.TechnicalSpecification)
         {
             return await SpecWarningsAsync(artifact, cancellationToken);
         }
 
-        if (artifact.Type != ArtifactType.ImplementationPlan)
+        if (artifact.Type != SdlcArtifacts.ImplementationPlan)
         {
             return [];
         }
@@ -161,7 +165,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
 
         var spec = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == artifact.ProjectId && a.ReleaseVersionId == artifact.ReleaseVersionId
-                && a.Type == ArtifactType.TechnicalSpecification && a.Status == ArtifactStatus.Locked)
+                && a.Type == SdlcArtifacts.TechnicalSpecification && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => a.Content)
             .FirstOrDefaultAsync(cancellationToken);
@@ -206,7 +210,7 @@ public sealed class ArtifactReader(AideDbContext db, ArtifactIntegrityGuard inte
             : [];
     }
 
-    private Task<Artifact?> FindAsync(Guid projectId, ArtifactType type, int version, CancellationToken cancellationToken) =>
+    private Task<Artifact?> FindAsync(Guid projectId, string type, int version, CancellationToken cancellationToken) =>
         db.Artifacts.AsNoTracking().FirstOrDefaultAsync(a => a.ProjectId == projectId && a.Type == type && a.Version == version, cancellationToken);
 
     private async Task<IReadOnlyList<ArtifactSummaryDto>> SummariesAsync(IReadOnlyList<Artifact> artifacts, CancellationToken cancellationToken)

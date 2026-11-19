@@ -1,6 +1,7 @@
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Specs;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Stack;
 

@@ -1,7 +1,6 @@
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
@@ -11,6 +10,10 @@ using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Agents;
 
@@ -70,7 +73,7 @@ public sealed partial class RepositoryAnalysisJobHandler(
 
         var runIds = new[] { AgentRunRules.RunId(job.Id), AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey) };
         if (await db.Artifacts.AsNoTracking().AnyAsync(
-                a => a.ProjectId == project.Id && a.ReleaseVersionId == version.Id && a.Type == ArtifactType.CodebaseSummary
+                a => a.ProjectId == project.Id && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.CodebaseSummary
                     && (a.AgentRunId == null || !runIds.Contains(a.AgentRunId.Value)),
                 cancellationToken))
         {
@@ -85,7 +88,7 @@ public sealed partial class RepositoryAnalysisJobHandler(
         AgentRunRequest Request(string? feedback) => new()
         {
             ProjectId = project.Id,
-            Agent = AgentKind.RepositoryAnalyst,
+            Agent = SdlcAgents.RepositoryAnalyst,
             Job = job,
             Inputs = new Dictionary<string, string?>
             {
@@ -121,7 +124,7 @@ public sealed partial class RepositoryAnalysisJobHandler(
             }
         }
 
-        var summary = await writer.AddLockedAsync(project.Id, version.Id, ArtifactType.CodebaseSummary, content.Value, produced.RunId, produced.CompletedAt, cancellationToken);
+        var summary = await writer.AddLockedAsync(project.Id, version.Id, SdlcArtifacts.CodebaseSummary, content.Value, produced.RunId, produced.CompletedAt, cancellationToken);
         if (summary is null)
         {
             LogSkipped(logger, "the version stopped being the project's version in development while the analyst ran");

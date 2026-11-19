@@ -3,6 +3,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
 using Aide.Domain.Projects;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.GitHub;
 

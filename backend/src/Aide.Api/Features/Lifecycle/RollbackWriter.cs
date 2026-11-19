@@ -3,11 +3,16 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Rollback;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Lifecycle;
 
@@ -22,12 +27,14 @@ namespace Aide.Api.Features.Lifecycle;
 /// whose job was queued fail as <c>RELEASE_CANCELLED</c>. Used by the escalation <c>rollback</c> decision and by
 /// <c>POST /rollback</c>.
 /// </summary>
-public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, BuildChecks.BuildCheckService buildChecks)
+public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, BuildChecks.BuildCheckService buildChecks, Pipelines.SdlcLifecycle lifecycle)
 {
     /// <summary>
     /// Rolls the tracked <paramref name="project"/> back to checkpoint <paramref name="targetVersion"/> of its current release
     /// version (§4.10: only that version's transitions, artifacts and steps are read, so earlier versions' work is never
     /// touched). <paramref name="keepGateId"/> is a pending gate not to cancel (the escalation gate whose decision is this rollback).
+    /// <paramref name="pinned"/> is the run a caller already pinned in this unit of work (FR-277), so the move reads it once;
+    /// <c>null</c> pins it here.
     /// </summary>
     public async Task<Result<RollbackEvent>> ApplyAsync(
         Project project,
@@ -36,6 +43,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         string actor,
         DateTimeOffset now,
         Guid? keepGateId,
+        Pipelines.SdlcRun? pinned,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
@@ -53,16 +61,16 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         var activeJobs = await db.Jobs
             .FromSql($"""
                 SELECT * FROM jobs
-                WHERE project_id = {id} AND status IN ('queued', 'running') AND type <> {JobTypes.Notification}
+                WHERE project_id = {id} AND status IN ('queued', 'running') AND type <> {SdlcJobTypes.Notification}
                 ORDER BY id
                 FOR UPDATE
                 """)
             .ToListAsync(cancellationToken);
-        var releaseRunning = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Running);
+        var releaseRunning = activeJobs.Any(j => j.Type == SdlcJobTypes.Release && j.Status == JobStatus.Running);
 
         // A release job waiting out a retry backoff whose attempt already merged: cancelling it would leave a merged,
         // untagged release behind (the merge can't be undone), so the rollback waits for the release instead.
-        var releasePartiallyApplied = activeJobs.Any(j => j.Type == JobTypes.Release && j.Status == JobStatus.Queued)
+        var releasePartiallyApplied = activeJobs.Any(j => j.Type == SdlcJobTypes.Release && j.Status == JobStatus.Queued)
             && await db.Releases.AsNoTracking().AnyAsync(
                 r => r.ProjectId == id && r.Status == ReleaseStatus.InProgress && (r.MergeCommitSha != null || r.MergeSubmittedAt != null), cancellationToken);
 
@@ -82,8 +90,27 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         var runInProgress = await db.AgentRuns.AsNoTracking()
             .AnyAsync(r => r.ProjectId == id && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.Running), cancellationToken);
 
+        // FR-292: the run is the source of truth for the position rolled back from; FR-277: its pinned definition decides
+        // (409 DEFINITION_UNAVAILABLE when this build can't run it).
+        Pipelines.SdlcRun run;
+        if (pinned is not null)
+        {
+            run = Pipelines.SdlcLifecycle.Refresh(db, pinned, project);
+        }
+        else
+        {
+            var resolved = await lifecycle.PinnedAsync(db, project, cancellationToken);
+            if (resolved.IsFailure)
+            {
+                return Result.Failure<RollbackEvent>(resolved.Error!);
+            }
+
+            run = resolved.Value;
+        }
+
+        var current = run.State;
         var planned = RollbackRules.Plan(new RollbackRequest(
-            new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint),
+            current,
             targetVersion,
             reason,
             transitions,
@@ -95,9 +122,10 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         {
             ReleaseRunning = releaseRunning,
             ReleasePartiallyApplied = releasePartiallyApplied,
-            VersionReleased = project.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
+            VersionReleased = current.Status == ProjectStatus.Released || versionStatus is ReleaseVersionStatus.Released or ReleaseVersionStatus.Imported,
             AwaitingMerge = versionStatus == ReleaseVersionStatus.AwaitingMerge,
-        });
+        },
+        run.Definition);
         if (planned.IsFailure)
         {
             return Result.Failure<RollbackEvent>(planned.Error!);
@@ -110,7 +138,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         project.LastRollbackAt = now;
 
         var invalidated = plan.InvalidatedArtifactIds.ToHashSet();
-        foreach (var artifact in artifacts.Where(a => invalidated.Contains(a.Id)))
+        foreach (var artifact in Artifacts.EventOrder.Invalidated(artifacts.Where(a => invalidated.Contains(a.Id))))
         {
             artifact.Status = ArtifactStatus.Invalidated;
             db.AddEvent(
@@ -146,7 +174,7 @@ public sealed class RollbackWriter(AideDbContext db, LifecycleWriter writer, Bui
         var pendingGates = await db.ApprovalGates
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending && g.Id != keepGateId)
             .ToListAsync(cancellationToken);
-        foreach (var gate in pendingGates)
+        foreach (var gate in Artifacts.EventOrder.Cancelled(pendingGates))
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;

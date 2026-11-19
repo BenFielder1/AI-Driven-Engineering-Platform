@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["consistent", "findings"],
+  "properties": {
+    "consistent": { "type": "boolean" },
+    "findings": { "type": "array", "items": { "type": "string" } }
+  }
+}

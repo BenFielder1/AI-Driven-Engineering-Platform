@@ -2,23 +2,32 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
+using Aide.Api.Pipelines;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Domain.Pipelines;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Artifacts;
 
 /// <summary>
 /// FR-16–FR-19: creating, approving and rejecting artifact versions. <see cref="ArtifactRules"/>,
-/// <see cref="InvalidationCascade"/>, <see cref="GateRules"/> and the lifecycle state machine decide; this service loads
+/// <see cref="InvalidationCascade"/>, <see cref="GateRules"/> and the engine with the SDLC definition decide; this service loads
 /// the rows and writes each outcome — status changes, events, cascade, phase fallback, stale gates and follow-up jobs —
 /// in one <c>SaveChanges</c> (one transaction) guarded by the project's and the artifacts' <c>xmin</c>.
 /// </summary>
@@ -33,6 +42,7 @@ public sealed partial class ArtifactService(
     ProjectStackService projectStacks,
     Analysis.StackProfileBaseReader profileBases,
     IStackCatalog catalogs,
+    SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<ArtifactService> logger)
 {
@@ -41,7 +51,7 @@ public sealed partial class ArtifactService(
     /// <paramref name="baseVersion"/>, <c>CONFLICT</c> unless that is still the latest version.
     /// </summary>
     public async Task<Result<Artifact>> CreateDraftAsync(
-        Guid projectId, ArtifactType type, string content, int? baseVersion, Guid userId, string actor, CancellationToken cancellationToken)
+        Guid projectId, string type, string content, int? baseVersion, Guid userId, string actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
@@ -50,7 +60,7 @@ public sealed partial class ArtifactService(
             return ProjectNotFound<Artifact>();
         }
 
-        var allowed = ArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status);
+        var allowed = SdlcArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status);
         if (allowed.IsFailure)
         {
             return Result.Failure<Artifact>(allowed.Error!);
@@ -85,7 +95,7 @@ public sealed partial class ArtifactService(
 
         // FR-183: an edited profile is validated (catalog options, FR-119 paths, folders and files at the base commit) and
         // stored re-rendered from its document, with the VCS fixed to the repository's host.
-        if (type == ArtifactType.StackProfile)
+        if (type == SdlcArtifacts.StackProfile)
         {
             var profile = await NormaliseProfileAsync(project, content, cancellationToken);
             if (profile.IsFailure)
@@ -151,7 +161,7 @@ public sealed partial class ArtifactService(
     /// approval rules (FR-17).
     /// </summary>
     public async Task<Result<Artifact>> RestoreAsync(
-        Guid projectId, ArtifactType type, int version, Guid userId, string actor, CancellationToken cancellationToken)
+        Guid projectId, string type, int version, Guid userId, string actor, CancellationToken cancellationToken)
     {
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
         if (project is null)
@@ -163,7 +173,7 @@ public sealed partial class ArtifactService(
             .FirstOrDefaultAsync(a => a.ProjectId == projectId && a.Type == type && a.Version == version, cancellationToken);
         if (chosen is null)
         {
-            return Result.Failure<Artifact>(new DomainError(ErrorCodes.NotFound, $"Version {version} of the {type.ToWire()} was not found."));
+            return Result.Failure<Artifact>(new DomainError(ErrorCodes.NotFound, $"Version {version} of the {type} was not found."));
         }
 
         var chosenIntegrity = await integrity.CheckAsync(chosen, cancellationToken);
@@ -236,7 +246,7 @@ public sealed partial class ArtifactService(
     /// drafts are history. Version numbers stay project-wide.
     /// </summary>
     private async Task SupersedeOpenDraftsAsync(
-        Project project, ArtifactType type, NewDraftPlan numbering, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        Project project, string type, NewDraftPlan numbering, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (numbering.SupersededVersions.Count == 0)
         {
@@ -246,7 +256,7 @@ public sealed partial class ArtifactService(
         var drafts = await db.Artifacts
             .Where(a => a.ProjectId == project.Id && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
             .ToListAsync(cancellationToken);
-        foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
+        foreach (var draft in EventOrder.Superseded(drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded))))
         {
             draft.Status = ArtifactStatus.Superseded;
             db.AddEvent(
@@ -272,7 +282,7 @@ public sealed partial class ArtifactService(
             return ArtifactNotFound();
         }
 
-        if (generalist is not null && checkedArtifact.Type != ArtifactType.StackProfile)
+        if (generalist is not null && checkedArtifact.Type != SdlcArtifacts.StackProfile)
         {
             return Result.Failure<Artifact>(new DomainError(ErrorCodes.Validation, "The request is invalid.") { Details = ["generalist: only a stack_profile has a No stack (general) choice."] });
         }
@@ -337,7 +347,7 @@ public sealed partial class ArtifactService(
         // FR-181, FR-183: a profile approves like PUT /stack; "No stack (general)" is recorded on a new version (rule 9).
         StackProfileApproval? profileApproval = null;
         ReleaseVersion? profileVersion = null;
-        if (artifact.Type == ArtifactType.StackProfile)
+        if (artifact.Type == SdlcArtifacts.StackProfile)
         {
             var prepared = await PrepareProfileApprovalAsync(project, artifact, artifacts, generalist == true, userId, actor, now, cancellationToken);
             if (prepared.IsFailure)
@@ -354,11 +364,18 @@ public sealed partial class ArtifactService(
         artifact.ApprovedAt = now;
         project.UpdatedAt = now;
 
-        // §4.4 cascade.
+        // §4.4 cascade, from the definition the project's run is pinned to (FR-277: 409 DEFINITION_UNAVAILABLE when this
+        // build can't run it).
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            return Result.Failure<Artifact>(pinned.Error!);
+        }
+
+        var run = pinned.Value;
         var cascade = InvalidationCascade.Plan(
             artifact.Id,
-            artifact.Type,
-            project.CurrentPhase,
+            SdlcLifecycle.CascadeEffect(artifact.Type, run),
             [.. artifacts.Select(a => new ArtifactRef(a.Id, a.Type, a.Status, a.CheckpointAtCreation))],
             [.. steps.Select(s => new StepRef(s.Id, s.PlanArtifactId, s.Status))]);
 
@@ -379,7 +396,7 @@ public sealed partial class ArtifactService(
             now);
 
         var invalidated = cascade.InvalidatedArtifactIds.ToHashSet();
-        foreach (var downstream in artifacts.Where(a => invalidated.Contains(a.Id)))
+        foreach (var downstream in EventOrder.Invalidated(artifacts.Where(a => invalidated.Contains(a.Id))))
         {
             downstream.Status = ArtifactStatus.Invalidated;
             db.AddEvent(
@@ -416,9 +433,8 @@ public sealed partial class ArtifactService(
         var fellBack = false;
         if (cascade.Effect.FallbackPhase is { } fallback)
         {
-            var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
-            var reason = $"{artifact.Type.ToWire()} v{artifact.Version} approved; downstream work invalidated";
-            var transition = LifecycleStateMachine.Apply(state, TransitionRequest.Fallback(fallback, reason), LifecycleSnapshot.Empty);
+            var reason = $"{artifact.Type} v{artifact.Version} approved; downstream work invalidated";
+            var transition = SdlcLifecycle.Apply(run, project, SdlcTransitions.Fallback(fallback, reason), LifecycleSnapshot.Empty);
             if (transition.IsFailure)
             {
                 return Result.Failure<Artifact>(transition.Error!);
@@ -428,7 +444,7 @@ public sealed partial class ArtifactService(
             fellBack = true;
         }
 
-        await CancelStaleGatesAsync(project, artifact, invalidated, fellBack, actor, now, cancellationToken);
+        await CancelStaleGatesAsync(project, artifact, invalidated, fellBack, run.Definition, actor, now, cancellationToken);
         if (reset.Count > 0)
         {
             await CancelQueuedExecutionAsync(projectId, now, cancellationToken);
@@ -441,9 +457,9 @@ public sealed partial class ArtifactService(
             steps.Add(step);
         }
 
-        if (artifact.Type == ArtifactType.OptimizationPlan && project.CurrentPhase == Phase.Review)
+        if (artifact.Type == SdlcArtifacts.OptimizationPlan && project.CurrentPhase == Phase.Review)
         {
-            await StartReviewCycleAsync(project, artifact, steps, actor, now, cancellationToken);
+            await StartReviewCycleAsync(project, SdlcLifecycle.Refresh(db, run, project), artifact, steps, actor, now, cancellationToken);
         }
 
         if (profileApproval is { } approval && profileVersion is not null)
@@ -474,7 +490,7 @@ public sealed partial class ArtifactService(
         }
 
         var authoredByAgent = ArtifactRules.IsAuthoredByAgent(checkedArtifact.CreatedByUserId);
-        var decided = ArtifactRules.Reject(checkedArtifact.Type, checkedArtifact.Status, authoredByAgent);
+        var decided = SdlcArtifactRules.Reject(checkedArtifact.Type, checkedArtifact.Status, authoredByAgent);
         if (decided.IsFailure)
         {
             return Result.Failure<Artifact>(decided.Error!);
@@ -487,7 +503,7 @@ public sealed partial class ArtifactService(
         }
 
         var artifact = await db.Artifacts.FirstAsync(a => a.Id == artifactId, cancellationToken);
-        decided = ArtifactRules.Reject(artifact.Type, artifact.Status, authoredByAgent);
+        decided = SdlcArtifactRules.Reject(artifact.Type, artifact.Status, authoredByAgent);
         if (decided.IsFailure)
         {
             return Result.Failure<Artifact>(decided.Error!);
@@ -503,7 +519,7 @@ public sealed partial class ArtifactService(
         if (decided.Value.RerunAgent is { } agent)
         {
             var job = await jobs.EnqueueAsync(
-                JobTypes.ForAgent(agent),
+                SdlcJobTypes.ForAgent(agent),
                 new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.ArtifactRejected, cleanComment, ArtifactId: artifact.Id),
                 projectId,
                 cancellationToken,
@@ -517,7 +533,7 @@ public sealed partial class ArtifactService(
             new { artifactId = artifact.Id, type = artifact.Type, version = artifact.Version, comment = cleanComment, rerunAgent = decided.Value.RerunAgent, jobId },
             actor,
             now);
-        if (artifact.Type == ArtifactType.StackProfile)
+        if (artifact.Type == SdlcArtifacts.StackProfile)
         {
             // FR-183, FR-193: no comment text in the payload.
             db.AddEvent(
@@ -608,7 +624,7 @@ public sealed partial class ArtifactService(
         }
 
         var existing = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == project.Id && a.Type == ArtifactType.StackProfile)
+            .Where(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.StackProfile)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
         var numbering = ArtifactRules.NewDraft(existing);
@@ -616,7 +632,7 @@ public sealed partial class ArtifactService(
         var recorded = new Artifact
         {
             ProjectId = project.Id,
-            Type = ArtifactType.StackProfile,
+            Type = SdlcArtifacts.StackProfile,
             Version = numbering.Version,
             ParentVersion = numbering.ParentVersion,
             Content = content,
@@ -726,22 +742,23 @@ public sealed partial class ArtifactService(
     }
 
     private async Task CancelStaleGatesAsync(
-        Project project, Artifact approved, IReadOnlyCollection<Guid> invalidated, bool fellBack, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        Project project, Artifact approved, IReadOnlyCollection<Guid> invalidated, bool fellBack, PipelineDefinition definition, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var pending = await db.ApprovalGates
             .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending)
             .ToListAsync(cancellationToken);
         var stale = GateRules.StaleAfterArtifactApproval(
+            definition,
             approved.Id,
             approved.Type,
             invalidated,
             fellBack,
             [.. pending.Select(g => new PendingGateRef(g.Id, g.Type, g.ArtifactId))]).ToHashSet();
-        foreach (var gate in pending.Where(g => stale.Contains(g.Id)))
+        foreach (var gate in EventOrder.Cancelled(pending.Where(g => stale.Contains(g.Id))))
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;
-            gate.Comment = $"Cancelled: {approved.Type.ToWire()} v{approved.Version} was approved.";
+            gate.Comment = $"Cancelled: {approved.Type} v{approved.Version} was approved.";
             db.AddEvent(
                 EventTypes.GateCancelled,
                 project.Id,
@@ -755,7 +772,7 @@ public sealed partial class ArtifactService(
     private async Task CancelQueuedExecutionAsync(Guid projectId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var queued = await db.Jobs
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Execution && j.Status == JobStatus.Queued)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Execution && j.Status == JobStatus.Queued)
             .ToListAsync(cancellationToken);
         foreach (var job in queued)
         {
@@ -770,7 +787,7 @@ public sealed partial class ArtifactService(
     /// has steps to run, working copy).
     /// </summary>
     private async Task StartReviewCycleAsync(
-        Project project, Artifact plan, IReadOnlyList<ExecutionStep> steps, string actor, DateTimeOffset now, CancellationToken cancellationToken)
+        Project project, SdlcRun run, Artifact plan, IReadOnlyList<ExecutionStep> steps, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         // Only the latest review's plan (its draft or a later version of it) starts the cycle; its new steps are all to run.
         var ofCycle = await snapshots.IsCyclePlanAsync(project, plan, cancellationToken);
@@ -781,10 +798,11 @@ public sealed partial class ArtifactService(
                 ? steps.Count(s => s.PlanArtifactId == plan.Id && s.Status is not StepStatus.Invalidated and not StepStatus.Completed)
                 : 0,
         };
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
-        var cycle = LifecycleStateMachine.Apply(
-            state,
-            TransitionRequest.ReviewCycle($"optimization_plan v{plan.Version} approved: re-entering execution"),
+        // The run pinned at the cascade (one run read per move, FR-277).
+        var cycle = SdlcLifecycle.Apply(
+            run,
+            project,
+            SdlcTransitions.ReviewCycle($"optimization_plan v{plan.Version} approved: re-entering execution"),
             snapshot);
         if (cycle.IsSuccess)
         {
@@ -793,7 +811,7 @@ public sealed partial class ArtifactService(
             // FR-40: the optimisation steps run on the same branch straight away (unless execution is paused, FR-37).
             if (!project.ExecutionPaused)
             {
-                await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
+                await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
             }
         }
     }
@@ -807,9 +825,9 @@ public sealed partial class ArtifactService(
             ? null
             : new DomainError(
                 ErrorCodes.WrongPhase,
-                $"{artifact.Type.ToWire()} v{artifact.Version} belongs to a released version and is read-only. Start a new version to change it.");
+                $"{artifact.Type} v{artifact.Version} belongs to a released version and is read-only. Start a new version to change it.");
 
-    private static bool IsPlan(ArtifactType type) => type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan;
+    private static bool IsPlan(string type) => type is SdlcArtifacts.ImplementationPlan or SdlcArtifacts.OptimizationPlan;
 
     /// <summary>FR-30: a <c>pending</c> execution step of a locked plan version.</summary>
     private static ExecutionStep NewStep(Guid projectId, Guid releaseVersionId, Guid planArtifactId, PlanStep step) => new()
@@ -842,14 +860,14 @@ public sealed partial class ArtifactService(
         Result.Failure<Artifact>(new DomainError(ErrorCodes.NotFound, "The artifact was not found."));
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: draft {ArtifactType} v{Version} created")]
-    private static partial void LogDraftCreated(ILogger logger, Guid projectId, ArtifactType artifactType, int version);
+    private static partial void LogDraftCreated(ILogger logger, Guid projectId, LoggedKey artifactType, int version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{RestoredFromVersion} restored as draft v{Version}")]
-    private static partial void LogRestored(ILogger logger, Guid projectId, ArtifactType artifactType, int restoredFromVersion, int version);
+    private static partial void LogRestored(ILogger logger, Guid projectId, LoggedKey artifactType, int restoredFromVersion, int version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{Version} approved ({Invalidated} artifacts invalidated, {Reset} steps reset, fallback {Fallback})")]
-    private static partial void LogApproved(ILogger logger, Guid projectId, ArtifactType artifactType, int version, int invalidated, int reset, Phase? fallback);
+    private static partial void LogApproved(ILogger logger, Guid projectId, LoggedKey artifactType, int version, int invalidated, int reset, Phase? fallback);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: {ArtifactType} v{Version} rejected (agent re-run: {Rerun})")]
-    private static partial void LogRejected(ILogger logger, Guid projectId, ArtifactType artifactType, int version, bool rerun);
+    private static partial void LogRejected(ILogger logger, Guid projectId, LoggedKey artifactType, int version, bool rerun);
 }

@@ -1,12 +1,12 @@
-using Aide.Domain.Agents;
-using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Infrastructure.Agents;
 
 /// <summary>The versioned prompt templates shipped in the repo (FR-24, D7): <c>Agents/Prompts/&lt;agent&gt;.md</c>, embedded.</summary>
 public interface IPromptLibrary
 {
-    PromptTemplate Template(AgentKind agent);
+    PromptTemplate Template(string agent);
 }
 
 /// <summary>
@@ -15,18 +15,18 @@ public interface IPromptLibrary
 /// </summary>
 public sealed class EmbeddedPromptLibrary : IPromptLibrary
 {
-    private static readonly Lazy<Dictionary<AgentKind, PromptTemplate>> Templates = new(LoadAll);
+    private static readonly Lazy<Dictionary<string, PromptTemplate>> Templates = new(LoadAll);
 
-    public PromptTemplate Template(AgentKind agent) =>
+    public PromptTemplate Template(string agent) =>
         Templates.Value.TryGetValue(agent, out var template)
             ? template
-            : throw new InvalidOperationException($"No prompt template for {agent.ToWire()}.");
+            : throw new InvalidOperationException($"No prompt template for {agent}.");
 
     /// <summary>The embedded resource name of an agent's template.</summary>
-    public static string ResourceName(AgentKind agent) => $"Aide.Infrastructure.Agents.Prompts.{agent.ToWire()}.md";
+    public static string ResourceName(string agent) => $"Aide.Infrastructure.Agents.Prompts.{agent}.md";
 
     /// <summary>The raw template source (for tests and diagnostics).</summary>
-    public static string Source(AgentKind agent)
+    public static string Source(string agent)
     {
         var name = ResourceName(agent);
         using var stream = typeof(EmbeddedPromptLibrary).Assembly.GetManifestResourceStream(name)
@@ -35,10 +35,10 @@ public sealed class EmbeddedPromptLibrary : IPromptLibrary
         return reader.ReadToEnd();
     }
 
-    private static Dictionary<AgentKind, PromptTemplate> LoadAll()
+    private static Dictionary<string, PromptTemplate> LoadAll()
     {
-        var templates = new Dictionary<AgentKind, PromptTemplate>();
-        foreach (var agent in Enum.GetValues<AgentKind>())
+        var templates = new Dictionary<string, PromptTemplate>();
+        foreach (var agent in SdlcAgents.All)
         {
             var parsed = PromptTemplate.Parse(agent, Source(agent));
             templates[agent] = parsed.IsSuccess

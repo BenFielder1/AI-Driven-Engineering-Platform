@@ -1,6 +1,5 @@
 using System.Net;
-using Aide.Infrastructure.Agents;
-using Aide.Infrastructure.Llm;
+using Tevrin.Engine.Runtime.Llm;
 using static Aide.UnitTests.Agents.LlmProviderTests;
 
 namespace Aide.UnitTests.Agents;

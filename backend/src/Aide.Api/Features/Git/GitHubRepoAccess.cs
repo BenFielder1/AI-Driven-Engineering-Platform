@@ -3,8 +3,9 @@ using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Api.Features.Git;
 

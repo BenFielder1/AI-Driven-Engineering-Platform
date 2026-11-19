@@ -5,11 +5,13 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -154,7 +156,7 @@ public sealed partial class DeploymentTargetService
         target.UpdatedAt = now;
         await CancelQueuedSetupAsync(projectId, target.Id, now, cancellationToken);
         jobs.Enqueue(
-            JobTypes.DeploymentSetup,
+            SdlcJobTypes.DeploymentSetup,
             payload with { TargetId = target.Id },
             projectId,
             now);
@@ -425,7 +427,7 @@ public sealed partial class DeploymentTargetService
 
     private async Task CancelQueuedSetupAsync(Guid projectId, Guid targetId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var queued = await db.Jobs.Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup && j.Status == JobStatus.Queued).ToListAsync(cancellationToken);
+        var queued = await db.Jobs.Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DeploymentSetup && j.Status == JobStatus.Queued).ToListAsync(cancellationToken);
         foreach (var job in queued.Where(j => TryPayload(j.Payload)?.TargetId == targetId))
         {
             job.Status = JobPolicy.Cancel(job.Status);

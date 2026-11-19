@@ -1,11 +1,12 @@
 using Aide.Api.Features.Lifecycle;
-using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Execution;
 
@@ -72,7 +73,7 @@ public sealed partial class ExecutionService(
         var now = time.GetUtcNow();
         project.ExecutionPaused = false;
         project.UpdatedAt = now;
-        await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Start), projectId, cancellationToken, now);
+        await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Start), projectId, cancellationToken, now);
         db.AddEvent(EventTypes.ExecutionStarted, projectId, new { branch = prepared.Value.Branch }, actor, now);
         return await SaveAsync(project, "start", cancellationToken);
     }
@@ -135,7 +136,7 @@ public sealed partial class ExecutionService(
                 return Result.Failure<ExecutionStateDto>(prepared.Error!);
             }
 
-            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Resume), projectId, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Resume), projectId, cancellationToken, now);
         }
 
         if (project.ExecutionPaused)

@@ -6,12 +6,9 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Review;
 using Aide.Api.Features.Versions;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
@@ -20,6 +17,8 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;
 
@@ -56,30 +55,30 @@ public sealed class IterationAgentTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory, initialVersion: "1.1.0");
         var id = fixture.Project.Id;
-        var baselineRequest = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, content: ProjectRequest);
-        var baselineSpec = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, content: FirstSpec());
+        var baselineRequest = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
+        var baselineSpec = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, content: FirstSpec());
         var head = await ReleaseOnWorkingCopyAsync(id);
 
         var started = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(
             await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{id}/versions", new { version = "1.2.0", request = "Add CSV export" }, Ct), HttpStatusCode.Created);
         Assert.Equal(head, started.ReleaseVersion.BaseCommitSha);
         await AgentJobs.RunQueuedAsync(factory, id);
-        var summary = Assert.Single(await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.CodebaseSummary));
+        var summary = Assert.Single(await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.CodebaseSummary));
         Assert.Equal(started.ReleaseVersion.Id, summary.ReleaseVersionId);
 
         await fixture.Contributor.Client.PostAsJsonAsync($"/api/projects/{id}/refinement/run", new { }, Ct);
         await AgentJobs.RunQueuedAsync(factory, id);
 
-        var run = Assert.Single(await AgentJobs.RunsAsync(factory, id), r => r.Agent == AgentKind.IdeaRefinement);
+        var run = Assert.Single(await AgentJobs.RunsAsync(factory, id), r => r.Agent == SdlcAgents.IdeaRefinement);
         Assert.Equal(
             [
-                new InputArtifactRef(summary.Id, ArtifactType.CodebaseSummary, summary.Version),
-                new InputArtifactRef(baselineRequest.Id, ArtifactType.ProjectRequest, 1),
-                new InputArtifactRef(baselineSpec.Id, ArtifactType.TechnicalSpecification, 1),
+                new InputArtifactRef(summary.Id, SdlcArtifacts.CodebaseSummary, summary.Version),
+                new InputArtifactRef(baselineRequest.Id, SdlcArtifacts.ProjectRequest, 1),
+                new InputArtifactRef(baselineSpec.Id, SdlcArtifacts.TechnicalSpecification, 1),
             ],
             run.InputArtifacts);
         Assert.NotEqual("[]", run.ToolCalls); // FR-71: the repo tools at the base commit
-        var draft = (await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.ProjectRequest)).Last();
+        var draft = (await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.ProjectRequest)).Last();
         Assert.Equal((started.ReleaseVersion.Id, ArtifactStatus.Draft), (draft.ReleaseVersionId, draft.Status));
     }
 
@@ -88,11 +87,11 @@ public sealed class IterationAgentTests(AideApiFactory factory)
     [Fact]
     public async Task FR75_A_spec_with_a_requirement_without_an_id_is_re_run_once_with_MISSING_REQUIREMENT_IDS_feedback()
     {
-        var responder = new ScriptedResponder(AgentKind.SpecGenerator, FirstSpec(withUnnumbered: true), FirstSpec());
+        var responder = new ScriptedResponder(SdlcAgents.SpecGenerator, FirstSpec(withUnnumbered: true), FirstSpec());
         await using var app = AgentJobs.WithResponders(factory, responder);
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id));
@@ -102,18 +101,18 @@ public sealed class IterationAgentTests(AideApiFactory factory)
         Assert.Contains("MISSING_REQUIREMENT_IDS", responder.Prompts[1], StringComparison.Ordinal);
         Assert.Contains("Export todos as CSV.", responder.Prompts[1], StringComparison.Ordinal);
         Assert.Contains("<spec_mode>\nfirst_version\n</spec_mode>", responder.Prompts[0], StringComparison.Ordinal);
-        var spec = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.TechnicalSpecification));
+        var spec = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.TechnicalSpecification));
         Assert.Equal((Guid?)AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey), spec.AgentRunId);
     }
 
     [Fact]
     public async Task FR75_A_spec_still_missing_an_id_after_the_re_run_fails_with_MISSING_REQUIREMENT_IDS_and_no_draft()
     {
-        var responder = new ScriptedResponder(AgentKind.SpecGenerator, FirstSpec(withUnnumbered: true));
+        var responder = new ScriptedResponder(SdlcAgents.SpecGenerator, FirstSpec(withUnnumbered: true));
         await using var app = AgentJobs.WithResponders(factory, responder);
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id));
@@ -121,7 +120,7 @@ public sealed class IterationAgentTests(AideApiFactory factory)
         Assert.Equal(JobStatus.Failed, job.Status);
         Assert.StartsWith("MISSING_REQUIREMENT_IDS: ", job.LastError, StringComparison.Ordinal);
         Assert.Equal([AgentRunStatus.Succeeded, AgentRunStatus.Failed], (await AgentJobs.RunsAsync(app, id)).Select(r => r.Status));
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.TechnicalSpecification));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.TechnicalSpecification));
     }
 
     [Fact]
@@ -129,30 +128,30 @@ public sealed class IterationAgentTests(AideApiFactory factory)
     {
         // First the untagged first-version spec (INVALID… for an iteration), then the Fake's cumulative tagged spec.
         var fake = new FakeSpecGeneratorResponder();
-        var responder = new SequenceResponder(AgentKind.SpecGenerator, _ => FirstSpec(), fake.Respond);
+        var responder = new SequenceResponder(SdlcAgents.SpecGenerator, _ => FirstSpec(), fake.Respond);
         await using var app = AgentJobs.WithResponders(factory, responder);
         using var fixture = await ProjectApi.FixtureAsync(app, initialVersion: "1.1.0");
         var id = fixture.Project.Id;
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
-        var baseline = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: FirstSpec());
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
+        var baseline = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: FirstSpec());
         await ReleaseOnWorkingCopyAsync(id, app);
         await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(
             await fixture.Owner.Client.PostAsJsonAsync($"/api/projects/{id}/versions", new { version = "1.2.0", request = "Add CSV export" }, Ct), HttpStatusCode.Created);
         await AgentJobs.RunQueuedAsync(app, id);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, version: 2, content: ProjectRequest + "\n\nCSV export.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, version: 2, content: ProjectRequest + "\n\nCSV export.");
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
-        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == JobTypes.SpecGeneration);
+        var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id), j => j.Type == SdlcJobTypes.SpecGeneration);
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
         Assert.Contains("<spec_mode>\nnew_version\n</spec_mode>", responder.Prompts[0], StringComparison.Ordinal);
         Assert.Contains("MISSING_SECTIONS", responder.Prompts[1], StringComparison.Ordinal); // "Changes in this version"
         Assert.Contains("FR-1 has no tag", responder.Prompts[1], StringComparison.Ordinal); // and every tag problem, in one re-run
         Assert.Contains("Changes in this version", responder.Prompts[1], StringComparison.Ordinal);
-        var run = Assert.Single(await AgentJobs.RunsAsync(app, id), r => r.Agent == AgentKind.SpecGenerator && r.Id == job.Id);
-        Assert.Contains(new InputArtifactRef(baseline.Id, ArtifactType.TechnicalSpecification, 1), run.InputArtifacts);
-        Assert.Contains(run.InputArtifacts, a => a.Type == ArtifactType.CodebaseSummary);
-        var spec = (await AgentJobs.ArtifactsAsync(app, id, ArtifactType.TechnicalSpecification)).Last();
+        var run = Assert.Single(await AgentJobs.RunsAsync(app, id), r => r.Agent == SdlcAgents.SpecGenerator && r.Id == job.Id);
+        Assert.Contains(new InputArtifactRef(baseline.Id, SdlcArtifacts.TechnicalSpecification, 1), run.InputArtifacts);
+        Assert.Contains(run.InputArtifacts, a => a.Type == SdlcArtifacts.CodebaseSummary);
+        var spec = (await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.TechnicalSpecification)).Last();
         Assert.True(SpecValidator.Validate(spec.Content, SpecValidationContext.NewVersion(RequirementParser.Ids(baseline.Content))).IsValid);
         Assert.Equal(["FR-5"], RequirementParser.Parse(spec.Content).NewOrChangedIds);
     }
@@ -166,12 +165,12 @@ public sealed class IterationAgentTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Planning, 3, ApprovalMode.Advisory);
         var spec = "## 2. Functional Requirements\n- **FR-1** [unchanged] List. Given todos, when listed, then shown.\n- **FR-2** [new] Export. Given todos, when exported, then a CSV is returned.\n- **FR-3** [changed] Filter. Given todos, when filtered, then matching ones are shown.";
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, content: spec);
-        var plan = PlanDocument.Render(ArtifactType.ImplementationPlan,
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, content: spec);
+        var plan = PlanDocument.Render(SdlcArtifacts.ImplementationPlan,
         [
             new PlanStep(1, "Export", "Add CSV export (FR-2).", [new DeclaredFile("src/export.js", FileAction.Create)], [], Covers: ["FR-2"]),
         ]);
-        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Draft, content: plan, projectVersionAtCreation: 3);
+        var draft = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Draft, content: plan, projectVersionAtCreation: 3);
 
         var dto = await ProjectApi.ReadAsync<ArtifactDto>(await fixture.Viewer.Client.GetAsync(new Uri($"/api/projects/{id}/artifacts/implementation_plan/latest", UriKind.Relative), Ct));
 
@@ -203,10 +202,10 @@ public sealed class IterationAgentTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification,
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification,
             content: "## 2. Functional Requirements\n- **FR-1** [unchanged] List todos. Given todos, when listed, then shown.\n- **FR-2** [new] Export. Given todos, when exported, then a CSV is returned.\n\n## API Contracts\nNo HTTP API.");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(1));
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(1));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.Add(new ExecutionStep
@@ -231,7 +230,7 @@ public sealed class IterationAgentTests(AideApiFactory factory)
         Assert.Contains(report.Violations, v => v.Source == FindingSource.Agent && v.Severity == Severity.Major && v.Message.StartsWith("Regression of FR-1", StringComparison.Ordinal));
         Assert.Contains(report.DriftAreas, d => d.Area == IterationReviewScope.RegressionAreaPrefix + "FR-1" && d.Severity == Severity.Major);
         Assert.NotEqual(DriftLevel.None, report.DriftLevel);
-        var reviewRun = Assert.Single(await AgentJobs.RunsAsync(app, id), r => r.Agent == AgentKind.CodeReview);
+        var reviewRun = Assert.Single(await AgentJobs.RunsAsync(app, id), r => r.Agent == SdlcAgents.CodeReview);
         Assert.NotEqual("[]", reviewRun.ToolCalls); // FR-71: the review reads the project branch with the repo tools
     }
 
@@ -270,11 +269,11 @@ public sealed class IterationAgentTests(AideApiFactory factory)
 }
 
 /// <summary>A Fake responder that answers request n with the n-th function (the last repeats) and records each prompt.</summary>
-public sealed class SequenceResponder(AgentKind agent, params Func<LlmRequest, string>[] replies) : IFakeAgentResponder
+public sealed class SequenceResponder(string agent, params Func<LlmRequest, string>[] replies) : IFakeAgentResponder
 {
     private readonly List<string> _prompts = [];
 
-    public AgentKind Agent => agent;
+    public string Agent => agent;
 
     public IReadOnlyList<string> Prompts
     {

@@ -1,12 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Aide.Api.Agents;
-using Aide.Api.Jobs;
 using Aide.Api.Logging;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Logging;
 
@@ -120,13 +117,13 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
     public async Task NFR_OBS_A_failed_agent_run_span_is_an_error_with_its_error_code_and_run_status()
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
-        var job = new JobExecution(Guid.CreateVersion7(), JobTypes.SpecGeneration, "{}", fixture.Project.Id, 1);
+        var job = new JobExecution(Guid.CreateVersion7(), SdlcJobTypes.SpecGeneration, "{}", fixture.Project.Id, 1);
         using var spans = new SpanRecorder(AideTelemetry.SourceName);
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var runner = scope.ServiceProvider.GetRequiredService<AgentRunner>();
-            var request = new AgentRunRequest { ProjectId = fixture.Project.Id, Agent = AgentKind.SpecGenerator, Job = job };
+            var request = new AgentRunRequest { ProjectId = fixture.Project.Id, Agent = SdlcAgents.SpecGenerator, Job = job };
             var ex = await Assert.ThrowsAsync<JobFailedException>(() => runner.RunAsync(request, Ct));
             Assert.Equal(ErrorCodes.MissingInput, ex.ErrorCode);
         }

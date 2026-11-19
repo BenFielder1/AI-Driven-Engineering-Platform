@@ -50,21 +50,21 @@ public sealed class GitLabInstanceSettings
     public bool AllowInsecureHttp { get; set; }
 
     /// <summary>The normalised base URL (<c>null</c> for gitlab.com), or a failure for an invalid one.</summary>
-    public Domain.Common.Result<string?> NormalizedBaseUrl(bool allowPrivateNetworks)
+    public Tevrin.Engine.Domain.Common.Result<string?> NormalizedBaseUrl(bool allowPrivateNetworks)
     {
         if (string.IsNullOrWhiteSpace(BaseUrl))
         {
-            return Domain.Common.Result.Success<string?>(null);
+            return Tevrin.Engine.Domain.Common.Result.Success<string?>(null);
         }
 
         var normalized = GitHostAddressRules.NormalizeBaseUrl(BaseUrl, AllowInsecureHttp, allowPrivateNetworks);
         if (normalized.IsFailure)
         {
-            return Domain.Common.Result.Failure<string?>(normalized.Error!);
+            return Tevrin.Engine.Domain.Common.Result.Failure<string?>(normalized.Error!);
         }
 
         var text = normalized.Value.AbsoluteUri.TrimEnd('/');
-        return Domain.Common.Result.Success<string?>(string.Equals(text, GitLabRules.GitLabComBaseUrl, StringComparison.Ordinal) ? null : text);
+        return Tevrin.Engine.Domain.Common.Result.Success<string?>(string.Equals(text, GitLabRules.GitLabComBaseUrl, StringComparison.Ordinal) ? null : text);
     }
 }
 

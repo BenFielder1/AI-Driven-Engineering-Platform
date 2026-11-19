@@ -3,31 +3,14 @@ using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Infrastructure.Agents;
-
-/// <summary>Picks the provider, model and credential for an agent run (FR-22, FR-79, D-V2-5).</summary>
-public interface ILlmResolver
-{
-    /// <summary>
-    /// The project's LLM settings (provider, the agent's model or the default model) when saved, else the system
-    /// defaults (<see cref="ILlmProviderCatalog.FallbackProvider"/>, with its configured models); plus the key.
-    /// </summary>
-    Task<ResolvedLlm> ResolveAsync(Guid projectId, AgentKind agent, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// The key for <paramref name="provider"/> (<see cref="LlmConnectionRules.ChooseKey"/>): the project's bound connection
-    /// (FR-79) whoever triggered the run; else the system key, only with <c>Llm:AllowSystemKeys=true</c>; none for
-    /// Ollama/Fake or when nothing is usable. A bound key that can't be decrypted is no key (never a silent fallback).
-    /// </summary>
-    Task<LlmKey> KeyAsync(Guid projectId, LlmProvider provider, CancellationToken cancellationToken);
-
-    /// <summary>The <see cref="ILlmProvider"/> implementation of a provider.</summary>
-    ILlmProvider ProviderFor(LlmProvider provider);
-}
 
 internal sealed partial class LlmResolver(
     AideDbContext db,
@@ -36,18 +19,18 @@ internal sealed partial class LlmResolver(
     IEnumerable<ILlmProvider> providers,
     ILogger<LlmResolver> logger) : ILlmResolver
 {
-    public async Task<ResolvedLlm> ResolveAsync(Guid projectId, AgentKind agent, CancellationToken cancellationToken)
+    public async Task<ResolvedLlm> ResolveAsync(Guid projectId, string agent, CancellationToken cancellationToken)
     {
         var (settings, bound) = await LoadAsync(projectId, cancellationToken);
         LlmChoice choice;
         if (settings is not null && !string.IsNullOrWhiteSpace(settings.DefaultModel))
         {
-            choice = AgentRunRules.ChooseModel(agent, settings.Provider, settings.DefaultModel, settings.ModelsByAgent);
+            choice = AgentModelRules.ChooseModel(agent, settings.Provider, settings.DefaultModel, settings.ModelsByAgent);
         }
         else
         {
             var provider = settings?.Provider ?? catalog.FallbackProvider;
-            choice = AgentRunRules.ChooseModel(agent, provider, catalog.DefaultModel(provider), catalog.DefaultAgentModels(provider));
+            choice = AgentModelRules.ChooseModel(agent, provider, catalog.DefaultModel(provider), catalog.DefaultAgentModels(provider));
         }
 
         var key = KeyFor(projectId, settings, bound, choice.Provider);

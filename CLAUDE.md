@@ -2,7 +2,7 @@
 
 Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
-**`SPEC.md` is the source of truth.** No version is being built, so there is no root `SPEC.md` or `PROGRESS.md`; the latest released spec is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). When the next version starts, its spec and build log go at the root. Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
+**`SPEC.md` is the source of truth.** **0.7.0 is being built** (the pipeline engine extraction): its spec and build log are the root [`SPEC.md`](SPEC.md) and [`PROGRESS.md`](PROGRESS.md), on branch `build/tevrin-0.7.0`. The latest released spec is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
 ## Versions
 
@@ -16,7 +16,7 @@ Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates speciali
 | 0.6.0 | [`docs/0.6.0/SPEC.md`](docs/0.6.0/SPEC.md) | [`docs/0.6.0/PROGRESS.md`](docs/0.6.0/PROGRESS.md) | Built and merged (PR #29, #31, #32, #33, #34 and #37); released as tag `0.6.0`. Rename to Tevrin, brand and design system, Home dashboard, marketing site, docs site, semver releases. Frozen; never edit except to fix links |
 | 0.6.1 | [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md) | [`docs/0.6.1/PROGRESS.md`](docs/0.6.1/PROGRESS.md) | Built and merged (PR #38, #47, #48 and #49); released as tag `0.6.1`. `tevrin/` branch prefix, themed scrollbars, failure-aware review, deployment files in plans, deterministic findings in the plan, a build check before review. Frozen; never edit except to fix links |
 
-- **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (next: 0.7.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.6.1 new decisions are `D-<x.y.z>-n` (e.g. `D-0.6.1-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
+- **Version numbers are semver `x.y.z`** (SPEC FR-229, D-V6-24, D-V6-26). The versions first specified as v1–v6 are 0.1.0–0.6.0. A feature version raises the minor number (in progress: 0.7.0; next: 0.8.0), a fix-only release the patch number. Use semver everywhere: folders (`docs/<x.y.z>/`), history pages (`docs/history/<x.y.z>.md`), prose, comments, test names and file names. Existing requirement and decision IDs keep their form (`D-V2-11`, `D-V6-n`); from 0.6.1 new decisions are `D-<x.y.z>-n` (e.g. `D-0.6.1-1`). The release version lives in `<Version>` in `backend/Directory.Build.props`, `version` in `frontend/package.json` (+ lock) and the newest entry of `frontend/src/features/marketing/content/changelog.ts`; `scripts/ci/check-version.sh` fails CI if they differ. Bump all three when a new version starts.
 - The root `SPEC.md` and `PROGRESS.md` always describe the version being built. When a version is done, move both into `docs/<x.y.z>/` and add a row here. Then release it (see Releases).
 - **0.6.0 is an increment on 0.5.0 (and 0.1.0–0.4.0):** earlier requirements stay in force unless `SPEC.md` amends them. Requirement IDs continue across versions (0.2.0 starts at FR-53, 0.3.0 at FR-94, 0.4.0 at FR-113, 0.5.0 at FR-163, 0.6.0 at FR-196), and the spec-verifier checks the requirements of 0.1.0–0.6.0.
 - **Scaffolding:** 0.2.0, 0.4.0, 0.5.0 and 0.6.0 M0 were baseline checks, and 0.3.0 migrated the frontend in place. Never re-scaffold the repo.
@@ -30,6 +30,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
   - Pages are client components (SPEC D-V3-2), and routing goes through `src/lib/navigation.ts`.
   - The web server is `frontend/server.ts`, a custom Node server run with Node 24 type stripping. It serves Next, proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL` read at runtime, sets the CSP nonce and security headers, and writes redacted JSON request logs.
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 18 via Npgsql (SPEC D-V5-1) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
+- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; don't upgrade without a decision, SPEC Q4). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*` (architecture test).
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` (after green CI on `main`) and `production` (when a GitHub release `x.y.z` is published, or by dispatch), deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
@@ -43,19 +44,26 @@ Router, auth and background-work choices come from SPEC.md; if SPEC.md changes t
 backend/
   Aide.slnx
   src/Aide.Api/             endpoints, DI, auth, ProblemDetails, OpenAPI, hosted background workers
-  src/Aide.Domain/          pure business rules: lifecycle state machine, phase map, gate rules, versioning (no EF, no ASP.NET)
+  src/Aide.Domain/          pure SDLC rules: SDLC guards and machine adapter (`SdlcMachine`), review, gate and artifact rules, versioning (no EF, no ASP.NET)
   src/Aide.Infrastructure/  Persistence/AideDbContext + entity configs, Migrations/, LLM providers, Git providers, notification channels
                             Agents/Prompts/*.md — versioned prompt templates (SPEC FR-24)
+  src/Tevrin.Engine.Domain/   pure engine: definition model, validator, hash, `PipelineStateMachine`, cascade, gate and artifact rules
+  src/Tevrin.Engine.Runtime/  YAML loader, pipeline registry, job queue, LLM providers, artifact store, gates, notifications, run log, `AgentStageRunner`
+  src/Tevrin.Engine.Api/      generic endpoints (definitions, pipeline runs, timeline, replay, gate inbox) and hub events
+  src/Tevrin.Pack.Sdlc/       the SDLC pack: Definitions/sdlc.pipeline.yaml, key constants (`SdlcAgents`, `SdlcArtifacts`, `SdlcGates`, `SdlcJobTypes`), `SdlcPack`
   src/Aide.Cli/             `tevrin` .NET global tool, package Tevrin.Cli (SPEC FR-52, D-V6-2)
   src/Aide.Cli.Alias/       deprecated `aide` command (package Aide.Cli), same sources as Aide.Cli
   tests/Aide.UnitTests/     domain + application tests
+  tests/Tevrin.Engine.Tests/ engine tests: definitions, state machine, agent stages, architecture rules; fixtures in Fixtures/ (`fixture-review.pipeline.yaml`)
   tests/Aide.IntegrationTests/ WebApplicationFactory + Testcontainers
+    Characterisation/       SDLC end-to-end snapshots (Snapshots/*.json), frozen since 0.7.0 M54: CI runs scripts/ci/check-snapshots-frozen.sh
   openapi/api.json          GENERATED contract — commit, never hand-edit
   Directory.Build.props · Directory.Packages.props · global.json · dotnet-tools.json
 frontend/
   src/api/generated/        GENERATED client — never hand-edit
   src/features/<feature>/   pages, components, hooks, tests (projects, artifacts, gates, execution, review, admin)
   src/app/                  Next.js App Router: (public) and (app) route groups, thin 'use client' pages that render feature pages
+  src/engine/               engine UI (Pipeline tab, replay, gate inbox, prompt comparison): renders any definition; may not import src/features or src/app (ESLint boundary)
   src/server/               web-server helpers for server.ts (proxy, headers, CSP nonce, log redaction)
   server.ts                 custom Node server (dev and production)
   src/lib/                  errors, permissions, config, query client
@@ -70,6 +78,7 @@ deploy/
   railway/                  Railway ops docs (README.md) and variable inventory (variables.md)
 .railway/                   Railway IaC (railway.ts), applied with `railway config plan|apply`
 scripts/ci/check-generated.sh  CI: fails if generated files differ from what is committed
+scripts/ci/check-snapshots-frozen.sh  CI: fails if a characterisation snapshot differs from the M54 commit
 scripts/ci/check-version.sh    CI + release deploy: the three version sources agree (and equal the release tag)
 docker-compose.yml          dev-loop database only
 .github/workflows/ci.yml · deploy.yml   CI gate · Railway deploy (preview after CI on main, production on a published release or dispatch)
@@ -204,12 +213,12 @@ never deploy. Promoting a pre-release to a full release doesn't deploy either (G
 
 1. `openapi/api.json` and `frontend/src/api/generated/` are generated. Regenerate them, and never hand-edit them. API changes are additive unless SPEC.md records a breaking-change decision.
 2. The frontend calls the backend only through the generated client, at same-origin `/api`. No hard-coded hosts.
-3. Business rules live in `Aide.Domain`, pure and unit-tested. Endpoints stay thin.
+3. Business rules live in `Aide.Domain` (SDLC) and `Tevrin.Engine.Domain` (engine), pure and unit-tested. Endpoints stay thin.
 4. Errors are ProblemDetails with an `errorCode` from the spec's error table. The frontend maps those codes to copy in one place.
 5. Every schema change is an EF Core migration. Never edit a committed migration, and never use `EnsureCreated` outside tests.
 6. Secrets are never committed: user-secrets for the dev loop, `deploy/k8s/overlays/local/secrets.env` (git-ignored) for Kubernetes. This includes LLM provider keys and GitHub credentials.
 7. Deploy scripts target only the `docker-desktop` Kubernetes context.
-8. Project lifecycle changes go only through the domain state machine. Every allowed and forbidden phase/status transition has a unit test.
+8. Project lifecycle changes go only through the engine state machine running the SDLC definition (`sdlc.pipeline.yaml`). Every allowed and forbidden SDLC phase/status transition has a unit test (`SdlcLifecycleTransitionTests`).
 9. Artifacts are immutable once `locked`. New content means a new version with a content hash and parent version; invalidation and rollback never rewrite history.
 10. Agent (LLM) calls sit behind one provider abstraction, are never made from endpoints directly, and are faked in tests — no test hits a real provider API.
 

@@ -11,6 +11,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Aide.Domain\Aide.Domain.csproj" />
     <ProjectReference Include="..\Aide.Infrastructure\Aide.Infrastructure.csproj" />
+    <!-- FR-262: Aide.* is the SDLC implementation and host, on the engine and the SDLC pack. -->
+    <ProjectReference Include="..\Tevrin.Engine.Api\Tevrin.Engine.Api.csproj" />
+    <ProjectReference Include="..\Tevrin.Pack.Sdlc\Tevrin.Pack.Sdlc.csproj" />
   </ItemGroup>
 
   <ItemGroup>

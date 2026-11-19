@@ -4,6 +4,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Persistence.Configurations;
 
@@ -249,6 +250,16 @@ internal sealed class StateTransitionConfiguration : IEntityTypeConfiguration<St
         builder.Property(t => t.Reason).IsRequired();
         builder.HasOne<Project>().WithMany().HasForeignKey(t => t.ProjectId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<ReleaseVersion>().WithMany().HasForeignKey(t => t.ReleaseVersionId).OnDelete(DeleteBehavior.NoAction);
+
+        // FR-294, §4.51: the run and the generic transition kind (nullable in 0.7.0, D-0.7.0-28).
+        builder.HasOne<PipelineRun>().WithMany().HasForeignKey(t => t.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
+
+        // §8: the run timeline reads by run in time order (FR-300).
+        builder.HasIndex(t => new { t.PipelineRunId, t.CreatedAt });
+
+        // Kept explicitly: the composite index would otherwise replace the foreign-key index (expand only).
+        builder.HasIndex(t => t.PipelineRunId);
+        builder.Property(t => t.Kind).HasMaxLength(AideDbContext.EnumMaxLength);
         builder.HasIndex(t => new { t.ProjectId, t.CreatedAt });
         builder.HasIndex(t => new { t.ProjectId, t.ReleaseVersionId });
         builder.HasIndex(t => t.ReleaseVersionId);

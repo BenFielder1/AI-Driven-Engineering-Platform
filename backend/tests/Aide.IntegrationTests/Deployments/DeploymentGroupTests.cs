@@ -6,10 +6,10 @@ using Aide.Api.Features.Stack;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Deployments;
 
@@ -113,7 +113,7 @@ public sealed class DeploymentGroupTests(AideApiFactory factory)
         var accepted = await ProjectApi.ReadAsync<DeploymentGroupDto>(
             await fixture.Owner.Client.PutAsJsonAsync(GroupPath(id), new { connectionId = connection, create = new { name = "todo" } }, Ct), HttpStatusCode.Accepted);
         Assert.Equal(("configuring", "todo"), (accepted.Status, accepted.Name));
-        var setupJobs = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().CountAsync(j => j.ProjectId == id && j.Type == JobTypes.DeploymentSetup, Ct));
+        var setupJobs = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().CountAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.DeploymentSetup, Ct));
         Assert.Equal(1, setupJobs);
 
         await SettleGroupAsync(app, id);
@@ -301,7 +301,7 @@ public sealed class DeploymentGroupTests(AideApiFactory factory)
         Assert.Equal([DeploymentPart.Frontend, DeploymentPart.Backend], Assert.Single((await DeploymentHarness.SettingsAsync(client, id)).Groups).Parts);
         var response = await client.PutAsJsonAsync($"{DeploymentHarness.SettingsPath(id)}/databases/production", new { provider = "railway", connectionId = connection, create = new { name = "todo-db" } }, Ct);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        var job = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().Where(j => j.ProjectId == id && j.Type == JobTypes.DatabaseProvisioning).OrderByDescending(j => j.CreatedAt).FirstAsync(Ct));
+        var job = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().Where(j => j.ProjectId == id && j.Type == SdlcJobTypes.DatabaseProvisioning).OrderByDescending(j => j.CreatedAt).FirstAsync(Ct));
         await DeploymentHarness.SettleAsync(app, job.Id);
 
         var settings = await DeploymentHarness.SettingsAsync(client, id);

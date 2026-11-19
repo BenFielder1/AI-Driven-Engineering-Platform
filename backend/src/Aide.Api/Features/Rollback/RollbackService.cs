@@ -4,6 +4,7 @@ using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Rollback;
 
@@ -27,7 +28,7 @@ public sealed partial class RollbackService(AideDbContext db, RollbackWriter wri
             return Result.Failure<RollbackDto>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
         }
 
-        var applied = await writer.ApplyAsync(project, targetCheckpoint, reason, actor, time.GetUtcNow(), keepGateId: null, cancellationToken);
+        var applied = await writer.ApplyAsync(project, targetCheckpoint, reason, actor, time.GetUtcNow(), keepGateId: null, pinned: null, cancellationToken);
         if (applied.IsFailure)
         {
             return Result.Failure<RollbackDto>(applied.Error!);

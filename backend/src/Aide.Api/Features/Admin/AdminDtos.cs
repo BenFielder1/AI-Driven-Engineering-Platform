@@ -1,10 +1,11 @@
 using System.Text.Json.Nodes;
 using Aide.Api.Features.Activity;
-using Aide.Domain.Agents;
+using Aide.Api.Features.Projects;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Admin;
 
@@ -36,7 +37,7 @@ public sealed record AdminAgentRunDto(
     Guid Id,
     Guid ProjectId,
     string ProjectName,
-    AgentKind Agent,
+    [WireEnum(typeof(SdlcAgents))] string Agent,
     Phase Phase,
     Guid? StepId,
     LlmProvider Provider,

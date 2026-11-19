@@ -2,12 +2,9 @@ using System.Net;
 using System.Text.Json;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Review;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.RepoTools;
@@ -17,6 +14,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Stages;
 
@@ -44,7 +42,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         var runs = await RunsAsync(fixture.Viewer.Client, $"{fixture.Path}/execution/runs");
 
         Assert.Equal(
-            [(ArtifactType.ImplementationPlan, 1, (int?)null, 8), (ArtifactType.OptimizationPlan, 1, 1, 3), (ArtifactType.OptimizationPlan, 2, 2, 2)],
+            [(SdlcArtifacts.ImplementationPlan, 1, (int?)null, 8), (SdlcArtifacts.OptimizationPlan, 1, 1, 3), (SdlcArtifacts.OptimizationPlan, 2, 2, 2)],
             runs.Select(r => (r.PlanType, r.PlanVersion, r.Cycle, r.StepCount)));
         Assert.Equal([seeded.Development.Id, seeded.FixPlans[0].Id, seeded.FixPlans[1].Id], runs.Select(r => r.Id));
         Assert.All(runs, r => Assert.Equal((PlanRunStatus.Completed, false, (string?)null, r.StepCount, r.StepCount), (r.Status, r.Superseded, r.SupersededReason, r.CompletedCount, r.CommitCount)));
@@ -62,7 +60,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
             var attempts = await AttemptsAsync(fixture.Viewer.Client, id, s.Id);
             var attempt = Assert.Single(attempts);
             Assert.Equal((1, StepAttemptOutcome.Accepted), (attempt.Attempt, attempt.Outcome));
-            Assert.Equal((AgentKind.CodeGenerator, "fake-1", 100, 50), (attempt.Run!.Agent, attempt.Run.Model, attempt.Run.InputTokens, attempt.Run.OutputTokens));
+            Assert.Equal((SdlcAgents.CodeGenerator, "fake-1", 100, 50), (attempt.Run!.Agent, attempt.Run.Model, attempt.Run.InputTokens, attempt.Run.OutputTokens));
         }
     }
 
@@ -72,16 +70,16 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Execution, 9, ApprovalMode.Advisory);
-        var old = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, ArtifactStatus.Invalidated, version: 1);
+        var old = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, ArtifactStatus.Invalidated, version: 1);
         await LifecycleSeed.AddStepsAsync(factory, id, old.Id, 2, StepStatus.Invalidated);
-        var current = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, version: 2);
+        var current = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, version: 2);
         await LifecycleSeed.AddStepsAsync(factory, id, current.Id, 3);
         await ProjectApi.WithDbAsync(factory, async db =>
         {
             db.AddEvent(
                 EventTypes.ArtifactInvalidated,
                 id,
-                new { artifactId = old.Id, type = old.Type, version = 1, cause = "cascade", approvedType = ArtifactType.TechnicalSpecification, approvedVersion = 4 },
+                new { artifactId = old.Id, type = old.Type, version = 1, cause = "cascade", approvedType = SdlcArtifacts.TechnicalSpecification, approvedVersion = 4 },
                 "seed",
                 DateTimeOffset.UtcNow);
             await db.SaveChangesAsync(Ct);
@@ -110,7 +108,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         using var other = await ProjectApi.FixtureAsync(factory);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, other.Project.Id, ArtifactType.ImplementationPlan);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, other.Project.Id, SdlcArtifacts.ImplementationPlan);
         var steps = await LifecycleSeed.AddStepsAsync(factory, other.Project.Id, plan.Id, 1);
 
         await Problems.AssertAsync(await GetAsync(fixture.Viewer.Client, $"{fixture.Path}/execution/steps/{Guid.NewGuid()}/attempts"), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -124,10 +122,10 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\nExpress API.");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\nExpress API.");
         PlanStep[] plan = [new(1, "Step 1", "Build part 1.", [new DeclaredFile("src/part1.js", FileAction.Create)], [])];
-        var planArtifact = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, content: PlanDocument.Render(ArtifactType.ImplementationPlan, plan));
+        var planArtifact = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, content: PlanDocument.Render(SdlcArtifacts.ImplementationPlan, plan));
         var step = (await ProjectApi.WithDbAsync(factory, async db =>
         {
             var s = new ExecutionStep
@@ -148,7 +146,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         Assert.Equal(HttpStatusCode.Accepted, start.StatusCode);
         var app = AgentJobs.WithResponders(
             factory,
-            new ScriptedResponder(AgentKind.CodeGenerator, Reply(1, ("src/undeclared.js", "x")), Reply(1, ("src/part1.js", "export const one = 1;\n"))));
+            new ScriptedResponder(SdlcAgents.CodeGenerator, Reply(1, ("src/undeclared.js", "x")), Reply(1, ("src/part1.js", "export const one = 1;\n"))));
 
         await AgentJobs.RunQueuedAsync(app, id);
 
@@ -158,11 +156,11 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         Assert.Empty(attempts[0].ProducedFiles);
         Assert.Empty(attempts[1].Violations);
         Assert.Equal(["src/part1.js"], attempts[1].ProducedFiles.Select(f => f.Path));
-        Assert.All(attempts, a => Assert.Equal((AgentKind.CodeGenerator, AgentRunStatus.Succeeded), (a.Run!.Agent, a.Run.Status)));
+        Assert.All(attempts, a => Assert.Equal((SdlcAgents.CodeGenerator, AgentRunStatus.Succeeded), (a.Run!.Agent, a.Run.Status)));
         Assert.NotEqual(attempts[0].Run!.Id, attempts[1].Run!.Id);
         // FR-71: each attempt's run used the repo tools on the project branch (the Fake's default script).
         Assert.All(attempts, a => Assert.Equal([RepoToolNames.ListFiles, RepoToolNames.ReadFile], a.ToolCalls.Select(c => c.Tool)));
-        var runs = (await AgentJobs.RunsAsync(factory, id)).Where(r => r.Agent == AgentKind.CodeGenerator).ToList();
+        var runs = (await AgentJobs.RunsAsync(factory, id)).Where(r => r.Agent == SdlcAgents.CodeGenerator).ToList();
         Assert.Equal(runs.Select(r => r.Id).Order(), attempts.Select(a => a.Run!.Id).Order());
 
         var listed = Assert.Single(await RunsAsync(fixture.Viewer.Client, $"{fixture.Path}/execution/runs"));
@@ -243,9 +241,9 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
                 ReleasedAt = start.AddDays(2),
             };
             db.ReleaseVersions.Add(version);
-            var first = PlanArtifact(id, ArtifactType.OptimizationPlan, 1, start.AddHours(1).AddMinutes(1), version.Id);
+            var first = PlanArtifact(id, SdlcArtifacts.OptimizationPlan, 1, start.AddHours(1).AddMinutes(1), version.Id);
             first.Status = ArtifactStatus.Invalidated;
-            var second = PlanArtifact(id, ArtifactType.OptimizationPlan, 2, start.AddHours(5).AddMinutes(1), version.Id);
+            var second = PlanArtifact(id, SdlcArtifacts.OptimizationPlan, 2, start.AddHours(5).AddMinutes(1), version.Id);
             db.Artifacts.AddRange(first, second);
 
             var r1 = AddReport(db, id, 1, start.AddHours(1), ReviewDecision.ReviewRequired, null, first.Id);
@@ -340,7 +338,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         ProjectApi.WithDbAsync(factory, async db =>
         {
             var start = DateTimeOffset.UtcNow.AddHours(-(fixSteps.Length + 2));
-            var development = PlanArtifact(id, ArtifactType.ImplementationPlan, 1, start);
+            var development = PlanArtifact(id, SdlcArtifacts.ImplementationPlan, 1, start);
             db.Artifacts.Add(development);
             AddCompletedSteps(db, id, development, developmentSteps, "Step", start);
             var plans = new List<Artifact>();
@@ -348,7 +346,7 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
             for (var i = 0; i < fixSteps.Length; i++)
             {
                 var at = start.AddHours(i + 1);
-                var plan = PlanArtifact(id, ArtifactType.OptimizationPlan, i + 1, at.AddMinutes(1));
+                var plan = PlanArtifact(id, SdlcArtifacts.OptimizationPlan, i + 1, at.AddMinutes(1));
                 db.Artifacts.Add(plan);
                 reports.Add(AddReport(db, id, i + 1, at, ReviewDecision.ReviewRequired, null, plan.Id));
                 AddCompletedSteps(db, id, plan, fixSteps[i], $"Fix {i + 1}.", at.AddMinutes(2), $"fix{i + 1}-");
@@ -374,8 +372,8 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         var run = new AgentRun
         {
             ProjectId = id,
-            Agent = AgentKind.CodeReview,
-            Phase = Phase.Review,
+            Agent = SdlcAgents.CodeReview,
+            Stage = Phase.Review.ToWire(),
             Provider = LlmProvider.Fake,
             Model = "fake-1",
             PromptVersion = "code-review@1",
@@ -411,14 +409,14 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
         return report;
     }
 
-    private static Artifact PlanArtifact(Guid id, ArtifactType type, int version, DateTimeOffset at, Guid releaseVersionId = default) => new()
+    private static Artifact PlanArtifact(Guid id, string type, int version, DateTimeOffset at, Guid releaseVersionId = default) => new()
     {
         ReleaseVersionId = releaseVersionId,
         ProjectId = id,
         Type = type,
         Version = version,
-        Content = $"# {type} v{version}",
-        ContentHash = ContentHash.Compute($"# {type} v{version}"),
+        Content = $"# {KeyNames.ToPascalCase(type)} v{version}",
+        ContentHash = ContentHash.Compute($"# {KeyNames.ToPascalCase(type)} v{version}"),
         Status = ArtifactStatus.Locked,
         CheckpointAtCreation = 3,
         CreatedAt = at,
@@ -447,8 +445,8 @@ public sealed class ExecutionRunsTests(AideApiFactory factory)
             var run = new AgentRun
             {
                 ProjectId = id,
-                Agent = AgentKind.CodeGenerator,
-                Phase = Phase.Execution,
+                Agent = SdlcAgents.CodeGenerator,
+                Stage = Phase.Execution.ToWire(),
                 StepId = step.Id,
                 Provider = LlmProvider.Fake,
                 Model = "fake-1",

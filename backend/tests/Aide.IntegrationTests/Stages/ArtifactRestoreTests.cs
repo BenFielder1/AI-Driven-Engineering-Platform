@@ -1,13 +1,12 @@
 using System.Net;
 using Aide.Api.Features.Artifacts;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Stages;
 
@@ -59,14 +58,14 @@ public sealed class ArtifactRestoreTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 3, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 2, content: "# Spec v2");
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, ArtifactStatus.Draft, version: 3, content: "# Spec v3 draft");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 2, content: "# Spec v2");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, version: 3, content: "# Spec v3 draft");
 
         var restored = await ArtifactApi.ReadAsync(await RestoreAsync(fixture.Contributor.Client, id, Spec, 2), HttpStatusCode.Created);
 
         Assert.Equal((4, (int?)3), (restored.Version, restored.ParentVersion));
         var statuses = await ProjectApi.WithDbAsync(factory, db => db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == id && a.Type == ArtifactType.TechnicalSpecification)
+            .Where(a => a.ProjectId == id && a.Type == SdlcArtifacts.TechnicalSpecification)
             .OrderBy(a => a.Version)
             .Select(a => a.Status)
             .ToListAsync(Ct));
@@ -144,8 +143,8 @@ public sealed class ArtifactRestoreTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Refinement, 1, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.CodebaseSummary, version: 1);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.CodebaseSummary, version: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.CodebaseSummary, version: 1);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.CodebaseSummary, version: 2);
 
         var body = await Problems.AssertAsync(await RestoreAsync(fixture.Contributor.Client, id, "codebase_summary", 1), HttpStatusCode.Conflict, ErrorCodes.RestoreNotAllowed);
 
@@ -173,8 +172,8 @@ public sealed class ArtifactRestoreTests(AideApiFactory factory)
     private async Task<(Artifact V2, Artifact V3)> SeedSpecsAsync(Guid id, Phase phase)
     {
         await LifecycleSeed.SetProjectAsync(factory, id, phase, 3, ApprovalMode.Advisory);
-        var v2 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 2, content: "# Spec\n\nVersion two.");
-        var v3 = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 3, content: "# Spec\n\nVersion three.");
+        var v2 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 2, content: "# Spec\n\nVersion two.");
+        var v3 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 3, content: "# Spec\n\nVersion three.");
         return (v2, v3);
     }
 
@@ -203,7 +202,7 @@ public sealed class ArtifactRestoreTests(AideApiFactory factory)
     private static Artifact SpecArtifact(Guid projectId, int version, string content, Guid releaseVersionId, DateTimeOffset createdAt) => new()
     {
         ProjectId = projectId,
-        Type = ArtifactType.TechnicalSpecification,
+        Type = SdlcArtifacts.TechnicalSpecification,
         Version = version,
         ParentVersion = version - 1,
         Content = content,

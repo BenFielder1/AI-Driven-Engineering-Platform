@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Aide.Domain.Entities;
 using Aide.Domain.Projects;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Connections;
 

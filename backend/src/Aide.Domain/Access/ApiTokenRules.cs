@@ -3,6 +3,7 @@ using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
 using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Access;
 

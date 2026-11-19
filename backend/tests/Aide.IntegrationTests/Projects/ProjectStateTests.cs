@@ -1,16 +1,15 @@
 using System.Net;
 using Aide.Api.Features.Projects;
-using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Projects;
 
@@ -29,7 +28,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
         var state = await GetStateAsync(owner.Client, project.Id);
 
         Assert.Equal((project.Id, Phase.Refinement, ProjectStatus.Active, 1, false), (state.ProjectId, state.Phase, state.Status, state.Checkpoint, state.ExecutionPaused));
-        Assert.Equal(ArtifactRules.All, state.Artifacts.Select(a => a.Type));
+        Assert.Equal(SdlcArtifactRules.All, state.Artifacts.Select(a => a.Type));
         Assert.All(state.Artifacts, a => Assert.Equal((null, null, null), (a.LatestVersion, a.LatestStatus, a.CurrentLockedVersion)));
         Assert.Equal(new ExecutionCountsDto(0, 0, 0, 0, 0, 0), state.Execution);
         Assert.Equal(new ReviewStateDto(0, 3, null, null, null, ReviewRunStatus.Idle), state.Review);
@@ -47,10 +46,10 @@ public sealed class ProjectStateTests(AideApiFactory factory)
         Assert.Equal(4, state.Checkpoint);
         Assert.Equal(
             [
-                new ArtifactStateDto(ArtifactType.ProjectRequest, 2, ArtifactStatus.Draft, 1),
-                new ArtifactStateDto(ArtifactType.TechnicalSpecification, 1, ArtifactStatus.Locked, 1),
-                new ArtifactStateDto(ArtifactType.ImplementationPlan, 2, ArtifactStatus.Locked, 2),
-                new ArtifactStateDto(ArtifactType.OptimizationPlan, null, null, null),
+                new ArtifactStateDto(SdlcArtifacts.ProjectRequest, 2, ArtifactStatus.Draft, 1),
+                new ArtifactStateDto(SdlcArtifacts.TechnicalSpecification, 1, ArtifactStatus.Locked, 1),
+                new ArtifactStateDto(SdlcArtifacts.ImplementationPlan, 2, ArtifactStatus.Locked, 2),
+                new ArtifactStateDto(SdlcArtifacts.OptimizationPlan, null, null, null),
             ],
             state.Artifacts);
 
@@ -60,7 +59,7 @@ public sealed class ProjectStateTests(AideApiFactory factory)
         // The v5 report was undone by a rollback to v4, so the v3 report is the latest that counts.
         Assert.Equal(new ReviewStateDto(1, 4, 0.820m, ReviewDecision.ReviewRequired, DriftLevel.Low, ReviewRunStatus.Idle), state.Review);
 
-        Assert.Equal([GateType.SpecApproval, GateType.PreRelease], state.PendingGates.Select(g => g.Type));
+        Assert.Equal([SdlcGates.SpecApproval, SdlcGates.PreRelease], state.PendingGates.Select(g => g.Type));
         Assert.True(state.PendingGates[0].Overdue);
         Assert.False(state.PendingGates[1].Overdue);
     }
@@ -92,12 +91,12 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                 s => s.SetProperty(p => p.Checkpoint, 4).SetProperty(p => p.ReviewCycle, 1).SetProperty(p => p.ExtraReviewCycles, 1),
                 Ct);
 
-            Artifact NewArtifact(ArtifactType type, int version, ArtifactStatus status, TimeSpan age, Guid? runId = null) => new()
+            Artifact NewArtifact(string type, int version, ArtifactStatus status, TimeSpan age, Guid? runId = null) => new()
             {
                 ProjectId = projectId,
                 Type = type,
                 Version = version,
-                Content = $"# {type} v{version}",
+                Content = $"# {KeyNames.ToPascalCase(type)} v{version}",
                 ContentHash = new string('a', 64),
                 Status = status,
                 CheckpointAtCreation = 1,
@@ -116,8 +115,8 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                 Status = status,
             };
 
-            var planV1 = NewArtifact(ArtifactType.ImplementationPlan, 1, ArtifactStatus.Invalidated, TimeSpan.FromHours(3));
-            var planV2 = NewArtifact(ArtifactType.ImplementationPlan, 2, ArtifactStatus.Locked, TimeSpan.FromHours(2));
+            var planV1 = NewArtifact(SdlcArtifacts.ImplementationPlan, 1, ArtifactStatus.Invalidated, TimeSpan.FromHours(3));
+            var planV2 = NewArtifact(SdlcArtifacts.ImplementationPlan, 2, ArtifactStatus.Locked, TimeSpan.FromHours(2));
             var steps = new[]
             {
                 NewStep(planV1, 1, StepStatus.Invalidated),
@@ -131,8 +130,8 @@ public sealed class ProjectStateTests(AideApiFactory factory)
             var run = new AgentRun
             {
                 ProjectId = projectId,
-                Agent = AgentKind.CodeGenerator,
-                Phase = Phase.Execution,
+                Agent = SdlcAgents.CodeGenerator,
+                Stage = Phase.Execution.ToWire(),
                 StepId = steps[3].Id,
                 Provider = LlmProvider.Fake,
                 Model = "fake-1",
@@ -140,9 +139,9 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                 Status = AgentRunStatus.Succeeded,
                 CreatedAt = now,
             };
-            var requestV1 = NewArtifact(ArtifactType.ProjectRequest, 1, ArtifactStatus.Locked, TimeSpan.FromHours(5));
-            var requestV2 = NewArtifact(ArtifactType.ProjectRequest, 2, ArtifactStatus.Draft, TimeSpan.FromHours(1), run.Id);
-            var specV1 = NewArtifact(ArtifactType.TechnicalSpecification, 1, ArtifactStatus.Locked, TimeSpan.FromHours(4));
+            var requestV1 = NewArtifact(SdlcArtifacts.ProjectRequest, 1, ArtifactStatus.Locked, TimeSpan.FromHours(5));
+            var requestV2 = NewArtifact(SdlcArtifacts.ProjectRequest, 2, ArtifactStatus.Draft, TimeSpan.FromHours(1), run.Id);
+            var specV1 = NewArtifact(SdlcArtifacts.TechnicalSpecification, 1, ArtifactStatus.Locked, TimeSpan.FromHours(4));
 
             db.Artifacts.AddRange(planV1, planV2, requestV1, requestV2, specV1);
             db.ExecutionSteps.AddRange(steps);
@@ -171,12 +170,12 @@ public sealed class ProjectStateTests(AideApiFactory factory)
                     CreatedAt = now - TimeSpan.FromMinutes(10),
                 });
             db.ApprovalGates.AddRange(
-                new ApprovalGate { ProjectId = projectId, Type = GateType.SpecApproval, ArtifactId = specV1.Id, CreatedAt = now - TimeSpan.FromHours(80) },
-                new ApprovalGate { ProjectId = projectId, Type = GateType.PreRelease, CreatedAt = now - TimeSpan.FromMinutes(5) },
+                new ApprovalGate { ProjectId = projectId, Type = SdlcGates.SpecApproval, ArtifactId = specV1.Id, CreatedAt = now - TimeSpan.FromHours(80) },
+                new ApprovalGate { ProjectId = projectId, Type = SdlcGates.PreRelease, CreatedAt = now - TimeSpan.FromMinutes(5) },
                 new ApprovalGate
                 {
                     ProjectId = projectId,
-                    Type = GateType.Escalation,
+                    Type = EngineGates.Escalation,
                     ArtifactId = planV2.Id,
                     Status = GateStatus.Approved,
                     Decision = EscalationDecision.Continue,

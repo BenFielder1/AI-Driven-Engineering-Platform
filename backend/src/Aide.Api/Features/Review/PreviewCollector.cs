@@ -2,11 +2,14 @@ using Aide.Api.Features.Deployments;
 using Aide.Api.Jobs;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Review;
 
@@ -78,7 +81,7 @@ public sealed partial class PreviewCollector(AideDbContext db, RolloutReader rol
     public async Task<Job?> NewestRolloutJobAsync(Guid projectId, Guid releaseVersionId, CancellationToken cancellationToken)
     {
         var jobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.PreviewRollout && j.Status != JobStatus.Cancelled)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PreviewRollout && j.Status != JobStatus.Cancelled)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Take(20)

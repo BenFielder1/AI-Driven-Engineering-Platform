@@ -8,6 +8,7 @@ using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Platforms;
 using Aide.UnitTests.GitHosts;
+using Tevrin.Engine.Domain.Common;
 using static Aide.UnitTests.Deployments.PlatformFixtures;
 
 namespace Aide.UnitTests.Deployments;

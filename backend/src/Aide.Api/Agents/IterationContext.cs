@@ -1,12 +1,15 @@
 using Aide.Api.Features.Versions;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Releases;
 using Aide.Domain.Specs;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Agents;
 
@@ -62,9 +65,9 @@ public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inpu
             .ThenByDescending(v => v.CreatedAt)
             .FirstOrDefault();
         var hasCode = !string.IsNullOrWhiteSpace(version.BaseCommitSha);
-        var summary = await inputs.CurrentAsync(projectId, ArtifactType.CodebaseSummary, cancellationToken);
-        var baselineSpec = baseline is null ? null : await LockedAsync(projectId, baseline.Id, ArtifactType.TechnicalSpecification, cancellationToken);
-        var baselineRequest = baseline is null ? null : await LockedAsync(projectId, baseline.Id, ArtifactType.ProjectRequest, cancellationToken);
+        var summary = await inputs.CurrentAsync(projectId, SdlcArtifacts.CodebaseSummary, cancellationToken);
+        var baselineSpec = baseline is null ? null : await LockedAsync(projectId, baseline.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var baselineRequest = baseline is null ? null : await LockedAsync(projectId, baseline.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
         return new IterationContext(version, hasCode, hasCode || baseline is not null || version.BaseTag is not null, summary, baselineSpec, baselineRequest);
     }
 
@@ -76,7 +79,7 @@ public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inpu
     public async Task<(Guid? JobId, AnalysisJobState State)> AnalysisJobAsync(Guid projectId, Guid releaseVersionId, CancellationToken cancellationToken)
     {
         var jobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.RepositoryAnalysis)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.RepositoryAnalysis)
             .OrderByDescending(j => j.CreatedAt)
             .Select(j => new { j.Id, j.Status, j.Payload })
             .Take(20)
@@ -93,7 +96,7 @@ public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inpu
         return (job?.Id, state);
     }
 
-    private async Task<Artifact?> LockedAsync(Guid projectId, Guid releaseVersionId, ArtifactType type, CancellationToken cancellationToken)
+    private async Task<Artifact?> LockedAsync(Guid projectId, Guid releaseVersionId, string type, CancellationToken cancellationToken)
     {
         var artifact = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type && a.Status == ArtifactStatus.Locked)

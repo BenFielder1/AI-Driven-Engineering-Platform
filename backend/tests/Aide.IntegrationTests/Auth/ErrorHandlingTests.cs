@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Aide.Api.Errors;
 using Aide.Domain.Common;
-using Aide.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

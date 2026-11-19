@@ -5,14 +5,9 @@ using System.Text.Json;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Projects;
-using Aide.Api.Jobs;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
@@ -20,6 +15,7 @@ using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Execution;
 
@@ -53,7 +49,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         Assert.Equal(InitialCommit, await GitAsync(id, "log", "-1", "--format=%s", "main"));
         Assert.Equal(branch, await ProjectApi.WithDbAsync(factory, db => db.ReleaseVersions.Where(v => v.ProjectId == id).Select(v => v.BranchName).SingleAsync(Ct)));
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
-        Assert.Equal((JobTypes.Execution, JobStatus.Queued), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.Execution, JobStatus.Queued), (job.Type, job.Status));
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.ExecutionStarted));
         var projectState = await ProjectApi.ReadAsync<ProjectStateDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct));
         Assert.Equal(ExecutionRunStatus.Running, projectState.ExecutionStatus);
@@ -135,7 +131,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.ExecutionCompleted));
         Assert.Equal(3, (await LifecycleSeed.EventsAsync(factory, id, EventTypes.StepCompleted)).Count);
         // FR-36: the pull request job recorded the Local comparison and moved the project to review (its job queued).
-        Assert.All((await LifecycleSeed.JobsAsync(factory, id)).Where(j => j.Type != JobTypes.Review), j => Assert.Equal(JobStatus.Succeeded, j.Status));
+        Assert.All((await LifecycleSeed.JobsAsync(factory, id)).Where(j => j.Type != SdlcJobTypes.Review), j => Assert.Equal(JobStatus.Succeeded, j.Status));
         var state = await ProjectApi.ReadAsync<ProjectStateDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct));
         Assert.Equal((ExecutionRunStatus.Completed, 3), (state.ExecutionStatus, state.Execution.Completed));
         Assert.Equal(Phase.Review, state.Phase);
@@ -159,7 +155,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         // Committed on the project branch: uncommitted files are discarded before a step, so they never reach a prompt.
         await GitAsync(id, "add", "src/part2.js");
         await GitAsync(id, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "Steps 1-3");
-        var responder = new ScriptedResponder(AgentKind.CodeGenerator, Reply(4, ("src/part2.js", "export const part2 = 'extended';\n")));
+        var responder = new ScriptedResponder(SdlcAgents.CodeGenerator, Reply(4, ("src/part2.js", "export const part2 = 'extended';\n")));
         var app = AgentJobs.WithResponders(factory, responder);
 
         await AgentJobs.RunAsync(app, Assert.Single(await LifecycleSeed.JobsAsync(factory, id)));
@@ -177,8 +173,8 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         Assert.Equal(StepStatus.Pending, steps.Steps[4].Status);
         Assert.Equal(FileAction.Modify, Assert.Single(steps.Steps[3].FileManifest!).Action);
         var run = Assert.Single(await AgentJobs.RunsAsync(factory, id));
-        Assert.Equal((AgentKind.CodeGenerator, (Guid?)steps.Steps[3].Id), (run.Agent, run.StepId));
-        Assert.Contains(run.InputArtifacts, a => a.Type == ArtifactType.ImplementationPlan);
+        Assert.Equal((SdlcAgents.CodeGenerator, (Guid?)steps.Steps[3].Id), (run.Agent, run.StepId));
+        Assert.Contains(run.InputArtifacts, a => a.Type == SdlcArtifacts.ImplementationPlan);
 
         // The finished job queued the next one (§4.9), and only one.
         var queued = (await LifecycleSeed.JobsAsync(factory, id)).Where(j => j.Status == JobStatus.Queued).ToList();
@@ -195,7 +191,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         await SeedExecutionAsync(id, Chain(2));
         await ControlAsync(fixture.Contributor.Client, id, "start");
         var bad = Reply(2, ("src/other.js", "const key = 'AKIAIOSFODNN7EXAMPLE';\n"), ("src/part1.js", "ok"));
-        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.CodeGenerator, bad));
+        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.CodeGenerator, bad));
 
         await AgentJobs.RunAsync(app, Assert.Single(await LifecycleSeed.JobsAsync(factory, id)));
 
@@ -217,7 +213,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await SeedExecutionAsync(id, Chain(2));
         await ControlAsync(fixture.Contributor.Client, id, "start");
-        var responder = new ScriptedResponder(AgentKind.CodeGenerator, Reply(1, ("src/undeclared.js", "x")));
+        var responder = new ScriptedResponder(SdlcAgents.CodeGenerator, Reply(1, ("src/undeclared.js", "x")));
         var app = AgentJobs.WithResponders(factory, responder);
 
         await AgentJobs.RunQueuedAsync(app, id);
@@ -232,7 +228,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         Assert.DoesNotContain(await LifecycleSeed.JobsAsync(factory, id), j => j.Status == JobStatus.Queued);
         var gates = await ProjectApi.ReadAsync<List<GateDto>>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/gates?status=pending", UriKind.Relative), Ct));
         var gate = Assert.Single(gates);
-        Assert.Equal((GateType.Escalation, EscalationReason.StepBlocked, step.Id, 1), (gate.Type, gate.EscalationReason!.Value, gate.ExecutionStepId!.Value, gate.StepNumber!.Value));
+        Assert.Equal((EngineGates.Escalation, EscalationReason.StepBlocked, step.Id, 1), (gate.Type, gate.EscalationReason!.Value, gate.ExecutionStepId!.Value, gate.StepNumber!.Value));
         await Problems.AssertAsync(await PostAsync(fixture.Contributor.Client, id, "start"), HttpStatusCode.Conflict, ErrorCodes.PhasePreconditionFailed);
         var state = await ProjectApi.ReadAsync<ProjectStateDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct));
         Assert.Equal(ExecutionRunStatus.Blocked, state.ExecutionStatus);
@@ -264,7 +260,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Specification, Phase.Planning, 3, t0.AddMinutes(1));
         await LifecycleSeed.AddTransitionAsync(factory, id, Phase.Planning, Phase.Execution, 4, t0.AddMinutes(2));
         await ControlAsync(fixture.Contributor.Client, id, "start");
-        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.CodeGenerator, Reply(1, ("src/undeclared.js", "x"))));
+        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.CodeGenerator, Reply(1, ("src/undeclared.js", "x"))));
         await AgentJobs.RunQueuedAsync(app, id);
         var gate = Assert.Single(await LifecycleSeed.GatesAsync(factory, id), g => g.Status == GateStatus.Pending);
 
@@ -432,7 +428,7 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await SeedExecutionAsync(id, Chain(1));
         await ControlAsync(fixture.Contributor.Client, id, "start");
-        var counting = new CountingResponder(new ScriptedResponder(AgentKind.CodeGenerator, Reply(1, ("src/nope.js", "x"))));
+        var counting = new CountingResponder(new ScriptedResponder(SdlcAgents.CodeGenerator, Reply(1, ("src/nope.js", "x"))));
         var app = AgentJobs.WithResponders(factory, counting);
         var job = Assert.Single(await LifecycleSeed.JobsAsync(factory, id));
         await AgentJobs.RunAsync(app, job);
@@ -462,9 +458,9 @@ public sealed class ExecutionRunnerTests(AideApiFactory factory)
     private async Task<IReadOnlyList<ExecutionStep>> SeedExecutionAsync(Guid id, PlanStep[] plan, Phase phase = Phase.Execution, int completedThrough = 0)
     {
         await LifecycleSeed.SetProjectAsync(factory, id, phase, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\nExpress API.");
-        var planArtifact = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, content: PlanDocument.Render(ArtifactType.ImplementationPlan, plan));
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\nExpress API.");
+        var planArtifact = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, content: PlanDocument.Render(SdlcArtifacts.ImplementationPlan, plan));
         return await ProjectApi.WithDbAsync<IReadOnlyList<ExecutionStep>>(factory, async db =>
         {
             var steps = plan.Select(p => new ExecutionStep

@@ -7,13 +7,14 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Common;
-using Aide.Domain.Entities;
+using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Runs;
 
@@ -51,7 +52,7 @@ public static class RunEndpoints
         IProjectAccess access,
         AideDbContext db,
         CancellationToken cancellationToken,
-        [WireEnum(typeof(AgentKind))] string? agent = null,
+        [WireEnum(typeof(SdlcAgents))] string? agent = null,
         [Range(1, int.MaxValue)] int page = 1,
         [Range(1, ProjectLimits.MaxPageLimit)] int limit = 20,
         Guid? releaseVersionId = null)
@@ -73,7 +74,7 @@ public static class RunEndpoints
         var query = db.AgentRuns.AsNoTracking().Where(r => r.ProjectId == id && r.ReleaseVersionId == versionId);
         if (agent is not null)
         {
-            var wanted = EnumStrings.Parse<AgentKind>(agent);
+            var wanted = SdlcAgents.Parse(agent);
             query = query.Where(r => r.Agent == wanted);
         }
 
@@ -96,7 +97,7 @@ public static class RunEndpoints
                 ProjectId = r.ProjectId,
                 ReleaseVersionId = r.ReleaseVersionId,
                 Agent = r.Agent,
-                Phase = r.Phase,
+                Stage = r.Stage,
                 StepId = r.StepId,
                 Provider = r.Provider,
                 Model = r.Model,
@@ -142,7 +143,10 @@ public static class RunEndpoints
             return ApiProblems.FromError(grant.Error!);
         }
 
-        var run = await db.AgentRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == runId && r.ProjectId == id, cancellationToken);
+        var run = await db.AgentRuns.AsNoTracking()
+            .Where(r => r.Id == runId && r.ProjectId == id)
+            .Select(AgentRunProjections.WithoutInput)
+            .FirstOrDefaultAsync(cancellationToken);
         if (run is null)
         {
             return ApiProblems.NotFound("The agent run was not found.");
@@ -253,7 +257,7 @@ public static class RunEndpoints
         r.Id,
         r.ReleaseVersionId,
         r.Agent,
-        r.Phase,
+        SdlcStages.PhaseOf(r.Stage),
         r.StepId,
         r.Provider,
         r.Model,

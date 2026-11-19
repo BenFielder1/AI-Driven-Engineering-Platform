@@ -1,10 +1,6 @@
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
@@ -12,6 +8,7 @@ using Aide.Infrastructure.Persistence.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Persistence;
 
@@ -43,16 +40,16 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
     {
         var user = NewUser();
         var project = NewProject();
-        var plan = NewArtifact(project.Id, ArtifactType.ImplementationPlan, 1, user.Id);
+        var plan = NewArtifact(project.Id, SdlcArtifacts.ImplementationPlan, 1, user.Id);
         var run = new AgentRun
         {
             ProjectId = project.Id,
-            Agent = AgentKind.PlanGenerator,
-            Phase = Phase.Planning,
+            Agent = SdlcAgents.PlanGenerator,
+            Stage = Phase.Planning.ToWire(),
             Provider = LlmProvider.Openai,
             Model = "fake-model",
             PromptVersion = "plan-generator@1",
-            InputArtifacts = [new InputArtifactRef(plan.Id, ArtifactType.TechnicalSpecification, 2)],
+            InputArtifacts = [new InputArtifactRef(plan.Id, SdlcArtifacts.TechnicalSpecification, 2)],
             Output = """{"questions":["Who are the users?"]}""",
             Status = AgentRunStatus.Succeeded,
             Attempts = 1,
@@ -78,7 +75,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         var gate = new ApprovalGate
         {
             ProjectId = project.Id,
-            Type = GateType.Escalation,
+            Type = EngineGates.Escalation,
             ArtifactId = plan.Id,
             Status = GateStatus.Approved,
             Decision = EscalationDecision.Rollback,
@@ -250,12 +247,12 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
         db.Projects.Add(project);
-        db.ApprovalGates.Add(new ApprovalGate { ProjectId = project.Id, Type = GateType.SpecApproval, Status = GateStatus.Rejected, CreatedAt = Now });
-        db.ApprovalGates.Add(new ApprovalGate { ProjectId = project.Id, Type = GateType.SpecApproval, CreatedAt = Now });
-        db.ApprovalGates.Add(new ApprovalGate { ProjectId = project.Id, Type = GateType.PreRelease, CreatedAt = Now });
+        db.ApprovalGates.Add(new ApprovalGate { ProjectId = project.Id, Type = SdlcGates.SpecApproval, Status = GateStatus.Rejected, CreatedAt = Now });
+        db.ApprovalGates.Add(new ApprovalGate { ProjectId = project.Id, Type = SdlcGates.SpecApproval, CreatedAt = Now });
+        db.ApprovalGates.Add(new ApprovalGate { ProjectId = project.Id, Type = SdlcGates.PreRelease, CreatedAt = Now });
         await db.SaveChangesAsync(Ct);
 
-        var duplicate = new ApprovalGate { ProjectId = project.Id, Type = GateType.SpecApproval, CreatedAt = Now };
+        var duplicate = new ApprovalGate { ProjectId = project.Id, Type = SdlcGates.SpecApproval, CreatedAt = Now };
         db.ApprovalGates.Add(duplicate);
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
         var pg = Assert.IsType<PostgresException>(ex.InnerException);
@@ -268,16 +265,16 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
     {
         var project = NewProject();
         var other = NewProject();
-        var first = new Job { ProjectId = project.Id, Type = Job.ExecutionType, RunAfter = Now, CreatedAt = Now };
+        var first = new Job { ProjectId = project.Id, Type = SdlcJobTypes.Execution, RunAfter = Now, CreatedAt = Now };
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
         db.Projects.AddRange(project, other);
         db.Jobs.Add(first);
         db.Jobs.Add(new Job { ProjectId = project.Id, Type = "agent_run", RunAfter = Now, CreatedAt = Now });
-        db.Jobs.Add(new Job { ProjectId = other.Id, Type = Job.ExecutionType, Status = JobStatus.Running, RunAfter = Now, CreatedAt = Now });
+        db.Jobs.Add(new Job { ProjectId = other.Id, Type = SdlcJobTypes.Execution, Status = JobStatus.Running, RunAfter = Now, CreatedAt = Now });
         await db.SaveChangesAsync(Ct);
 
-        var duplicate = new Job { ProjectId = project.Id, Type = Job.ExecutionType, RunAfter = Now, CreatedAt = Now };
+        var duplicate = new Job { ProjectId = project.Id, Type = SdlcJobTypes.Execution, RunAfter = Now, CreatedAt = Now };
         db.Jobs.Add(duplicate);
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
         var pg = Assert.IsType<PostgresException>(ex.InnerException);
@@ -288,7 +285,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         first.Status = JobStatus.Succeeded;
         await db.SaveChangesAsync(Ct);
 
-        db.Jobs.Add(new Job { ProjectId = project.Id, Type = Job.ExecutionType, RunAfter = Now, CreatedAt = Now });
+        db.Jobs.Add(new Job { ProjectId = project.Id, Type = SdlcJobTypes.Execution, RunAfter = Now, CreatedAt = Now });
         await db.SaveChangesAsync(Ct);
     }
 
@@ -324,10 +321,10 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
     {
         var user = NewUser();
         var project = NewProject();
-        var plan = NewArtifact(project.Id, ArtifactType.ImplementationPlan, 1, user.Id);
-        var run = new AgentRun { ProjectId = project.Id, Agent = AgentKind.CodeGenerator, Phase = Phase.Execution, Model = "m", PromptVersion = "1", CreatedAt = Now };
+        var plan = NewArtifact(project.Id, SdlcArtifacts.ImplementationPlan, 1, user.Id);
+        var run = new AgentRun { ProjectId = project.Id, Agent = SdlcAgents.CodeGenerator, Stage = Phase.Execution.ToWire(), Model = "m", PromptVersion = "1", CreatedAt = Now };
         var step = new ExecutionStep { ProjectId = project.Id, PlanArtifactId = plan.Id, StepNumber = 1, Title = "t", Task = "t" };
-        var gate = new ApprovalGate { ProjectId = project.Id, Type = GateType.PlanApproval, ArtifactId = plan.Id, CreatedAt = Now };
+        var gate = new ApprovalGate { ProjectId = project.Id, Type = SdlcGates.PlanApproval, ArtifactId = plan.Id, CreatedAt = Now };
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -342,7 +339,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
             await db.SaveChangesAsync(Ct);
 
             run.StepId = step.Id;
-            db.Artifacts.Add(NewArtifact(project.Id, ArtifactType.TechnicalSpecification, 1, user.Id, run.Id));
+            db.Artifacts.Add(NewArtifact(project.Id, SdlcArtifacts.TechnicalSpecification, 1, user.Id, run.Id));
             db.ApprovalGates.Add(gate);
             db.ApprovalLinks.Add(new ApprovalLink { GateId = gate.Id, NonceHash = Hash(), ExpiresAt = Now, CreatedAt = Now });
             db.ComplianceReports.Add(new ComplianceReport { ProjectId = project.Id, ReviewCycle = 1, AgentRunId = run.Id, CreatedAt = Now });
@@ -401,7 +398,7 @@ public sealed class CoreSchemaTests(AideApiFactory factory)
         UpdatedAt = Now,
     };
 
-    private static Artifact NewArtifact(Guid projectId, ArtifactType type, int version, Guid userId, Guid? runId = null) => new()
+    private static Artifact NewArtifact(Guid projectId, string type, int version, Guid userId, Guid? runId = null) => new()
     {
         ProjectId = projectId,
         Type = type,

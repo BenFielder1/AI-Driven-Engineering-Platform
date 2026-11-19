@@ -1,112 +1,19 @@
-using Aide.Domain.Jobs;
-using Aide.Infrastructure.Persistence;
+using Aide.Api.Logging;
+using Aide.Domain.Common;
+using Aide.Infrastructure.Bitbucket;
+using Aide.Infrastructure.GitHub;
+using Aide.Infrastructure.GitLab;
+using Aide.Infrastructure.Persistence.Conversion;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Jobs;
 
-/// <summary>Job worker settings (section <c>Jobs</c>, §4.9, NFR-REL).</summary>
-public sealed class JobOptions
+public static class AideJobServiceCollectionExtensions
 {
-    public const string SectionName = "Jobs";
-
-    /// <summary>Run the background worker loop. Tests turn it off and drive <see cref="JobWorker.RunOnceAsync"/>.</summary>
-    public bool Enabled { get; set; } = true;
-
-    /// <summary>How long the worker waits before polling again when there was nothing to do.</summary>
-    public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(2);
-
-    /// <summary>Jobs one worker runs at once; a free slot is filled on the next poll or as soon as a running job finishes.</summary>
-    public int Concurrency { get; set; } = 4;
-
     /// <summary>
-    /// A running job whose lease hasn't been renewed within this time is re-queued (NFR-REL: 5 minutes). The worker renews
-    /// the lease of each job it runs every third of this, so only a dead or stalled worker loses its jobs.
+    /// The job queue (outbox enqueuer) and the background worker (§4.9) from the engine (FR-264), with Tevrin's settings,
+    /// payload JSON, trace source and log scope keys, and the Git host rate-limit deferrals (D-0.7.0-20).
     /// </summary>
-    public TimeSpan LeaseDuration { get; set; } = JobPolicy.LeaseDuration;
-}
-
-/// <summary>A claimed job, as handed to its <see cref="IJobHandler"/>. <see cref="Attempt"/> is 1-based.</summary>
-public sealed record JobExecution(Guid Id, string Type, string Payload, Guid? ProjectId, int Attempt);
-
-/// <summary>
-/// Runs one job type. Handlers are idempotent (§4.9): a job can be delivered again after a lease expiry. Throw
-/// <see cref="JobFailedException"/> with <c>transient: false</c> for failures a retry can't fix (e.g.
-/// <c>MISSING_INPUT</c>); any other exception is a transient failure and is retried with backoff.
-/// </summary>
-public interface IJobHandler
-{
-    Task HandleAsync(JobExecution job, CancellationToken cancellationToken);
-}
-
-/// <summary>A job that ended without succeeding: dead-lettered (retries used up, or the lease expired on the last
-/// attempt) or failed permanently. <see cref="Error"/> is the job's last error.</summary>
-public sealed record JobEnded(Guid JobId, string JobType, Guid? ProjectId, bool DeadLettered, string? Error);
-
-/// <summary>
-/// Cleans up after a job that ended without succeeding (e.g. fails agent runs the job left <c>running</c>, FR-25). Called
-/// by the worker on both the handler path and the lease reaper, with the worker's <see cref="AideDbContext"/> before it
-/// saves: changes are recorded in the same transaction as the job's final status. Must be idempotent.
-/// </summary>
-public interface IJobEndedHook
-{
-    Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken);
-}
-
-/// <summary>
-/// Follow-up work of a job that succeeded (e.g. queueing the next execution step, §4.9). Called by the worker with its
-/// <see cref="AideDbContext"/> in the same transaction that marks the job succeeded, so the job's row is already
-/// <c>succeeded</c> when the hook queries jobs. Changes are saved by the worker. If saving them fails (e.g. a concurrent
-/// writer queued the same execution job), the job is still marked succeeded without them. Must be idempotent.
-/// </summary>
-public interface IJobSucceededHook
-{
-    Task OnJobSucceededAsync(AideDbContext db, JobExecution job, CancellationToken cancellationToken);
-}
-
-/// <summary>A handled job failure; <see cref="Transient"/> decides between retry and immediate failure (JobPolicy).</summary>
-public sealed class JobFailedException : Exception
-{
-    public JobFailedException()
-    {
-    }
-
-    public JobFailedException(string message)
-        : base(message)
-    {
-    }
-
-    public JobFailedException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
-
-    public JobFailedException(string message, bool transient, string? errorCode = null)
-        : base(message)
-    {
-        Transient = transient;
-        ErrorCode = errorCode;
-    }
-
-    public bool Transient { get; } = true;
-
-    public string? ErrorCode { get; }
-}
-
-/// <summary>A handler for one job type. Only registered types are claimed by the worker.</summary>
-public sealed record JobHandlerRegistration(string JobType, Func<IServiceProvider, IJobHandler> Factory);
-
-public static class JobServiceCollectionExtensions
-{
-    /// <summary>Registers <typeparamref name="THandler"/> (scoped) as the handler of <paramref name="jobType"/>.</summary>
-    public static IServiceCollection AddJobHandler<THandler>(this IServiceCollection services, string jobType)
-        where THandler : class, IJobHandler
-    {
-        ArgumentException.ThrowIfNullOrEmpty(jobType);
-        services.AddScoped<THandler>();
-        services.AddSingleton(new JobHandlerRegistration(jobType, sp => sp.GetRequiredService<THandler>()));
-        return services;
-    }
-
-    /// <summary>The job queue (outbox enqueuer) and the background worker (§4.9).</summary>
     public static IServiceCollection AddAideJobs(this IServiceCollection services)
     {
         services.AddOptions<JobOptions>()
@@ -115,61 +22,60 @@ public static class JobServiceCollectionExtensions
             .Validate(o => o.PollInterval > TimeSpan.Zero, "Jobs:PollInterval must be positive.")
             .Validate(o => o.LeaseDuration > TimeSpan.Zero, "Jobs:LeaseDuration must be positive.")
             .ValidateOnStart();
-        services.AddScoped<JobEnqueuer>();
-        services.AddSingleton<JobWorker>();
-        services.AddHostedService(sp => sp.GetRequiredService<JobWorker>());
+        services.AddSingleton<IJobPayloadSerializer>(AideJobPayloadSerializer.Instance);
+        services.AddSingleton(new JobTelemetry(AideTelemetry.Source)
+        {
+            JobIdTag = AideTelemetry.JobIdTag,
+            JobTypeTag = AideTelemetry.JobTypeTag,
+            JobAttemptTag = AideTelemetry.JobAttemptTag,
+            ProjectIdTag = AideTelemetry.ProjectIdTag,
+            JobOutcomeTag = AideTelemetry.JobOutcomeTag,
+            ErrorCodeTag = AideTelemetry.ErrorCodeTag,
+            ProjectIdScopeKey = ProjectLogScope.ProjectIdKey,
+        });
+        services.AddSingleton<IJobExceptionClassifier, GitHostRateLimitClassifier>();
+        services.AddTevrinJobQueue();
         return services;
     }
 }
 
-/// <summary>NFR-OBS: the log scope keys every log entry written while a job runs carries (plus <c>ProjectId</c> for
-/// project jobs).</summary>
-public static class JobScopeKeys
+/// <summary>Job payloads as <c>jsonb</c>, in the same JSON as Tevrin's typed columns (<see cref="AideJson"/>).</summary>
+public sealed class AideJobPayloadSerializer : IJobPayloadSerializer
 {
-    public const string JobId = "JobId";
-    public const string JobType = "JobType";
-    public const string Attempt = "Attempt";
+    public static AideJobPayloadSerializer Instance { get; } = new();
+
+    public string Serialize(object payload) => AideJson.Serialize(payload);
 }
 
 /// <summary>
-/// A handler isn't ready to run yet (e.g. FR-70: refinement waiting for the codebase summary): the worker re-queues the
-/// job to run at <see cref="RunAfter"/> without counting the attempt — a wait, never a blocking sleep and never a failure.
+/// §4.14, FR-136, NFR-REL: a Git host's rate limit isn't a job failure. GitHub's exhausted limit, GitLab's rate limiting and
+/// Bitbucket's 429 (or the connection's 900-an-hour budget) re-queue the job for the reset without counting the attempt.
 /// </summary>
-public sealed class JobDeferredException : Exception
+public sealed partial class GitHostRateLimitClassifier : IJobExceptionClassifier
 {
-    public JobDeferredException()
+    public JobDeferralHint? Classify(Exception exception) => exception switch
     {
-    }
+        GitHubRateLimitedException ex => new JobDeferralHint(
+            ex.ResetAt,
+            ErrorCodes.GitHubRateLimited,
+            until => $"{ErrorCodes.GitHubRateLimited}: GitHub's rate limit is exhausted; the job waits until {until:u}.",
+            LogRateLimited),
+        GitLabRateLimitedException ex => new JobDeferralHint(
+            ex.ResetAt,
+            ErrorCodes.GitLabRateLimited,
+            until => $"{ErrorCodes.GitLabRateLimited}: GitLab is rate limiting requests; the job waits until {until:u}.",
+            (logger, until) => LogHostRateLimited(logger, "GitLab", until)),
+        BitbucketRateLimitedException ex => new JobDeferralHint(
+            ex.ResetAt,
+            ErrorCodes.BitbucketRateLimited,
+            until => $"{ErrorCodes.BitbucketRateLimited}: Bitbucket is rate limiting requests; the job waits until {until:u}.",
+            (logger, until) => LogHostRateLimited(logger, "Bitbucket", until)),
+        _ => null,
+    };
 
-    public JobDeferredException(string message)
-        : base(message)
-    {
-    }
+    [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by GitHub's rate limit; deferred until {RunAfter} without counting the attempt")]
+    private static partial void LogRateLimited(ILogger logger, DateTimeOffset runAfter);
 
-    public JobDeferredException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
-
-    public JobDeferredException(string message, DateTimeOffset runAfter)
-        : base(message)
-    {
-        RunAfter = runAfter;
-    }
-
-    /// <summary>
-    /// As <see cref="JobDeferredException(string, DateTimeOffset)"/>, replacing the job's payload with
-    /// <paramref name="payload"/> (raw JSON) for the next run, e.g. the merge poll's ETag or when review started waiting for
-    /// checks (§4.14) — so the state survives a restart.
-    /// </summary>
-    public JobDeferredException(string message, DateTimeOffset runAfter, string? payload)
-        : this(message, runAfter)
-    {
-        Payload = payload;
-    }
-
-    public DateTimeOffset RunAfter { get; }
-
-    /// <summary>The payload for the next run (raw JSON), or <c>null</c> to keep the current one.</summary>
-    public string? Payload { get; }
+    [LoggerMessage(Level = LogLevel.Information, Message = "Job stopped by {Host}'s rate limit; deferred until {RunAfter} without counting the attempt")]
+    private static partial void LogHostRateLimited(ILogger logger, string host, DateTimeOffset runAfter);
 }

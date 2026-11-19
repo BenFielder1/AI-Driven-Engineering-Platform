@@ -11,8 +11,6 @@ using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Projects;
 using Aide.Domain.Releases;
@@ -21,6 +19,11 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Projects;
 
@@ -559,7 +562,7 @@ public static partial class ProjectEndpoints
             .Where(a => a.ProjectId == id && a.ReleaseVersionId == versionId)
             .Select(a => new { a.Id, a.Type, a.Version, a.Status, a.CreatedAt })
             .ToListAsync(cancellationToken);
-        var artifactStates = ArtifactRules.All
+        var artifactStates = SdlcArtifactRules.All
             .Select(type =>
             {
                 var versions = artifacts.Where(a => a.Type == type).ToList();
@@ -575,7 +578,7 @@ public static partial class ProjectEndpoints
         // The current plan: the most recently created locked plan (implementation plan, or the optimisation plan of
         // a review cycle). An approved new implementation plan invalidates the optimisation plan (§4.4).
         var currentPlanId = artifacts
-            .Where(a => a.Status == ArtifactStatus.Locked && a.Type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan)
+            .Where(a => a.Status == ArtifactStatus.Locked && a.Type is SdlcArtifacts.ImplementationPlan or SdlcArtifacts.OptimizationPlan)
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)
             .Select(a => (Guid?)a.Id)
@@ -609,7 +612,7 @@ public static partial class ProjectEndpoints
             report?.DriftLevel,
             ReviewStatusRules.Status(
                 await db.Jobs.AsNoTracking()
-                    .Where(j => j.ProjectId == id && j.Type == JobTypes.Review)
+                    .Where(j => j.ProjectId == id && j.Type == SdlcJobTypes.Review)
                     .OrderByDescending(j => j.CreatedAt)
                     .ThenByDescending(j => j.Id)
                     .Select(j => (JobStatus?)j.Status)

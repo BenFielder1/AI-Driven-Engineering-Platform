@@ -4,15 +4,14 @@ using System.Net.Http.Json;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Tokens;
 using Aide.Domain.Access;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Artifacts;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Live;
 
@@ -31,7 +30,7 @@ public sealed class ProjectsHubTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Specification, 2, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
         var gate = (await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id))).Gate!;
         await using var viewer = await LiveClient.ConnectAsync(factory, fixture.Viewer);
         await viewer.JoinAsync(id);

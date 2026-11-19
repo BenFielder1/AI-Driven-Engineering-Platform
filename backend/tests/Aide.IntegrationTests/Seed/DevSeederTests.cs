@@ -2,7 +2,6 @@ using Aide.Api.Seed;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Git;
@@ -14,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Seed;
 
@@ -199,18 +199,18 @@ public sealed class DevSeederTests(AideApiFactory factory)
             Assert.Equal(("fe-nextjs", ".", (Domain.Stack.StackComponent?)null, (Domain.Stack.StackDataLayer?)null), (composition.Frontend!.Pack, composition.Frontend.Path, composition.Backend, composition.Data));
             Assert.Equal(LlmProvider.Fake, (await db.ProjectLlmSettings.SingleAsync(s => s.ProjectId == project.Id, Ct)).Provider);
             var artifacts = await db.Artifacts.Where(a => a.ProjectId == project.Id).OrderBy(a => a.Type).ToListAsync(Ct);
-            Assert.All(artifacts, a => Assert.Equal(Domain.Artifacts.ArtifactStatus.Locked, a.Status));
-            Assert.Contains("## Routes & Rendering Strategy", artifacts.Single(a => a.Type == Domain.Artifacts.ArtifactType.TechnicalSpecification).Content, StringComparison.Ordinal);
+            Assert.All(artifacts, a => Assert.Equal(Tevrin.Engine.Domain.Artifacts.ArtifactStatus.Locked, a.Status));
+            Assert.Contains("## Routes & Rendering Strategy", artifacts.Single(a => a.Type == SdlcArtifacts.TechnicalSpecification).Content, StringComparison.Ordinal);
             Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoPresetProjectSeeded).ToListAsync(Ct));
             Assert.Equal(4, await db.Projects.CountAsync(Ct));
         });
 
         var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
 
-        Assert.Equal((Domain.Jobs.JobTypes.PlanGeneration, Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, Tevrin.Engine.Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
         await WithDbAsync(app, async db =>
         {
-            var plan = await db.Artifacts.SingleAsync(a => a.ProjectId == projectId && a.Type == Domain.Artifacts.ArtifactType.ImplementationPlan, Ct);
+            var plan = await db.Artifacts.SingleAsync(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.ImplementationPlan, Ct);
             Assert.Contains("**Agent:** scaffolder", plan.Content, StringComparison.Ordinal);
         });
     }
@@ -233,13 +233,13 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var version = await db.ReleaseVersions.SingleAsync(v => v.ProjectId == project.Id, Ct);
             Assert.Equal("baas", Domain.Stack.StackCompositionJson.Deserialize(version.StackComposition)!.Data!.Mode);
             Assert.Null(version.PresetId);
-            Assert.Equal(Domain.Artifacts.ArtifactStatus.Locked, (await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id, Ct)).Status);
+            Assert.Equal(Tevrin.Engine.Domain.Artifacts.ArtifactStatus.Locked, (await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id, Ct)).Status);
             Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoStackProjectSeeded).ToListAsync(Ct));
         });
 
         var jobs = await Support.AgentJobs.RunQueuedAsync(app, projectId);
 
-        Assert.Equal((Domain.Jobs.JobTypes.SpecGeneration, Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
+        Assert.Equal((SdlcJobTypes.SpecGeneration, Tevrin.Engine.Domain.Jobs.JobStatus.Succeeded), (Assert.Single(jobs).Type, jobs[0].Status));
     }
 
     [Fact]
@@ -268,20 +268,20 @@ public sealed class DevSeederTests(AideApiFactory factory)
             var transition = await db.StateTransitions.SingleAsync(t => t.ProjectId == project.Id, Ct);
             Assert.Equal(((Phase?)null, Phase.Analysis), (transition.FromPhase, transition.ToPhase));
 
-            var profile = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == Domain.Artifacts.ArtifactType.StackProfile, Ct);
-            Assert.Equal((1, Domain.Artifacts.ArtifactStatus.Draft), (profile.Version, profile.Status));
+            var profile = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.StackProfile, Ct);
+            Assert.Equal((1, Tevrin.Engine.Domain.Artifacts.ArtifactStatus.Draft), (profile.Version, profile.Status));
             var parsed = Domain.Stack.StackProfile.Parse(profile.Content);
             Assert.True(parsed.IsSuccess);
             Assert.Equal(["backend"], Domain.Stack.StackProfile.Unresolved(parsed.Value.Document));
 
             var import = await db.TrackerImports.SingleAsync(i => i.ProjectId == project.Id, Ct);
             Assert.Equal((Domain.Trackers.TrackerProvider.Jira, Domain.Trackers.TrackerImportStatus.Completed, DevSeeder.DemoImportKeys.Count), (import.Provider, import.Status, import.ItemCount));
-            var snapshot = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == Domain.Artifacts.ArtifactType.SourceItems, Ct);
-            Assert.Equal((import.SourceArtifactId, 1, Domain.Artifacts.ArtifactStatus.Locked), ((Guid?)snapshot.Id, snapshot.Version, snapshot.Status));
+            var snapshot = await db.Artifacts.SingleAsync(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.SourceItems, Ct);
+            Assert.Equal((import.SourceArtifactId, 1, Tevrin.Engine.Domain.Artifacts.ArtifactStatus.Locked), ((Guid?)snapshot.Id, snapshot.Version, snapshot.Status));
             Assert.Contains("FAKE-1", snapshot.Content, StringComparison.Ordinal);
 
             // Seeded quietly: no agent job and no notification.
-            Assert.False(await db.Jobs.AnyAsync(j => j.ProjectId == project.Id && j.Type != Domain.Jobs.JobTypes.Notification, Ct));
+            Assert.False(await db.Jobs.AnyAsync(j => j.ProjectId == project.Id && j.Type != SdlcJobTypes.Notification, Ct));
             Assert.False(await db.Notifications.AnyAsync(n => n.ProjectId == project.Id, Ct));
             Assert.Single(await db.Events.Where(e => e.Type == EventTypes.DemoAnalysisProjectSeeded).ToListAsync(Ct));
         });

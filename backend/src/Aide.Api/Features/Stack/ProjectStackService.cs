@@ -1,10 +1,11 @@
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Stack;
 
@@ -218,7 +219,7 @@ public sealed partial class ProjectStackService(
     private async Task<bool> PlanWasLockedAsync(Guid projectId, Guid releaseVersionId, CancellationToken cancellationToken)
     {
         var plans = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == ArtifactType.ImplementationPlan)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == SdlcArtifacts.ImplementationPlan)
             .Select(a => new { a.Status, a.ApprovedAt })
             .ToListAsync(cancellationToken);
         return StackPinning.PlanWasLocked(plans.Select(p => (p.Status, p.ApprovedAt)));

@@ -2,7 +2,6 @@ using System.Net;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Infrastructure.Security;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

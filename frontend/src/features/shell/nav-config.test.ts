@@ -29,10 +29,10 @@ function hasPage(to: string): boolean {
 }
 
 describe('FR-53: workspace navigation', () => {
-  it('FR53_nav_config / FR-206: Home, Projects, Notifications and Connections for everyone; Admin with its six pages for admins only', () => {
-    expect(labels(workspaceSections(user))).toEqual([{ label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Connections'] }])
+  it('FR53_nav_config / FR-206 / FR-307: Home, Projects, Notifications, Gates and Connections for everyone; Admin with its six pages for admins only', () => {
+    expect(labels(workspaceSections(user))).toEqual([{ label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Gates', 'Connections'] }])
     expect(labels(workspaceSections(admin))).toEqual([
-      { label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Connections'] },
+      { label: 'Workspace', items: ['Home', 'Projects', 'Notifications', 'Gates', 'Connections'] },
       { label: 'Admin', items: ['Overview', 'Users', 'Events', 'Agent runs', 'Dead letters', 'Integrations'] },
     ])
   })
@@ -55,18 +55,18 @@ describe('FR-53: workspace navigation', () => {
 })
 
 describe('FR-54: project navigation', () => {
-  it('FR54_nav_config: Lifecycle has the six stages in order, Project has Overview, Artifacts, Agent runs, Activity and Settings', () => {
+  it('FR54_nav_config: Lifecycle has the six stages in order, Project has Overview, Artifacts, Agent runs, Pipeline (FR-306), Activity and Settings', () => {
     expect(labels(projectSections())).toEqual([
       { label: 'Lifecycle', items: ['Refinement', 'Specification', 'Planning', 'Execution', 'Review', 'Release'] },
-      { label: 'Project', items: ['Overview', 'Artifacts', 'Agent runs', 'Activity', 'Settings'] },
+      { label: 'Project', items: ['Overview', 'Artifacts', 'Agent runs', 'Pipeline', 'Activity', 'Settings'] },
     ])
   })
 
   it('FR91_nav_deployments: Deployments shows between Activity and Settings only when the project has a deployment target', () => {
     expect(projectSections({ deploymentsEnabled: false })[1]?.items.map((i) => i.label)).not.toContain('Deployments')
     const project = projectSections({ deploymentsEnabled: true })[1]
-    expect(project?.items.map((i) => i.label)).toEqual(['Overview', 'Artifacts', 'Agent runs', 'Activity', 'Deployments', 'Settings'])
-    expect(hrefFor(project?.items[4] ?? { to: '/projects' }, { projectId: 'p1' })).toBe('/projects/p1/deployments')
+    expect(project?.items.map((i) => i.label)).toEqual(['Overview', 'Artifacts', 'Agent runs', 'Pipeline', 'Activity', 'Deployments', 'Settings'])
+    expect(hrefFor(project?.items[5] ?? { to: '/projects' }, { projectId: 'p1' })).toBe('/projects/p1/deployments')
     expect(paletteEntries(user, { id: 'p1', name: 'P' }).map((e) => e.label)).not.toContain('Deployments')
     expect(paletteEntries(user, { id: 'p1', name: 'P', deploymentsEnabled: true }).map((e) => e.label)).toContain('Deployments')
   })
@@ -124,9 +124,9 @@ describe('FR-53: breadcrumbs come from nav-config', () => {
 })
 
 describe('FR-53: the command palette lists the same pages', () => {
-  it('FR53_palette / FR-209: workspace pages plus Account (Home and New project are actions); admin pages for admins only', () => {
+  it('FR53_palette / FR-209 / FR-307: workspace pages (with Gates) plus Account (Home and New project are actions); admin pages for admins only', () => {
     const forUser = paletteEntries(user).map((e) => e.label)
-    expect(forUser).toEqual(['Projects', 'Notifications', 'Connections', 'Account'])
+    expect(forUser).toEqual(['Projects', 'Notifications', 'Gates', 'Connections', 'Account'])
     expect(paletteEntries(admin).map((e) => e.href)).toContain('/admin/integrations')
   })
 

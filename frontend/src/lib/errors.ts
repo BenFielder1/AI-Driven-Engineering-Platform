@@ -50,6 +50,8 @@ export const errorMessages = {
     "This artifact version is locked. Create a new version instead.",
   GATE_NOT_PENDING: "This gate has already been decided.",
   INVALID_DECISION: "That decision isn't valid for this gate.",
+  DEFINITION_UNAVAILABLE:
+    "This run uses a pipeline definition this version of Tevrin can't run. Ask an admin to check the deployment.",
   REFINEMENT_IN_PROGRESS:
     "A refinement round is already queued or running. Wait for it to finish, then answer its questions.",
   // Review, release, rollback
@@ -752,6 +754,12 @@ export const contextualErrorMessages = {
       "Tevrin needs at least one Admin, so the last Admin can't become a User. Make someone else an Admin first.",
     NOT_FOUND: "That user no longer exists. The list now shows the latest.",
     FORBIDDEN: "Only administrators can change system roles, and only from a browser session.",
+  },
+  /** POST /api/pipeline-runs/:runId/gates/:gateId/approve|reject from the gate inbox (0.7.0 FR-307). */
+  pipelineGateDecision: {
+    FORBIDDEN: "Only project Owners can decide this gate.",
+    GATE_NOT_PENDING: "This gate was already decided or cancelled, so nothing changed. The list now shows the gates still waiting.",
+    NOT_FOUND: "This gate's project or run is no longer available to you. The list now shows the gates still waiting.",
   },
 } as const satisfies Record<string, Partial<Record<ErrorCode, string>>>;
 

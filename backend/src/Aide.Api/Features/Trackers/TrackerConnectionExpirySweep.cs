@@ -5,6 +5,7 @@ using Aide.Domain.Entities;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Trackers;
 

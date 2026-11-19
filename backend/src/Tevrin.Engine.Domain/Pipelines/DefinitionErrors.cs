@@ -1,0 +1,55 @@
+namespace Tevrin.Engine.Domain.Pipelines;
+
+/// <summary>FR-276: one problem in a definition: a §4.49 code, the YAML path (e.g. <c>stages[1].validate[0].guard</c>;
+/// <c>$</c> for the whole document) and a human-readable message.</summary>
+public sealed record DefinitionError(string Code, string Path, string Message)
+{
+    public override string ToString() => $"{Code} at {Path}: {Message}";
+}
+
+/// <summary>FR-276: the validator codes of §4.49 (exact values).</summary>
+public static class DefinitionErrorCodes
+{
+    /// <summary>The YAML doesn't parse, a key has the wrong type, or a value is out of range or not allowed.</summary>
+    public const string Parse = "DEF_PARSE";
+
+    public const string DuplicateId = "DEF_DUPLICATE_ID";
+    public const string UnknownStage = "DEF_UNKNOWN_STAGE";
+    public const string UnknownArtifact = "DEF_UNKNOWN_ARTIFACT";
+    public const string UnknownStatus = "DEF_UNKNOWN_STATUS";
+    public const string UnknownGuard = "DEF_UNKNOWN_GUARD";
+    public const string UnknownHandler = "DEF_UNKNOWN_HANDLER";
+    public const string UnknownTool = "DEF_UNKNOWN_TOOL";
+    public const string UnknownJobType = "DEF_UNKNOWN_JOB_TYPE";
+    public const string StageKind = "DEF_STAGE_KIND";
+    public const string UnreachableStage = "DEF_UNREACHABLE_STAGE";
+    public const string UncappedLoop = "DEF_UNCAPPED_LOOP";
+    public const string LoopForward = "DEF_LOOP_FORWARD";
+    public const string SchemaNotFound = "DEF_SCHEMA_NOT_FOUND";
+    public const string ArtifactNoProducer = "DEF_ARTIFACT_NO_PRODUCER";
+    public const string UnknownSetting = "DEF_UNKNOWN_SETTING";
+    public const string TriggerNotSupported = "DEF_TRIGGER_NOT_SUPPORTED";
+
+    /// <summary>FR-295, D-0.7.0-33: an agent stage's prompt isn't one its pack registered.</summary>
+    public const string UnknownPrompt = "DEF_UNKNOWN_PROMPT";
+
+    /// <summary>Every code, in §4.49 table order.</summary>
+    public static IReadOnlyList<string> All { get; } =
+    [
+        Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
+        UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
+        UnknownSetting, TriggerNotSupported, UnknownPrompt,
+    ];
+
+    /// <summary>
+    /// Parse errors plus validator errors as one list: a validator error at a path the parser already reported (a value
+    /// of the wrong type reads as missing) is dropped, so each problem is reported once.
+    /// </summary>
+    public static IReadOnlyList<DefinitionError> Merge(IReadOnlyList<DefinitionError> parseErrors, IReadOnlyList<DefinitionError> validationErrors)
+    {
+        ArgumentNullException.ThrowIfNull(parseErrors);
+        ArgumentNullException.ThrowIfNull(validationErrors);
+        var parsedPaths = parseErrors.Select(e => e.Path).ToHashSet(StringComparer.Ordinal);
+        return [.. parseErrors, .. validationErrors.Where(e => !parsedPaths.Contains(e.Path))];
+    }
+}

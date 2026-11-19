@@ -1,7 +1,9 @@
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
+using Aide.UnitTests.Lifecycle;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Gates;
 
@@ -9,15 +11,15 @@ namespace Aide.UnitTests.Gates;
 public class GateRulesTests
 {
     [Theory]
-    [InlineData(ApprovalMode.Strict, Phase.Planning, GateType.SpecApproval)]
-    [InlineData(ApprovalMode.Advisory, Phase.Planning, GateType.SpecApproval)]
+    [InlineData(ApprovalMode.Strict, Phase.Planning, SdlcGates.SpecApproval)]
+    [InlineData(ApprovalMode.Advisory, Phase.Planning, SdlcGates.SpecApproval)]
     [InlineData(ApprovalMode.Autonomous, Phase.Planning, null)]
-    [InlineData(ApprovalMode.Strict, Phase.Execution, GateType.PlanApproval)]
+    [InlineData(ApprovalMode.Strict, Phase.Execution, SdlcGates.PlanApproval)]
     [InlineData(ApprovalMode.Advisory, Phase.Execution, null)]
     [InlineData(ApprovalMode.Autonomous, Phase.Execution, null)]
-    [InlineData(ApprovalMode.Strict, Phase.Release, GateType.PreRelease)]
-    [InlineData(ApprovalMode.Advisory, Phase.Release, GateType.PreRelease)]
-    [InlineData(ApprovalMode.Autonomous, Phase.Release, GateType.PreRelease)]
+    [InlineData(ApprovalMode.Strict, Phase.Release, SdlcGates.PreRelease)]
+    [InlineData(ApprovalMode.Advisory, Phase.Release, SdlcGates.PreRelease)]
+    [InlineData(ApprovalMode.Autonomous, Phase.Release, SdlcGates.PreRelease)]
     [InlineData(ApprovalMode.Strict, Phase.Refinement, null)]
     [InlineData(ApprovalMode.Strict, Phase.Specification, null)]
     [InlineData(ApprovalMode.Strict, Phase.Review, null)]
@@ -25,24 +27,24 @@ public class GateRulesTests
     [InlineData(ApprovalMode.Advisory, Phase.Review, null)]
     [InlineData(ApprovalMode.Autonomous, Phase.Specification, null)]
     [InlineData(ApprovalMode.Autonomous, Phase.Review, null)]
-    public void S4_2_Required_gate_by_mode_and_entered_phase(ApprovalMode mode, Phase entering, GateType? expected) =>
-        Assert.Equal(expected, GateRules.RequiredGate(mode, entering));
+    public void S4_2_Required_gate_by_mode_and_entered_phase(ApprovalMode mode, Phase entering, string? expected) =>
+        Assert.Equal(expected, Sdlc.RequiredGate(mode, entering));
 
     [Theory]
-    [InlineData(GateType.SpecApproval)]
-    [InlineData(GateType.PlanApproval)]
-    [InlineData(GateType.PreRelease)]
-    public void FR13_Approving_a_pending_gate_applies_the_gated_transition(GateType type)
+    [InlineData(SdlcGates.SpecApproval)]
+    [InlineData(SdlcGates.PlanApproval)]
+    [InlineData(SdlcGates.PreRelease)]
+    public void FR13_Approving_a_pending_gate_applies_the_gated_transition(string type)
     {
         var result = GateRules.Approve(type, GateStatus.Pending);
 
         Assert.Equal(new GateResolution(GateStatus.Approved, GateFollowUp.ApplyTransition), result.Value);
     }
 
-    public static TheoryData<GateType, GateStatus> DecidedGates()
+    public static TheoryData<string, GateStatus> DecidedGates()
     {
-        var data = new TheoryData<GateType, GateStatus>();
-        foreach (var type in Enum.GetValues<GateType>())
+        var data = new TheoryData<string, GateStatus>();
+        foreach (var type in SdlcGates.All)
         {
             foreach (var status in new[] { GateStatus.Approved, GateStatus.Rejected, GateStatus.Cancelled })
             {
@@ -55,7 +57,7 @@ public class GateRulesTests
 
     [Theory]
     [MemberData(nameof(DecidedGates))]
-    public void S4_2_Only_pending_gates_can_be_decided(GateType type, GateStatus status)
+    public void S4_2_Only_pending_gates_can_be_decided(string type, GateStatus status)
     {
         Assert.Equal(ErrorCodes.GateNotPending, GateRules.Approve(type, status, EscalationDecision.Accept).Error!.Code);
         Assert.Equal(ErrorCodes.GateNotPending, GateRules.Reject(type, status).Error!.Code);
@@ -64,25 +66,25 @@ public class GateRulesTests
     [Fact]
     public void FR13_Rejecting_plan_approval_reruns_the_plan_generator()
     {
-        var result = GateRules.Reject(GateType.PlanApproval, GateStatus.Pending);
+        var result = GateRules.Reject(SdlcGates.PlanApproval, GateStatus.Pending);
 
         Assert.Equal(GateStatus.Rejected, result.Value.NewStatus);
         Assert.Equal(GateFollowUp.RerunAgent, result.Value.FollowUp);
-        Assert.Equal(AgentKind.PlanGenerator, result.Value.RerunAgent);
+        Assert.Equal(SdlcAgents.PlanGenerator, result.Value.RerunAgent);
     }
 
     [Fact]
     public void D16_Rejecting_spec_approval_reruns_the_spec_generator_not_idea_refinement()
     {
-        var result = GateRules.Reject(GateType.SpecApproval, GateStatus.Pending);
+        var result = GateRules.Reject(SdlcGates.SpecApproval, GateStatus.Pending);
 
-        Assert.Equal(AgentKind.SpecGenerator, result.Value.RerunAgent);
+        Assert.Equal(SdlcAgents.SpecGenerator, result.Value.RerunAgent);
     }
 
     [Fact]
     public void Rejecting_pre_release_records_the_decision_without_rerunning_an_agent()
     {
-        var result = GateRules.Reject(GateType.PreRelease, GateStatus.Pending);
+        var result = GateRules.Reject(SdlcGates.PreRelease, GateStatus.Pending);
 
         Assert.Equal(new GateResolution(GateStatus.Rejected, GateFollowUp.None), result.Value);
     }
@@ -90,7 +92,7 @@ public class GateRulesTests
     [Fact]
     public void FR14_Escalation_continue_starts_another_review_cycle()
     {
-        var result = GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Continue);
+        var result = GateRules.Approve(EngineGates.Escalation, GateStatus.Pending, EscalationDecision.Continue);
 
         Assert.Equal(GateFollowUp.StartReviewCycle, result.Value.FollowUp);
         Assert.Equal(EscalationDecision.Continue, result.Value.Decision);
@@ -100,7 +102,7 @@ public class GateRulesTests
     [Fact]
     public void FR14_Escalation_rollback_carries_the_target_version()
     {
-        var result = GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Rollback, 4);
+        var result = GateRules.Approve(EngineGates.Escalation, GateStatus.Pending, EscalationDecision.Rollback, 4);
 
         Assert.Equal(GateFollowUp.Rollback, result.Value.FollowUp);
         Assert.Equal(4, result.Value.TargetVersion);
@@ -109,7 +111,7 @@ public class GateRulesTests
     [Fact]
     public void FR14_Escalation_accept_marks_release_eligible()
     {
-        var result = GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Accept);
+        var result = GateRules.Approve(EngineGates.Escalation, GateStatus.Pending, EscalationDecision.Accept);
 
         Assert.Equal(GateFollowUp.MarkReleaseEligible, result.Value.FollowUp);
     }
@@ -118,13 +120,13 @@ public class GateRulesTests
     public void FR33_A_blocked_step_escalation_cannot_be_accepted() =>
         Assert.Equal(
             ErrorCodes.InvalidDecision,
-            GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Accept, stepBlocked: true).Error!.Code);
+            GateRules.Approve(EngineGates.Escalation, GateStatus.Pending, EscalationDecision.Accept, stepBlocked: true).Error!.Code);
 
     [Fact]
     public void FR33_A_blocked_step_escalation_can_be_continued_or_rolled_back()
     {
-        Assert.Equal(GateFollowUp.StartReviewCycle, GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Continue, stepBlocked: true).Value.FollowUp);
-        Assert.Equal(GateFollowUp.Rollback, GateRules.Approve(GateType.Escalation, GateStatus.Pending, EscalationDecision.Rollback, 3, stepBlocked: true).Value.FollowUp);
+        Assert.Equal(GateFollowUp.StartReviewCycle, GateRules.Approve(EngineGates.Escalation, GateStatus.Pending, EscalationDecision.Continue, stepBlocked: true).Value.FollowUp);
+        Assert.Equal(GateFollowUp.Rollback, GateRules.Approve(EngineGates.Escalation, GateStatus.Pending, EscalationDecision.Rollback, 3, stepBlocked: true).Value.FollowUp);
     }
 
     [Theory]
@@ -134,13 +136,13 @@ public class GateRulesTests
     [InlineData(EscalationDecision.Continue, 3)]
     [InlineData(EscalationDecision.Accept, 3)]
     public void FR14_Invalid_escalation_decisions_are_rejected(EscalationDecision? decision, int? targetVersion) =>
-        Assert.Equal(ErrorCodes.InvalidDecision, GateRules.Approve(GateType.Escalation, GateStatus.Pending, decision, targetVersion).Error!.Code);
+        Assert.Equal(ErrorCodes.InvalidDecision, GateRules.Approve(EngineGates.Escalation, GateStatus.Pending, decision, targetVersion).Error!.Code);
 
     [Theory]
-    [InlineData(GateType.SpecApproval)]
-    [InlineData(GateType.PlanApproval)]
-    [InlineData(GateType.PreRelease)]
-    public void Non_escalation_gates_take_no_escalation_decision(GateType type)
+    [InlineData(SdlcGates.SpecApproval)]
+    [InlineData(SdlcGates.PlanApproval)]
+    [InlineData(SdlcGates.PreRelease)]
+    public void Non_escalation_gates_take_no_escalation_decision(string type)
     {
         Assert.Equal(ErrorCodes.InvalidDecision, GateRules.Approve(type, GateStatus.Pending, EscalationDecision.Accept).Error!.Code);
         Assert.Equal(ErrorCodes.InvalidDecision, GateRules.Approve(type, GateStatus.Pending, targetVersion: 2).Error!.Code);
@@ -148,15 +150,15 @@ public class GateRulesTests
 
     [Fact]
     public void FR14_Escalation_gates_are_decided_not_rejected() =>
-        Assert.Equal(ErrorCodes.InvalidDecision, GateRules.Reject(GateType.Escalation, GateStatus.Pending).Error!.Code);
+        Assert.Equal(ErrorCodes.InvalidDecision, GateRules.Reject(EngineGates.Escalation, GateStatus.Pending).Error!.Code);
 
     [Theory]
-    [InlineData(GateType.SpecApproval, true)]
-    [InlineData(GateType.PlanApproval, true)]
-    [InlineData(GateType.PreRelease, true)]
-    [InlineData(GateType.Escalation, false)]
-    public void FR48_Approval_links_only_for_spec_plan_and_pre_release_gates(GateType type, bool supported) =>
-        Assert.Equal(supported, GateRules.SupportsApprovalLinks(type));
+    [InlineData(SdlcGates.SpecApproval, true)]
+    [InlineData(SdlcGates.PlanApproval, true)]
+    [InlineData(SdlcGates.PreRelease, true)]
+    [InlineData(EngineGates.Escalation, false)]
+    public void FR48_Approval_links_only_for_spec_plan_and_pre_release_gates(string type, bool supported) =>
+        Assert.Equal(supported, SdlcStages.SupportsApprovalLinks(Sdlc.Definition, type));
 
     [Theory]
     [InlineData(GateStatus.Pending, GateStatus.Cancelled)]

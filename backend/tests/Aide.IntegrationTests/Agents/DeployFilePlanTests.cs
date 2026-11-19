@@ -2,16 +2,15 @@ using System.Text.Json.Nodes;
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Support;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;
 
@@ -38,16 +37,16 @@ public sealed class DeployFilePlanTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await DeploymentHarness.SetStackAsync(fixture.Owner.Client, id, NextOnVercel);
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Specification, 2, ApprovalMode.Autonomous);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: Spec(), projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: Spec(), projectVersionAtCreation: 2);
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
         var job = Assert.Single(await AgentJobs.RunQueuedAsync(app, id));
 
-        Assert.Equal((JobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
+        Assert.Equal((SdlcJobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var agentSteps = Assert.Single(responder.Replies);
         Assert.DoesNotContain(VercelConfigRules.FileName, agentSteps, StringComparison.Ordinal);
-        var plan = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ImplementationPlan));
+        var plan = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ImplementationPlan));
         var steps = PlanDocument.ReadSteps(plan.Content); // the block as stored, with provenance (no generalist-only validation)
         Assert.Equal(JsonNode.Parse(agentSteps)!["steps"]!.AsArray().Count + 1, steps.Count);
         var added = steps[1];
@@ -75,7 +74,7 @@ public sealed class DeployFilePlanTests(AideApiFactory factory)
     {
         private readonly List<string> _replies = [];
 
-        public AgentKind Agent => inner.Agent;
+        public string Agent => inner.Agent;
 
         /// <summary>The replies sent to Tevrin (after the file was removed).</summary>
         public IReadOnlyList<string> Replies

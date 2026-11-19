@@ -6,11 +6,8 @@ using Aide.Api.Features.Projects;
 using Aide.Api.Features.Stack;
 using Aide.Api.Features.Versions;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
@@ -18,6 +15,7 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Analysis;
 
@@ -94,7 +92,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
 
     private static async Task<StackProfileDocument> LatestDocumentAsync(WebApplicationFactory<Program> app, Guid projectId)
     {
-        var latest = (await AgentJobs.ArtifactsAsync(app, projectId, ArtifactType.StackProfile)).Last();
+        var latest = (await AgentJobs.ArtifactsAsync(app, projectId, SdlcArtifacts.StackProfile)).Last();
         return StackProfile.Parse(latest.Content).Value.Document;
     }
 
@@ -111,7 +109,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
         Assert.Equal(Phase.Analysis, project.CurrentPhase);
         var version = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.Id == project.ReleaseVersionId, Ct));
         Assert.Equal((StackSource.Infer, (string?)null), (version.StackSource, version.StackComposition));
-        Assert.Equal(JobTypes.RepositoryAnalysis, Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id)).Type);
+        Assert.Equal(SdlcJobTypes.RepositoryAnalysis, Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id)).Type);
         var stack = await ProjectApi.ReadAsync<ProjectStackDto>(await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/stack", UriKind.Relative), Ct));
         Assert.Null(stack.Composition);
     }
@@ -155,7 +153,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
         await AgentJobs.RunQueuedAsync(app, project.Id);
 
         Assert.Equal(Phase.Refinement, project.CurrentPhase);
-        Assert.DoesNotContain(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == JobTypes.StackAnalysis);
+        Assert.DoesNotContain(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == SdlcJobTypes.StackAnalysis);
         var analysis = await AnalysisAsync(owner.Client, project.Id);
         Assert.Equal((StackSource.Manual, false, (StackProfileViewDto?)null), (analysis.StackSource, analysis.CanApprove, analysis.Profile));
         Assert.Equal(Aide.Domain.Artifacts.CodebaseSummaryState.Completed, analysis.Summary.Status);
@@ -171,10 +169,10 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
         var project = await InferredAsync(app, owner);
 
         var jobs = await LifecycleSeed.JobsAsync(app, project.Id);
-        Assert.Equal([JobTypes.RepositoryAnalysis, JobTypes.StackAnalysis], jobs.Where(j => j.Type is JobTypes.RepositoryAnalysis or JobTypes.StackAnalysis).Select(j => j.Type));
-        var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Agent == AgentKind.StackAnalyst);
+        Assert.Equal([SdlcJobTypes.RepositoryAnalysis, SdlcJobTypes.StackAnalysis], jobs.Where(j => j.Type is SdlcJobTypes.RepositoryAnalysis or SdlcJobTypes.StackAnalysis).Select(j => j.Type));
+        var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Agent == SdlcAgents.StackAnalyst);
         Assert.Equal(AgentRunStatus.Succeeded, run.Status);
-        Assert.Contains(run.InputArtifacts, a => a.Type == ArtifactType.CodebaseSummary);
+        Assert.Contains(run.InputArtifacts, a => a.Type == SdlcArtifacts.CodebaseSummary);
 
         var analysis = await AnalysisAsync(owner.Client, project.Id);
         Assert.Equal((Phase.Analysis, StackSource.Infer, true), (analysis.Phase, analysis.StackSource, analysis.HasExistingCode));
@@ -205,7 +203,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
         using var owner = await ApiSession.RegisterAsync(app);
         var project = await InferredAsync(app, owner, $"Add sharing. {FakeStackAnalystResponder.DjangoMarker}");
 
-        var runs = (await AgentJobs.RunsAsync(app, project.Id)).Where(r => r.Agent == AgentKind.StackAnalyst).ToList();
+        var runs = (await AgentJobs.RunsAsync(app, project.Id)).Where(r => r.Agent == SdlcAgents.StackAnalyst).ToList();
         Assert.Equal(2, runs.Count);
         Assert.Contains("be-express", runs[1].UserFeedback, StringComparison.Ordinal);
         var analysis = await AnalysisAsync(owner.Client, project.Id);
@@ -227,7 +225,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
 
         var queued = await ProjectApi.ReadAsync<StackAnalysisQueuedDto>(
             await owner.Client.PostAsync(new Uri($"/api/projects/{project.Id}/analysis/run", UriKind.Relative), null, Ct), HttpStatusCode.Accepted);
-        Assert.Contains(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Id == queued.JobId && j.Type == JobTypes.StackAnalysis);
+        Assert.Contains(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Id == queued.JobId && j.Type == SdlcJobTypes.StackAnalysis);
         await Problems.AssertAsync(
             await owner.Client.PostAsync(new Uri($"/api/projects/{project.Id}/analysis/run", UriKind.Relative), null, Ct),
             HttpStatusCode.Conflict,
@@ -260,7 +258,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
         await using var app = App();
         using var owner = await ApiSession.RegisterAsync(app);
         var project = await ProjectApi.ReadAsync<ProjectDto>(await CreateAsync(owner.Client), HttpStatusCode.Created);
-        var analyst = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == JobTypes.RepositoryAnalysis);
+        var analyst = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == SdlcJobTypes.RepositoryAnalysis);
 
         // Like the worker when the Repository Analyst's retries are used up: the job's final status and the ended hooks in one transaction.
         await using (var scope = app.Services.CreateAsyncScope())
@@ -270,22 +268,22 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
             row.Status = JobStatus.Dead;
             row.LastError = "UPSTREAM_ERROR: the provider failed";
             row.CompletedAt = DateTimeOffset.UtcNow;
-            foreach (var hook in scope.ServiceProvider.GetServices<Aide.Api.Jobs.IJobEndedHook>())
+            foreach (var hook in scope.ServiceProvider.GetServices<Tevrin.Engine.Runtime.Jobs.IJobEndedHook>())
             {
-                await hook.OnJobEndedAsync(db, new Aide.Api.Jobs.JobEnded(analyst.Id, analyst.Type, project.Id, DeadLettered: true, row.LastError), Ct);
+                await hook.OnJobEndedAsync(db, new Tevrin.Engine.Runtime.Jobs.JobEnded(analyst.Id, analyst.Type, project.Id, DeadLettered: true, row.LastError), Ct);
             }
 
             await db.SaveChangesAsync(Ct);
         }
 
-        var queued = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == JobTypes.StackAnalysis);
+        var queued = Assert.Single(await LifecycleSeed.JobsAsync(app, project.Id), j => j.Type == SdlcJobTypes.StackAnalysis);
         Assert.Equal(JobStatus.Queued, queued.Status);
         await AgentJobs.RunAsync(app, queued);
 
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, project.Id, ArtifactType.CodebaseSummary));
-        var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Agent == AgentKind.StackAnalyst);
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, project.Id, SdlcArtifacts.CodebaseSummary));
+        var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id), r => r.Agent == SdlcAgents.StackAnalyst);
         Assert.Equal(AgentRunStatus.Succeeded, run.Status);
-        Assert.DoesNotContain(run.InputArtifacts, a => a.Type == ArtifactType.CodebaseSummary);
+        Assert.DoesNotContain(run.InputArtifacts, a => a.Type == SdlcArtifacts.CodebaseSummary);
         var analysis = await AnalysisAsync(owner.Client, project.Id);
         Assert.Equal(StackAnalysisRunState.Succeeded, analysis.Run!.Status);
         Assert.Contains(AgentRunWarnings.SummaryUnavailable, analysis.Run.Warnings);
@@ -448,7 +446,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
 
         var problem = await Problems.AssertAsync(await ApproveAsync(owner.Client, project.Id, edited.Id), HttpStatusCode.BadRequest, ErrorCodes.StackIncompatible);
         Assert.Contains(problem.GetProperty("violations").EnumerateArray(), v => v.GetProperty("rule").GetString() == "R3");
-        Assert.Equal(ArtifactStatus.Draft, (await AgentJobs.ArtifactsAsync(app, project.Id, ArtifactType.StackProfile)).Last().Status);
+        Assert.Equal(ArtifactStatus.Draft, (await AgentJobs.ArtifactsAsync(app, project.Id, SdlcArtifacts.StackProfile)).Last().Status);
     }
 
     [Fact]
@@ -482,7 +480,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
 
         Assert.Equal((ArtifactStatus.Locked, draft.Version + 1), (approved.Status, approved.Version));
         Assert.True(StackProfile.Parse(approved.Content).Value.Document.Generalist);
-        var versions = await AgentJobs.ArtifactsAsync(app, project.Id, ArtifactType.StackProfile);
+        var versions = await AgentJobs.ArtifactsAsync(app, project.Id, SdlcArtifacts.StackProfile);
         Assert.Equal(ArtifactStatus.Superseded, versions.Single(v => v.Id == draft.ArtifactId).Status);
         Assert.Null((await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().SingleAsync(v => v.Id == project.ReleaseVersionId, Ct))).StackComposition);
 
@@ -505,7 +503,7 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
 
         await AgentJobs.RunQueuedAsync(app, project.Id);
 
-        var runs = (await AgentJobs.RunsAsync(app, project.Id)).Where(r => r.Agent == AgentKind.StackAnalyst).ToList();
+        var runs = (await AgentJobs.RunsAsync(app, project.Id)).Where(r => r.Agent == SdlcAgents.StackAnalyst).ToList();
         Assert.Equal(2, runs.Count);
         Assert.Equal("The frontend also has an admin app.", runs[1].UserFeedback);
         var latest = (await AnalysisAsync(owner.Client, project.Id)).Profile!;
@@ -544,9 +542,9 @@ public sealed class StackInferenceTests(AideApiFactory factory) : IAsyncLifetime
         Assert.True(LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, project.Id, EventTypes.StackProfileRejected)).Payload).GetProperty("rerun").GetBoolean());
         await AgentJobs.RunQueuedAsync(app, project.Id);
 
-        var rerun = (await AgentJobs.RunsAsync(app, project.Id)).Where(r => r.Agent == AgentKind.StackAnalyst).Last();
+        var rerun = (await AgentJobs.RunsAsync(app, project.Id)).Where(r => r.Agent == SdlcAgents.StackAnalyst).Last();
         Assert.Equal("Keep Netlify, but the data layer is Prisma.", rerun.UserFeedback);
-        Assert.Contains(rerun.InputArtifacts, a => a.ArtifactId == edited.Id && a.Type == ArtifactType.StackProfile);
+        Assert.Contains(rerun.InputArtifacts, a => a.ArtifactId == edited.Id && a.Type == SdlcArtifacts.StackProfile);
         var prompt = string.Join('\n', capture.Requests[^1].Messages.Select(m => m.Content));
         Assert.Contains("deploy-netlify", prompt[prompt.IndexOf("<previous_profile>", StringComparison.Ordinal)..], StringComparison.Ordinal);
         Assert.Contains("keep every correction that agrees with the", capture.Requests[^1].System, StringComparison.Ordinal);

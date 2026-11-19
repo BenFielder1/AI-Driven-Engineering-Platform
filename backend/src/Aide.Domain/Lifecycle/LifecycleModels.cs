@@ -1,5 +1,8 @@
-using Aide.Domain.Gates;
 using Aide.Domain.Review;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Pipelines;
 
 namespace Aide.Domain.Lifecycle;
 
@@ -12,43 +15,8 @@ public sealed record LifecycleState(Phase Phase, ProjectStatus Status, int Versi
     public static LifecycleState Initial { get; } = new(Phase.Refinement, ProjectStatus.Active, 1);
 }
 
-/// <summary>A requested lifecycle move.</summary>
-public sealed record TransitionRequest(TransitionKind Kind, Phase? TargetPhase = null, int? TargetVersion = null, string? Reason = null)
-{
-    public static TransitionRequest Advance(string? reason = null) => new(TransitionKind.Advance, Reason: reason);
-
-    public static TransitionRequest AdvanceTo(Phase target, string? reason = null) => new(TransitionKind.Advance, target, Reason: reason);
-
-    public static TransitionRequest ReviewCycle(string? reason = null) => new(TransitionKind.ReviewCycle, Phase.Execution, Reason: reason);
-
-    public static TransitionRequest Rollback(Phase targetPhase, int targetVersion, string? reason = null) =>
-        new(TransitionKind.Rollback, targetPhase, targetVersion, reason);
-
-    public static TransitionRequest Fallback(Phase targetPhase, string? reason = null) =>
-        new(TransitionKind.InvalidationFallback, targetPhase, Reason: reason);
-
-    public static TransitionRequest ReleaseNoop(string? reason = null) => new(TransitionKind.ReleaseNoop, Phase.Release, Reason: reason);
-
-    public static TransitionRequest ReleaseCompleted(string? reason = null) => new(TransitionKind.ReleaseCompleted, Phase.Release, Reason: reason);
-
-    /// <summary>FR-65: the release merge was refused or the strategy is manual (<c>releasing → awaiting_merge</c>).</summary>
-    public static TransitionRequest ReleaseAwaitingMerge(string? reason = null) => new(TransitionKind.ReleaseAwaitingMerge, Phase.Release, Reason: reason);
-
-    /// <summary>FR-65: <c>PR_CLOSED</c> or <c>MERGE_TIMEOUT</c> (<c>awaiting_merge → releasing</c>).</summary>
-    public static TransitionRequest ReleaseMergeAbandoned(string? reason = null) => new(TransitionKind.ReleaseMergeAbandoned, Phase.Release, Reason: reason);
-
-    /// <summary>§4.10, FR-60: start a new release version (<c>release → refinement</c>, checkpoint 1).</summary>
-    public static TransitionRequest NewVersion(string? reason = null) => new(TransitionKind.NewVersion, Phase.Refinement, Reason: reason);
-
-    /// <summary>
-    /// FR-186, §4.27: start a new release version in <paramref name="entering"/>: <c>analysis</c> for a version that infers its
-    /// stack (<see cref="LifecycleSnapshot.InfersStack"/>), else <c>refinement</c>.
-    /// </summary>
-    public static TransitionRequest NewVersionInto(Phase entering, string? reason = null) => new(TransitionKind.NewVersion, entering, Reason: reason);
-}
-
 /// <summary>
-/// Facts the state machine needs to check entry conditions (§4.1). The caller loads them; the machine
+/// Facts the SDLC guards need to check entry conditions (§4.1, §4.52). The caller loads them; the machine
 /// stays pure. Fields not relevant to a move are ignored.
 /// </summary>
 public sealed record LifecycleSnapshot
@@ -98,9 +66,9 @@ public sealed record LifecycleSnapshot
     /// <summary>True when the gate guarding entry to the target phase has been approved (the approval is the trigger).</summary>
     public bool EntryGateApproved { get; init; }
 
-    public IReadOnlyCollection<GateType> PendingGates { get; init; } = [];
+    public IReadOnlyCollection<string> PendingGates { get; init; } = [];
 
-    /// <summary>§4.10: a release version is <c>in_development</c> or <c>awaiting_merge</c> (blocks <see cref="TransitionKind.NewVersion"/>).</summary>
+    /// <summary>§4.10: a release version is <c>in_development</c> or <c>awaiting_merge</c> (blocks a new version).</summary>
     public bool DevelopmentVersionExists { get; init; }
 
     /// <summary>FR-179, §4.27: the release version's <c>stack_profile</c> has a locked version (leaving <c>analysis</c>).</summary>
@@ -119,32 +87,88 @@ public sealed record LifecycleSnapshot
     public bool BaseHasCode { get; init; }
 }
 
-/// <summary>An applied lifecycle move: what to write as the state transition and the new project state.</summary>
+/// <summary>
+/// An applied lifecycle move (FR-292: the engine's <see cref="RunTransition"/>, or a new version's run start, in SDLC
+/// terms): what to write as the state transition and the new project state. <see cref="Kind"/> is the generic kind stored
+/// in <c>state_transitions.kind</c> (<see cref="PipelineTransitionKinds"/>, D-0.7.0-28) and <see cref="EventKind"/> the
+/// kind 0.6.1 wrote in the <c>PHASE_CHANGED</c> payload (unchanged on the wire).
+/// </summary>
 public sealed record PhaseTransition(
     Phase From,
     Phase To,
     ProjectStatus Status,
     int Version,
-    TransitionKind Kind,
+    string Kind,
+    string EventKind,
     string Reason)
 {
+    /// <summary>0.6.1's <c>PHASE_CHANGED</c> kinds that aren't a status change name.</summary>
+    public const string AdvanceEvent = "advance";
+    public const string ReviewCycleEvent = "review_cycle";
+    public const string RollbackEvent = "rollback";
+    public const string FallbackEvent = "invalidation_fallback";
+    public const string NoopEvent = "release_noop";
+    public const string NewVersionEvent = "new_version";
+
     public LifecycleState NewState => new(To, Status, Version);
+
+    /// <summary>The entered stage's <c>enqueue_on_enter</c> job, for an advance only (replaces 0.6.1's <c>PhaseJobs</c>).</summary>
+    public string? EnqueueOnEnter { get; init; }
 
     /// <summary>
     /// §4.8: a rollback clears the review state (review cycle and the extra cycles granted by escalation <c>continue</c>);
     /// so does a cascade fallback (§4.4), whose new upstream artifacts make the earlier review cycles moot, and starting a
     /// new release version (§4.10).
     /// </summary>
-    public bool ClearsReviewState => Kind is TransitionKind.Rollback or TransitionKind.InvalidationFallback or TransitionKind.NewVersion;
+    public bool ClearsReviewState { get; init; }
 
     /// <summary>§4.10: starting a new release version also clears <c>execution_paused</c>.</summary>
-    public bool ClearsExecutionPause => Kind == TransitionKind.NewVersion;
+    public bool ClearsExecutionPause { get; init; }
+
+    /// <summary>The engine's applied move in SDLC terms.</summary>
+    public static PhaseTransition Of(RunTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        var (kind, eventKind) = transition.Kind switch
+        {
+            RunTransitionKind.Advance => (PipelineTransitionKinds.Advance, AdvanceEvent),
+            RunTransitionKind.Loop => (PipelineTransitionKinds.Loop, ReviewCycleEvent),
+            RunTransitionKind.Rollback => (PipelineTransitionKinds.Rollback, RollbackEvent),
+            RunTransitionKind.Fallback => (PipelineTransitionKinds.Fallback, FallbackEvent),
+            RunTransitionKind.Noop => (PipelineTransitionKinds.Noop, NoopEvent),
+            RunTransitionKind.StatusChange => (PipelineTransitionKinds.StatusChange, transition.StatusChange!),
+            _ => throw new ArgumentOutOfRangeException(nameof(transition), transition.Kind, null),
+        };
+        return new PhaseTransition(
+            SdlcStages.PhaseOf(transition.From),
+            SdlcStages.PhaseOf(transition.To),
+            EnumStrings.Parse<ProjectStatus>(transition.PackStatus),
+            transition.Checkpoint,
+            kind,
+            eventKind,
+            transition.Reason)
+        {
+            EnqueueOnEnter = transition.EnqueueOnEnter,
+            ClearsReviewState = transition.ClearsLoopState,
+        };
+    }
+
+    /// <summary>§4.10, FR-60: a new version's first transition, the start of its run (stored kind <c>start</c>).</summary>
+    public static PhaseTransition NewVersion(Phase from, LifecycleState started, string reason)
+    {
+        ArgumentNullException.ThrowIfNull(started);
+        return new PhaseTransition(from, started.Phase, started.Status, started.Version, PipelineTransitionKinds.Start, NewVersionEvent, reason)
+        {
+            ClearsReviewState = true,
+            ClearsExecutionPause = true,
+        };
+    }
 }
 
 /// <summary>Result of "advance to next phase": either the move was applied, or a gate must be created first.</summary>
-public sealed record AdvanceOutcome(PhaseTransition? Transition, GateType? GateRequired)
+public sealed record AdvanceOutcome(PhaseTransition? Transition, string? GateRequired)
 {
     public static AdvanceOutcome Applied(PhaseTransition transition) => new(transition, null);
 
-    public static AdvanceOutcome NeedsGate(GateType gate) => new(null, gate);
+    public static AdvanceOutcome NeedsGate(string gate) => new(null, gate);
 }

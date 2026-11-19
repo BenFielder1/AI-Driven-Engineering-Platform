@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Text;
-using Aide.Domain.Artifacts;
-using Aide.Domain.Common;
 
 namespace Aide.Domain.Execution;
 
@@ -18,7 +16,7 @@ public sealed record PullRequestInput(
     int ProjectVersion,
     string? Specification,
     int? SpecificationVersion,
-    ArtifactType PlanType,
+    string PlanType,
     int PlanVersion,
     IReadOnlyList<PullRequestStep> Steps);
 
@@ -93,7 +91,7 @@ public static class PullRequestDescription
         }
 
         b.AppendLine();
-        b.Append("### Plan: ").Append(input.PlanType.ToWire()).Append(" v").Append(input.PlanVersion.ToString(CultureInfo.InvariantCulture))
+        b.Append("### Plan: ").Append(input.PlanType).Append(" v").Append(input.PlanVersion.ToString(CultureInfo.InvariantCulture))
             .Append(" (").Append(count).AppendLine(" steps)").AppendLine();
         b.AppendLine("| # | Step | Commit | Files |");
         b.AppendLine("|---|------|--------|-------|");
@@ -145,7 +143,7 @@ public static class PullRequestDescription
         b.AppendLine("| Phase | `execution` |");
         b.Append("| Project ID | `").Append(input.ProjectId.ToString("D")).AppendLine("` |");
         b.Append("| Project version | ").Append(input.ProjectVersion.ToString(CultureInfo.InvariantCulture)).AppendLine(" |");
-        b.Append("| Plan | ").Append(input.PlanType.ToWire()).Append(" v").Append(input.PlanVersion.ToString(CultureInfo.InvariantCulture)).AppendLine(" |");
+        b.Append("| Plan | ").Append(input.PlanType).Append(" v").Append(input.PlanVersion.ToString(CultureInfo.InvariantCulture)).AppendLine(" |");
         b.Append("| Steps | ").Append(count).AppendLine(" |");
         b.AppendLine();
         b.AppendLine("---");

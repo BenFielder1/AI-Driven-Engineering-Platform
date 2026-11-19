@@ -3,13 +3,13 @@ using Aide.Api.Features.Git;
 using Aide.Api.Features.Projects;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Agents;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Releases;
 
@@ -66,7 +66,7 @@ public sealed class BaasManualReleaseMigrationTests(AideApiFactory factory)
     }
 
     private static Task<Job> PollJobAsync(WebApplicationFactory<Program> app, Guid id) =>
-        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.MergePoll, Ct));
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.MergePoll, Ct));
 
     private static Task<Aide.Domain.Entities.Release> ReleaseAsync(WebApplicationFactory<Program> app, Guid id) =>
         ProjectApi.WithDbAsync(app, db => db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
@@ -260,7 +260,7 @@ public sealed class BaasManualReleaseMigrationTests(AideApiFactory factory)
         Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.MergedHeadMismatch));
         Assert.Empty(await RunsAsync(app, id));
 
-        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout);
+        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, SdlcJobTypes.ProductionRollout);
         await DeploymentHarness.SettleRolloutAsync(app, id, rollout.Id);
 
         var release = await ReleaseAsync(app, id);
@@ -294,7 +294,7 @@ public sealed class BaasManualReleaseMigrationTests(AideApiFactory factory)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, ManagedDatabaseStatus.Available), Ct));
         await MergeByHandAsync(id, branch);
         await AgentJobs.RunCoreAsync(app, await PollJobAsync(app, id));
-        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout);
+        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, SdlcJobTypes.ProductionRollout);
         await DeploymentHarness.SettleRolloutAsync(app, id, rollout.Id);
 
         var last = (await RunsAsync(app, id))[^1];

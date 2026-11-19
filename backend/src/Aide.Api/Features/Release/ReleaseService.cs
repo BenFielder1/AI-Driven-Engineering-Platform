@@ -2,11 +2,14 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 using ReleaseEntity = Aide.Domain.Entities.Release;
 
 namespace Aide.Api.Features.Release;
@@ -14,8 +17,9 @@ namespace Aide.Api.Features.Release;
 /// <summary>Writes release attempts and their events into the current unit of work (nothing is saved here).</summary>
 public static class ReleaseRecords
 {
-    /// <summary>The trigger of the release job queued by entering the release phase (FR-42).</summary>
-    public const string PhaseEntered = LifecycleJobPayload.PhaseEntered;
+    /// <summary>The trigger of the release job queued by entering the release phase (FR-42, FR-273). <c>RELEASE_STARTED</c>
+    /// still records it as <c>phase_entered</c> (<see cref="AgentJobTriggerWire"/>): event payloads keep their 0.6.1 values.</summary>
+    public const string StageEntered = LifecycleJobPayload.StageEntered;
 
     /// <summary>The trigger of the release job queued by <c>POST /release</c> (FR-43).</summary>
     public const string Retried = "retried";
@@ -63,7 +67,7 @@ public static class ReleaseRecords
         db.AddEvent(
             EventTypes.ReleaseStarted,
             project.Id,
-            new { releaseId = release.Id, releaseVersionId = versionId, version = version?.Version, checkpoint, tag = release.Tag, attempt = release.Attempt, trigger, provider = provider?.ToWire() },
+            new { releaseId = release.Id, releaseVersionId = versionId, version = version?.Version, checkpoint, tag = release.Tag, attempt = release.Attempt, trigger = AgentJobTriggerWire.ToWire(trigger), provider = provider?.ToWire() },
             actor,
             now);
         return release;
@@ -152,7 +156,7 @@ public static class ReleaseRecords
     {
         ArgumentNullException.ThrowIfNull(db);
         return db.Jobs.AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.Release && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Release && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken);
     }
 
@@ -250,7 +254,7 @@ public sealed partial class ReleaseService(
         project.UpdatedAt = now;
         var release = await ReleaseRecords.AddAttemptAsync(db, project, ReleaseRecords.Retried, actor, now, cancellationToken);
         await jobs.EnqueueAsync(
-            JobTypes.Release,
+            SdlcJobTypes.Release,
             new LifecycleJobPayload(project.Id, project.Checkpoint, ReleaseRecords.Retried),
             project.Id,
             cancellationToken,

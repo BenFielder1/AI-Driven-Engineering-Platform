@@ -1,23 +1,24 @@
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
-using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Rollback;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Security;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Versions;
 
-/// <summary>Payload of the <see cref="JobTypes.RepositoryAnalysis"/> job (FR-70): the project and the version to analyse.</summary>
+/// <summary>Payload of the <see cref="SdlcJobTypes.RepositoryAnalysis"/> job (FR-70): the project and the version to analyse.</summary>
 public sealed record RepositoryAnalysisJobPayload(Guid ProjectId, Guid ReleaseVersionId);
 
 /// <summary>
@@ -34,6 +35,7 @@ public sealed partial class VersionService(
     IStackCatalog catalog,
     ProjectStackService stacks,
     Trackers.SourceImportService imports,
+    Pipelines.SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<VersionService> logger)
 {
@@ -104,15 +106,18 @@ public sealed partial class VersionService(
             : versions.FirstOrDefault(v => ReleaseVersionRules.IsReleased(v.Status) && SemVer.TryParse(v.Version, out var parsed) && parsed == released);
 
         // FR-186, §4.27: an inference version starts in analysis at the new base commit (STACK_INFER_NO_CODE without one).
-        var transition = LifecycleStateMachine.Apply(
-            new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint),
-            TransitionRequest.NewVersionInto(infer ? Phase.Analysis : Phase.Refinement, $"Started version {version}"),
+        var transition = await lifecycle.NewVersionAsync(
+            db,
+            project,
+            infer ? Phase.Analysis : Phase.Refinement,
             new LifecycleSnapshot
             {
                 DevelopmentVersionExists = ReleaseVersionRules.DevelopmentVersion(rows) is not null,
                 InfersStack = infer,
                 BaseHasCode = !string.IsNullOrWhiteSpace(baseVersion?.MergeCommitSha),
-            });
+            },
+            $"Started version {version}",
+            cancellationToken);
         if (transition.IsFailure)
         {
             return Result.Failure<ReleaseVersion>(transition.Error!);
@@ -188,7 +193,7 @@ public sealed partial class VersionService(
             },
             actor,
             now);
-        await jobs.EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, started.Id), project.Id, cancellationToken, now);
+        await jobs.EnqueueAsync(SdlcJobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(project.Id, started.Id), project.Id, cancellationToken, now);
         foreach (var planned in plannedImports.Value)
         {
             imports.Queue(project.Id, started.Id, planned, userId, now);
@@ -370,7 +375,6 @@ public static class VersionServiceCollectionExtensions
     public static IServiceCollection AddReleaseVersions(this IServiceCollection services)
     {
         services.AddScoped<VersionService>();
-        services.AddJobHandler<Agents.RepositoryAnalysisJobHandler>(JobTypes.RepositoryAnalysis);
         return services;
     }
 }

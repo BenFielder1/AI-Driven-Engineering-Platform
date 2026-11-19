@@ -1,8 +1,8 @@
 using System.Text.Json;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Specs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Execution;
 
@@ -114,7 +114,7 @@ public class PlanScopeTests
         Assert.Equal(["FR-2"], steps[0].Covers);
         Assert.Equal(["generalist", "generalist"], steps.Select(s => s.Agent));
 
-        var markdown = PlanDocument.RenderChecked(ArtifactType.ImplementationPlan, steps, 20).Value;
+        var markdown = PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, steps, 20).Value;
         Assert.Contains("**Covers:** FR-2", markdown, StringComparison.Ordinal);
         Assert.Equal(PlanDocument.ToJson(steps), PlanDocument.ToJson(PlanDocument.ParseMarkdown(markdown, 20).Value));
     }

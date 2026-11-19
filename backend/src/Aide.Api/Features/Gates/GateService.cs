@@ -2,15 +2,21 @@ using System.Text.Json;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
+using Aide.Api.Pipelines;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Gates;
 
@@ -27,6 +33,7 @@ public sealed partial class GateService(
     JobEnqueuer jobs,
     WorkingCopyPreparer workingCopies,
     BuildChecks.BuildCheckService buildChecks,
+    SdlcLifecycle lifecycle,
     TimeProvider time,
     ILogger<GateService> logger)
 {
@@ -39,7 +46,7 @@ public sealed partial class GateService(
             return NotFound();
         }
 
-        var stepBlocked = gate.Type == GateType.Escalation
+        var stepBlocked = gate.Type == EngineGates.Escalation
             && (await GateReader.BlockedStepsAsync(db, project.Id, [gate.Id], cancellationToken)).ContainsKey(gate.Id);
         var resolved = GateRules.Approve(gate.Type, gate.Status, request.Decision, request.TargetCheckpoint, stepBlocked);
         if (resolved.IsFailure)
@@ -50,7 +57,17 @@ public sealed partial class GateService(
         var resolution = resolved.Value;
         var now = time.GetUtcNow();
         var comment = Clean(request.Comment);
-        var state = new LifecycleState(project.CurrentPhase, project.Status, project.Checkpoint);
+
+        // FR-277: the decision and its follow-up use the definition the project's run is pinned to (409
+        // DEFINITION_UNAVAILABLE when this build can't run it).
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            return Result.Failure<ApprovalGate>(pinned.Error!);
+        }
+
+        var run = pinned.Value;
+        var state = run.State;
         Decide(gate, resolution.NewStatus, resolution.Decision, resolution.TargetVersion, reviewerId, comment, now);
         project.UpdatedAt = now;
 
@@ -63,12 +80,12 @@ public sealed partial class GateService(
         {
             case GateFollowUp.ApplyTransition:
                 {
-                    var entry = GateRules.GuardedEntry(gate.Type);
-                    if (PhaseOrder.Next(project.CurrentPhase) != entry)
+                    var entry = SdlcStages.GuardedEntry(run.Definition, gate.Type);
+                    if (SdlcLifecycle.Next(run) != entry)
                     {
                         return Result.Failure<ApprovalGate>(new DomainError(
                             ErrorCodes.WrongPhase,
-                            $"The project is in {project.CurrentPhase.ToWire()}; this {gate.Type.ToWire()} gate guards entry to {entry?.ToWire()}."));
+                            $"The project is in {state.Phase.ToWire()}; this {gate.Type} gate guards entry to {entry?.ToWire()}."));
                     }
 
                     bool? prepared = null;
@@ -88,7 +105,7 @@ public sealed partial class GateService(
                     };
                     var advanceReason = await AdvanceReasonAsync(project.Id, gate.Id, cancellationToken);
                     var reason = GatedAdvanceReason(gate.Type, advanceReason, comment);
-                    var applied = LifecycleStateMachine.Apply(state, TransitionRequest.Advance(reason), snapshot);
+                    var applied = SdlcLifecycle.Apply(run, project, SdlcTransitions.Advance(reason), snapshot);
                     if (applied.IsFailure)
                     {
                         return Result.Failure<ApprovalGate>(applied.Error!);
@@ -98,7 +115,7 @@ public sealed partial class GateService(
                     break;
                 }
 
-            case GateFollowUp.StartReviewCycle when project.CurrentPhase == Phase.Execution:
+            case GateFollowUp.StartReviewCycle when state.Phase == Phase.Execution:
                 await ContinueBlockedStepsAsync(project, gate, actor, now, cancellationToken);
                 break;
 
@@ -110,13 +127,13 @@ public sealed partial class GateService(
                     // steps still to run). If it already is, the cycle starts now; if its draft is waiting, approving it
                     // starts the cycle (Decisions: review cycle); with no plan at all, the extra cycle is a new review.
                     var snapshot = await snapshots.LoadAsync(project, cancellationToken) with { EscalationOutcome = EscalationDecision.Continue };
-                    var cycle = LifecycleStateMachine.Apply(state, TransitionRequest.ReviewCycle("Escalation: continue with another review cycle"), snapshot);
+                    var cycle = SdlcLifecycle.Apply(run, project, SdlcTransitions.ReviewCycle("Escalation: continue with another review cycle"), snapshot);
                     if (cycle.IsSuccess)
                     {
                         await writer.ApplyAsync(project, cycle.Value, actor, now, cancellationToken);
                         if (!project.ExecutionPaused)
                         {
-                            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
+                            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.ReviewCycle), project.Id, cancellationToken, now);
                         }
                     }
                     else if (!await snapshots.CyclePlanDraftPendingAsync(project, cancellationToken)
@@ -124,7 +141,7 @@ public sealed partial class GateService(
                     {
                         // The escalated review proposed no optimisation plan to approve: the extra cycle is a new review.
                         await jobs.EnqueueAsync(
-                            JobTypes.Review,
+                            SdlcJobTypes.Review,
                             new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.UserRequested, "Escalation decision: continue with another review cycle."),
                             project.Id,
                             cancellationToken,
@@ -139,11 +156,11 @@ public sealed partial class GateService(
                     // FR-14 accept: release-eligible with the comment recorded on the gate; release still needs the
                     // pre_release gate (§4.2, every mode).
                     var preReleasePending = await db.ApprovalGates.AnyAsync(
-                        g => g.ProjectId == project.Id && g.Type == GateType.PreRelease && g.Status == GateStatus.Pending,
+                        g => g.ProjectId == project.Id && g.Type == SdlcGates.PreRelease && g.Status == GateStatus.Pending,
                         cancellationToken);
-                    if (project.CurrentPhase == Phase.Review && !preReleasePending)
+                    if (state.Phase == Phase.Review && !preReleasePending)
                     {
-                        writer.AddGate(project, GateType.PreRelease, null, actor, now);
+                        writer.AddGate(project, SdlcGates.PreRelease, null, actor, now);
                     }
 
                     break;
@@ -159,6 +176,7 @@ public sealed partial class GateService(
                         actor,
                         now,
                         keepGateId: gate.Id,
+                        pinned: run,
                         cancellationToken);
                     if (rolledBack.IsFailure)
                     {
@@ -243,7 +261,7 @@ public sealed partial class GateService(
 
         if (ExecutionRules.ShouldContinue([.. steps.Select(ExecutionQueries.ToState)], project.ExecutionPaused))
         {
-            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.EscalationContinue), project.Id, cancellationToken, now);
+            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(project.Id, ExecutionJobPayload.EscalationContinue), project.Id, cancellationToken, now);
         }
     }
 
@@ -266,7 +284,14 @@ public sealed partial class GateService(
         {
             return Result.Failure<ApprovalGate>(new DomainError(
                 ErrorCodes.InvalidDecision,
-                $"Rejecting a {gate.Type.ToWire()} gate takes no escalation decision or target version."));
+                $"Rejecting a {gate.Type} gate takes no escalation decision or target version."));
+        }
+
+        // FR-277: a decision on a run whose pinned definition this build can't run is refused, as on approve.
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            return Result.Failure<ApprovalGate>(pinned.Error!);
         }
 
         var resolution = resolved.Value;
@@ -280,7 +305,7 @@ public sealed partial class GateService(
         if (resolution.FollowUp == GateFollowUp.RerunAgent && resolution.RerunAgent is { } agent)
         {
             var job = await jobs.EnqueueAsync(
-                JobTypes.ForAgent(agent),
+                SdlcJobTypes.ForAgent(agent),
                 new LifecycleJobPayload(project.Id, project.Checkpoint, LifecycleJobPayload.GateRejected, comment, gate.Id),
                 project.Id,
                 cancellationToken,
@@ -321,9 +346,9 @@ public sealed partial class GateService(
     /// the gate's <c>GATE_CREATED</c> payload) comes first, then the approval: "<c>{reason} ({type} gate approved: {comment})</c>";
     /// either part is left out when it wasn't given, e.g. "<c>spec_approval gate approved</c>".
     /// </summary>
-    internal static string GatedAdvanceReason(GateType type, string? advanceReason, string? comment)
+    internal static string GatedAdvanceReason(string type, string? advanceReason, string? comment)
     {
-        var approval = comment is null ? $"{type.ToWire()} gate approved" : $"{type.ToWire()} gate approved: {comment}";
+        var approval = comment is null ? $"{type} gate approved" : $"{type} gate approved: {comment}";
         return advanceReason is null ? approval : $"{advanceReason} ({approval})";
     }
 
@@ -365,8 +390,8 @@ public sealed partial class GateService(
         Result.Failure<ApprovalGate>(new DomainError(ErrorCodes.NotFound, "The gate was not found."));
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: gate {GateId} ({GateType}) approved ({FollowUp})")]
-    private static partial void LogApproved(ILogger logger, Guid projectId, Guid gateId, GateType gateType, GateFollowUp followUp);
+    private static partial void LogApproved(ILogger logger, Guid projectId, Guid gateId, LoggedKey gateType, GateFollowUp followUp);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId}: gate {GateId} ({GateType}) rejected")]
-    private static partial void LogRejected(ILogger logger, Guid projectId, Guid gateId, GateType gateType);
+    private static partial void LogRejected(ILogger logger, Guid projectId, Guid gateId, LoggedKey gateType);
 }

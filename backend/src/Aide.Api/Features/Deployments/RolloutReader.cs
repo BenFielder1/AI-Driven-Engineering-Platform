@@ -2,11 +2,14 @@ using Aide.Api.Features.Databases;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -79,7 +82,7 @@ public sealed class RolloutReader(AideDbContext db, MigrationRunService migratio
         }
 
         var jobs = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.ProductionRollout)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.ProductionRollout)
             .OrderByDescending(j => j.CreatedAt)
             .ToListAsync(cancellationToken);
         foreach (var release in releases)

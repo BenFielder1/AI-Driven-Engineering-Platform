@@ -1,6 +1,6 @@
-using Aide.Domain.Entities;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Infrastructure.Persistence;
 

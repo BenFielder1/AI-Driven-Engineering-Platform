@@ -1,12 +1,14 @@
-using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -66,7 +68,7 @@ public sealed partial class RolloutScheduler(
         }
 
         var older = await db.Jobs
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.PreviewRollout && j.Status == JobStatus.Queued)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PreviewRollout && j.Status == JobStatus.Queued)
             .ToListAsync(cancellationToken);
         foreach (var job in older)
         {
@@ -76,7 +78,7 @@ public sealed partial class RolloutScheduler(
 
         LogQueued(logger, projectId, DeploymentEnvironment.Preview, older.Count);
         return jobs.Enqueue(
-            JobTypes.PreviewRollout,
+            SdlcJobTypes.PreviewRollout,
             new RolloutJobPayload(projectId, DeploymentEnvironment.Preview, releaseVersionId, null, branch, sha, trigger, triggeredBy, now),
             projectId,
             now);
@@ -98,7 +100,7 @@ public sealed partial class RolloutScheduler(
 
         LogQueued(logger, release.ProjectId, DeploymentEnvironment.Production, 0);
         return jobs.Enqueue(
-            JobTypes.ProductionRollout,
+            SdlcJobTypes.ProductionRollout,
             new RolloutJobPayload(release.ProjectId, DeploymentEnvironment.Production, release.ReleaseVersionId, release.Id, defaultBranch, sha, DeploymentTrigger.Auto, null, now),
             release.ProjectId,
             now);
@@ -108,10 +110,10 @@ public sealed partial class RolloutScheduler(
     public async Task<Job?> ProductionRolloutAsync(Guid projectId, Guid releaseId, CancellationToken cancellationToken)
     {
         var added = db.ChangeTracker.Entries<Job>()
-            .Where(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.ProductionRollout && e.Entity.ProjectId == projectId)
+            .Where(e => e.State == EntityState.Added && e.Entity.Type == SdlcJobTypes.ProductionRollout && e.Entity.ProjectId == projectId)
             .Select(e => e.Entity);
         var stored = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.ProductionRollout)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.ProductionRollout)
             .OrderByDescending(j => j.CreatedAt)
             .ToListAsync(cancellationToken);
         return added.Concat(stored).FirstOrDefault(j => TryPayload(j.Payload)?.ReleaseId == releaseId);
@@ -120,7 +122,7 @@ public sealed partial class RolloutScheduler(
     /// <summary>The project's newest preview rollout job (any state), or <c>null</c>.</summary>
     public Task<Job?> LatestPreviewAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.PreviewRollout && j.Status != JobStatus.Cancelled)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PreviewRollout && j.Status != JobStatus.Cancelled)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .FirstOrDefaultAsync(cancellationToken);
@@ -128,13 +130,13 @@ public sealed partial class RolloutScheduler(
     /// <summary>FR-148: whether a preview rollout is queued or running.</summary>
     public Task<bool> PreviewRunningAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.Jobs.AsNoTracking().AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.PreviewRollout && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PreviewRollout && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken);
 
     /// <summary>FR-148: whether a preview database reset is queued or running.</summary>
     public Task<bool> PreviewResetPendingAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.Jobs.AsNoTracking().AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.PreviewDatabaseReset && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.PreviewDatabaseReset && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken);
 
     /// <summary>

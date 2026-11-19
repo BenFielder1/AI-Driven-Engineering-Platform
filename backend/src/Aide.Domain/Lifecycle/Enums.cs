@@ -1,8 +1,11 @@
 namespace Aide.Domain.Lifecycle;
 
+// The summary keeps 0.6.1's text, so the generated contract (backend/openapi/api.json) is unchanged; the order type it names
+// was removed in FR-293 (the entity spells it without the identifier). Since FR-293 the stage order is the SDLC definition's
+// (SdlcStages), and Phase stays as the SDLC's typed stage id for entities, DTOs and rules.
 /// <summary>
 /// The lifecycle phases, in order (§4.1; 0.5.0 §4.27 adds <see cref="Analysis"/> first). Stored as snake_case strings, so the
-/// numeric values only give the order (<see cref="PhaseOrder"/>) and may be renumbered.
+/// numeric values only give the order (Phase&#x4F;rder) and may be renumbered.
 /// </summary>
 public enum Phase
 {
@@ -31,44 +34,4 @@ public enum ProjectStatus
     /// missing permission, or the <c>manual</c> merge strategy) and the merge poll waits for the PR to be merged on GitHub.
     /// </summary>
     AwaitingMerge = 6,
-}
-
-/// <summary>The kinds of lifecycle move the state machine accepts.</summary>
-public enum TransitionKind
-{
-    /// <summary>Forward to the next phase.</summary>
-    Advance = 0,
-
-    /// <summary><c>review → execution</c> for another review cycle.</summary>
-    ReviewCycle = 1,
-
-    /// <summary>To an earlier (or the same) phase at an earlier checkpoint of the version in development (§4.8, §4.10).</summary>
-    Rollback = 2,
-
-    /// <summary>Back to the phase producing the first invalidated artifact after a cascade (§4.4).</summary>
-    InvalidationFallback = 3,
-
-    /// <summary><c>release → release</c>, no change.</summary>
-    ReleaseNoop = 4,
-
-    /// <summary>The release job finished: status <c>released</c>. Since 0.2.0 the checkpoint is not incremented (§4.10, D-V2-2).</summary>
-    ReleaseCompleted = 5,
-
-    /// <summary>
-    /// §4.10, FR-60: <c>release → refinement</c> to start a new release version, at checkpoint 1. Only from status
-    /// <c>released</c> with no version in development; the one exception to "forward goes to the next phase only".
-    /// </summary>
-    NewVersion = 6,
-
-    /// <summary>
-    /// FR-65: the release job's merge was refused, or the strategy is <c>manual</c>: <c>release/releasing →
-    /// release/awaiting_merge</c>, checkpoint unchanged. The merge poll then waits for the merge on GitHub.
-    /// </summary>
-    ReleaseAwaitingMerge = 7,
-
-    /// <summary>
-    /// FR-65, §4.14: the awaited merge won't happen (<c>PR_CLOSED</c>, <c>MERGE_TIMEOUT</c>): <c>release/awaiting_merge →
-    /// release/releasing</c>, checkpoint unchanged, so an Owner can retry the release.
-    /// </summary>
-    ReleaseMergeAbandoned = 8,
 }

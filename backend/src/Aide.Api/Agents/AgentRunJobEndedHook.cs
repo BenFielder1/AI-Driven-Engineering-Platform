@@ -1,10 +1,11 @@
 using System.Text.Json;
-using Aide.Api.Jobs;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
 
 namespace Aide.Api.Agents;
 
@@ -20,8 +21,9 @@ namespace Aide.Api.Agents;
 /// </summary>
 public sealed partial class AgentRunJobEndedHook(TimeProvider time, ILogger<AgentRunJobEndedHook> logger) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
         var ids = new HashSet<Guid> { job.JobId };
@@ -42,9 +44,14 @@ public sealed partial class AgentRunJobEndedHook(TimeProvider time, ILogger<Agen
             }
         }
 
-        var runs = await db.AgentRuns
+        // FR-297: the recorded input isn't loaded; only the columns marked failed are written.
+        var runs = (await db.AgentRuns.AsNoTracking()
             .Where(r => ids.Contains(r.Id) && r.Status == AgentRunStatus.Running)
-            .ToListAsync(cancellationToken);
+            .Select(AgentRunProjections.WithoutInput)
+            .ToListAsync(cancellationToken))
+            .Select(r => AgentRunProjections.Track(db, r))
+            .Where(r => r.Status == AgentRunStatus.Running)
+            .ToList();
         if (runs.Count == 0)
         {
             return;

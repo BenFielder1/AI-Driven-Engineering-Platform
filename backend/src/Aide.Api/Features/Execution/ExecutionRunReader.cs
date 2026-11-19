@@ -1,9 +1,10 @@
 using System.Text.Json;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Execution;
 
@@ -35,7 +36,7 @@ public sealed class ExecutionRunReader(AideDbContext db)
             .Where(a => planIds.Contains(a.Id))
             .Select(a => new RunPlan(a.Id, a.Type, a.Version, a.Status, a.CreatedAt))
             .ToListAsync(cancellationToken);
-        var reports = plans.Any(p => p.Type == ArtifactType.OptimizationPlan)
+        var reports = plans.Any(p => p.Type == SdlcArtifacts.OptimizationPlan)
             ? await ReportsAsync(projectId, versionId, cancellationToken)
             : [];
         var stepIds = steps.Select(s => s.Id).ToList();
@@ -123,7 +124,7 @@ public sealed class ExecutionRunReader(AideDbContext db)
     public async Task<RunPlan?> RunOfReportAsync(Guid projectId, Guid releaseVersionId, Guid reportId, CancellationToken cancellationToken)
     {
         var plans = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == ArtifactType.OptimizationPlan
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == SdlcArtifacts.OptimizationPlan
                 && db.ExecutionSteps.Any(s => s.PlanArtifactId == a.Id))
             .Select(a => new RunPlan(a.Id, a.Type, a.Version, a.Status, a.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -251,7 +252,7 @@ public sealed class ExecutionRunReader(AideDbContext db)
                 return null;
             }
 
-            var approvedType = Text(root, "approvedType") is { } wire && EnumStrings.TryParse<ArtifactType>(wire, out var type) ? type : (ArtifactType?)null;
+            var approvedType = Text(root, "approvedType") is { } wire && SdlcArtifacts.TryParse(wire, out var type) ? type : (string?)null;
             return (artifactId, new PlanInvalidation(Text(root, "cause"), approvedType, Int(root, "approvedVersion"), Int(root, "targetCheckpoint")));
         }
         catch (JsonException)

@@ -1,0 +1,131 @@
+# FR-290: the SDLC lifecycle as a pipeline definition (SPEC §4.51 sketch, with keys fixed to 0.6.1 behaviour).
+# Since FR-292/FR-293 this definition is the SDLC lifecycle: stage order and statuses, gates (§4.53), start stages, guards
+# and the jobs queued on entering a stage (enqueue_on_enter, D-0.7.0-27) are 0.6.1's, pinned by Aide.UnitTests (FR290_*).
+# Changing any value changes the definition hash (§4.50).
+pipeline: sdlc
+version: 1
+title: Software delivery
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+# A new version starts in refinement, or in analysis when it infers its stack (the host's start selector, FR-186).
+start: [refinement, analysis]
+settings: [review_cycles]
+
+# All SDLC artifacts are stored as Markdown (plans and the stack profile embed a JSON block in it).
+# Cascade (§4.54) follows the stage inputs; codebase_summary and source_items invalidate nothing (FR-70, FR-173), and a new
+# stack_profile invalidates everything built on it, falling back to analysis (§4.27).
+artifacts:
+  project_request:         { title: Project request, format: markdown, approval: required, cascade: downstream }
+  technical_specification: { title: Technical specification, format: markdown, approval: required, cascade: downstream }
+  implementation_plan:     { title: Implementation plan, format: markdown, approval: required, cascade: downstream }
+  optimization_plan:       { title: Optimization plan, format: markdown, approval: required, cascade: downstream }
+  codebase_summary:        { title: Codebase summary, format: markdown, approval: auto_lock, cascade: none }
+  source_items:            { title: Source items, format: markdown, approval: auto_lock, cascade: none }
+  stack_profile:           { title: Stack profile, format: markdown, approval: required, cascade: self_and_downstream }
+
+# §4.57: `active` is a generic status; these are the SDLC's own.
+statuses:
+  building:       { generic: active }
+  reviewing:      { generic: active }
+  releasing:      { generic: active }
+  rolled_back:    { generic: active }
+  awaiting_merge: { generic: active }
+  released:       { generic: completed }
+
+rollback_status: rolled_back
+
+# FR-65: the release's status-only moves, refused with NOT_RELEASING from any other status. The reasons and messages are
+# 0.6.1's (the default reason is the name in words; the default message names the stage and statuses). The awaiting-merge
+# moves refuse a request naming another phase (wrong_stage_message, 0.6.1's text); release_completed ignored it in 0.6.1.
+status_changes:
+  release_completed:       { stage: release, from: [releasing, awaiting_merge], to: released, completes_run: true, error_code: NOT_RELEASING,
+                             error_message: "The project is not releasing." }
+  release_awaiting_merge:  { stage: release, from: [releasing], to: awaiting_merge, error_code: NOT_RELEASING,
+                             wrong_stage_message: "Awaiting a release merge stays in the release phase." }
+  release_merge_abandoned: { stage: release, from: [awaiting_merge], to: releasing, error_code: NOT_RELEASING,
+                             reason: Awaited merge abandoned, wrong_stage_message: "Awaiting a release merge stays in the release phase." }
+
+# §4.9, FR-286: one active execution job per project (ux_jobs_project_id_active_execution stays as the backstop).
+concurrency:
+  exclusive: [{ job_type: execution, scope: project }]
+
+stages:
+  # §4.27: only a start stage; an advance into it is refused. The Stack Analyst runs as the stack_analysis job, queued when
+  # the version's repository_analysis job ends (not on entry).
+  - id: analysis
+    title: Analysis
+    status: active
+    agent: { key: stack_analyst, job_type: stack_analysis }
+    inputs: [codebase_summary]
+    output: stack_profile
+    requires: [{ guard: sdlc.start-only }]
+
+  # FR-27: refinement rounds are started by the user, so nothing is queued on entry. stack_profile is an input because
+  # the pinned composition it approves feeds refinement (and so a new profile invalidates the project request, §4.27).
+  - id: refinement
+    title: Refinement
+    status: active
+    agent: { key: idea_refinement, job_type: idea_refinement }
+    inputs: [stack_profile, source_items, codebase_summary]
+    output: project_request
+    requires: [{ guard: sdlc.leaving-analysis }]
+
+  # FR-28: spec_generation is queued on entry.
+  - id: specification
+    title: Specification
+    status: active
+    enqueue_on_enter: spec_generation
+    agent: { key: spec_generator, job_type: spec_generation }
+    inputs: [project_request, source_items, codebase_summary]
+    output: technical_specification
+    requires: [{ artifact_locked: project_request }]
+
+  # FR-29: plan_generation is queued on entry.
+  - id: planning
+    title: Planning
+    status: active
+    enqueue_on_enter: plan_generation
+    agent: { key: plan_generator, job_type: plan_generation }
+    inputs: [project_request, technical_specification, codebase_summary]
+    output: implementation_plan
+    requires: [{ artifact_locked: technical_specification }]
+    gate: { type: spec_approval, modes: [strict, advisory], approves: technical_specification, approval_links: true }
+
+  # FR-31–FR-37: manual; execution is started by POST /execution/start (the execution job).
+  - id: execution
+    title: Execution
+    status: building
+    requires:
+      - { artifact_locked: technical_specification }
+      - { artifact_locked: implementation_plan }
+      - { guard: sdlc.plan-has-steps }
+      - { guard: sdlc.working-copy-prepared }
+    gate: { type: plan_approval, modes: [strict], approves: implementation_plan, approval_links: true }
+
+  # FR-38: a review cycle (the review job) is queued on entry. FR-14: the loop back to execution is capped at
+  # maxReviewCycles + extraReviewCycles; the review decision itself stays in ReviewDecisionRules.
+  - id: review
+    title: Review
+    status: reviewing
+    enqueue_on_enter: review
+    agent: { key: code_review, job_type: review }
+    inputs: [technical_specification, implementation_plan, codebase_summary]
+    output: optimization_plan
+    requires: [{ guard: sdlc.plan-steps-completed }]
+    loop:
+      title: Review cycle
+      to: execution
+      on: review_required
+      max_iterations: { setting: review_cycles }
+      requires: [{ guard: sdlc.review-cycle-ready }]
+
+  # FR-42: manual; the release job is queued on entry.
+  - id: release
+    title: Release
+    status: releasing
+    enqueue_on_enter: release
+    requires:
+      - { guard: sdlc.release-eligible }
+      - { no_pending_gates: { except: [pre_release] } }
+    gate: { type: pre_release, modes: [strict, advisory, autonomous], approval_links: true }

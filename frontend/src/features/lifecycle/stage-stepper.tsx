@@ -4,12 +4,28 @@ import { useRef, type KeyboardEvent } from 'react'
 
 import { buttonClasses } from '../../components/ui/button-classes'
 import { cn } from '../../lib/utils'
-import { phaseLabels } from '../projects/labels'
 import { stageRoute, type Phase } from '../shell/nav-config'
 import type { StageStatus } from '../shell/stage-states'
+import { stageTitle, useSdlcStages, type SdlcStage } from './sdlc-stages'
 import { adjacentStages } from './stage-nav'
 
 const stateText = { done: 'done', current: 'current stage', upcoming: 'upcoming' } as const
+
+/**
+ * FR-308: the stepper's stages in the SDLC definition's order, with its titles. `statuses` (from the project state)
+ * gives each stage's state and needs-action count, and whether Analysis is a stage on this version; a stage the
+ * statuses don't list is upcoming.
+ */
+export function stepperStages(
+  definitionStages: readonly SdlcStage[],
+  statuses: readonly StageStatus[],
+): (StageStatus & { title: string })[] {
+  const byStage = new Map(statuses.map((s) => [s.stage, s]))
+  const analysis = byStage.has('analysis')
+  return definitionStages
+    .filter((d) => analysis || d.stage !== 'analysis')
+    .map((d) => ({ ...(byStage.get(d.stage) ?? { stage: d.stage, state: 'upcoming' as const, needsAction: 0 }), title: d.title }))
+}
 
 /**
  * FR-54 horizontal stage stepper: the six stages (seven with Analysis on a version that infers its stack, §4.27) with the sidebar's states (done ✓, current with a pulsing dot,
@@ -18,17 +34,19 @@ const stateText = { done: 'done', current: 'current stage', upcoming: 'upcoming'
  */
 export function StageStepper({
   projectId,
-  stages,
+  stages: statuses,
   viewing,
   className,
 }: {
   projectId: string
+  /** Each stage's state; the list, order and titles come from the SDLC definition (FR-308). */
   stages: readonly StageStatus[]
   /** The stage page on screen, if any. */
   viewing?: Phase
   className?: string
 }) {
   const links = useRef<(HTMLAnchorElement | null)[]>([])
+  const stages = stepperStages(useSdlcStages(), statuses)
 
   function onKeyDown(event: KeyboardEvent<HTMLOListElement>) {
     const index = links.current.findIndex((el) => el === document.activeElement)
@@ -99,7 +117,7 @@ export function StageStepper({
                     i + 1
                   )}
                 </span>
-                {phaseLabels[s.stage]}
+                {s.title}
                 <span className="sr-only">
                   {' '}
                   ({stateText[s.state]}
@@ -125,10 +143,11 @@ export function StageStepper({
 
 /**
  * FR-54 "Previous stage" / "Next stage": move between stage pages, relative to the stage on screen (or the project's
- * current stage on other project pages). Disabled at either end.
+ * current stage on other project pages), in the SDLC definition's order (FR-308). Disabled at either end.
  */
 export function StageNavButtons({ projectId, from, analysis = false }: { projectId: string; from: Phase; analysis?: boolean }) {
-  const { previous, next } = adjacentStages(from, { analysis })
+  const stages = useSdlcStages()
+  const { previous, next } = adjacentStages(from, { analysis, stages })
   const base = buttonClasses('secondary', 'min-h-11 px-3')
   return (
     <div className="flex shrink-0 items-center gap-2">
@@ -136,7 +155,7 @@ export function StageNavButtons({ projectId, from, analysis = false }: { project
         <Link to={stageRoute[previous]} params={{ projectId }} className={base}>
           <ChevronLeft className="size-4" aria-hidden />
           <span className="max-sm:sr-only">Previous stage</span>
-          <span className="sr-only">: {phaseLabels[previous]}</span>
+          <span className="sr-only">: {stageTitle(stages, previous)}</span>
         </Link>
       ) : (
         <button type="button" disabled className={base}>
@@ -147,7 +166,7 @@ export function StageNavButtons({ projectId, from, analysis = false }: { project
       {next ? (
         <Link to={stageRoute[next]} params={{ projectId }} className={base}>
           <span className="max-sm:sr-only">Next stage</span>
-          <span className="sr-only">: {phaseLabels[next]}</span>
+          <span className="sr-only">: {stageTitle(stages, next)}</span>
           <ChevronRight className="size-4" aria-hidden />
         </Link>
       ) : (

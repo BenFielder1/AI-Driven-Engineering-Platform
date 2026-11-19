@@ -1,9 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Aide.Api.Features.Gates;
-using Aide.Domain.Artifacts;
-using Aide.Domain.Entities;
-using Aide.Domain.Gates;
+using Aide.Api.Features.Projects;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Approvals;
 
@@ -29,7 +29,7 @@ public enum ApprovalLinkStatus
 }
 
 /// <summary>The artifact a gate approves (spec and plan gates); <c>title</c> is its first heading, when it has one.</summary>
-public sealed record ApprovalArtifactSummaryDto(ArtifactType Type, int Version, string? Title);
+public sealed record ApprovalArtifactSummaryDto([WireEnum(typeof(SdlcArtifacts))] string Type, int Version, string? Title);
 
 /// <summary>
 /// What the approval confirmation page shows (FR-48): the gate, its project, the decision the link carries and, for spec
@@ -39,7 +39,7 @@ public sealed record ApprovalLinkViewDto(
     Guid GateId,
     Guid ProjectId,
     string ProjectName,
-    GateType GateType,
+    [WireEnum(typeof(SdlcGates))] string GateType,
     ApprovalLinkDecision Decision,
     ApprovalArtifactSummaryDto? ArtifactSummary,
     DateTimeOffset ExpiresAt,

@@ -6,14 +6,10 @@ using Aide.Api.Features.BuildChecks;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Gates;
 using Aide.Api.Features.Projects;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
@@ -26,6 +22,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Execution;
 
@@ -65,9 +63,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
     private static async Task<Artifact> SeedExecutionAsync(WebApplicationFactory<Program> app, Guid id, int maxAttempts, string? extraFile = null, bool completed = false)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory, maxBuildFixAttempts: maxAttempts);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.AddRange(Enumerable.Range(1, 2).Select(n => new ExecutionStep
@@ -138,7 +136,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
                 await afterRollout();
             }
 
-            foreach (var check in await QueuedAsync(app, id, JobTypes.BuildCheck))
+            foreach (var check in await QueuedAsync(app, id, SdlcJobTypes.BuildCheck))
             {
                 await DeploymentHarness.SettleAsync(app, check.Id);
             }
@@ -152,7 +150,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
 
-        public AgentKind Agent => inner.Agent;
+        public string Agent => inner.Agent;
 
         public IReadOnlyList<string> Prompts => [.. _prompts];
 
@@ -180,11 +178,11 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         var rollout = await DeploymentHarness.RolloutJobAsync(app, id);
         Assert.Equal((0, 0, BuildCheckStatus.Waiting), (check.ReviewCycle, check.Attempt, check.Status));
         Assert.Equal(RolloutScheduler(rollout).GitSha, check.HeadSha);
-        Assert.Empty(await QueuedAsync(app, id, JobTypes.Review));
+        Assert.Empty(await QueuedAsync(app, id, SdlcJobTypes.Review));
         Assert.Single(await LifecycleSeed.EventsAsync(app, id, EventTypes.BuildCheckStarted));
 
         // FR-255: waiting defers (never a failed attempt); then the rollout succeeds and the check passes.
-        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
         Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
         var deferred = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.Id == job.Id, Ct));
         Assert.Equal((JobStatus.Queued, 0), (deferred.Status, deferred.Attempts));
@@ -200,7 +198,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
 
         // No new rollout: review scores with the rollout the check passed.
         await AgentJobs.RunQueuedAsync(app, id);
-        Assert.Single(await JobsOfAsync(app, id, JobTypes.PreviewRollout));
+        Assert.Single(await JobsOfAsync(app, id, SdlcJobTypes.PreviewRollout));
         var report = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
         var preview = JsonDocument.Parse(report.ExternalChecks!).RootElement.GetProperty("preview").GetProperty("rollout");
         Assert.Equal(rollout.Id.ToString(), preview.GetProperty("rolloutId").GetString());
@@ -222,7 +220,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
 
         var check = Assert.Single(await ChecksAsync(app, id));
         Assert.Equal((0, BuildCheckStatus.Skipped), (check.Attempt, check.Status));
-        Assert.Empty(await JobsOfAsync(app, id, JobTypes.BuildCheck)); // decided at once, no job
+        Assert.Empty(await JobsOfAsync(app, id, SdlcJobTypes.BuildCheck)); // decided at once, no job
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal((Phase.Review, 1), (project.CurrentPhase, project.ReviewCycle));
     }
@@ -239,7 +237,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         // The check now waits for a newer head than the one the (succeeded) rollout deployed.
         await ProjectApi.WithDbAsync(app, db => db.BuildChecks.Where(c => c.ProjectId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.HeadSha, "0123456789abcdef0123456789abcdef01234567"), Ct));
-        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
         Assert.True(await DeploymentHarness.RunOnceAsync(app, job.Id));
 
         Assert.Equal(BuildCheckStatus.Waiting, Assert.Single(await ChecksAsync(app, id)).Status);
@@ -255,7 +253,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
 
         // The rollout is still running; the check has been waiting for 31 minutes.
-        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
         var check = Assert.Single(await ChecksAsync(app, id));
         var payload = AideJson.Serialize(new BuildCheckJobPayload(id, check.Id, PreviewWaitSince: DateTimeOffset.UtcNow.AddMinutes(-31)));
         await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id).ExecuteUpdateAsync(s => s.SetProperty(j => j.Payload, payload), Ct));
@@ -267,7 +265,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.Equal("failure:preview:vercel", failure.FailureId);
         Assert.Contains("didn't finish within 30 minutes", failure.Message, StringComparison.Ordinal);
         Assert.Contains(check.Sources, s => s.Conclusion == BuildCheckRules.TimedOutConclusion);
-        Assert.Single(await QueuedAsync(app, id, JobTypes.BuildFix));
+        Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildFix));
     }
 
     // ---------- FR-256 ----------
@@ -282,7 +280,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
         await SettleNewestRolloutAsync(app, id);
         await FailNewestPreviewAsync(app, id, ModuleLog);
-        await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck)).Id);
+        await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck)).Id);
 
         var first = Assert.Single(await ChecksAsync(app, id));
         Assert.Equal(BuildCheckStatus.Failed, first.Status);
@@ -309,7 +307,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         var checks = await ChecksAsync(app, id);
         Assert.Equal([(0, BuildCheckStatus.Failed), (1, BuildCheckStatus.Waiting)], checks.Select(c => (c.Attempt, c.Status)));
         Assert.Equal(fix.CommitSha, checks[1].HeadSha);
-        Assert.Equal(2, (await JobsOfAsync(app, id, JobTypes.PreviewRollout)).Count);
+        Assert.Equal(2, (await JobsOfAsync(app, id, SdlcJobTypes.PreviewRollout)).Count);
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
 
         // FR-259: the step DTOs carry the origin and the check's attempt.
@@ -347,7 +345,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         {
             var job = new Job
             {
-                Type = JobTypes.BuildFix,
+                Type = SdlcJobTypes.BuildFix,
                 Payload = AideJson.Serialize(new BuildFixJobPayload(id, checkId)),
                 ProjectId = id,
                 Status = JobStatus.Queued,
@@ -394,7 +392,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.Contains("Create lib/db.ts so '@/lib/db' resolves (attempt 2's fix).", prompt, StringComparison.Ordinal);
         var stored = await ProjectApi.WithDbAsync(app, db => db.ExecutionSteps.AsNoTracking().Where(s => s.BuildCheckId == current.Id).ToListAsync(Ct));
         Assert.Equal(4, Assert.Single(stored).StepNumber); // after the plan's highest step (3)
-        Assert.Single(await QueuedAsync(app, id, JobTypes.Execution));
+        Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.Execution));
     }
 
     [Fact]
@@ -405,7 +403,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             steps = new[] { new { number = 1, title = "Create the db module", task = "Add lib/db.ts.", files = new[] { new { path = "lib/db.ts", action = "create" } }, dependencies = Array.Empty<int>() } },
             summary = "Adds the missing module.",
         });
-        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.BuildFix, reply));
+        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.BuildFix, reply));
         var (fixture, _, versionId) = await FailedChecksAsync(app);
         using var __ = fixture;
         var id = fixture.Project.Id;
@@ -428,7 +426,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
     [Fact]
     public async Task FR258_A_fix_plan_still_invalid_after_one_retry_exhausts_the_check_and_review_starts()
     {
-        var scripted = new ScriptedResponder(AgentKind.BuildFix, "not a plan", "still not a plan");
+        var scripted = new ScriptedResponder(SdlcAgents.BuildFix, "not a plan", "still not a plan");
         var app = AgentJobs.WithResponders(factory, scripted);
         var (fixture, _, versionId) = await FailedChecksAsync(app);
         using var __ = fixture;
@@ -446,7 +444,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.Contains("Your previous fix plan was rejected", scripted.Prompts[1], StringComparison.Ordinal);
         var exhausted = Assert.Single(await ChecksAsync(app, id));
         Assert.Equal((BuildCheckStatus.Exhausted, (BuildCheckEndReason?)BuildCheckEndReason.FixPlanInvalid), (exhausted.Status, exhausted.EndReason));
-        var pr = Assert.Single(await QueuedAsync(app, id, JobTypes.PullRequest));
+        var pr = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.PullRequest));
         Assert.Contains(BuildCheckService.ExhaustedTrigger, pr.Payload, StringComparison.Ordinal);
 
         // D-0.6.1-23: the fix job's start was pushed as "planning"; the item now reads fix planning failed.
@@ -471,7 +469,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             files = new[] { new { path = "next.config.ts", content = "export default { typescript: { ignoreBuildErrors: true } };\n" } },
             notes = "Turned off type errors.",
         });
-        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.CodeGenerator, code));
+        var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.CodeGenerator, code));
         var (fixture, planId, versionId) = await FailedChecksAsync(app);
         using var __ = fixture;
         var id = fixture.Project.Id;
@@ -530,7 +528,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.Equal([(0, BuildCheckStatus.Failed), (1, BuildCheckStatus.Failed), (2, BuildCheckStatus.Exhausted)], checks.Select(c => (c.Attempt, c.Status)));
         var fixes = await ProjectApi.WithDbAsync(app, db => db.ExecutionSteps.AsNoTracking().Where(s => s.ProjectId == id && s.Origin == StepOrigin.BuildFix).OrderBy(s => s.StepNumber).ToListAsync(Ct));
         Assert.Equal([(3, (Guid?)checks[0].Id), (4, (Guid?)checks[1].Id)], fixes.Select(s => (s.StepNumber, s.BuildCheckId)));
-        Assert.Equal(3, (await JobsOfAsync(app, id, JobTypes.PreviewRollout)).Count); // no new rollout after the exhausted check
+        Assert.Equal(3, (await JobsOfAsync(app, id, SdlcJobTypes.PreviewRollout)).Count); // no new rollout after the exhausted check
 
         // Review starts with the failure as a finding, and the prompt says the check was exhausted after 2 attempts.
         var prompt = Assert.Single(review.Prompts);
@@ -572,7 +570,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         using var fixture = await ExecutingAsync(app, maxAttempts: 5, deploy: false);
         var id = fixture.Project.Id;
         await AgentJobs.RunQueuedAsync(app, id);
-        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.OptimizationPlan));
+        var draft = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.OptimizationPlan));
 
         await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, draft.Id, "approve"));
         await AgentJobs.RunQueuedAsync(app, id);
@@ -688,9 +686,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
             await LifecycleSeed.AddTransitionAsync(app, id, history[i].From, history[i].To, history[i].Version, t0.AddMinutes(i));
         }
 
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, projectVersionAtCreation: 1, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 2, content: "# Spec\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 4, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, projectVersionAtCreation: 1, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2, content: "# Spec\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 4, content: AgentJobs.PlanMarkdown(2));
         await LifecycleSeed.AddStepsAsync(app, id, plan.Id, 2, StepStatus.Completed);
         var versionId = await DeploymentHarness.VersionIdAsync(app, id);
 
@@ -748,9 +746,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Execution, 5, ApprovalMode.Advisory, maxBuildFixAttempts: 5);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 3, projectVersionAtCreation: 2);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
         await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 2, StepStatus.Completed);
         var versionId = await DeploymentHarness.VersionIdAsync(factory, id);
         var exhausted = Seeded(id, versionId, 0, BuildCheckStatus.Exhausted);
@@ -782,7 +780,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         using var fixture = await ExecutingAsync(app, maxAttempts: 5, deploy: true);
         var id = fixture.Project.Id;
         await AgentJobs.RunQueuedAsync(app, id);
-        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
 
         // A writer advanced to review by hand while the check waited (execution stopped).
         await ProjectApi.WithDbAsync(app, db => db.Projects.Where(p => p.Id == id)
@@ -795,8 +793,8 @@ public sealed class BuildCheckTests(AideApiFactory factory)
     }
 
     [Theory]
-    [InlineData(JobTypes.BuildCheck, BuildCheckStatus.Waiting)]
-    [InlineData(JobTypes.BuildFix, BuildCheckStatus.Failed)]
+    [InlineData(SdlcJobTypes.BuildCheck, BuildCheckStatus.Waiting)]
+    [InlineData(SdlcJobTypes.BuildFix, BuildCheckStatus.Failed)]
     public async Task S4_47_A_dead_lettered_build_check_or_fix_job_exhausts_the_check_and_queues_the_advance_to_review(string jobType, BuildCheckStatus status)
     {
         var (fixture, _, versionId) = await FailedChecksAsync(factory);
@@ -823,9 +821,9 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<Aide.Infrastructure.Persistence.AideDbContext>();
-            foreach (var hook in scope.ServiceProvider.GetServices<Aide.Api.Jobs.IJobEndedHook>())
+            foreach (var hook in scope.ServiceProvider.GetServices<Tevrin.Engine.Runtime.Jobs.IJobEndedHook>())
             {
-                await hook.OnJobEndedAsync(db, new Aide.Api.Jobs.JobEnded(job.Id, jobType, id, DeadLettered: true, "boom"), Ct);
+                await hook.OnJobEndedAsync(db, new Tevrin.Engine.Runtime.Jobs.JobEnded(job.Id, jobType, id, DeadLettered: true, "boom"), Ct);
             }
 
             await db.SaveChangesAsync(Ct);
@@ -833,7 +831,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
 
         var ended = Assert.Single(await ChecksAsync(factory, id));
         Assert.Equal((BuildCheckStatus.Exhausted, (BuildCheckEndReason?)BuildCheckEndReason.JobFailed), (ended.Status, ended.EndReason));
-        var pr = Assert.Single(await QueuedAsync(factory, id, JobTypes.PullRequest));
+        var pr = Assert.Single(await QueuedAsync(factory, id, SdlcJobTypes.PullRequest));
         Assert.Contains(BuildCheckService.ExhaustedTrigger, pr.Payload, StringComparison.Ordinal);
 
         // D-0.6.1-23: the item says why it ended (a dead fix job leaves its failed check's planning failed; the seeded check has no failures).
@@ -860,13 +858,13 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         {
             await SettleNewestRolloutAsync(app, id);
             await FailNewestPreviewAsync(app, id, log);
-            await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck)).Id);
+            await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck)).Id);
             await AgentJobs.RunQueuedAsync(app, id);
         }
 
         // Attempt 2: the preview builds; the check passes and review starts.
         await SettleNewestRolloutAsync(app, id);
-        await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck)).Id);
+        await DeploymentHarness.SettleAsync(app, Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck)).Id);
         Assert.Equal(Phase.Review, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
         await AgentJobs.RunQueuedAsync(app, id);
 
@@ -879,7 +877,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.Equal([(3, (Guid?)checks[0].Id), (4, (Guid?)checks[1].Id)], fixes.Select(s => (s.StepNumber, s.BuildCheckId)));
 
         // Three rollouts (one per checked commit) and none after the pass; review used the third.
-        var rollouts = await JobsOfAsync(app, id, JobTypes.PreviewRollout);
+        var rollouts = await JobsOfAsync(app, id, SdlcJobTypes.PreviewRollout);
         Assert.Equal(3, rollouts.Count);
         var report = await ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
         var used = JsonDocument.Parse(report.ExternalChecks!).RootElement.GetProperty("preview").GetProperty("rollout").GetProperty("rolloutId").GetString();
@@ -933,7 +931,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
 
         // Execution completes; the PR job opens the PR, queues the rollout and starts attempt 0, whose first poll defers.
         await AgentJobs.RunQueuedAsync(app, id);
-        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
         Assert.Equal(0, job.Attempts);
         Assert.True(AideJson.Deserialize<BuildCheckJobPayload>(job.Payload).RulesWarned); // the warning is logged once per check
         Assert.True(github.Api.Count(HttpMethod.Get, RulesPath) > 0);
@@ -959,7 +957,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
         var checks = await ChecksAsync(app, id);
         Assert.Equal([(0, BuildCheckStatus.Failed), (1, BuildCheckStatus.Waiting)], checks.Select(c => (c.Attempt, c.Status)));
-        Assert.DoesNotContain(await JobsOfAsync(app, id, JobTypes.BuildCheck), j => j.Status is JobStatus.Dead or JobStatus.Failed);
+        Assert.DoesNotContain(await JobsOfAsync(app, id, SdlcJobTypes.BuildCheck), j => j.Status is JobStatus.Dead or JobStatus.Failed);
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
     }
 
@@ -978,7 +976,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
 
         // The first poll can't read the checks: it defers (not a failed attempt) and shows the checks as not read yet.
         await AgentJobs.RunQueuedAsync(app, id);
-        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
         Assert.Equal(0, job.Attempts);
         var check = Assert.Single(await ChecksAsync(app, id));
         Assert.Equal(BuildCheckStatus.Waiting, check.Status);
@@ -989,7 +987,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.Equal(Phase.Execution, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
 
         // Still unreadable after 15 minutes: the check goes on without them (no failure, no fix) and review starts.
-        job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
         var payload = AideJson.Deserialize<BuildCheckJobPayload>(job.Payload) with { ChecksWaitSince = DateTimeOffset.UtcNow.AddMinutes(-16) };
         await ProjectApi.WithDbAsync(app, db => db.Jobs.Where(j => j.Id == job.Id).ExecuteUpdateAsync(s => s.SetProperty(j => j.Payload, AideJson.Serialize(payload)), Ct));
         Assert.False(await DeploymentHarness.RunOnceAsync(app, job.Id));
@@ -998,8 +996,8 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         Assert.Equal(BuildCheckStatus.Skipped, check.Status);
         Assert.Empty(check.Failures);
         Assert.Equal(BuildCheckRules.UnavailableConclusion, Assert.Single(check.Sources).Conclusion);
-        Assert.Empty(await JobsOfAsync(app, id, JobTypes.BuildFix));
-        Assert.DoesNotContain(await JobsOfAsync(app, id, JobTypes.BuildCheck), j => j.Status is JobStatus.Dead or JobStatus.Failed);
+        Assert.Empty(await JobsOfAsync(app, id, SdlcJobTypes.BuildFix));
+        Assert.DoesNotContain(await JobsOfAsync(app, id, SdlcJobTypes.BuildCheck), j => j.Status is JobStatus.Dead or JobStatus.Failed);
         Assert.Equal(Phase.Review, (await LifecycleSeed.ProjectAsync(app, id)).CurrentPhase);
     }
 
@@ -1018,7 +1016,7 @@ public sealed class BuildCheckTests(AideApiFactory factory)
         await ProjectApi.ReadAsync<ExecutionStateDto>(
             await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/execution/start", new { }, Ct), HttpStatusCode.Accepted);
         await AgentJobs.RunQueuedAsync(app, id);
-        var job = Assert.Single(await QueuedAsync(app, id, JobTypes.BuildCheck));
+        var job = Assert.Single(await QueuedAsync(app, id, SdlcJobTypes.BuildCheck));
         var rollout = await DeploymentHarness.RolloutJobAsync(app, id);
         if (!await ProjectApi.WithDbAsync(app, db => db.Deployments.AnyAsync(d => d.ProjectId == id && d.Environment == DeploymentEnvironment.Preview, Ct)))
         {

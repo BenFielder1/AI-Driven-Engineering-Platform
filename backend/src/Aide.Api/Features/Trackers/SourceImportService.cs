@@ -1,11 +1,9 @@
 using Aide.Api.Features.Activity;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Trackers;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Configurations;
@@ -13,10 +11,15 @@ using Aide.Infrastructure.Trackers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Trackers;
 
-/// <summary>Payload of the <see cref="JobTypes.TrackerImport"/> job.</summary>
+/// <summary>Payload of the <see cref="SdlcJobTypes.TrackerImport"/> job.</summary>
 public sealed record TrackerImportJobPayload(Guid ProjectId, Guid ImportId);
 
 /// <summary>An import checked and ready to queue.</summary>
@@ -99,7 +102,7 @@ public sealed partial class SourceImportService(
             CreatedAt = now,
         };
         db.TrackerImports.Add(import);
-        jobs.Enqueue(JobTypes.TrackerImport, new TrackerImportJobPayload(projectId, import.Id), projectId, now);
+        jobs.Enqueue(SdlcJobTypes.TrackerImport, new TrackerImportJobPayload(projectId, import.Id), projectId, now);
         return import;
     }
 
@@ -128,7 +131,7 @@ public sealed partial class SourceImportService(
             .ToListAsync(cancellationToken);
         var names = await ActorResolver.NamesAsync(db, imports.Select(i => i.CreatedBy).Distinct(), cancellationToken);
         var snapshot = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == ArtifactType.SourceItems && a.Status == ArtifactStatus.Locked)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.SourceItems && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => new SourceSnapshotDto(a.Id, a.Version, a.ContentHash, a.CreatedAt))
             .FirstOrDefaultAsync(cancellationToken);
@@ -325,7 +328,7 @@ public sealed partial class SourceImportService(
         }
 
         var hash = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == ArtifactType.SourceItems && a.Status == ArtifactStatus.Locked)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.SourceItems && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => a.ContentHash)
             .FirstOrDefaultAsync(cancellationToken);
@@ -390,7 +393,7 @@ public sealed partial class SourceImportService(
     private async Task<SourceDraftStateDto?> DraftStateAsync(Guid projectId, Guid? versionId, SourceSnapshotDto? snapshot, CancellationToken cancellationToken)
     {
         var draft = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == ArtifactType.ProjectRequest)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.ProjectRequest)
             .OrderByDescending(a => a.Version)
             .Select(a => new { a.Id, a.Version, a.AgentRunId, a.CreatedAt })
             .FirstOrDefaultAsync(cancellationToken);
@@ -403,7 +406,7 @@ public sealed partial class SourceImportService(
         if (draft.AgentRunId is { } runId)
         {
             var inputs = await db.AgentRuns.AsNoTracking().Where(r => r.Id == runId).Select(r => r.InputArtifacts).FirstOrDefaultAsync(cancellationToken);
-            builtFrom = inputs?.FirstOrDefault(i => i.Type == ArtifactType.SourceItems)?.Version;
+            builtFrom = inputs?.FirstOrDefault(i => i.Type == SdlcArtifacts.SourceItems)?.Version;
         }
 
         return new SourceDraftStateDto(
@@ -464,19 +467,19 @@ public sealed class SourceSnapshotWriter(AideDbContext db)
         ArgumentNullException.ThrowIfNull(project);
         project.UpdatedAt = now;
         var existing = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == project.Id && a.Type == ArtifactType.SourceItems)
+            .Where(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.SourceItems)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
         var plan = ArtifactRules.NewDraft(existing);
         var artifact = new Artifact
         {
             ProjectId = project.Id,
-            Type = ArtifactType.SourceItems,
+            Type = SdlcArtifacts.SourceItems,
             Version = plan.Version,
             ParentVersion = plan.ParentVersion,
             Content = markdown,
             ContentHash = ContentHash.Compute(markdown),
-            Status = ArtifactRules.InitialStatus(ArtifactType.SourceItems),
+            Status = SdlcArtifactRules.InitialStatus(SdlcArtifacts.SourceItems),
             CheckpointAtCreation = project.Checkpoint,
             ReleaseVersionId = releaseVersionId,
             CreatedByUserId = userId,

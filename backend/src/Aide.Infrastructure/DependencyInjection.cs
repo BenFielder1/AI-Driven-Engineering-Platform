@@ -16,6 +16,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Engine.Runtime.Pipelines;
 
 namespace Aide.Infrastructure;
 
@@ -61,15 +64,30 @@ public static class DependencyInjection
 
             // §4.10: new projects get their first release version; version-scoped rows left unstamped get the current one.
             options.AddInterceptors(sp.GetRequiredService<ReleaseVersionStampingInterceptor>());
+
+            // FR-292, FR-294: the project's pipeline run follows it, and new rows get their run (after the version stamping).
+            options.AddInterceptors(sp.GetRequiredService<PipelineRunSyncInterceptor>());
+
+            // §8: a span per stage execution once the save that closes it commits (after the run sync, which closes them).
+            options.AddInterceptors(sp.GetRequiredService<StageExecutionTracingInterceptor>());
         });
+
+        // D-0.7.0-20: the engine reaches its tables through the same scoped context (one unit of work).
+        services.AddScoped<IEngineDbContext>(sp => sp.GetRequiredService<AideDbContext>());
+        services.AddScoped<RunLogQueries>();
         services.TryAddSingleton<IProjectEventPublisher, NullProjectEventPublisher>();
         services.TryAddSingleton<ProjectEventPublishingInterceptor>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<NotificationOutboxInterceptor>();
         services.TryAddSingleton<ReleaseVersionStampingInterceptor>();
+        services.TryAddSingleton<StageExecutionTracingInterceptor>();
+        services.TryAddSingleton(sp => new PipelineRunSyncInterceptor(sp.GetService<PipelineRegistryHost>(), sp.GetRequiredService<TimeProvider>()));
 
         // FR-79: fills last4 of LLM keys migrated from 0.1.0 projects (needs ISecretProtector from AddAideDataProtection).
         services.AddHostedService<LlmCredentialLast4Backfill>();
+
+        // FR-294, D-0.7.0-28: SDLC pipeline runs for 0.6.1 data, at start-up before the job worker (registered later) starts.
+        services.AddHostedService<PipelineRunBackfillService>();
 
         // LLM provider configuration (FR-22): defaults and which providers have a system key.
         services.AddOptions<LlmOptions>()
@@ -77,6 +95,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
         services.AddSingleton<ILlmProviderCatalog, LlmProviderCatalog>();
+        services.AddSingleton<ILlmCatalog>(sp => sp.GetRequiredService<ILlmProviderCatalog>());
 
         // The one LLM abstraction (FR-22, CLAUDE.md rule 11): typed HttpClients for the real providers, an offline Fake,
         // versioned prompt templates (FR-24) and the resolver that picks provider, model and key per project and agent.

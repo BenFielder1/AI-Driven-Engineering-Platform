@@ -5,6 +5,7 @@ using Aide.Domain.GitHosts;
 using Aide.Infrastructure.Bitbucket;
 using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Platforms;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Infrastructure.Deployments;
 

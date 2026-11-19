@@ -1,11 +1,14 @@
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Artifacts;
 
@@ -72,7 +75,7 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(token);
         var isCurrent = ArtifactRules.IsCurrentVersion(new ArtifactVersion(artifact.Version, artifact.Status), others);
-        var change = ArtifactRules.OnIntegrityCheck(artifact.Type, artifact.Status, artifact.Content, artifact.ContentHash, authoredByAgent, isCurrent);
+        var change = SdlcArtifactRules.OnIntegrityCheck(artifact.Type, artifact.Status, artifact.Content, artifact.ContentHash, authoredByAgent, isCurrent);
         var projectVersion = await db.Projects.AsNoTracking()
             .Where(p => p.Id == artifact.ProjectId)
             .Select(p => p.Checkpoint)
@@ -82,7 +85,7 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
         if (change.RerunAgent is { } agent)
         {
             var job = await jobs.EnqueueAsync(
-                JobTypes.ForAgent(agent),
+                SdlcJobTypes.ForAgent(agent),
                 new LifecycleJobPayload(artifact.ProjectId, projectVersion, LifecycleJobPayload.ArtifactCorrupted, ArtifactId: artifact.Id),
                 artifact.ProjectId,
                 token,
@@ -110,5 +113,5 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Project {ProjectId}: artifact {ArtifactId} ({ArtifactType} v{Version}) failed its integrity check and was marked corrupted (regenerate: {Regenerate})")]
-    private static partial void LogCorrupted(ILogger logger, Guid projectId, Guid artifactId, ArtifactType artifactType, int version, bool regenerate);
+    private static partial void LogCorrupted(ILogger logger, Guid projectId, Guid artifactId, LoggedKey artifactType, int version, bool regenerate);
 }

@@ -1,12 +1,14 @@
 using Aide.Api.Features.Review;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Lifecycle;
 
@@ -28,12 +30,12 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
             .Where(a => a.ProjectId == id && a.ReleaseVersionId == currentVersionId && a.Status == ArtifactStatus.Locked)
             .Select(a => new { a.Id, a.Type, a.CreatedAt })
             .ToListAsync(cancellationToken);
-        bool IsLocked(ArtifactType type) => locked.Any(a => a.Type == type);
+        bool IsLocked(string type) => locked.Any(a => a.Type == type);
 
         // The current plan: the most recently created locked plan (the implementation plan, or the optimisation plan of
         // a review cycle). Approving a new implementation plan invalidates the optimisation plan (§4.4).
         var currentPlanId = locked
-            .Where(a => a.Type is ArtifactType.ImplementationPlan or ArtifactType.OptimizationPlan)
+            .Where(a => a.Type is SdlcArtifacts.ImplementationPlan or SdlcArtifacts.OptimizationPlan)
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)
             .Select(a => (Guid?)a.Id)
@@ -48,7 +50,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         var cyclePlanId = report is null
             ? null
             : locked
-                .Where(a => a.Type == ArtifactType.OptimizationPlan && IsOfReport(report, a.Id, a.CreatedAt))
+                .Where(a => a.Type == SdlcArtifacts.OptimizationPlan && IsOfReport(report, a.Id, a.CreatedAt))
                 .OrderByDescending(a => a.CreatedAt)
                 .ThenByDescending(a => a.Id)
                 .Select(a => (Guid?)a.Id)
@@ -80,7 +82,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         if (report is not null)
         {
             escalation = await db.ApprovalGates.AsNoTracking()
-                .Where(g => g.ProjectId == id && g.Type == GateType.Escalation && g.Status == GateStatus.Approved
+                .Where(g => g.ProjectId == id && g.Type == EngineGates.Escalation && g.Status == GateStatus.Approved
                     && g.Decision != null && g.CreatedAt >= report.CreatedAt)
                 .OrderByDescending(g => g.DecidedAt)
                 .Select(g => g.Decision)
@@ -95,7 +97,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
             .AnyAsync(v => v.ProjectId == id && (v.Status == ReleaseVersionStatus.InDevelopment || v.Status == ReleaseVersionStatus.AwaitingMerge), cancellationToken);
 
         // FR-179, §4.27: leaving analysis needs the locked stack_profile and the composition it pinned (or its No stack choice).
-        var profileLocked = IsLocked(ArtifactType.StackProfile);
+        var profileLocked = IsLocked(SdlcArtifacts.StackProfile);
         var compositionPinned = false;
         var generalist = false;
         if (project.CurrentPhase == Phase.Analysis)
@@ -105,7 +107,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
             if (profileLocked)
             {
                 var content = await db.Artifacts.AsNoTracking()
-                    .Where(a => a.ProjectId == id && a.ReleaseVersionId == currentVersionId && a.Type == ArtifactType.StackProfile && a.Status == ArtifactStatus.Locked)
+                    .Where(a => a.ProjectId == id && a.ReleaseVersionId == currentVersionId && a.Type == SdlcArtifacts.StackProfile && a.Status == ArtifactStatus.Locked)
                     .OrderByDescending(a => a.Version)
                     .Select(a => a.Content)
                     .FirstAsync(cancellationToken);
@@ -116,9 +118,9 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         return new LifecycleSnapshot
         {
             Mode = project.ApprovalMode,
-            ProjectRequestLocked = IsLocked(ArtifactType.ProjectRequest),
-            TechnicalSpecificationLocked = IsLocked(ArtifactType.TechnicalSpecification),
-            ImplementationPlanLocked = IsLocked(ArtifactType.ImplementationPlan),
+            ProjectRequestLocked = IsLocked(SdlcArtifacts.ProjectRequest),
+            TechnicalSpecificationLocked = IsLocked(SdlcArtifacts.TechnicalSpecification),
+            ImplementationPlanLocked = IsLocked(SdlcArtifacts.ImplementationPlan),
             CurrentPlanStepCount = current?.Total ?? 0,
             CurrentPlanCompletedStepCount = current?.Completed ?? 0,
             WorkingCopyPrepared = workingCopyPrepared,
@@ -145,7 +147,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(artifact);
         var report = await LatestReportAsync(project, cancellationToken);
-        return artifact.Type == ArtifactType.OptimizationPlan && report is not null && IsOfReport(report, artifact.Id, artifact.CreatedAt);
+        return artifact.Type == SdlcArtifacts.OptimizationPlan && report is not null && IsOfReport(report, artifact.Id, artifact.CreatedAt);
     }
 
     /// <summary>A draft optimisation plan of the latest current-timeline report's cycle is waiting for approval (FR-14 continue).</summary>
@@ -158,7 +160,7 @@ public sealed class LifecycleSnapshotLoader(AideDbContext db)
         }
 
         return await db.Artifacts.AsNoTracking().AnyAsync(
-            a => a.ProjectId == project.Id && a.ReleaseVersionId == report.ReleaseVersionId && a.Type == ArtifactType.OptimizationPlan && a.Status == ArtifactStatus.Draft
+            a => a.ProjectId == project.Id && a.ReleaseVersionId == report.ReleaseVersionId && a.Type == SdlcArtifacts.OptimizationPlan && a.Status == ArtifactStatus.Draft
                 && (a.Id == report.OptimizationPlanArtifactId || a.CreatedAt >= report.CreatedAt),
             cancellationToken);
     }

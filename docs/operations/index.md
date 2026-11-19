@@ -16,3 +16,4 @@ How to run Tevrin yourself and keep it healthy.
 | [PostgreSQL 17 to 18 upgrade](postgres-18-upgrade.md) | Move local data to the new major version |
 | [CI and the commit gate](ci.md) | What CI checks, and how changes reach `main` |
 | [Releases](releases.md) | Version numbers, tags, GitHub releases and the production deploy they start |
+| [Pipeline definitions](pipeline-definitions.md) | Definition pinning, the readiness check and the run backfill |

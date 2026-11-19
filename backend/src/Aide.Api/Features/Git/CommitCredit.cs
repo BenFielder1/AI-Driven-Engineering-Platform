@@ -1,11 +1,13 @@
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.GitHosts;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Security;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Git;
 
@@ -30,7 +32,7 @@ public sealed partial class CommitCredit(AideDbContext db, ISecretProtectors pro
 
             var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
             var approver = await db.ApprovalGates.AsNoTracking()
-                .Where(g => g.ProjectId == projectId && g.ReleaseVersionId == versionId && g.Type == GateType.PlanApproval
+                .Where(g => g.ProjectId == projectId && g.ReleaseVersionId == versionId && g.Type == SdlcGates.PlanApproval
                     && g.Status == GateStatus.Approved && (g.ArtifactId == planId || g.ArtifactId == null))
                 .OrderByDescending(g => g.DecidedAt)
                 .Select(g => g.ReviewerId)
@@ -64,7 +66,7 @@ public sealed partial class CommitCredit(AideDbContext db, ISecretProtectors pro
 
             var approver = await db.ApprovalGates.AsNoTracking()
                 .Where(g => g.ProjectId == release.ProjectId && g.ReleaseVersionId == release.ReleaseVersionId
-                    && g.Type == GateType.PreRelease && g.Status == GateStatus.Approved)
+                    && g.Type == SdlcGates.PreRelease && g.Status == GateStatus.Approved)
                 .OrderByDescending(g => g.DecidedAt)
                 .Select(g => g.ReviewerId)
                 .FirstOrDefaultAsync(cancellationToken);

@@ -2,13 +2,13 @@ using System.Net.Http.Json;
 using Aide.Api.Features.Deployments;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Support;
 
@@ -109,7 +109,7 @@ public static class DeploymentHarness
     /// <summary>The project's newest <c>deployment_setup</c> job.</summary>
     public static Task<Job> SetupJobAsync(WebApplicationFactory<Program> app, Guid projectId) =>
         ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DeploymentSetup)
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
             .FirstAsync(Ct));
 
@@ -161,7 +161,7 @@ public static class DeploymentHarness
     /// <summary>The <c>deployment</c> job of <paramref name="deploymentId"/>.</summary>
     public static Task<Job> JobOfAsync(WebApplicationFactory<Program> app, Guid projectId, Guid deploymentId) =>
         ProjectApi.WithDbAsync(app, async db =>
-            (await db.Jobs.AsNoTracking().Where(j => j.ProjectId == projectId && j.Type == JobTypes.Deployment).ToListAsync(Ct))
+            (await db.Jobs.AsNoTracking().Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Deployment).ToListAsync(Ct))
                 .Single(j => DeploymentScheduler.TryPayload(j.Payload)?.DeploymentId == deploymentId));
 
     /// <summary>Runs a queued job once (ignoring its run-after); <c>true</c> when it deferred itself again.</summary>
@@ -196,7 +196,7 @@ public static class DeploymentHarness
         for (var round = 1; round <= maxRounds; round++)
         {
             var queued = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-                .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DatabaseProvisioning && j.Status == JobStatus.Queued)
+                .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DatabaseProvisioning && j.Status == JobStatus.Queued)
                 .Select(j => j.Id)
                 .ToListAsync(Ct));
             if (queued.Count == 0)
@@ -214,7 +214,7 @@ public static class DeploymentHarness
     }
 
     /// <summary>FR-147, FR-149: the project's newest rollout job of <paramref name="type"/> (<c>preview_rollout</c> by default).</summary>
-    public static Task<Job> RolloutJobAsync(WebApplicationFactory<Program> app, Guid projectId, string type = JobTypes.PreviewRollout) =>
+    public static Task<Job> RolloutJobAsync(WebApplicationFactory<Program> app, Guid projectId, string type = SdlcJobTypes.PreviewRollout) =>
         ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
             .Where(j => j.ProjectId == projectId && j.Type == type)
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
@@ -234,7 +234,7 @@ public static class DeploymentHarness
             }
 
             var deploying = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-                .Where(j => j.ProjectId == projectId && j.Type == JobTypes.Deployment && j.Status == JobStatus.Queued)
+                .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Deployment && j.Status == JobStatus.Queued)
                 .Select(j => j.Id)
                 .ToListAsync(Ct));
             foreach (var jobId in deploying)

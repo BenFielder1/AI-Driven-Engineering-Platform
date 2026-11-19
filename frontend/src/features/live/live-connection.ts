@@ -3,6 +3,7 @@ import type { HttpRequest, HttpResponse, HubConnection, ILogger } from '@microso
 import { createContext } from 'react'
 
 import { readXsrfToken, refreshAntiforgeryToken, XSRF_HEADER, type Schemas } from '../../api/client'
+import type { PipelineLiveEvent } from '../../engine/api/types'
 
 export type ProjectEventMessage = Schemas['ProjectEventMessage']
 export type BuildCheckUpdatedMessage = Schemas['BuildCheckUpdatedMessage']
@@ -22,6 +23,8 @@ export interface LiveConnection {
   onProjectEvent(handler: (message: ProjectEventMessage) => void): void
   /** FR-259: `buildCheckUpdated`, the build check item after it starts, changes state or has fix steps planned. */
   onBuildCheckUpdated(handler: (message: BuildCheckUpdatedMessage) => void): void
+  /** FR-302: the engine's `pipelineRunUpdated`, `stageUpdated` and `gateUpdated` messages (each carries its DTO). */
+  onPipelineEvent(handler: (event: PipelineLiveEvent) => void): void
   /** Automatic reconnect lost the connection and is retrying. */
   onReconnecting(handler: () => void): void
   /** Automatic reconnect succeeded: the server forgot our groups, so Join again. */
@@ -121,6 +124,19 @@ export const createSignalRConnection: LiveConnectionFactory = () => {
     onBuildCheckUpdated: (handler) => {
       register((c) => {
         c.on('buildCheckUpdated', handler)
+      })
+    },
+    onPipelineEvent: (handler) => {
+      register((c) => {
+        c.on('pipelineRunUpdated', (run: Extract<PipelineLiveEvent, { type: 'pipelineRunUpdated' }>['run']) => {
+          handler({ type: 'pipelineRunUpdated', run })
+        })
+        c.on('stageUpdated', (stage: Extract<PipelineLiveEvent, { type: 'stageUpdated' }>['stage']) => {
+          handler({ type: 'stageUpdated', stage })
+        })
+        c.on('gateUpdated', (gate: Extract<PipelineLiveEvent, { type: 'gateUpdated' }>['gate']) => {
+          handler({ type: 'gateUpdated', gate })
+        })
       })
     },
     onReconnecting: (handler) => {

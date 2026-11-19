@@ -5,15 +5,21 @@ using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Analysis;
 
@@ -72,11 +78,11 @@ public sealed partial class AnalysisService(
         }
 
         var latest = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == ArtifactType.StackProfile)
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.StackProfile)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
         var lockedExists = latest is not null && (latest.Status == ArtifactStatus.Locked || await db.Artifacts.AsNoTracking().AnyAsync(
-            a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == ArtifactType.StackProfile && a.Status == ArtifactStatus.Locked,
+            a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.StackProfile && a.Status == ArtifactStatus.Locked,
             cancellationToken));
         var parsed = latest is null ? null : StackProfile.Parse(latest.Content);
         var document = parsed is { IsSuccess: true } ok ? ok.Value.Document : null;
@@ -168,7 +174,7 @@ public sealed partial class AnalysisService(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 projectId,
-                new { agent = AgentKind.StackAnalyst.ToWire(), tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
+                new { agent = SdlcAgents.StackAnalyst, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
                 actor,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -176,13 +182,13 @@ public sealed partial class AnalysisService(
         }
 
         if (await db.Jobs.AnyAsync(
-                j => j.ProjectId == projectId && j.Type == JobTypes.StackAnalysis && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+                j => j.ProjectId == projectId && j.Type == SdlcJobTypes.StackAnalysis && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
                 cancellationToken))
         {
             return Result.Failure<StackAnalysisQueuedDto>(new DomainError(ErrorCodes.InvalidState, "The Stack Analyst is already queued or running. Wait for it to finish."));
         }
 
-        var job = jobs.Enqueue(JobTypes.StackAnalysis, new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.UserRequested), projectId, now);
+        var job = jobs.Enqueue(SdlcJobTypes.StackAnalysis, new LifecycleJobPayload(projectId, project.Checkpoint, LifecycleJobPayload.UserRequested), projectId, now);
         project.UpdatedAt = now; // xmin: concurrent starts conflict instead of queueing two runs
         var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
         if (saved.IsFailure)
@@ -267,7 +273,7 @@ public sealed partial class AnalysisService(
             .Select(v => (DateTimeOffset?)v.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         var job = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.StackAnalysis && j.CreatedAt >= version.CreatedAt)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.StackAnalysis && j.CreatedAt >= version.CreatedAt)
             .Where(j => next == null || j.CreatedAt < next)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
@@ -279,10 +285,13 @@ public sealed partial class AnalysisService(
 
         var main = AgentRunRules.RunId(job.Id);
         var corrective = AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey);
-        var runs = await db.AgentRuns.AsNoTracking().Where(r => r.Id == main || r.Id == corrective).ToListAsync(cancellationToken);
+        var runs = await db.AgentRuns.AsNoTracking()
+            .Where(r => r.Id == main || r.Id == corrective)
+            .Select(AgentRunProjections.WithoutInput)
+            .ToListAsync(cancellationToken);
         var run = runs.FirstOrDefault(r => r.Id == corrective) ?? runs.FirstOrDefault(r => r.Id == main);
         var draft = await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == ArtifactType.StackProfile && a.AgentRunId != null && (a.AgentRunId == main || a.AgentRunId == corrective))
+            .Where(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.StackProfile && a.AgentRunId != null && (a.AgentRunId == main || a.AgentRunId == corrective))
             .Select(a => new { a.Id, a.Version })
             .FirstOrDefaultAsync(cancellationToken);
         var status = job.Status switch
@@ -299,7 +308,7 @@ public sealed partial class AnalysisService(
 
         var error = status == StackAnalysisRunState.Failed ? run?.Error ?? job.LastError : null;
         var code = error?.Split(':', 2)[0] is { Length: > 0 } prefix && prefix.All(c => char.IsAsciiLetterUpper(c) || c == '_') ? prefix : null;
-        var trigger = ReadTrigger(job.Payload);
+        var trigger = AgentJobTriggerWire.ToWire(ReadTrigger(job.Payload));
         return new StackAnalysisRunDto(
             job.Id,
             run?.Id,

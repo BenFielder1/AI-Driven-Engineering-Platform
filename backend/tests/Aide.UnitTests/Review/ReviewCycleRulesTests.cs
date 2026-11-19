@@ -1,9 +1,10 @@
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Review;
 
@@ -290,7 +291,7 @@ public class ReviewCycleRulesTests
             System = "s",
             Messages = [new LlmMessage(LlmRole.User, $"<review_cycle>\n{cycle}\n</review_cycle>\n<code>\n- src/a.js\n</code>")],
             MaxTokens = 100,
-            Agent = AgentKind.CodeReview,
+            Agent = SdlcAgents.CodeReview,
         };
 
         var first = Parsed(responder.Respond(Request(1)));

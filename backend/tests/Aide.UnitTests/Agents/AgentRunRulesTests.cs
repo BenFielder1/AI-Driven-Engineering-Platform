@@ -1,7 +1,9 @@
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;
 
@@ -13,14 +15,14 @@ public class AgentRunRulesTests
     {
         var models = new Dictionary<string, string> { ["idea_refinement"] = "claude-sonnet-5-5" };
 
-        Assert.Equal(new LlmChoice(LlmProvider.Anthropic, "claude-sonnet-5-5"), AgentRunRules.ChooseModel(AgentKind.IdeaRefinement, LlmProvider.Anthropic, "claude-opus-5-5", models));
-        Assert.Equal(new LlmChoice(LlmProvider.Anthropic, "claude-opus-5-5"), AgentRunRules.ChooseModel(AgentKind.SpecGenerator, LlmProvider.Anthropic, "claude-opus-5-5", models));
+        Assert.Equal(new LlmChoice(LlmProvider.Anthropic, "claude-sonnet-5-5"), AgentModelRules.ChooseModel(SdlcAgents.IdeaRefinement, LlmProvider.Anthropic, "claude-opus-5-5", models));
+        Assert.Equal(new LlmChoice(LlmProvider.Anthropic, "claude-opus-5-5"), AgentModelRules.ChooseModel(SdlcAgents.SpecGenerator, LlmProvider.Anthropic, "claude-opus-5-5", models));
     }
 
     [Fact]
     public void FR22_Ollama_example_uses_the_projects_model()
     {
-        var choice = AgentRunRules.ChooseModel(AgentKind.CodeGenerator, LlmProvider.Ollama, "qwen2.5-coder", new Dictionary<string, string>());
+        var choice = AgentModelRules.ChooseModel(SdlcAgents.CodeGenerator, LlmProvider.Ollama, "qwen2.5-coder", new Dictionary<string, string>());
 
         Assert.Equal(new LlmChoice(LlmProvider.Ollama, "qwen2.5-coder"), choice);
     }
@@ -30,8 +32,8 @@ public class AgentRunRulesTests
     {
         var models = new Dictionary<string, string> { ["code_review"] = "  " };
 
-        Assert.Equal("fake-1", AgentRunRules.ChooseModel(AgentKind.CodeReview, LlmProvider.Fake, " fake-1 ", models).Model);
-        Assert.Equal("fake-1", AgentRunRules.ChooseModel(AgentKind.CodeReview, LlmProvider.Fake, "fake-1", null).Model);
+        Assert.Equal("fake-1", AgentModelRules.ChooseModel(SdlcAgents.CodeReview, LlmProvider.Fake, " fake-1 ", models).Model);
+        Assert.Equal("fake-1", AgentModelRules.ChooseModel(SdlcAgents.CodeReview, LlmProvider.Fake, "fake-1", null).Model);
     }
 
     [Theory]

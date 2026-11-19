@@ -1,13 +1,16 @@
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -215,7 +218,7 @@ public sealed partial class DeploymentSetupJobHandler(
     private async Task<bool> IsNewestAsync(Guid jobId, DeploymentSetupPayload payload, CancellationToken cancellationToken)
     {
         var candidates = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == payload.ProjectId && j.Type == JobTypes.DeploymentSetup)
+            .Where(j => j.ProjectId == payload.ProjectId && j.Type == SdlcJobTypes.DeploymentSetup)
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
             .Take(50)
             .ToListAsync(cancellationToken);
@@ -266,11 +269,12 @@ public sealed partial class DeploymentSetupJobHandler(
 /// <summary>A setup job that ended without succeeding (retries used up) leaves its target <c>error</c> instead of <c>configuring</c>.</summary>
 public sealed class DeploymentSetupJobEndedHook(Databases.ManagedDatabaseSecrets secrets, TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.DeploymentSetup || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.DeploymentSetup || job.ProjectId is not { } projectId)
         {
             return;
         }
@@ -289,7 +293,7 @@ public sealed class DeploymentSetupJobEndedHook(Databases.ManagedDatabaseSecrets
 
         var target = await db.DeploymentTargets.FirstOrDefaultAsync(t => t.Id == parsed.TargetId && t.ProjectId == projectId, cancellationToken);
         var newest = (await db.Jobs.AsNoTracking()
-                .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
+                .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DeploymentSetup)
                 .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
                 .Take(50)
                 .ToListAsync(cancellationToken))
@@ -317,7 +321,7 @@ public sealed class DeploymentSetupJobEndedHook(Databases.ManagedDatabaseSecrets
         }
 
         var newest = (await db.Jobs.AsNoTracking()
-                .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
+                .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DeploymentSetup)
                 .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
                 .Take(50)
                 .ToListAsync(cancellationToken))

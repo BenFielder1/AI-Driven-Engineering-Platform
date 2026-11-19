@@ -5,18 +5,15 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Connections;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Runs;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Connections;
 
@@ -199,7 +196,7 @@ public sealed class LlmBindingTests(AideApiFactory factory) : IDisposable
 
         // The owner is notified: the run failure queues an Owner notification (the dedicated "connection invalid" type is FR-92).
         var notifications = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.Type == JobTypes.Notification && j.ProjectId == fixture.Project.Id)
+            .Where(j => j.Type == SdlcJobTypes.Notification && j.ProjectId == fixture.Project.Id)
             .Select(j => j.Payload)
             .ToListAsync(Ct));
         Assert.Contains(notifications, p => p.Contains("run_failed", StringComparison.Ordinal));
@@ -417,15 +414,15 @@ public sealed class LlmBindingTests(AideApiFactory factory) : IDisposable
     private static Task<AgentRun> RunRowAsync(WebApplicationFactory<Program> app, Guid runId) =>
         ProjectApi.WithDbAsync(app, db => db.AgentRuns.AsNoTracking().SingleAsync(r => r.Id == runId, Ct));
 
-    private static JobExecution NewJob(Guid projectId) => new(Guid.CreateVersion7(), JobTypes.SpecGeneration, "{}", projectId, 1);
+    private static JobExecution NewJob(Guid projectId) => new(Guid.CreateVersion7(), SdlcJobTypes.SpecGeneration, "{}", projectId, 1);
 
     private static AgentRunRequest Spec(Guid projectId, JobExecution job) => new()
     {
         ProjectId = projectId,
-        Agent = AgentKind.SpecGenerator,
+        Agent = SdlcAgents.SpecGenerator,
         Job = job,
         Inputs = new Dictionary<string, string?> { ["PROJECT_REQUEST"] = ProjectRequest },
-        InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), ArtifactType.ProjectRequest, 1)],
+        InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), SdlcArtifacts.ProjectRequest, 1)],
     };
 
     private static async Task<AgentRunOutcome> RunAsync(WebApplicationFactory<Program> app, AgentRunRequest request)

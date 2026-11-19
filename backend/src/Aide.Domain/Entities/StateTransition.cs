@@ -12,6 +12,12 @@ public sealed class StateTransition
     /// <summary>The release version the transition belongs to (§4.10).</summary>
     public Guid ReleaseVersionId { get; set; }
 
+    /// <summary>FR-294: the pipeline run the transition belongs to (nullable until the contract step, D-0.7.0-28).</summary>
+    public Guid? PipelineRunId { get; set; }
+
+    /// <summary>§4.51: the generic transition kind (<c>PipelineTransitionKinds</c>); null on rows written before 0.7.0.</summary>
+    public string? Kind { get; set; }
+
     /// <summary>Null for the creation record (→ refinement at checkpoint 1).</summary>
     public Phase? FromPhase { get; set; }
 

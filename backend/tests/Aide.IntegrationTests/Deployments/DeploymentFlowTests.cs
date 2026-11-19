@@ -6,13 +6,10 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Agents;
@@ -21,6 +18,8 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Deployments;
 
@@ -46,9 +45,9 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         await DeploymentHarness.BindAsync(app, id, await DeploymentHarness.SeedConnectionAsync(app, fixture.Owner.User!.Id), fixture.Owner.User!.Id);
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
-        var plan = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: "# Todo API\n\n## Summary\nManage todos.");
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\n## Technical Architecture\nNode.js service.\n\n## API Contracts\nNo HTTP API.\n");
+        var plan = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: AgentJobs.PlanMarkdown(2));
         await ProjectApi.WithDbAsync(app, async db =>
         {
             db.ExecutionSteps.AddRange(Enumerable.Range(1, 2).Select(n => new ExecutionStep
@@ -71,7 +70,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
     }
 
     private static Task<Job> ReviewJobAsync(WebApplicationFactory<Program> app, Guid id) =>
-        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.Review && j.Status == JobStatus.Queued, Ct));
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.Review && j.Status == JobStatus.Queued, Ct));
 
     private static Task<ComplianceReport> ReportAsync(WebApplicationFactory<Program> app, Guid id) =>
         ProjectApi.WithDbAsync(app, db => db.ComplianceReports.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
@@ -153,7 +152,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
 
-        public Aide.Domain.Agents.AgentKind Agent => inner.Agent;
+        public string Agent => inner.Agent;
 
         public IReadOnlyList<string> Prompts => [.. _prompts];
 
@@ -289,7 +288,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         await LifecycleSeed.DecideAsync(fixture.Owner.Client, id, gate.Id, "approve");
         await AgentJobs.RunQueuedAsync(app, id);
         var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Environment == DeploymentEnvironment.Production);
-        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout)).Id);
+        await DeploymentHarness.SettleRolloutAsync(app, id, (await DeploymentHarness.RolloutJobAsync(app, id, SdlcJobTypes.ProductionRollout)).Id);
 
         var project = await LifecycleSeed.ProjectAsync(app, id);
         Assert.Equal(ProjectStatus.Released, project.Status);
@@ -323,7 +322,7 @@ public sealed class DeploymentFlowTests(AideApiFactory factory)
         await AgentJobs.RunQueuedAsync(app, id);
         var production = Assert.Single(await DeploymentHarness.DeploymentsAsync(app, id), d => d.Environment == DeploymentEnvironment.Production);
         var releaseRow = await ProjectApi.WithDbAsync(app, db => db.Releases.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct));
-        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, JobTypes.ProductionRollout);
+        var rollout = await DeploymentHarness.RolloutJobAsync(app, id, SdlcJobTypes.ProductionRollout);
         Assert.Equal((releaseRow.Id, releaseRow.MergeCommitSha, DeploymentTrigger.Auto, (Guid?)rollout.Id), (production.ReleaseId, production.GitSha, production.Trigger, production.RolloutId));
         await DeploymentHarness.SettleRolloutAsync(app, id, rollout.Id);
 

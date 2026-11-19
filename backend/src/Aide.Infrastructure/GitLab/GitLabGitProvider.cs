@@ -4,6 +4,7 @@ using Aide.Domain.GitHosts;
 using Aide.Infrastructure.Git;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Infrastructure.GitLab;
 

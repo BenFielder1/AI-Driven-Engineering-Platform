@@ -1,8 +1,5 @@
 using Aide.Api.Features.Git;
-using Aide.Api.Features.Notifications;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Execution;
 using Aide.Domain.Releases;
@@ -10,6 +7,10 @@ using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Notifications;
+using Tevrin.Pack.Sdlc;
 using ReleaseEntity = Aide.Domain.Entities.Release;
 
 namespace Aide.Api.Features.Release;
@@ -100,13 +101,13 @@ public sealed partial class GitHubReleasePublisher(
             ?? tag;
         var spec = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == release.ProjectId && a.ReleaseVersionId == release.ReleaseVersionId
-                && a.Type == ArtifactType.TechnicalSpecification && a.Status == ArtifactStatus.Locked)
+                && a.Type == SdlcArtifacts.TechnicalSpecification && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => a.Content)
             .FirstOrDefaultAsync(cancellationToken);
         var plans = await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == release.ProjectId && a.ReleaseVersionId == release.ReleaseVersionId
-                && (a.Type == ArtifactType.ImplementationPlan || a.Type == ArtifactType.OptimizationPlan))
+                && (a.Type == SdlcArtifacts.ImplementationPlan || a.Type == SdlcArtifacts.OptimizationPlan))
             .Select(a => new { a.Id, a.CreatedAt })
             .ToListAsync(cancellationToken);
         var planOrder = plans.OrderBy(p => p.CreatedAt).Select((p, i) => (p.Id, i)).ToDictionary(x => x.Id, x => x.i);

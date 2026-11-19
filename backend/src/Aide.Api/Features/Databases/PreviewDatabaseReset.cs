@@ -1,14 +1,15 @@
 using Aide.Api.Features.Deployments;
-using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Databases;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Databases;
 
@@ -65,7 +66,7 @@ public sealed class PreviewDatabaseResetService(AideDbContext db, RolloutSchedul
         }
 
         var now = time.GetUtcNow();
-        var job = jobs.Enqueue(JobTypes.PreviewDatabaseReset, new PreviewDatabaseResetPayload(projectId, row?.Id, method, actor), projectId, now);
+        var job = jobs.Enqueue(SdlcJobTypes.PreviewDatabaseReset, new PreviewDatabaseResetPayload(projectId, row?.Id, method, actor), projectId, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (new PreviewDatabaseResetDto(job.Id, method), null);

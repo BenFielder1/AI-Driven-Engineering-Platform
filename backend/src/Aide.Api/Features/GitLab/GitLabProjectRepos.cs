@@ -6,6 +6,7 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitLab;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.GitLab;
 

@@ -1,6 +1,7 @@
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
-using Aide.Domain.Gates;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Notifications;
 
@@ -46,8 +47,8 @@ public static class NotificationRules
     /// <summary>FR-193: the <see cref="NotificationFacts.Reason"/> of a <c>stack_profile_ready</c> raised by a failed Stack Analyst run.</summary>
     public const string StackProfileRunFailedReason = "run_failed";
 
-    private static readonly string StackProfileArtifact = Artifacts.ArtifactType.StackProfile.ToWire();
-    private static readonly string StackAnalystAgent = Agents.AgentKind.StackAnalyst.ToWire();
+    private static readonly string StackProfileArtifact = SdlcArtifacts.StackProfile;
+    private static readonly string StackAnalystAgent = SdlcAgents.StackAnalyst;
 
     /// <summary>The notification an audit event raises, or <c>null</c> when it raises none.</summary>
     public static NotificationType? ForEvent(string eventType) => ForEvent(eventType, agent: null, artifactType: null);
@@ -188,8 +189,8 @@ public static class NotificationRules
     /// FR-48: one-click approve/reject links exist only for spec, plan and pre-release gates. An escalation needs a decision
     /// (continue, rollback with a target, accept), so its notification links to the project page.
     /// </summary>
-    public static bool OffersApprovalLinks(GateType type) =>
-        type is GateType.SpecApproval or GateType.PlanApproval or GateType.PreRelease;
+    public static bool OffersApprovalLinks(string type) =>
+        type is SdlcGates.SpecApproval or SdlcGates.PlanApproval or SdlcGates.PreRelease;
 
     /// <summary>
     /// The app page a notification opens (a relative path; never an approval token). <paramref name="artifactType"/> picks

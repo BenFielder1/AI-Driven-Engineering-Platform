@@ -2,10 +2,11 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Review;
 
@@ -453,7 +454,7 @@ public static class CodeReviewOutput
             handled = handled with { Outcomes = FindingSteps.Renumber(handled.Outcomes, validated.Value) };
         }
 
-        var markdown = PlanDocument.RenderChecked(ArtifactType.OptimizationPlan, validated.Value, maxFilesPerStep, agents);
+        var markdown = PlanDocument.RenderChecked(SdlcArtifacts.OptimizationPlan, validated.Value, maxFilesPerStep, agents);
         return markdown.IsSuccess
             ? Result.Success(new PlanRead(validated.Value, markdown.Value, dropped, handled))
             : Result.Failure<PlanRead>(markdown.Error!);

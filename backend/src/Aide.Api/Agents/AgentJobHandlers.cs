@@ -1,15 +1,15 @@
 using System.Globalization;
 using Aide.Api.Features.Stack;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
-using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Specs;
 using Aide.Domain.Stack;
 using Aide.Domain.Trackers;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Agents;
 
@@ -39,7 +39,7 @@ public sealed class IdeaRefinementJobHandler(
         ArgumentNullException.ThrowIfNull(job);
         var payload = AgentJobInputs.Payload(job);
         var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
-        if (project is null || !AgentJobInputs.ShouldRun(payload, ArtifactType.ProjectRequest, project))
+        if (project is null || !AgentJobInputs.ShouldRun(payload, SdlcArtifacts.ProjectRequest, project))
         {
             AgentJobLog.Skipped(logger, job.Type, payload.Trigger, project?.CurrentPhase);
             return;
@@ -50,9 +50,9 @@ public sealed class IdeaRefinementJobHandler(
 
         // FR-172: a queued or running import is waited for like the summary (re-queued, up to 10 minutes).
         var sourceWarning = await SourceItemsWaiter.WaitAsync(inputs, iteration.Version?.Id, time, cancellationToken);
-        var sourceItems = await inputs.CurrentAsync(project.Id, ArtifactType.SourceItems, cancellationToken);
-        var draft = await inputs.PreviousAsync(payload, ArtifactType.ProjectRequest, cancellationToken)
-            ?? await inputs.LatestIntactAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
+        var sourceItems = await inputs.CurrentAsync(project.Id, SdlcArtifacts.SourceItems, cancellationToken);
+        var draft = await inputs.PreviousAsync(payload, SdlcArtifacts.ProjectRequest, cancellationToken)
+            ?? await inputs.LatestIntactAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
         var answers = RefinementRules.FormatAnswers(payload.Answers);
 
         // FR-128: the composition and, for a version with existing code, the detector's evidence and mismatches.
@@ -60,7 +60,7 @@ public sealed class IdeaRefinementJobHandler(
         AgentRunRequest Request(string? feedback) => new()
         {
             ProjectId = project.Id,
-            Agent = AgentKind.IdeaRefinement,
+            Agent = SdlcAgents.IdeaRefinement,
             Job = job,
             Inputs = new Dictionary<string, string?>
             {
@@ -87,7 +87,7 @@ public sealed class IdeaRefinementJobHandler(
         await agentJob.RunAsync(
             Request(payload.Feedback),
             new ArtifactAgentSpec(
-                ArtifactType.ProjectRequest,
+                SdlcArtifacts.ProjectRequest,
                 text =>
                 {
                     var parsed = RefinementRules.Parse(text);
@@ -123,16 +123,16 @@ public sealed class SpecGenerationJobHandler(
         ArgumentNullException.ThrowIfNull(job);
         var payload = AgentJobInputs.Payload(job);
         var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
-        if (project is null || !AgentJobInputs.ShouldRun(payload, ArtifactType.TechnicalSpecification, project))
+        if (project is null || !AgentJobInputs.ShouldRun(payload, SdlcArtifacts.TechnicalSpecification, project))
         {
             AgentJobLog.Skipped(logger, job.Type, payload.Trigger, project?.CurrentPhase);
             return;
         }
 
-        var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
-        var previous = await inputs.PreviousAsync(payload, ArtifactType.TechnicalSpecification, cancellationToken);
+        var projectRequest = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
+        var previous = await inputs.PreviousAsync(payload, SdlcArtifacts.TechnicalSpecification, cancellationToken);
         var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
-        var sourceItems = await inputs.CurrentAsync(project.Id, ArtifactType.SourceItems, cancellationToken);
+        var sourceItems = await inputs.CurrentAsync(project.Id, SdlcArtifacts.SourceItems, cancellationToken);
 
         // FR-123, FR-128: with a composition, its required sections (with "Stack Migration" for a stack change, or when the
         // imported code doesn't match it).
@@ -148,7 +148,7 @@ public sealed class SpecGenerationJobHandler(
         AgentRunRequest Request(string? previousSpec, string? feedback) => new()
         {
             ProjectId = project.Id,
-            Agent = AgentKind.SpecGenerator,
+            Agent = SdlcAgents.SpecGenerator,
             Job = job,
             Inputs = new Dictionary<string, string?>
             {
@@ -170,7 +170,7 @@ public sealed class SpecGenerationJobHandler(
         await agentJob.RunAsync(
             Request(previous?.Content, payload.Feedback),
             new ArtifactAgentSpec(
-                ArtifactType.TechnicalSpecification,
+                SdlcArtifacts.TechnicalSpecification,
                 text => SpecValidator.Check(AgentOutput.UnwrapFence(text), context),
                 (rejected, error) => Request(
                     AgentOutput.UnwrapFence(rejected),
@@ -206,19 +206,19 @@ public sealed class PlanGenerationJobHandler(
         ArgumentNullException.ThrowIfNull(job);
         var payload = AgentJobInputs.Payload(job);
         var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
-        if (project is null || !AgentJobInputs.ShouldRun(payload, ArtifactType.ImplementationPlan, project))
+        if (project is null || !AgentJobInputs.ShouldRun(payload, SdlcArtifacts.ImplementationPlan, project))
         {
             AgentJobLog.Skipped(logger, job.Type, payload.Trigger, project?.CurrentPhase);
             return;
         }
 
-        var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
-        var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
-        var previous = await inputs.PreviousAsync(payload, ArtifactType.ImplementationPlan, cancellationToken);
+        var projectRequest = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var previous = await inputs.PreviousAsync(payload, SdlcArtifacts.ImplementationPlan, cancellationToken);
         var summary = (await iterations.ReadAsync(project.Id, cancellationToken)).CodebaseSummary;
         var maxFiles = project.MaxFilesPerStep;
         var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
-        var agents = version.PlanAgents(ArtifactType.ImplementationPlan);
+        var agents = version.PlanAgents(SdlcArtifacts.ImplementationPlan);
 
         // FR-124: the composition's specialists and composed rules, else none (generalist).
         var guidance = version.Stack is { } stack ? StackGuidance.Plan(stack, version.RepoEmpty, version.BaseFiles) : null;
@@ -228,7 +228,7 @@ public sealed class PlanGenerationJobHandler(
         AgentRunRequest Request(string? previousPlan, string? feedback) => new()
         {
             ProjectId = project.Id,
-            Agent = AgentKind.PlanGenerator,
+            Agent = SdlcAgents.PlanGenerator,
             Job = job,
             Inputs = new Dictionary<string, string?>
             {
@@ -248,12 +248,12 @@ public sealed class PlanGenerationJobHandler(
         await agentJob.RunAsync(
             Request(previous is null ? null : PreviousPlanJson(previous.Content, agents), payload.Feedback),
             new ArtifactAgentSpec(
-                ArtifactType.ImplementationPlan,
+                SdlcArtifacts.ImplementationPlan,
                 text =>
                 {
                     var plan = PlanDocument.ParseAgentOutput(text, maxFiles, agents, deployFiles);
                     return plan.IsSuccess
-                        ? PlanDocument.RenderChecked(ArtifactType.ImplementationPlan, plan.Value, maxFiles, agents)
+                        ? PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, plan.Value, maxFiles, agents)
                         : Result.Failure<string>(plan.Error!);
                 },
                 (rejected, error) => Request(
@@ -331,9 +331,6 @@ public static class AgentJobServiceCollectionExtensions
         services.AddScoped<AgentJobInputs>();
         services.AddScoped<IterationContextReader>();
         services.AddScoped<ArtifactAgentJob>();
-        services.AddJobHandler<IdeaRefinementJobHandler>(JobTypes.IdeaRefinement);
-        services.AddJobHandler<SpecGenerationJobHandler>(JobTypes.SpecGeneration);
-        services.AddJobHandler<PlanGenerationJobHandler>(JobTypes.PlanGeneration);
         return services;
     }
 }

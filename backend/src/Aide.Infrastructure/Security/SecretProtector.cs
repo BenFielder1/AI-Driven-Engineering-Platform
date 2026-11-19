@@ -1,20 +1,8 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
+using Tevrin.Engine.Runtime.Security;
 
 namespace Aide.Infrastructure.Security;
-
-/// <summary>Encrypts secrets at rest (§8 NFR-SEC, FR-9: Git tokens, LLM keys, webhook URLs) with ASP.NET Data Protection.</summary>
-public interface ISecretProtector
-{
-    string Protect(string plaintext);
-
-    /// <summary>Decrypts a value from <see cref="Protect"/>. Throws <see cref="CryptographicException"/> if it was
-    /// tampered with or the key ring no longer has its key.</summary>
-    string Unprotect(string protectedValue);
-
-    /// <summary>Like <see cref="Unprotect"/>, but returns <c>false</c> instead of throwing.</summary>
-    bool TryUnprotect(string protectedValue, out string plaintext);
-}
 
 /// <summary>Data Protection purpose strings (§8). Changing a purpose makes every secret stored under it unreadable, so
 /// they are versioned and fixed.</summary>

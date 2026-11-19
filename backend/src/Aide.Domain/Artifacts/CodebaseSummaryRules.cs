@@ -1,5 +1,7 @@
 using Aide.Domain.Agents;
 using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Domain.Artifacts;
 
@@ -26,7 +28,7 @@ public static class CodebaseSummaryRules
     ];
 
     /// <summary>Whether a type is stored locked without an approval gate (<c>codebase_summary</c>, FR-70; <c>source_items</c>, FR-170).</summary>
-    public static bool IsAutoLocked(ArtifactType type) => type is ArtifactType.CodebaseSummary or ArtifactType.SourceItems;
+    public static bool IsAutoLocked(string type) => type is SdlcArtifacts.CodebaseSummary or SdlcArtifacts.SourceItems;
 
     /// <summary>The required sections missing from <paramref name="markdown"/>, in order.</summary>
     public static IReadOnlyList<string> Missing(string markdown) => SpecSections.Missing(markdown, RequiredSections);

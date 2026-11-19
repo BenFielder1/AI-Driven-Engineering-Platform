@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Domain.Notifications;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Notifications;
 
@@ -75,7 +75,7 @@ public sealed class NotificationComposer(AideDbContext db)
             var facts = new NotificationFacts(type, projectName)
             {
                 GateType = gate.Type,
-                ArtifactType = artifact?.Type.ToWire(),
+                ArtifactType = artifact?.Type,
                 ArtifactVersion = artifact?.Version,
             };
             return new ComposedNotification(type, projectId, projectName, sourceId, NotificationMessages.Compose(facts), NotificationRules.LinkPath(type, projectId), gate);

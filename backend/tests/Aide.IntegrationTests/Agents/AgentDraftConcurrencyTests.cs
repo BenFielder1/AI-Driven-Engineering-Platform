@@ -1,9 +1,5 @@
 using Aide.Api.Features.Lifecycle;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
-using Aide.Domain.Entities;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence;
@@ -14,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;
 
@@ -36,7 +33,7 @@ public sealed class AgentDraftConcurrencyTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
         rival.ProjectId = id;
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
 
         var first = Assert.Single(await AgentJobs.RunQueuedAsync(app, id));
@@ -44,14 +41,14 @@ public sealed class AgentDraftConcurrencyTests(AideApiFactory factory)
         Assert.True(rival.Fired);
         Assert.Equal(JobStatus.Dead, first.Status); // the test harness records a transient failure as dead; the worker retries
         Assert.StartsWith("CONFLICT: ", first.LastError, StringComparison.Ordinal);
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.TechnicalSpecification));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.TechnicalSpecification));
 
         await AgentJobs.RunAsync(app, first);
 
         Assert.Equal(1, responder.Calls);
         var run = Assert.Single(await AgentJobs.RunsAsync(app, id));
         Assert.Equal(AgentRunStatus.Succeeded, run.Status);
-        var spec = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.TechnicalSpecification));
+        var spec = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.TechnicalSpecification));
         Assert.Equal(((Guid?)run.Id, ArtifactStatus.Draft), (spec.AgentRunId, spec.Status));
         Assert.Equal((long)run.InputTokens + run.OutputTokens, (await LifecycleSeed.ProjectAsync(app, id)).TokensUsed);
         Assert.Single(await LifecycleSeed.EventsAsync(app, id, Aide.Domain.Common.EventTypes.ArtifactCreated));
@@ -61,7 +58,7 @@ public sealed class AgentDraftConcurrencyTests(AideApiFactory factory)
     public async Task FR29_A_redelivered_plan_job_reuses_its_corrective_run_and_draft()
     {
         var responder = new ScriptedResponder(
-            AgentKind.PlanGenerator,
+            SdlcAgents.PlanGenerator,
             AgentJobs.PlanReply([], [2]),
             AgentJobs.PlanReply([], [1]));
         await using var app = AgentJobs.WithResponders(factory, responder);
@@ -78,7 +75,7 @@ public sealed class AgentDraftConcurrencyTests(AideApiFactory factory)
         Assert.Equal(2, responder.Requests.Count);
         var runs = await AgentJobs.RunsAsync(app, id);
         Assert.Equal([AgentRunStatus.Succeeded, AgentRunStatus.Succeeded], runs.Select(r => r.Status));
-        var plan = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ImplementationPlan));
+        var plan = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ImplementationPlan));
         Assert.Equal((Guid?)AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey), plan.AgentRunId);
         Assert.Equal(tokens, (await LifecycleSeed.ProjectAsync(app, id)).TokensUsed);
         Assert.Equal(runs.Sum(r => (long)r.InputTokens + r.OutputTokens), tokens);
@@ -100,13 +97,13 @@ public sealed class AgentDraftConcurrencyTests(AideApiFactory factory)
 
         Assert.True(rival.Fired);
         Assert.StartsWith("CONFLICT: ", first.LastError, StringComparison.Ordinal);
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ImplementationPlan));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ImplementationPlan));
 
         // The retry finds the project back in specification and drafts nothing.
         await AgentJobs.RunAsync(app, first);
 
         Assert.Equal(1, responder.Calls);
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ImplementationPlan));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ImplementationPlan));
         Assert.Equal(JobStatus.Succeeded, (await LifecycleSeed.JobsAsync(app, id)).Single(j => j.Id == first.Id).Status);
     }
 
@@ -114,11 +111,11 @@ public sealed class AgentDraftConcurrencyTests(AideApiFactory factory)
     private static async Task PlanningReadyAsync(WebApplicationFactory<Program> app, Guid id)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Specification, 2, ApprovalMode.Autonomous);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
         await LifecycleSeed.AddArtifactAsync(
             app,
             id,
-            ArtifactType.TechnicalSpecification,
+            SdlcArtifacts.TechnicalSpecification,
             content: string.Join("\n\n", SpecSections.Required.Select((name, i) => $"## {i + 1}. {name}\nDetails.")),
             projectVersionAtCreation: 2);
     }

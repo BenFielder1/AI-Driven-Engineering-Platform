@@ -1,7 +1,7 @@
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Stack;
+using Tevrin.Engine.Domain.Artifacts;
 using static Aide.UnitTests.Stack.StackTestCatalog;
 
 namespace Aide.UnitTests.Stack;

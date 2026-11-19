@@ -5,14 +5,10 @@ using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Review;
 using Aide.Api.Features.Versions;
-using Aide.Api.Jobs;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Domain.Stack;
@@ -24,6 +20,9 @@ using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Stack;
 
@@ -93,9 +92,9 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
         var id = fixture.Project.Id;
         var composition = await SetCompositionAsync(factory, id);
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Refinement, 1, ApprovalMode.Autonomous);
-        await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
 
-        foreach (var type in new[] { ArtifactType.TechnicalSpecification, ArtifactType.ImplementationPlan })
+        foreach (var type in new[] { SdlcArtifacts.TechnicalSpecification, SdlcArtifacts.ImplementationPlan })
         {
             await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
             Assert.All(await AgentJobs.RunQueuedAsync(factory, id), j => Assert.Equal(JobStatus.Succeeded, j.Status));
@@ -104,7 +103,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
         }
 
         // FR-123: the spec has the composition's sections; FR-121: spec and plan runs record the catalog, with no packs.
-        var spec = (await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.TechnicalSpecification)).Single();
+        var spec = (await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.TechnicalSpecification)).Single();
         Assert.Contains("## API Contract & Error Codes\n", spec.Content, StringComparison.Ordinal);
         Assert.Contains("## Data Model & Migrations\n", spec.Content, StringComparison.Ordinal);
         var early = await AgentJobs.RunsAsync(factory, id);
@@ -125,7 +124,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
 
         // FR-121, FR-125: each step ran as its specialist; the backend-engineer's run records the be-aspnet skill.
         var runs = await AgentJobs.RunsAsync(factory, id);
-        var backend = runs.Single(r => r.Agent == AgentKind.CodeGenerator && r.AgentKey == StackAgents.BackendEngineer);
+        var backend = runs.Single(r => r.Agent == SdlcAgents.CodeGenerator && r.AgentKey == StackAgents.BackendEngineer);
         Assert.Equal(composition.CatalogVersion, backend.CatalogVersion);
         var loaded = Packs(backend);
         Assert.Contains(loaded, p => p.GetProperty("id").GetString() == "be-aspnet" && p.GetProperty("version").GetString()!.StartsWith("1.0.0", StringComparison.Ordinal));
@@ -140,7 +139,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
         Assert.DoesNotContain(report.Violations, v => v.Source == FindingSource.Deterministic);
         if (report.Decision == ReviewDecision.ReviewRequired)
         {
-            var optimization = (await AgentJobs.ArtifactsAsync(factory, id, ArtifactType.OptimizationPlan)).Single();
+            var optimization = (await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.OptimizationPlan)).Single();
             await ArtifactApi.ReadAsync(await ArtifactApi.DecideAsync(fixture.Owner.Client, id, optimization.Id, "approve"));
             await AgentJobs.RunQueuedAsync(factory, id);
             report = await LatestReportAsync(fixture);
@@ -155,8 +154,8 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
     {
         await SetCompositionAsync(app, id);
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Specification, 2, ApprovalMode.Autonomous);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: Spec("API Contract & Error Codes", "Data Model & Migrations"), projectVersionAtCreation: 2);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: Spec("API Contract & Error Codes", "Data Model & Migrations"), projectVersionAtCreation: 2);
     }
 
     [Fact]
@@ -170,7 +169,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
                 new { number = 2, title = "Schema", task = "Migrate.", files = new[] { new { path = "backend/src/App.Infrastructure/Migrations/20260101000000_Init.cs", action = "create" } }, dependencies = DependsOnStep1, agent = "backend-engineer", covers = Fr1 },
             },
         });
-        await using var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.PlanGenerator, reply));
+        await using var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.PlanGenerator, reply));
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
         await PlanningReadyAsync(app, id);
@@ -182,7 +181,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
         Assert.Equal(2, runs.Count);
         Assert.StartsWith("INVALID_PLAN: ", runs[^1].Error, StringComparison.Ordinal);
         Assert.Contains("Migrations belong to data-engineer", runs[^1].Error, StringComparison.Ordinal);
-        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.ImplementationPlan));
+        Assert.Empty(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.ImplementationPlan));
     }
 
     [Fact]
@@ -196,7 +195,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
                 new { number = 2, title = "API", task = "Endpoints.", files = new[] { new { path = "backend/src/App.Api/Features/Tasks/TasksEndpoints.cs", action = "create" } }, dependencies = DependsOnStep1, agent = "backend-engineer", covers = Fr1 },
             },
         });
-        await using var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.PlanGenerator, reply));
+        await using var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.PlanGenerator, reply));
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
         await PlanningReadyAsync(app, id);
@@ -214,9 +213,9 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
     private static async Task<IReadOnlyList<ExecutionStep>> SeedExecutionAsync(WebApplicationFactory<Program> app, Guid id, PlanStep[] plan)
     {
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Execution, 4, ApprovalMode.Advisory);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.TechnicalSpecification, content: "# Spec\n\nReact + ASP.NET + EF Core.");
-        var planArtifact = await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ImplementationPlan, content: PlanDocument.Render(ArtifactType.ImplementationPlan, plan));
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.TechnicalSpecification, content: "# Spec\n\nReact + ASP.NET + EF Core.");
+        var planArtifact = await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ImplementationPlan, content: PlanDocument.Render(SdlcArtifacts.ImplementationPlan, plan));
         return await ProjectApi.WithDbAsync<IReadOnlyList<ExecutionStep>>(app, async db =>
         {
             var steps = plan.Select(p => new ExecutionStep
@@ -242,7 +241,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
     {
         const string migration = "backend/src/App.Infrastructure/Migrations/20260101000000_Init.cs";
         var reply = JsonSerializer.Serialize(new { stepNumber = 1, files = new[] { new { path = migration, content = "// edited\n" } }, notes = "scripted" });
-        await using var app = AgentJobs.WithResponders(factory, new ScriptedResponder(AgentKind.CodeGenerator, reply));
+        await using var app = AgentJobs.WithResponders(factory, new ScriptedResponder(SdlcAgents.CodeGenerator, reply));
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
         await SetCompositionAsync(app, id);
@@ -275,7 +274,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
             files = new[] { new { path = "backend/src/App.Api/Program.cs", content = "// /api/health/live /api/health/ready\ndb.Database.EnsureCreated();\n" } },
             notes = "scripted",
         });
-        await using var app = AgentJobs.WithResponders(factory, review, new ScriptedResponder(AgentKind.CodeGenerator, code));
+        await using var app = AgentJobs.WithResponders(factory, review, new ScriptedResponder(SdlcAgents.CodeGenerator, code));
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
         await SetCompositionAsync(app, id);
@@ -284,13 +283,13 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
 
         var jobs = await AgentJobs.RunQueuedAsync(app, id);
 
-        Assert.Contains(jobs, j => j.Type == JobTypes.Review && j.Status == JobStatus.Succeeded);
+        Assert.Contains(jobs, j => j.Type == SdlcJobTypes.Review && j.Status == JobStatus.Succeeded);
         var latest = await LatestReportAsync(fixture);
         var finding = Assert.Single(latest.Violations, v => v.Source == FindingSource.Deterministic);
         Assert.Equal((ReviewCategory.Architecture, Severity.Major, "backend/src/App.Api/Program.cs"), (finding.Category, finding.Severity, finding.File));
         var architecture = latest.CategoryScores.Single(c => c.Category == ReviewCategory.Architecture);
         Assert.Equal((0.95m, 0.10m, 0.85m), (architecture.AgentScore, architecture.Penalty, architecture.Score));
-        var reviewRun = (await AgentJobs.RunsAsync(app, id)).Single(r => r.Agent == AgentKind.CodeReview);
+        var reviewRun = (await AgentJobs.RunsAsync(app, id)).Single(r => r.Agent == SdlcAgents.CodeReview);
         Assert.Equal("[]", reviewRun.Packs);
     }
 
@@ -321,14 +320,14 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
             var versionId = await ProjectApi.WithDbAsync(app, db => db.ReleaseVersions.AsNoTracking().Where(v => v.ProjectId == id).Select(v => v.Id).SingleAsync(Ct));
             await ProjectApi.WithDbAsync(app, async db =>
             {
-                await new JobEnqueuer(db, TimeProvider.System).EnqueueAsync(JobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(id, versionId), id, Ct);
+                await new JobEnqueuer(db, TimeProvider.System, Aide.Api.Jobs.AideJobPayloadSerializer.Instance, app.Services.GetRequiredService<JobTypeRegistry>(), NullLogger<JobEnqueuer>.Instance).EnqueueAsync(SdlcJobTypes.RepositoryAnalysis, new RepositoryAnalysisJobPayload(id, versionId), id, Ct);
                 await db.SaveChangesAsync(Ct);
             });
         }
 
         Assert.All(await AgentJobs.RunQueuedAsync(app, id), j => Assert.Equal(JobStatus.Succeeded, j.Status));
 
-        var summary = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.CodebaseSummary));
+        var summary = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.CodebaseSummary));
         var stackSection = SpecSections.Extract(summary.Content, "Stack & Dependencies")!;
         Assert.Contains("fe-vue", stackSection, StringComparison.Ordinal);
         Assert.Contains("mismatch", stackSection, StringComparison.OrdinalIgnoreCase);
@@ -337,11 +336,11 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
 
         // The spec job requires "Stack Migration" (the Fake spec adds it).
         await LifecycleSeed.SetProjectAsync(app, id, Phase.Refinement, 1, ApprovalMode.Autonomous);
-        await LifecycleSeed.AddArtifactAsync(app, id, ArtifactType.ProjectRequest, content: ProjectRequest);
+        await LifecycleSeed.AddArtifactAsync(app, id, SdlcArtifacts.ProjectRequest, content: ProjectRequest);
         await ProjectApi.ReadAsync<AdvanceResultDto>(await LifecycleSeed.AdvanceAsync(fixture.Contributor.Client, id));
         Assert.All(await AgentJobs.RunQueuedAsync(app, id), j => Assert.Equal(JobStatus.Succeeded, j.Status));
         Assert.Contains("#### Stack Migration", specs.Requests[^1].System, StringComparison.Ordinal);
-        var spec = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, ArtifactType.TechnicalSpecification));
+        var spec = Assert.Single(await AgentJobs.ArtifactsAsync(app, id, SdlcArtifacts.TechnicalSpecification));
         Assert.Contains("## Stack Migration\n", spec.Content, StringComparison.Ordinal);
     }
 
@@ -358,7 +357,7 @@ public sealed class CompositionAgentTests(AideApiFactory factory)
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<LlmRequest> _requests = new();
 
-        public AgentKind Agent => inner.Agent;
+        public string Agent => inner.Agent;
 
         public IReadOnlyList<LlmRequest> Requests => [.. _requests];
 

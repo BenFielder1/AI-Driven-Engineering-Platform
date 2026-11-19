@@ -5,13 +5,15 @@ using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 using ReleaseEntity = Aide.Domain.Entities.Release;
 
 namespace Aide.Api.Features.Release;
@@ -197,7 +199,7 @@ public sealed partial class ReleaseJobHandler(
             return latest.Status == ReleaseStatus.InProgress ? latest : null;
         }
 
-        var created = await ReleaseRecords.AddAttemptAsync(db, project, ReleaseRecords.PhaseEntered, SystemActor.Name, time.GetUtcNow(), cancellationToken);
+        var created = await ReleaseRecords.AddAttemptAsync(db, project, ReleaseRecords.StageEntered, SystemActor.Name, time.GetUtcNow(), cancellationToken);
         await SaveAsync(cancellationToken);
         db.ChangeTracker.Clear();
         return created;
@@ -500,11 +502,12 @@ public sealed partial class ReleaseJobHandler(
 /// <summary>A release job that ended without succeeding (retries used up) fails the project's in-progress attempts with its last (token-free) error.</summary>
 public sealed class ReleaseJobEndedHook(TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.Release || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.Release || job.ProjectId is not { } projectId)
         {
             return;
         }
@@ -539,9 +542,7 @@ public static class ReleaseServiceCollectionExtensions
         services.AddScoped<ProductionMigrationGate>();
         services.AddScoped<GitHubReleasePublisher>();
         services.AddScoped<IJobEndedHook, MergePollJobEndedHook>();
-        services.AddJobHandler<MergePollJobHandler>(JobTypes.MergePoll);
         services.AddScoped<IJobEndedHook, ReleaseJobEndedHook>();
-        services.AddJobHandler<ReleaseJobHandler>(JobTypes.Release);
         return services;
     }
 }

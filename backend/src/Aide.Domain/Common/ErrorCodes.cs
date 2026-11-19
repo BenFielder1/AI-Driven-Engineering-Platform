@@ -1,3 +1,4 @@
+
 namespace Aide.Domain.Common;
 
 /// <summary>
@@ -33,6 +34,9 @@ public static class ErrorCodes
     public const string ArtifactLocked = "ARTIFACT_LOCKED";
     public const string GateNotPending = "GATE_NOT_PENDING";
     public const string InvalidDecision = "INVALID_DECISION";
+
+    /// <summary>FR-301, SPEC §6: the run's pinned pipeline definition names guards, handlers or tools this build doesn't register.</summary>
+    public const string DefinitionUnavailable = "DEFINITION_UNAVAILABLE";
 
     /// <summary>
     /// FR-58: an artifact version can't be restored now; the ProblemDetails <c>reason</c> says why
@@ -421,6 +425,7 @@ public static class ErrorCodes
         [ArtifactLocked] = 409,
         [GateNotPending] = 409,
         [InvalidDecision] = 400,
+        [DefinitionUnavailable] = 409,
         [RestoreNotAllowed] = 409,
         [RefinementInProgress] = 409,
         [InvalidPlan] = 400,

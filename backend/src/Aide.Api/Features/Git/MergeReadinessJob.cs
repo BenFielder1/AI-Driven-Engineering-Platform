@@ -1,12 +1,11 @@
 using System.Text.Json;
-using Aide.Api.Jobs;
 using Aide.Domain.Common;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Releases;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Features.Git;
 
@@ -65,7 +64,6 @@ public static class MergeReadinessServiceCollectionExtensions
         services.AddScoped<GitHostTargets>();
         services.AddScoped<MergeReadinessService>();
         services.AddSingleton<MergeReadinessThrottle>();
-        services.AddJobHandler<MergeReadinessJobHandler>(JobTypes.MergeReadiness);
         return services;
     }
 }

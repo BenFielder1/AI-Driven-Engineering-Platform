@@ -1,6 +1,9 @@
 using System.Text.RegularExpressions;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Domain.Projects;
 
@@ -275,7 +278,7 @@ public static partial class ProjectSettingsRules
     // ---------------------------------------------------------------- LLM
 
     /// <summary>Anthropic and OpenAI need an API key; Ollama and Fake don't.</summary>
-    public static bool RequiresApiKey(LlmProvider provider) => provider is LlmProvider.Anthropic or LlmProvider.Openai;
+    public static bool RequiresApiKey(LlmProvider provider) => LlmProviderKeys.Required(provider);
 
     /// <summary>
     /// "Missing credentials never block": Fake and Ollama are always usable; Anthropic and OpenAI are usable when a
@@ -324,7 +327,7 @@ public static partial class ProjectSettingsRules
     public static bool IsWellFormedApiKey(string apiKey)
     {
         ArgumentNullException.ThrowIfNull(apiKey);
-        return !Agents.SecretRedaction.HasWhitespaceOrControl(apiKey);
+        return !Tevrin.Engine.Domain.Agents.SecretRedaction.HasWhitespaceOrControl(apiKey);
     }
 
     /// <summary>

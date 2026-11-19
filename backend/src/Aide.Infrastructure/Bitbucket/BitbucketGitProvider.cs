@@ -5,6 +5,7 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.GitLab;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Infrastructure.Bitbucket;
 

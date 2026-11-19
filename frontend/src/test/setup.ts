@@ -13,6 +13,7 @@ import { resetGitHubDb } from '../mocks/handlers/github'
 import { resetGitLabDb } from '../mocks/handlers/gitlab'
 import { resetLlmDb } from '../mocks/handlers/llm'
 import { resetNotificationsDb } from '../mocks/handlers/notifications'
+import { resetPipelinesDb } from '../mocks/handlers/pipeline-store'
 import { resetProjectsDb } from '../mocks/handlers/projects'
 import { resetStackDb } from '../mocks/handlers/stack'
 import { resetTrackersDb } from '../mocks/handlers/trackers'
@@ -80,6 +81,7 @@ afterEach(() => {
   resetAuthDb()
   resetProjectsDb()
   resetNotificationsDb()
+  resetPipelinesDb()
   resetAdminDb()
   resetConnectionsDb()
   resetLlmDb()

@@ -5,14 +5,8 @@ using System.Text.Json;
 using Aide.Api.Agents;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Runs;
-using Aide.Api.Jobs;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
-using Aide.Infrastructure.Agents;
-using Aide.Infrastructure.Security;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -20,6 +14,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Agents;
 
@@ -35,7 +31,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
 
     private readonly ScriptedHandler _ollama = new();
     private readonly ScriptedHandler _anthropic = new();
-    private readonly CountingResponder _spec = new(AgentKind.SpecGenerator, "## 1. Overview\nA fake spec.");
+    private readonly CountingResponder _spec = new(SdlcAgents.SpecGenerator, "## 1. Overview\nA fake spec.");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -72,8 +68,8 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
         Assert.Contains("Add rate limits.", _spec.LastRequest!.System + _spec.LastRequest.Messages[0].Content, StringComparison.Ordinal);
         var run = await ProjectApi.ReadAsync<AgentRunDetailDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/runs/{outcome.RunId}", UriKind.Relative), Ct));
         Assert.Equal(job.Id, run.Id); // one run row per job
-        Assert.Equal((AgentKind.SpecGenerator, Aide.Domain.Lifecycle.Phase.Refinement, LlmProvider.Fake, "fake-1", "7"), (run.Agent, run.Phase, run.Provider, run.Model, run.PromptVersion)); // FR-199: v7
-        Assert.Equal([new RunInputArtifactDto(ArtifactType.ProjectRequest, 2)], run.InputArtifacts);
+        Assert.Equal((SdlcAgents.SpecGenerator, Aide.Domain.Lifecycle.Phase.Refinement, LlmProvider.Fake, "fake-1", "7"), (run.Agent, run.Phase, run.Provider, run.Model, run.PromptVersion)); // FR-199: v7
+        Assert.Equal([new RunInputArtifactDto(SdlcArtifacts.ProjectRequest, 2)], run.InputArtifacts);
         Assert.Equal((AgentRunStatus.Succeeded, 1, (string?)null), (run.Status, run.Attempts, run.Error));
         Assert.True(run.InputTokens > 0 && run.OutputTokens > 0);
         Assert.True(run.DurationMs >= 0);
@@ -579,7 +575,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             {
                 services.AddHttpClient<OllamaLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => _ollama);
                 services.AddHttpClient<AnthropicLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => _anthropic);
-                services.AddHttpClient(Aide.Infrastructure.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _anthropic);
+                services.AddHttpClient(Tevrin.Engine.Runtime.Llm.IAnthropicModelInfo.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _anthropic);
                 services.AddHttpClient<OpenAiLlmProvider>().ConfigurePrimaryHttpMessageHandler(() => new ScriptedHandler());
                 services.AddSingleton<IFakeAgentResponder>(_spec);
             });
@@ -597,15 +593,15 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             new { type = "message_stop" },
         }.Select(e => "data: " + JsonSerializer.Serialize(e) + Environment.NewLine + Environment.NewLine));
 
-    private static JobExecution NewJob(Guid projectId) => new(Guid.CreateVersion7(), JobTypes.SpecGeneration, "{}", projectId, 1);
+    private static JobExecution NewJob(Guid projectId) => new(Guid.CreateVersion7(), SdlcJobTypes.SpecGeneration, "{}", projectId, 1);
 
     private static AgentRunRequest Spec(Guid projectId, JobExecution job) => new()
     {
         ProjectId = projectId,
-        Agent = AgentKind.SpecGenerator,
+        Agent = SdlcAgents.SpecGenerator,
         Job = job,
         Inputs = new Dictionary<string, string?> { ["PROJECT_REQUEST"] = ProjectRequest },
-        InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), ArtifactType.ProjectRequest, 2)],
+        InputArtifacts = [new InputArtifactRef(Guid.CreateVersion7(), SdlcArtifacts.ProjectRequest, 2)],
     };
 
     private static async Task<AgentRunOutcome> RunAsync(WebApplicationFactory<Program> app, AgentRunRequest request)
@@ -700,11 +696,11 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             runner.RunAsync(Spec(job.ProjectId!.Value, job), cancellationToken);
     }
 
-    private sealed class CountingResponder(AgentKind agent, string text) : IFakeAgentResponder
+    private sealed class CountingResponder(string agent, string text) : IFakeAgentResponder
     {
         private int _calls;
 
-        public AgentKind Agent => agent;
+        public string Agent => agent;
 
         public int Calls => _calls;
 

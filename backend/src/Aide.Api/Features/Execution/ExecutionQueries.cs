@@ -1,12 +1,13 @@
 using Aide.Api.Features.Projects;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Jobs;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Execution;
 
@@ -23,7 +24,7 @@ public static class ExecutionQueries
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         return await db.Artifacts.AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Status == ArtifactStatus.Locked
-                && (a.Type == ArtifactType.ImplementationPlan || a.Type == ArtifactType.OptimizationPlan))
+                && (a.Type == SdlcArtifacts.ImplementationPlan || a.Type == SdlcArtifacts.OptimizationPlan))
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)
             .Select(a => (Guid?)a.Id)
@@ -59,7 +60,7 @@ public static class ExecutionQueries
     {
         ArgumentNullException.ThrowIfNull(db);
         return db.Jobs.AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.Execution && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Execution && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running),
             cancellationToken);
     }
 

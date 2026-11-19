@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Api.Features.Bitbucket;
 

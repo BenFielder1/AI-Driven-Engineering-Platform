@@ -5,7 +5,6 @@ using Aide.Api.Features.Connections;
 using Aide.Api.Features.Tokens;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Infrastructure.Security;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;

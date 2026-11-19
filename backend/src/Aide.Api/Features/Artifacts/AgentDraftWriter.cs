@@ -1,9 +1,10 @@
 using Aide.Domain.Access;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Artifacts;
 
@@ -13,7 +14,7 @@ namespace Aide.Api.Features.Artifacts;
 /// (author <c>agent</c>). Nothing is saved here: the caller saves it after the run's completion was committed.
 /// <para>
 /// The project row is loaded tracked and its <c>updated_at</c> bumped, so the save carries the project's <c>xmin</c>: a
-/// rollback, phase fallback or any other project change committed between the <see cref="ArtifactRules.CanCreateDraft"/>
+/// rollback, phase fallback or any other project change committed between the <see cref="SdlcArtifactRules.CanCreateDraft"/>
 /// check and the save makes it fail with a concurrency conflict instead of leaving a draft in a phase that no longer
 /// allows it. Concurrent writers of the same type collide on the same <c>xmin</c>, the unique version or the superseded
 /// draft's <c>xmin</c>. The job retries transiently; the retry re-uses the succeeded run and re-checks the phase.
@@ -23,9 +24,9 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
 {
     /// <summary>
     /// The new draft, the one this run already created (idempotent), or <c>null</c> when the type can't be drafted in the
-    /// project's current phase any more (<see cref="ArtifactRules.CanCreateDraft"/>) or the project is gone.
+    /// project's current phase any more (<see cref="SdlcArtifactRules.CanCreateDraft"/>) or the project is gone.
     /// </summary>
-    public async Task<Artifact?> AddAsync(Guid projectId, ArtifactType type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<Artifact?> AddAsync(Guid projectId, string type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
         var existingForRun = await db.Artifacts.AsNoTracking()
@@ -36,7 +37,7 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
         }
 
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
-        if (project is null || ArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status).IsFailure)
+        if (project is null || SdlcArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status).IsFailure)
         {
             return null;
         }
@@ -92,15 +93,15 @@ public sealed class AgentDraftWriter(AideDbContext db, TimeProvider time)
     }
 
     /// <summary>
-    /// FR-70: adds an auto-locked version (<see cref="ArtifactRules.InitialStatus"/>; only <c>codebase_summary</c>) written
+    /// FR-70: adds an auto-locked version (<see cref="SdlcArtifactRules.InitialStatus"/>; only <c>codebase_summary</c>) written
     /// by an agent in release version <paramref name="releaseVersionId"/>: version = latest + 1 (project-wide, like every
     /// type), parent = latest, stored <c>locked</c> with no gate, and <c>CODEBASE_SUMMARY_CREATED</c>. Idempotent per run;
     /// <c>null</c> when the project is gone or <paramref name="releaseVersionId"/> is no longer its current version. Not saved.
     /// </summary>
-    public async Task<Artifact?> AddLockedAsync(Guid projectId, Guid releaseVersionId, ArtifactType type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<Artifact?> AddLockedAsync(Guid projectId, Guid releaseVersionId, string type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
-        if (ArtifactRules.InitialStatus(type) != ArtifactStatus.Locked)
+        if (SdlcArtifactRules.InitialStatus(type) != ArtifactStatus.Locked)
         {
             throw new ArgumentOutOfRangeException(nameof(type), type, "Only auto-locked types are stored locked by an agent.");
         }

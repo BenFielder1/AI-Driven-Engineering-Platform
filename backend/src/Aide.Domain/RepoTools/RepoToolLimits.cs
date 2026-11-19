@@ -1,3 +1,5 @@
+using Tevrin.Engine.Domain.Common;
+
 namespace Aide.Domain.RepoTools;
 
 /// <summary>The read-only repo tools agents may call (FR-71, D-V2-9).</summary>
@@ -20,7 +22,7 @@ public static class RepoToolErrors
     public const string UnsafePath = "UNSAFE_PATH";
 
     /// <summary>The run used its 25 calls or 400 KB; the agent must answer with what it has.</summary>
-    public const string ToolLimit = "TOOL_LIMIT";
+    public const string ToolLimit = EngineErrorCodes.ToolLimit;
 
     /// <summary>No such file or directory (hidden paths such as <c>.aide/</c> look missing too).</summary>
     public const string NotFound = "NOT_FOUND";

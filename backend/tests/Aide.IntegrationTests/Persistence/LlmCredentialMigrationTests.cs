@@ -1,12 +1,12 @@
 using Aide.Domain.Entities;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Persistence;
-using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Persistence;
 
@@ -82,8 +82,8 @@ public sealed class LlmCredentialMigrationTests(AideApiFactory factory)
         db.AgentRuns.Add(new AgentRun
         {
             ProjectId = WithKey,
-            Agent = Aide.Domain.Agents.AgentKind.IdeaRefinement,
-            Phase = Aide.Domain.Lifecycle.Phase.Refinement,
+            Agent = SdlcAgents.IdeaRefinement,
+            Stage = Aide.Domain.Lifecycle.Phase.Refinement.ToWire(),
             Provider = LlmProvider.Anthropic,
             Model = "claude-opus-5-5",
             PromptVersion = "idea-refinement@1",

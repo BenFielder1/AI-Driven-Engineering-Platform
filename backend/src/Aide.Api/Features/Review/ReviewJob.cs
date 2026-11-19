@@ -8,11 +8,9 @@ using Aide.Api.Features.Stack;
 using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Review;
 using Aide.Domain.Specs;
@@ -22,6 +20,13 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Review;
 
@@ -74,7 +79,7 @@ internal sealed record FailureHistoryInput(IReadOnlyList<FailureRecord> Previous
 internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult Result);
 
 /// <summary>
-/// FR-38–FR-40: one review cycle (job <see cref="JobTypes.Review"/>, queued on entering review, by
+/// FR-38–FR-40: one review cycle (job <see cref="SdlcJobTypes.Review"/>, queued on entering review, by
 /// <c>POST /review</c>, or by an escalation <c>continue</c> with no optimisation plan to run).
 /// <list type="number">
 /// <item>Start the cycle once per job: <c>projects.review_cycle</c> + 1, pending <c>pre_release</c> and escalation gates of the
@@ -256,9 +261,9 @@ public sealed partial class ReviewJobHandler(
 
         // The decision gates of an earlier cycle no longer describe the code being reviewed: a new decision replaces them.
         var superseded = await db.ApprovalGates
-            .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending && (g.Type == GateType.PreRelease || g.Type == GateType.Escalation))
+            .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending && (g.Type == SdlcGates.PreRelease || g.Type == EngineGates.Escalation))
             .ToListAsync(cancellationToken);
-        foreach (var gate in superseded)
+        foreach (var gate in Artifacts.EventOrder.Cancelled(superseded))
         {
             gate.Status = GateRules.Cancel(gate.Status);
             gate.DecidedAt = now;
@@ -269,7 +274,7 @@ public sealed partial class ReviewJobHandler(
         db.AddEvent(
             EventTypes.ReviewStarted,
             project.Id,
-            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = payload.Trigger, checkpoint = project.Checkpoint, releaseVersionId = project.CurrentReleaseVersionId },
+            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = AgentJobTriggerWire.ToWire(payload.Trigger), checkpoint = project.Checkpoint, releaseVersionId = project.CurrentReleaseVersionId },
             SystemActor.Name,
             now);
         await SaveAsync("starting the review cycle", cancellationToken);
@@ -310,11 +315,11 @@ public sealed partial class ReviewJobHandler(
         var selected = ReviewCode.SelectForReading(tree, changed.Keys, limits);
         var contents = await Git(() => workingCopies.ReadCommittedAsync(project.Id, working.Branch, selected, cancellationToken)) ?? [];
 
-        var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
-        var implementation = await inputs.CurrentAsync(project.Id, ArtifactType.ImplementationPlan, cancellationToken);
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var implementation = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ImplementationPlan, cancellationToken);
         var currentPlanId = await ExecutionQueries.CurrentPlanIdAsync(db, project.Id, cancellationToken);
         var optimization = currentPlanId is { } planId && planId != implementation?.Id
-            ? await inputs.CurrentAsync(project.Id, ArtifactType.OptimizationPlan, cancellationToken)
+            ? await inputs.CurrentAsync(project.Id, SdlcArtifacts.OptimizationPlan, cancellationToken)
             : null;
 
         var specText = spec?.Content ?? string.Empty;
@@ -396,7 +401,7 @@ public sealed partial class ReviewJobHandler(
     {
         var maxFiles = project.MaxFilesPerStep;
         var stack = material.Stack.Stack;
-        var agents = material.Stack.PlanAgents(ArtifactType.OptimizationPlan);
+        var agents = material.Stack.PlanAgents(SdlcArtifacts.OptimizationPlan);
 
         // FR-243: an optimisation plan that leaves out a required deployment file the branch lacks gets that step first.
         var deployFiles = stack is null
@@ -416,7 +421,7 @@ public sealed partial class ReviewJobHandler(
         AgentRunRequest Request(string? runFeedback) => new()
         {
             ProjectId = project.Id,
-            Agent = AgentKind.CodeReview,
+            Agent = SdlcAgents.CodeReview,
             Job = job,
             Inputs = new Dictionary<string, string?>
             {
@@ -558,7 +563,7 @@ public sealed partial class ReviewJobHandler(
         Artifact? draft = null;
         if (ReviewAssessment.DraftsOptimizationPlan(decision.Decision, outcome.Result.OptimizationPlan.Count))
         {
-            draft = await drafts.AddAsync(project.Id, ArtifactType.OptimizationPlan, outcome.Result.OptimizationPlanMarkdown!, outcome.Run.RunId, now, cancellationToken);
+            draft = await drafts.AddAsync(project.Id, SdlcArtifacts.OptimizationPlan, outcome.Result.OptimizationPlanMarkdown!, outcome.Run.RunId, now, cancellationToken);
         }
 
         var report = new ComplianceReport
@@ -596,12 +601,12 @@ public sealed partial class ReviewJobHandler(
         {
             case ReviewDecision.ReleaseEligible:
                 // FR-39: release still needs the pre_release gate, in every approval mode (§4.2).
-                writer.AddGate(project, GateType.PreRelease, null, SystemActor.Name, now, $"Review cycle {cycle.ToString(CultureInfo.InvariantCulture)}: score {score} meets the threshold {threshold}");
+                writer.AddGate(project, SdlcGates.PreRelease, null, SystemActor.Name, now, $"Review cycle {cycle.ToString(CultureInfo.InvariantCulture)}: score {score} meets the threshold {threshold}");
                 break;
             case ReviewDecision.EscalationRequired:
                 writer.AddGate(
                     project,
-                    GateType.Escalation,
+                    EngineGates.Escalation,
                     null,
                     SystemActor.Name,
                     now,
@@ -695,7 +700,7 @@ public sealed partial class ReviewJobHandler(
         db.ChangeTracker.Clear();
         var now = time.GetUtcNow();
         now = now.AddTicks(-(now.Ticks % EventLog.Step.Ticks));
-        var draft = await drafts.AddAsync(project.Id, ArtifactType.OptimizationPlan, outcome.Result.OptimizationPlanMarkdown!, outcome.Run.RunId, now, cancellationToken);
+        var draft = await drafts.AddAsync(project.Id, SdlcArtifacts.OptimizationPlan, outcome.Result.OptimizationPlanMarkdown!, outcome.Run.RunId, now, cancellationToken);
         if (draft is null)
         {
             LogSkipped(logger, "the project's phase no longer allows an optimisation plan draft");
@@ -907,11 +912,12 @@ public static class ReviewEvents
 /// </summary>
 public sealed class ReviewJobEndedHook(TimeProvider time) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.Review || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.Review || job.ProjectId is not { } projectId)
         {
             return;
         }

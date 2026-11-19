@@ -1,5 +1,6 @@
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Jobs;
+using Aide.Api.Logging;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
@@ -8,6 +9,10 @@ using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
 
 namespace Aide.Api.Agents;
 
@@ -17,7 +22,7 @@ namespace Aide.Api.Agents;
 /// the rejected reply and the error (FR-28, FR-29).
 /// </summary>
 public sealed record ArtifactAgentSpec(
-    ArtifactType Type,
+    string Type,
     Func<string, Result<string>> ToContent,
     Func<string, DomainError, AgentRunRequest> Corrective)
 {
@@ -99,7 +104,7 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
         {
             // The project changed (e.g. a rollback or phase fallback), a concurrent writer took the version or changed the
             // superseded draft: retry. The retry re-uses the succeeded run and re-checks whether the draft is still allowed.
-            throw new JobFailedException($"The {type.ToWire()} draft collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
+            throw new JobFailedException($"The {type} draft collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
         }
     }
 
@@ -111,10 +116,10 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The {Agent} reply was rejected with {ErrorCode}; re-running once with the reasons as feedback: {Reason}")]
-    private static partial void LogRejected(ILogger logger, AgentKind agent, string errorCode, string reason);
+    private static partial void LogRejected(ILogger logger, LoggedKey agent, string errorCode, string reason);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "No {ArtifactType} draft created: the project's phase no longer allows it")]
-    private static partial void LogDraftSkipped(ILogger logger, ArtifactType artifactType);
+    private static partial void LogDraftSkipped(ILogger logger, LoggedKey artifactType);
 }
 
 /// <summary>The project and artifact inputs of an agent job (FR-24), read with their integrity re-checked (FR-20).</summary>
@@ -138,7 +143,7 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
         db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
 
     /// <summary>The current (highest locked) version of a type whose content still matches its hash, or <c>null</c>.</summary>
-    public async Task<Artifact?> CurrentAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
+    public async Task<Artifact?> CurrentAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         var artifact = await db.Artifacts.AsNoTracking()
@@ -149,7 +154,7 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
     }
 
     /// <summary>The highest version of a type that is intact (not corrupted), whatever its status, or <c>null</c>.</summary>
-    public async Task<Artifact?> LatestIntactAsync(Guid projectId, ArtifactType type, CancellationToken cancellationToken)
+    public async Task<Artifact?> LatestIntactAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
         var candidates = await db.Artifacts.AsNoTracking()
@@ -172,7 +177,7 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
     /// The version a re-run should revise (FR-13, FR-17): the rejected artifact, or the artifact of the rejected gate, when
     /// it is of <paramref name="type"/> and intact. Phase entry and regeneration after corruption (FR-20) revise nothing.
     /// </summary>
-    public async Task<Artifact?> PreviousAsync(LifecycleJobPayload payload, ArtifactType type, CancellationToken cancellationToken)
+    public async Task<Artifact?> PreviousAsync(LifecycleJobPayload payload, string type, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(payload);
         Guid? artifactId = payload.Trigger switch
@@ -196,18 +201,18 @@ public sealed class AgentJobInputs(AideDbContext db, ArtifactIntegrityGuard inte
     /// <summary>
     /// Should a job of this trigger still produce a <paramref name="type"/> draft? Phase-entry jobs only while the project
     /// is still in the producing phase (a stale job after a rollback or fallback does nothing); re-runs whenever a draft of
-    /// the type may be created (<see cref="ArtifactRules.CanCreateDraft"/>).
+    /// the type may be created (<see cref="SdlcArtifactRules.CanCreateDraft"/>).
     /// </summary>
-    public static bool ShouldRun(LifecycleJobPayload payload, ArtifactType type, Project project)
+    public static bool ShouldRun(LifecycleJobPayload payload, string type, Project project)
     {
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(project);
-        if (ArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status).IsFailure)
+        if (SdlcArtifactRules.CanCreateDraft(type, project.CurrentPhase, project.Status).IsFailure)
         {
             return false;
         }
 
-        return payload.Trigger != LifecycleJobPayload.PhaseEntered || project.CurrentPhase == ArtifactRules.ProducingPhase(type);
+        return payload.Trigger != LifecycleJobPayload.StageEntered || project.CurrentPhase == SdlcArtifactRules.ProducingPhase(type);
     }
 
     /// <summary>FR-172: for a release version, when its oldest still-queued or running import was queued, and whether a failed import awaits a retry.</summary>

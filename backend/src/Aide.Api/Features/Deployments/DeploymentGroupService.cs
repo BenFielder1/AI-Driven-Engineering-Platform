@@ -1,14 +1,16 @@
 using Aide.Api.Features.Databases;
 using Aide.Api.Features.Projects;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Deployments;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Deployments;
 
@@ -148,7 +150,7 @@ public sealed partial class DeploymentGroupService(
             group.UpdatedAt = now;
             await PreparePartsAsync(group, parts, facts, now, membersOnly: false, cancellationToken);
             await CancelQueuedAsync(projectId, group.Id, now, cancellationToken);
-            jobs.Enqueue(JobTypes.DeploymentSetup, Payload(group, request.Create is not null, linkParts), projectId, now);
+            jobs.Enqueue(SdlcJobTypes.DeploymentSetup, Payload(group, request.Create is not null, linkParts), projectId, now);
         }
 
         db.AddEvent(
@@ -245,7 +247,7 @@ public sealed partial class DeploymentGroupService(
         group.UpdatedAt = now;
         await PreparePartsAsync(group, parts, facts, now, membersOnly: true, cancellationToken);
         await CancelQueuedAsync(projectId, group.Id, now, cancellationToken);
-        jobs.Enqueue(JobTypes.DeploymentSetup, Payload(group, group.SharedResourceId is null, lastJob?.LinkParts), projectId, now);
+        jobs.Enqueue(SdlcJobTypes.DeploymentSetup, Payload(group, group.SharedResourceId is null, lastJob?.LinkParts), projectId, now);
         db.AddEvent(
             EventTypes.SettingsUpdated,
             projectId,
@@ -477,7 +479,7 @@ public sealed partial class DeploymentGroupService(
 
     private async Task CancelQueuedAsync(Guid projectId, Guid groupId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var queued = await db.Jobs.Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup && j.Status == JobStatus.Queued).ToListAsync(cancellationToken);
+        var queued = await db.Jobs.Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DeploymentSetup && j.Status == JobStatus.Queued).ToListAsync(cancellationToken);
         foreach (var job in queued.Where(j => DeploymentTargetService.TryPayload(j.Payload)?.GroupId == groupId))
         {
             job.Status = JobPolicy.Cancel(job.Status);
@@ -488,7 +490,7 @@ public sealed partial class DeploymentGroupService(
     private async Task<DeploymentSetupPayload?> LatestJobPayloadAsync(Guid projectId, Guid groupId, CancellationToken cancellationToken)
     {
         var candidates = await db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DeploymentSetup)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DeploymentSetup)
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
             .Take(50)
             .ToListAsync(cancellationToken);

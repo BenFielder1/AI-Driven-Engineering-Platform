@@ -1,13 +1,13 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.RepoTools;
 using Aide.Infrastructure.Agents;
-using Aide.Infrastructure.Llm;
 using Aide.Infrastructure.RepoTools;
 using Aide.UnitTests.Agents;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.RepoTools;
 
@@ -39,7 +39,7 @@ public sealed class LlmToolLoopTests : IDisposable
         }
     }
 
-    private static LlmRequest Request(AgentKind agent = AgentKind.SpecGenerator) => new()
+    private static LlmRequest Request(string agent = SdlcAgents.SpecGenerator) => new()
     {
         Model = "m-1",
         System = "You are a test.",
@@ -262,10 +262,10 @@ public sealed class LlmToolLoopTests : IDisposable
     [Fact]
     public async Task FR71_Fake_scripted_read_of_etc_passwd_gets_UNSAFE_PATH_and_then_answers()
     {
-        var fake = new FakeLlmProvider([], [new FakeToolScript(AgentKind.IdeaRefinement, FakeToolScripts.PathEscape)]);
+        var fake = new FakeLlmProvider([], [new FakeToolScript(SdlcAgents.IdeaRefinement, FakeToolScripts.PathEscape)]);
         var tools = new RepoToolSession(_root);
 
-        var result = await LlmToolLoop.RunAsync(fake, Request(AgentKind.IdeaRefinement), tools, Ct);
+        var result = await LlmToolLoop.RunAsync(fake, Request(SdlcAgents.IdeaRefinement), tools, Ct);
 
         var call = Assert.Single(tools.Calls);
         Assert.Equal((RepoToolNames.ReadFile, RepoToolErrors.UnsafePath, 0), (call.Tool, call.Error, call.Bytes));
@@ -277,7 +277,7 @@ public sealed class LlmToolLoopTests : IDisposable
     [Fact]
     public async Task FR71_Fake_script_of_30_calls_stops_at_TOOL_LIMIT_and_answers_with_what_it_has()
     {
-        var fake = new FakeLlmProvider([], [new FakeToolScript(AgentKind.SpecGenerator, FakeToolScripts.Many(30))]);
+        var fake = new FakeLlmProvider([], [new FakeToolScript(SdlcAgents.SpecGenerator, FakeToolScripts.Many(30))]);
         var tools = new RepoToolSession(_root);
 
         var result = await LlmToolLoop.RunAsync(fake, Request(), tools, Ct);
@@ -566,7 +566,7 @@ public sealed class LlmToolLoopTests : IDisposable
 
         public List<LlmToolRequest> ToolRequests { get; } = [];
 
-        public Aide.Domain.Entities.LlmProvider Kind => Aide.Domain.Entities.LlmProvider.Fake;
+        public Tevrin.Engine.Domain.Entities.LlmProvider Kind => Tevrin.Engine.Domain.Entities.LlmProvider.Fake;
 
         public Task<LlmCompletion> CompleteAsync(LlmRequest request, CancellationToken cancellationToken)
         {
@@ -596,7 +596,7 @@ public sealed class LlmToolLoopTests : IDisposable
     {
         public bool LastForced { get; private set; }
 
-        public Aide.Domain.Entities.LlmProvider Kind => Aide.Domain.Entities.LlmProvider.Fake;
+        public Tevrin.Engine.Domain.Entities.LlmProvider Kind => Tevrin.Engine.Domain.Entities.LlmProvider.Fake;
 
         public Task<LlmCompletion> CompleteAsync(LlmRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 

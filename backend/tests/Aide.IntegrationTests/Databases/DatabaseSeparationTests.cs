@@ -1,17 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
 using Aide.Api.Features.Databases;
-using Aide.Api.Jobs;
 using Aide.Domain.Common;
 using Aide.Domain.Databases;
 using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.Persistence;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Databases;
 
@@ -58,7 +57,7 @@ public sealed class DatabaseSeparationTests(AideApiFactory factory)
     {
         await ProjectApi.ReadAsync<DeploymentDatabaseDto>(await client.PutAsJsonAsync(DatabasePath(projectId, environment), body, Ct), HttpStatusCode.Accepted);
         var job = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
-            .Where(j => j.ProjectId == projectId && j.Type == JobTypes.DatabaseProvisioning)
+            .Where(j => j.ProjectId == projectId && j.Type == SdlcJobTypes.DatabaseProvisioning)
             .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id)
             .FirstAsync(Ct));
         await DeploymentHarness.SettleAsync(app, job.Id);
@@ -154,7 +153,7 @@ public sealed class DatabaseSeparationTests(AideApiFactory factory)
         {
             var db = scope.ServiceProvider.GetRequiredService<AideDbContext>();
             var job = scope.ServiceProvider.GetRequiredService<JobEnqueuer>().Enqueue(
-                JobTypes.PreviewDatabaseReset, new PreviewDatabaseResetPayload(id, previewId, PreviewResetMethod.ResetSchema, "test"), id);
+                SdlcJobTypes.PreviewDatabaseReset, new PreviewDatabaseResetPayload(id, previewId, PreviewResetMethod.ResetSchema, "test"), id);
             await db.SaveChangesAsync(Ct);
             jobId = job.Id;
         }

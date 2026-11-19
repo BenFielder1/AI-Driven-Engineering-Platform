@@ -1,5 +1,6 @@
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Domain.Projects;
 

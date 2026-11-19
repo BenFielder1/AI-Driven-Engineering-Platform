@@ -1,9 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using Aide.Api.Features.Artifacts;
+using Aide.Api.Features.Projects;
+using Aide.Api.Jobs;
 using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
-using Aide.Domain.Entities;
-using Aide.Domain.Jobs;
+using Tevrin.Engine.Domain.Entities;
 
 namespace Aide.Api.Features.Refinement;
 
@@ -51,7 +52,7 @@ public sealed record RefinementQuestionDto(string Id, string Question, string? R
 public sealed record RefinementRoundDto(
     Guid RunId,
     Guid JobId,
-    AgentJobTrigger? Trigger,
+    [WireEnum(typeof(AgentJobTriggerWire))] string? Trigger,
     AgentRunStatus Status,
     string? Error,
     IReadOnlyList<RefinementAnswerDto> Answers,
@@ -82,7 +83,7 @@ public sealed record RefinementRoundHistoryDto(
     int Round,
     Guid RunId,
     Guid JobId,
-    AgentJobTrigger? Trigger,
+    [WireEnum(typeof(AgentJobTriggerWire))] string? Trigger,
     AgentRunStatus Status,
     string? Error,
     DateTimeOffset StartedAt,

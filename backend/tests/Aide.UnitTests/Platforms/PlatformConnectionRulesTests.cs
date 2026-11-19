@@ -3,6 +3,7 @@ using Aide.Domain.Deployments;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
 using Aide.Domain.Platforms;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.UnitTests.Platforms;
 

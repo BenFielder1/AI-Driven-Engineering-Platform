@@ -6,8 +6,6 @@ using Aide.Api.Features.Projects;
 using Aide.Api.Features.Release;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Releases;
 using Aide.Domain.Review;
@@ -16,6 +14,7 @@ using Aide.IntegrationTests.Releases;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Bitbucket;
 
@@ -518,10 +517,10 @@ public sealed class BitbucketReleaseTests(AideApiFactory factory)
     }
 
     private static Task<Job> ReleaseJobAsync(WebApplicationFactory<Program> app, Guid id) =>
-        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.Release, Ct));
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.Release, Ct));
 
     private static Task<Job> PollJobAsync(WebApplicationFactory<Program> app, Guid id) =>
-        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == JobTypes.MergePoll, Ct));
+        ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.ProjectId == id && j.Type == SdlcJobTypes.MergePoll, Ct));
 
     private static async Task<ReleaseDto> LatestAsync(HttpClient client, Guid id) =>
         await ProjectApi.ReadAsync<ReleaseDto>(await client.GetAsync(new Uri($"/api/projects/{id}/releases/latest", UriKind.Relative), Ct));

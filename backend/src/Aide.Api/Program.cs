@@ -22,6 +22,7 @@ using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Live;
 using Aide.Api.Features.Llm;
 using Aide.Api.Features.Notifications;
+using Aide.Api.Features.PipelineRuns;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Refinement;
 using Aide.Api.Features.Release;
@@ -37,6 +38,7 @@ using Aide.Api.Hosting;
 using Aide.Api.Jobs;
 using Aide.Api.Json;
 using Aide.Api.Logging;
+using Aide.Api.Pipelines;
 using Aide.Api.Seed;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Security;
@@ -44,6 +46,10 @@ using Npgsql;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Tevrin.Engine.Api;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Notifications;
+using Tevrin.Engine.Runtime.Pipelines;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -67,6 +73,8 @@ builder.Services.AddOpenTelemetry()
         tracing
             // NFR-OBS: job and agent-run spans, tagged aide.project_id / aide.job_id / aide.run_id like their log scopes.
             .AddSource(AideTelemetry.SourceName)
+            // §8: stage-execution and agent-stage spans from the engine.
+            .AddSource(Tevrin.Engine.Runtime.EngineTelemetry.SourceName)
             .AddAspNetCoreInstrumentation(o =>
             {
                 o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/api/health");
@@ -153,7 +161,13 @@ builder.Services.AddScoped<LifecycleService>();
 builder.Services.AddScoped<RollbackWriter>();
 builder.Services.AddScoped<GateService>();
 builder.Services.AddScoped<GateReader>();
+builder.Services.AddPipelineApiHost(); // FR-299–FR-303: the engine's generic API (Tevrin.Engine.Api)
 builder.Services.AddAideJobs();
+builder.Services.AddSdlcJobHandlers();
+
+// Pipeline definitions (FR-275–FR-278, FR-290): the SDLC pack, its guards and providers. Loaded, validated and
+// health-checked only; lifecycle decisions still go through the SDLC state machine (M58).
+builder.Services.AddSdlcPipeline();
 
 // Artifacts: versions, approval, cascade, integrity, diff (FR-16–FR-21).
 builder.Services.AddScoped<ArtifactIntegrityGuard>();
@@ -208,7 +222,8 @@ builder.Services.AddOptions<SeedOptions>().BindConfiguration(SeedOptions.Section
 builder.Services.AddHostedService<DevSeeder>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseReadyHealthCheck>("database", tags: [HealthEndpoints.ReadyTag])
-    .AddCheck<StackCatalogHealthCheck>("stack-catalog", tags: [HealthEndpoints.ReadyTag]);
+    .AddCheck<StackCatalogHealthCheck>("stack-catalog", tags: [HealthEndpoints.ReadyTag])
+    .AddCheck<PipelineDefinitionsHealthCheck>("pipeline-definitions", tags: [HealthEndpoints.ReadyTag]);
 
 var app = builder.Build();
 
@@ -259,6 +274,8 @@ app.MapVersionEndpoints();
 app.MapStackEndpoints();
 app.MapNotificationEndpoints();
 app.MapApprovalEndpoints();
+app.MapPipelineEndpoints();
+app.MapPipelineRunEndpoints();
 app.MapLiveEndpoints();
 
 await app.RunAsync();

@@ -1,8 +1,9 @@
 using System.Text.Json;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
+using Aide.Api.Features.Projects;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Execution;
 
@@ -39,7 +40,7 @@ public sealed record ExecutionStepSummaryDto(
 /// </summary>
 public sealed record ExecutionRunDto(
     Guid Id,
-    ArtifactType PlanType,
+    [WireEnum(typeof(SdlcArtifacts))] string PlanType,
     int PlanVersion,
     Guid ReleaseVersionId,
     int? Cycle,
@@ -58,7 +59,7 @@ public sealed record ExecutionRunDto(
 /// <summary>The agent run of a step attempt (FR-57): agent, specialist key, model, tokens, duration and status.</summary>
 public sealed record StepAttemptRunDto(
     Guid Id,
-    AgentKind Agent,
+    [WireEnum(typeof(SdlcAgents))] string Agent,
     string? AgentKey,
     string Model,
     int InputTokens,

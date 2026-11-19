@@ -2,11 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Aide.Domain.Agents;
 using Aide.Domain.Common;
-using Aide.Infrastructure.Agents;
-using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;
 
@@ -26,7 +25,7 @@ public sealed class LlmStreamingTests
         System = "You are a test.",
         Messages = [new LlmMessage(LlmRole.User, "Hello")],
         MaxTokens = 1234,
-        Agent = AgentKind.SpecGenerator,
+        Agent = SdlcAgents.SpecGenerator,
         ApiKey = apiKey,
     };
 
@@ -250,6 +249,34 @@ public sealed class LlmStreamingTests
         var completion = await new AnthropicLlmProvider(new HttpClient(handler), Options()).CompleteAsync(Request(), Ct);
 
         Assert.Equal(new LlmCompletion("whole", 3, 4, "end_turn"), completion);
+    }
+
+    [Fact]
+    public async Task FR297_A_streamed_reply_marks_the_first_token_for_the_run_latency()
+    {
+        var handler = new StreamHandler(_ => StreamScript.Sse(Chunks(AnthropicText, 7)));
+        var provider = new AnthropicLlmProvider(new HttpClient(handler), Options());
+        var time = TimeProvider.System;
+        using var probe = LlmFirstTokenProbe.Start(time);
+        var started = time.GetTimestamp();
+
+        var completion = await provider.CompleteAsync(Request(), Ct);
+
+        Assert.Equal("Hello wörld", completion.Text);
+        Assert.NotNull(probe.FirstTokenTimestamp);
+        Assert.True(probe.LatencyMs(started) >= 0);
+    }
+
+    [Fact]
+    public async Task FR297_A_whole_JSON_body_records_no_latency()
+    {
+        var handler = new LlmProviderTests.FakeHandler(HttpStatusCode.OK, """{"content":[{"type":"text","text":"whole"}],"stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":4}}""");
+        using var probe = LlmFirstTokenProbe.Start(TimeProvider.System);
+
+        await new AnthropicLlmProvider(new HttpClient(handler), Options()).CompleteAsync(Request(), Ct);
+
+        Assert.Null(probe.FirstTokenTimestamp);
+        Assert.Null(probe.LatencyMs(TimeProvider.System.GetTimestamp()));
     }
 
     // ------------------------------------------------------------------ OpenAI (SSE)

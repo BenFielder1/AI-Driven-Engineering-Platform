@@ -23,6 +23,19 @@ export const IN_PREVIEW = 'In preview'
 
 export const changelog: readonly ChangelogEntry[] = [
   {
+    version: '0.7.0',
+    date: null,
+    title: 'Pipeline engine',
+    asAide: false,
+    highlights: [
+      'Tevrin now runs on a reusable pipeline engine. The software lifecycle is its first pipeline and works exactly as before.',
+      'A Pipeline tab on each project shows the run, its stages with timings, the timeline, artifacts and the cost so far.',
+      "Replay steps through a run one event at a time, with each agent's input and output and each artifact's diff.",
+      'A gate inbox lists every approval waiting for you across your projects.',
+    ],
+    specHref: docsUrl('history/0.7.0/'),
+  },
+  {
     version: '0.6.1',
     date: '2026-11-15',
     title: 'Failure-aware review and a build check before review',

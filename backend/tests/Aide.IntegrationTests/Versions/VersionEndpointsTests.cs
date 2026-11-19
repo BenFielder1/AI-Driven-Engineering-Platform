@@ -4,17 +4,15 @@ using Aide.Api.Features.Admin;
 using Aide.Api.Features.Projects;
 using Aide.Api.Features.Rollback;
 using Aide.Api.Features.Versions;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Infrastructure.Git;
 using Aide.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.IntegrationTests.Versions;
 
@@ -65,7 +63,7 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         Assert.Equal((version.Id.ToString(), "1.2.0", "v1.1.0"), (startedEvent.GetProperty("releaseVersionId").GetString(), startedEvent.GetProperty("version").GetString(), startedEvent.GetProperty("baseTag").GetString()));
 
         // The Repository Analyst job is queued; until the analyst exists (FR-70) its handler completes without work.
-        var analysis = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == JobTypes.RepositoryAnalysis);
+        var analysis = Assert.Single(await LifecycleSeed.JobsAsync(factory, id), j => j.Type == SdlcJobTypes.RepositoryAnalysis);
         Assert.Equal(version.Id.ToString(), LifecycleSeed.Payload(analysis.Payload).GetProperty("releaseVersionId").GetString());
         Assert.Equal(JobStatus.Succeeded, Assert.Single(await AgentJobs.RunQueuedAsync(factory, id), j => j.Id == analysis.Id).Status);
 
@@ -155,7 +153,7 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var id = fixture.Project.Id;
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan);
         await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 2, StepStatus.Completed);
         var stepBranch = $"aide/{fixture.Project.Slug}-0192f3a4";
         await ProjectApi.WithDbAsync(factory, db => db.ExecutionSteps.Where(s => s.ProjectId == id)
@@ -183,7 +181,7 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         await PrepareAsync(id); // records tevrin/<slug>/v0.1.0
         Assert.Equal(["tevrin/"], await PrefixesAsync());
 
-        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan);
+        var plan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan);
         await LifecycleSeed.AddStepsAsync(factory, id, plan.Id, 1, StepStatus.Completed);
         await ProjectApi.WithDbAsync(factory, db => db.ExecutionSteps.Where(s => s.ProjectId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.BranchName, "aide/old-0192f3a4"), Ct));
@@ -256,7 +254,7 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory, initialVersion: "1.1.0");
         var id = fixture.Project.Id;
         var old = await MarkReleasedAsync(id);
-        var oldSpec = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, projectVersionAtCreation: 5);
+        var oldSpec = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 5);
         var started = await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(await StartAsync(fixture.Owner.Client, id, "1.2.0"), HttpStatusCode.Created);
         var v120 = started.ReleaseVersion.Id;
 
@@ -271,8 +269,8 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
             await LifecycleSeed.AddTransitionAsync(factory, id, history[i].From, history[i].To, history[i].Checkpoint, t0.AddMinutes(i + 1));
         }
 
-        var newSpec = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.TechnicalSpecification, version: 2, projectVersionAtCreation: 2);
-        var newPlan = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ImplementationPlan, projectVersionAtCreation: 3);
+        var newSpec = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, version: 2, projectVersionAtCreation: 2);
+        var newPlan = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 3);
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory);
         Assert.Equal((v120, v120), (newSpec.ReleaseVersionId, newPlan.ReleaseVersionId));
 
@@ -314,7 +312,7 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory, initialVersion: "1.1.0");
         var id = fixture.Project.Id;
         await MarkReleasedAsync(id);
-        var stray = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.OptimizationPlan, ArtifactStatus.Draft, projectVersionAtCreation: 6);
+        var stray = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, ArtifactStatus.Draft, projectVersionAtCreation: 6);
         await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(await StartAsync(fixture.Owner.Client, id, "1.2.0"), HttpStatusCode.Created);
 
         await Problems.AssertAsync(
@@ -328,7 +326,7 @@ public sealed class VersionEndpointsTests(AideApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(factory, initialVersion: "1.1.0");
         var id = fixture.Project.Id;
         await MarkReleasedAsync(id);
-        var leftover = await LifecycleSeed.AddArtifactAsync(factory, id, ArtifactType.ProjectRequest, ArtifactStatus.Draft, projectVersionAtCreation: 6);
+        var leftover = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, ArtifactStatus.Draft, projectVersionAtCreation: 6);
         await ProjectApi.ReadAsync<StartReleaseVersionResultDto>(await StartAsync(fixture.Owner.Client, id, "1.2.0"), HttpStatusCode.Created);
 
         var draft = await ProjectApi.ReadAsync<Aide.Api.Features.Artifacts.ArtifactDto>(

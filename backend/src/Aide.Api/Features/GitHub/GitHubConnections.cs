@@ -2,12 +2,15 @@ using Aide.Domain.Access;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
-using Aide.Domain.Jobs;
 using Aide.Infrastructure.GitHub;
 using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Security;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.GitHub;
 
@@ -271,7 +274,7 @@ public sealed partial class GitHubConnections(
             }
 
             // ...and the owner's connection_invalid notification job the outbox queued with it (FR-92).
-            foreach (var entry in db.ChangeTracker.Entries<Job>().Where(e => e.State == EntityState.Added && e.Entity.Type == JobTypes.Notification).ToList())
+            foreach (var entry in db.ChangeTracker.Entries<Job>().Where(e => e.State == EntityState.Added && e.Entity.Type == SdlcJobTypes.Notification).ToList())
             {
                 entry.State = EntityState.Detached;
             }

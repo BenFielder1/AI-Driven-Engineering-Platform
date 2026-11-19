@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using Aide.Domain.Notifications;
-using Aide.Infrastructure.Notifications;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Engine.Runtime.Notifications;
 
 namespace Aide.UnitTests.Notifications;
 

@@ -3,9 +3,9 @@ using System.Text;
 using System.Text.Json;
 using Aide.Domain.Entities;
 using Aide.Domain.GitHub;
-using Aide.Domain.Jobs;
 using Aide.Domain.Projects;
 using Aide.Infrastructure.GitHub;
+using Tevrin.Engine.Domain.Jobs;
 
 namespace Aide.UnitTests.GitHub;
 

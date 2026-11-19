@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using Aide.Api.Features.Analysis;
 using Aide.Api.Features.Projects;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Lifecycle;
 using Aide.IntegrationTests.Support;
 

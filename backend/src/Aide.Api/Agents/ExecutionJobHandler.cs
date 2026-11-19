@@ -2,15 +2,10 @@ using System.Globalization;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
 using Aide.Api.Features.Stack;
-using Aide.Api.Jobs;
 using Aide.Domain.Access;
-using Aide.Domain.Agents;
-using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
 using Aide.Domain.Execution;
-using Aide.Domain.Gates;
-using Aide.Domain.Jobs;
 using Aide.Domain.Lifecycle;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Git;
@@ -18,6 +13,13 @@ using Aide.Infrastructure.Persistence;
 using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Agents;
 
@@ -234,7 +236,7 @@ public sealed partial class ExecutionJobHandler(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 project.Id,
-                new { agent = AgentKind.CodeGenerator.ToWire(), tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, stepNumber = number },
+                new { agent = SdlcAgents.CodeGenerator, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, stepNumber = number },
                 SystemActor.Name,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -296,9 +298,9 @@ public sealed partial class ExecutionJobHandler(
     private async Task<AgentRunRequest> RequestAsync(
         JobExecution job, Project project, Guid planId, ExecutionStep step, List<ExecutionStep> steps, CancellationToken cancellationToken)
     {
-        var projectRequest = await inputs.CurrentAsync(project.Id, ArtifactType.ProjectRequest, cancellationToken);
-        var spec = await inputs.CurrentAsync(project.Id, ArtifactType.TechnicalSpecification, cancellationToken);
-        var summary = await inputs.CurrentAsync(project.Id, ArtifactType.CodebaseSummary, cancellationToken);
+        var projectRequest = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var summary = await inputs.CurrentAsync(project.Id, SdlcArtifacts.CodebaseSummary, cancellationToken);
         var plan = await db.Artifacts.AsNoTracking().FirstAsync(a => a.Id == planId, cancellationToken);
         var files = await Git(() => workingCopies.ReadAsync(project.Id, step.DeclaredFiles.Select(f => f.Path), cancellationToken));
         var rules = await Git(() => workingCopies.ReadRulesAsync(project.Id, cancellationToken));
@@ -306,7 +308,7 @@ public sealed partial class ExecutionJobHandler(
         return new AgentRunRequest
         {
             ProjectId = project.Id,
-            Agent = AgentKind.CodeGenerator,
+            Agent = SdlcAgents.CodeGenerator,
             Job = job,
             StepId = step.Id,
             RunKey = StepAttemptRecorder.RunKey(step.Id, step.Attempt),
@@ -441,7 +443,7 @@ public sealed partial class ExecutionJobHandler(
                 SystemActor.Name,
                 now);
             var escalationPending = await db.ApprovalGates.AnyAsync(
-                g => g.ProjectId == projectId && g.Type == GateType.Escalation && g.Status == GateStatus.Pending,
+                g => g.ProjectId == projectId && g.Type == EngineGates.Escalation && g.Status == GateStatus.Pending,
                 cancellationToken);
             if (!escalationPending)
             {
@@ -449,7 +451,7 @@ public sealed partial class ExecutionJobHandler(
                 var project = await db.Projects.FirstAsync(p => p.Id == projectId, cancellationToken);
                 writer.AddGate(
                     project,
-                    GateType.Escalation,
+                    EngineGates.Escalation,
                     null,
                     SystemActor.Name,
                     now,
@@ -542,11 +544,12 @@ public sealed partial class ExecutionJobHandler(
 /// </summary>
 public sealed class ExecutionContinuationHook(JobEnqueuer jobs) : IJobSucceededHook
 {
-    public async Task OnJobSucceededAsync(AideDbContext db, JobExecution job, CancellationToken cancellationToken)
+    public async Task OnJobSucceededAsync(IEngineDbContext engineDb, JobExecution job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.Type != JobTypes.Execution || job.ProjectId is not { } projectId)
+        if (job.Type != SdlcJobTypes.Execution || job.ProjectId is not { } projectId)
         {
             return;
         }
@@ -564,7 +567,7 @@ public sealed class ExecutionContinuationHook(JobEnqueuer jobs) : IJobSucceededH
         var steps = await ExecutionQueries.CurrentStepsAsync(db, planId, track: false, cancellationToken);
         if (ExecutionRules.ShouldContinue([.. steps.Select(ExecutionQueries.ToState)], project.ExecutionPaused))
         {
-            await jobs.EnqueueAsync(JobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Continue), projectId, cancellationToken);
+            await jobs.EnqueueAsync(SdlcJobTypes.Execution, new ExecutionJobPayload(projectId, ExecutionJobPayload.Continue), projectId, cancellationToken);
         }
     }
 }
@@ -578,17 +581,18 @@ public sealed class ExecutionContinuationHook(JobEnqueuer jobs) : IJobSucceededH
 /// </summary>
 public sealed partial class ExecutionJobEndedHook(TimeProvider time, ILogger<ExecutionJobEndedHook> logger) : IJobEndedHook
 {
-    public async Task OnJobEndedAsync(AideDbContext db, JobEnded job, CancellationToken cancellationToken)
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
     {
+        var db = engineDb.AsAide();
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(job);
-        if (job.JobType != JobTypes.Execution || job.ProjectId is not { } projectId)
+        if (job.JobType != SdlcJobTypes.Execution || job.ProjectId is not { } projectId)
         {
             return;
         }
 
         var otherRunning = await db.Jobs.AsNoTracking().AnyAsync(
-            j => j.ProjectId == projectId && j.Type == JobTypes.Execution && j.Status == JobStatus.Running && j.Id != job.JobId,
+            j => j.ProjectId == projectId && j.Type == SdlcJobTypes.Execution && j.Status == JobStatus.Running && j.Id != job.JobId,
             cancellationToken);
         if (otherRunning)
         {
@@ -647,7 +651,6 @@ public static class ExecutionJobServiceCollectionExtensions
         services.AddScoped<ExecutionRunReader>();
         services.AddScoped<IJobSucceededHook, ExecutionContinuationHook>();
         services.AddScoped<IJobEndedHook, ExecutionJobEndedHook>();
-        services.AddJobHandler<ExecutionJobHandler>(JobTypes.Execution);
         return services;
     }
 }

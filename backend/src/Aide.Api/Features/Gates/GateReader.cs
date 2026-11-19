@@ -1,11 +1,12 @@
 using System.Text.Json;
 using Aide.Api.Features.Activity;
 using Aide.Domain.Common;
-using Aide.Domain.Entities;
-using Aide.Domain.Gates;
 using Aide.Domain.Review;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Features.Gates;
 
@@ -51,7 +52,7 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                 .ToDictionaryAsync(a => a.Id, cancellationToken);
 
         // An escalation gate is raised by the latest escalating review before it (§4.5).
-        var escalations = gates.Any(g => g.Type == GateType.Escalation)
+        var escalations = gates.Any(g => g.Type == EngineGates.Escalation)
             ? await db.ComplianceReports.AsNoTracking()
                 .Where(r => r.ProjectId == projectId && r.Decision == ReviewDecision.EscalationRequired)
                 .Select(r => new { r.CreatedAt, r.EscalationReason })
@@ -59,7 +60,7 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
             : [];
 
         // An escalation raised by a blocked step (FR-33) names the step in its GATE_CREATED payload.
-        var blockedSteps = await BlockedStepsAsync(db, projectId, [.. gates.Where(g => g.Type == GateType.Escalation).Select(g => g.Id)], cancellationToken);
+        var blockedSteps = await BlockedStepsAsync(db, projectId, [.. gates.Where(g => g.Type == EngineGates.Escalation).Select(g => g.Id)], cancellationToken);
 
         var reviewers = await ActorResolver.NamesAsync(db, gates.Select(g => g.ReviewerId).OfType<Guid>(), cancellationToken);
         var now = time.GetUtcNow();
@@ -68,7 +69,7 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
         {
             var artifact = g.ArtifactId is { } aid && artifacts.TryGetValue(aid, out var a) ? a : null;
             var blocked = blockedSteps.TryGetValue(g.Id, out var stepRef) ? stepRef : null;
-            var escalationReason = g.Type != GateType.Escalation
+            var escalationReason = g.Type != EngineGates.Escalation
                 ? null
                 : blocked is not null
                     ? EscalationReason.StepBlocked
@@ -143,14 +144,14 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
         return result;
     }
 
-    internal static string ReasonFor(GateType type, int? artifactVersion, EscalationReason? escalation)
+    internal static string ReasonFor(string type, int? artifactVersion, EscalationReason? escalation)
     {
         var version = artifactVersion is { } v ? $" v{v}" : string.Empty;
         return type switch
         {
-            GateType.SpecApproval => $"Approve the technical specification{version} to enter planning.",
-            GateType.PlanApproval => $"Approve the implementation plan{version} to enter execution.",
-            GateType.PreRelease => "Approve to enter release and merge and tag the project branch.",
+            SdlcGates.SpecApproval => $"Approve the technical specification{version} to enter planning.",
+            SdlcGates.PlanApproval => $"Approve the implementation plan{version} to enter execution.",
+            SdlcGates.PreRelease => "Approve to enter release and merge and tag the project branch.",
             _ => escalation switch
             {
                 EscalationReason.LowScore => $"The review score is below {ReviewDecisionRules.EscalationFloor.ToString(System.Globalization.CultureInfo.InvariantCulture)}. Continue, roll back or accept.",
@@ -159,7 +160,7 @@ public sealed class GateReader(AideDbContext db, TimeProvider time)
                 EscalationReason.NoImprovement => "The review score did not improve on the previous cycle. Continue, roll back or accept.",
                 EscalationReason.NoOptimizationPlan => "The review requires another cycle but proposed no optimisation plan. Continue (run another review), roll back or accept.",
                 EscalationReason.StepBlocked => "An execution step was rejected four times and is blocked. Continue (retry the step with fresh attempts) or roll back.",
-                _ => $"A human decision is needed ({GateType.Escalation.ToWire()}). Continue, roll back or accept.",
+                _ => $"A human decision is needed ({EngineGates.Escalation}). Continue, roll back or accept.",
             },
         };
     }

@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Aide.Domain.Common;
+using Tevrin.Engine.Domain.Common;
 
 namespace Aide.Domain.Stack;
 

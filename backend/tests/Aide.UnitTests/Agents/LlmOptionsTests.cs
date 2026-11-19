@@ -1,10 +1,12 @@
-using Aide.Domain.Entities;
 using Aide.Domain.Projects;
 using Aide.Infrastructure;
 using Aide.Infrastructure.Llm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.UnitTests.Agents;
 
@@ -139,7 +141,7 @@ public sealed class LlmOptionsTests
         var factory = services.GetRequiredService<IHttpClientFactory>();
 
         using var modelInfo = factory.CreateClient(IAnthropicModelInfo.HttpClientName);
-        using var anthropic = factory.CreateClient(nameof(Aide.Infrastructure.Agents.AnthropicLlmProvider));
+        using var anthropic = factory.CreateClient(nameof(Tevrin.Engine.Runtime.Llm.AnthropicLlmProvider));
 
         Assert.Equal(Timeout.InfiniteTimeSpan, modelInfo.Timeout);
         Assert.Equal(Timeout.InfiniteTimeSpan, anthropic.Timeout);
@@ -168,11 +170,66 @@ public sealed class LlmOptionsTests
 
         Assert.Equal(
             [
-                new Aide.Domain.Agents.LlmCatalogModel("claude-opus-5-5", "Claude Opus 5.5", 128_000, 1_000_000, true),
-                new Aide.Domain.Agents.LlmCatalogModel("claude-haiku-4-5", "claude-haiku-4-5", 64_000, 200_000, false),
+                new Tevrin.Engine.Domain.Agents.LlmCatalogModel("claude-opus-5-5", "Claude Opus 5.5", 128_000, 1_000_000, true),
+                new Tevrin.Engine.Domain.Agents.LlmCatalogModel("claude-haiku-4-5", "claude-haiku-4-5", 64_000, 200_000, false),
             ],
             catalog);
     }
+
+    [Fact]
+    public void FR274_Models_per_agent_still_bind_by_the_0_6_1_enum_member_names()
+    {
+        // appsettings.json, Railway and secrets.env.example name agents by the 0.6.1 AgentKind member (PascalCase,
+        // e.g. Llm__Providers__Anthropic__Models__StackAnalyst); the enum binding also took any case and the wire value.
+        using var services = Services(With(
+            ("Llm:Providers:Anthropic:Models:IdeaRefinement", "model-a"),
+            ("Llm:Providers:Anthropic:Models:StackAnalyst", "model-b"),
+            ("Llm:Providers:Anthropic:Models:codereview", "model-c"),
+            ("Llm:Providers:Anthropic:Models:build_fix", "model-d")));
+
+        var models = services.GetRequiredService<ILlmProviderCatalog>().DefaultAgentModels(LlmProvider.Anthropic);
+
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                [SdlcAgents.IdeaRefinement] = "model-a",
+                [SdlcAgents.StackAnalyst] = "model-b",
+                [SdlcAgents.CodeReview] = "model-c",
+                [SdlcAgents.BuildFix] = "model-d",
+            },
+            models);
+    }
+
+    [Fact]
+    public void FR274_An_unknown_agent_name_still_fails_startup_and_lists_the_member_names()
+    {
+        var failures = Failures(With(("Llm:Providers:Anthropic:Models:Reviewer", "claude-opus-5-5")));
+
+        Assert.Contains(
+            "Llm:Providers:Anthropic:Models:Reviewer is not an agent (IdeaRefinement, SpecGenerator, PlanGenerator, CodeGenerator, CodeReview, RepositoryAnalyst, StackAnalyst, BuildFix).",
+            failures);
+    }
+
+    [Theory]
+    [InlineData("CodeReview", SdlcAgents.CodeReview)]
+    [InlineData(" CodeReview ", SdlcAgents.CodeReview)]
+    [InlineData("CODEREVIEW", SdlcAgents.CodeReview)]
+    [InlineData("code_review", SdlcAgents.CodeReview)]
+    [InlineData("RepositoryAnalyst", SdlcAgents.RepositoryAnalyst)]
+    public void FR274_Agent_config_names_parse_as_before(string name, string expected)
+    {
+        Assert.True(SdlcAgents.TryParseConfigName(name, out var agent));
+        Assert.Equal(expected, agent);
+    }
+
+    [Theory]
+    [InlineData("Code_Review")]
+    [InlineData("CODE_REVIEW")]
+    [InlineData("4")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void FR274_Names_the_enum_binding_rejected_are_still_rejected(string? name) =>
+        Assert.False(SdlcAgents.TryParseConfigName(name, out _));
 
     // ------------------------------------------------------------------ output limit resolver (FR-160)
 
