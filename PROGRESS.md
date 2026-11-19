@@ -32,7 +32,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-274 | Same stored values, string columns, contract strings | 3.3 | backend + data + frontend | M56 | done | [CI 44160448308](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44160448308) |
 | FR-275 | Definition model + YAML loader | 3.4, 4.49 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
 | FR-276 | Definition validator (all errors, codes, paths) | 3.4, 4.49 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
-| FR-277 | Definition hash, `pipeline_definitions`, pinning | 3.4, 4.50 | backend + data | M57/M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
+| FR-277 | Definition hash, `pipeline_definitions`, pinning | 3.4, 4.50 | backend + data | M57/M58 | done | [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302) (audit fixes ca9dc04, a0217a0) |
 | FR-278 | `IPipelinePack`, `IPackRegistry`, extension points | 3.4 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
 | FR-279 | Artifacts in the definition (format, schema, approval, cascade) | 3.4 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
 | FR-280 | Stage kinds (agent, code, manual) | 3.4 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
@@ -41,7 +41,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-283 | Gates on stages by approval mode | 3.4, 4.53 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
 | FR-284 | Triggers modelled; only manual runs | 3.4 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
 | FR-285 | Stage statuses, custom statuses, status changes | 3.4, 4.57 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
-| FR-286 | Concurrency block | 3.4, 4.59 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
+| FR-286 | Concurrency block | 3.4, 4.59 | backend | M57 | done | [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302) (audit fixes ca9dc04, a0217a0) |
 | FR-290 | `sdlc.pipeline.yaml`, SDLC guards, readiness check | 3.4, 4.51, 4.52 | backend | M57 | done | [CI 44277530638](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44277530638) |
 | FR-287 | `PipelineStateMachine.Apply` | 3.5, 4.51 | backend | M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
 | FR-288 | `RequestAdvance` parity (gate needed, GATE_PENDING, unmet reasons) | 3.5, 4.52 | backend | M58 | done | [CI 44303824125](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44303824125) |
@@ -57,14 +57,14 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-299 | Definition endpoints | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
 | FR-300 | Run, stages, timeline endpoints | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
 | FR-301 | Run artifacts, diff, gates, gate decisions | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
-| FR-302 | Gate inbox endpoint + hub events | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
+| FR-302 | Gate inbox endpoint + hub events | 3.7, 6 | backend | M60 | done | [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302) (audit fixes ca9dc04, a0217a0) |
 | FR-303 | Replay endpoint | 3.7, 6 | backend | M60 | done | [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557) |
 | FR-304 | `src/engine/` + lint boundary | 3.8 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-305 | Definition-driven components | 3.8 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
-| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump: [CI 44132705760](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44132705760) |
+| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump, CLAUDE.md, STACK.md, guide and ops page done (1ea2d98, 9fdb73b); changelog date, history page and docs/0.7.0 move at release (M62) |
 
 ## Phases
 - [x] M54 Version and characterisation (FR-260, FR-261, FR-309 bump): snapshots 8dce91a, re-sorted d4d84f8 (D-0.7.0-22); freeze step in CI
@@ -76,6 +76,16 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M60 Generic API (FR-299–FR-303, FR-298 endpoint): 8b28f8d, [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557)
 - [x] M61 Engine UI (FR-304–FR-308): M61a 6f82a51 ([CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906)), M61b d7a8f59 ([CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349))
 - [ ] M62 Release 0.7.0 (FR-309), after Ben confirms on preview
+
+## Acceptance audit (2026-11-19)
+41 Done, 9 Partial, 0 Missing on 1d2ed57. Three partials are agreed deferrals: FR-295/FR-296 SDLC side (D-0.7.0-34) and FR-309 release-time docs (M62). The rest were closed in ca9dc04 and a0217a0:
+- pinning for SDLC moves (FR-277);
+- concurrency taken from the definition (FR-286, D-0.7.0-37);
+- the hub-events test (FR-302);
+- the §8 observability and performance items;
+- a SPEC amendment for FR-265–FR-267.
+
+CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR opened next.
 
 ## Decisions
 See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
