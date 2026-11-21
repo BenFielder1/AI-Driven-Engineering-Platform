@@ -11,6 +11,7 @@ using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Agents;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Engine.Runtime.Persistence;
 using Tevrin.Engine.Runtime.Pipelines;
 using Tevrin.Pack.Sdlc;
 
@@ -39,7 +40,6 @@ internal sealed class SdlcAgentStageHarness : IDisposable
         Context = new NoIterationSource(Data);
         var settings = new Dictionary<string, string?>
         {
-            ["ConnectionStrings:Aide"] = "Host=unused.invalid;Database=unused", // the resolver's context; never connects
             ["Llm:DefaultProvider"] = "fake",
             ["Llm:Providers:Anthropic:DefaultModel"] = "claude-opus-5-5",
             ["Llm:Providers:OpenAI:DefaultModel"] = "gpt-6-astra",
@@ -59,6 +59,7 @@ internal sealed class SdlcAgentStageHarness : IDisposable
         services.AddSingleton<ILlmOutputLimits, FixedOutputLimits>();
         services.AddSingleton<IRepoToolOpener>(Repo);
         services.AddSingleton<ISdlcContextSource>(Context);
+        services.AddScoped<IEngineDbContext, OfflineEngineDbContext>();
         _provider = services.BuildServiceProvider();
 
         var registry = _provider.GetRequiredService<PipelineRegistry>();

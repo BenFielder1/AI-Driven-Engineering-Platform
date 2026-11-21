@@ -29,18 +29,18 @@ namespace Aide.Api.Agents;
 /// by <c>POST /analysis/run</c>, and on a rejected (FR-183) or corrupted (FR-20) profile. Its inputs are the locked
 /// <c>codebase_summary</c> (missing: the run carries <c>summary_unavailable</c>), the detector's evidence at the base commit
 /// (§4.18, also recorded as <c>STACK_DETECTED</c>), the profile the detector alone gives, the catalog's options, the version's
-/// request, a rejected draft and its comment, and the read-only repo tools at the base commit (FR-71), through the
-/// <see cref="AgentRunner"/> (rule 10).
+/// request, a rejected draft and its comment, and the read-only repo tools at the base commit (FR-71), through the engine
+/// runner (<see cref="SdlcAgentStageJob"/>, FR-318; rule 10).
 /// <para>
 /// The reply must be a valid profile naming only catalog options and citing files that exist at the base commit
 /// (<see cref="StackProfile.CheckReply"/>); otherwise it is re-run once with the reasons and the allowed options, then the
 /// run fails with <c>STACK_PROFILE_INVALID</c>. An accepted profile goes through the deterministic rules
 /// (<see cref="StackProfile.Reconcile"/>: a disagreement with the detector is a <c>conflict</c>, the VCS is fixed) and is
-/// stored as a <c>stack_profile</c> draft with <c>STACK_PROFILE_CREATED</c>. Redelivery is idempotent (<see cref="ArtifactAgentJob"/>).
+/// stored as a <c>stack_profile</c> draft with <c>STACK_PROFILE_CREATED</c>. Redelivery is idempotent (FR-310).
 /// </para>
 /// </summary>
 public sealed partial class StackAnalysisJobHandler(
-    ArtifactAgentJob agentJob,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     AideDbContext db,
     StackProfileBaseReader bases,
@@ -152,7 +152,7 @@ public sealed partial class StackAnalysisJobHandler(
             },
         };
 
-        await agentJob.RunAsync(Request(payload.Feedback), spec, cancellationToken);
+        await agentJob.RunAsync(Request(payload.Feedback), spec, payload.Trigger, cancellationToken);
     }
 
     /// <summary>

@@ -100,6 +100,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
       - 2 project reads per attempt.
 
       bd61f3a, [CI 44929383412](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44929383412), characterisation unchanged. Three review rounds, 0 Critical/Major open
+    - [x] `stack_analyst` (review clean); unit harness uses an offline `IEngineDbContext`
     - **CI:** the integration test step limit was raised from 18 to 22 minutes (job limit 25). The `rest` shard's trx durations rose about 30% evenly across unrelated tests (Bitbucket, release flows; 765 s → 983 s), which points to runner speed, not the agent moves. Rebalancing the shards is a later follow-up.
   - [ ] M62d `build_fix`, then `code_generator`, with SDLC stage handlers (FR-319)
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)

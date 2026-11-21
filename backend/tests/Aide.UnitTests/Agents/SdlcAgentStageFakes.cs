@@ -175,9 +175,12 @@ internal sealed class AgentReplies(string agent, params string?[] replies) : IFa
     public string Respond(LlmRequest request) =>
         replies[Math.Min(++_calls, replies.Length) - 1] ?? BuiltIn(agent).Respond(request);
 
-    private static IFakeAgentResponder BuiltIn(string agent) => agent == Tevrin.Pack.Sdlc.SdlcAgents.IdeaRefinement
-        ? new Aide.Infrastructure.Agents.FakeIdeaRefinementResponder()
-        : new Aide.Infrastructure.Agents.FakeSpecGeneratorResponder();
+    private static IFakeAgentResponder BuiltIn(string agent) => agent switch
+    {
+        Tevrin.Pack.Sdlc.SdlcAgents.IdeaRefinement => new Aide.Infrastructure.Agents.FakeIdeaRefinementResponder(),
+        Tevrin.Pack.Sdlc.SdlcAgents.StackAnalyst => new Aide.Infrastructure.Agents.FakeStackAnalystResponder(),
+        _ => new Aide.Infrastructure.Agents.FakeSpecGeneratorResponder(),
+    };
 }
 
 internal sealed class FixedOutputLimits : ILlmOutputLimits
