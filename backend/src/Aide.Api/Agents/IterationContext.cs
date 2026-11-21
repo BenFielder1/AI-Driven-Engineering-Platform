@@ -43,10 +43,14 @@ public sealed record IterationContext(
 /// <summary>Reads the <see cref="IterationContext"/> of a project's current release version, and its analyst's state.</summary>
 public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inputs)
 {
-    public async Task<IterationContext> ReadAsync(Guid projectId, CancellationToken cancellationToken)
+    public async Task<IterationContext> ReadAsync(Guid projectId, CancellationToken cancellationToken) =>
+        await ReadAsync(projectId, await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken), cancellationToken);
+
+    /// <summary>FR-317: the <see cref="IterationContext"/> of release version <paramref name="releaseVersionId"/> (e.g. an
+    /// engine run's subject); <see cref="IterationContext.None"/> without one.</summary>
+    public async Task<IterationContext> ReadAsync(Guid projectId, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
-        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-        if (versionId is not { } id)
+        if (releaseVersionId is not { } id)
         {
             return IterationContext.None;
         }
@@ -65,7 +69,8 @@ public sealed class IterationContextReader(AideDbContext db, AgentJobInputs inpu
             .ThenByDescending(v => v.CreatedAt)
             .FirstOrDefault();
         var hasCode = !string.IsNullOrWhiteSpace(version.BaseCommitSha);
-        var summary = await inputs.CurrentAsync(projectId, SdlcArtifacts.CodebaseSummary, cancellationToken);
+        // The version's highest locked intact summary (for the current version: AgentJobInputs.CurrentAsync).
+        var summary = await LockedAsync(projectId, id, SdlcArtifacts.CodebaseSummary, cancellationToken);
         var baselineSpec = baseline is null ? null : await LockedAsync(projectId, baseline.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
         var baselineRequest = baseline is null ? null : await LockedAsync(projectId, baseline.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
         return new IterationContext(version, hasCode, hasCode || baseline is not null || version.BaseTag is not null, summary, baselineSpec, baselineRequest);

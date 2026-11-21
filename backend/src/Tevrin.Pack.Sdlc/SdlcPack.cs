@@ -5,7 +5,8 @@ namespace Tevrin.Pack.Sdlc;
 /// <summary>
 /// FR-262, FR-278, FR-290: the SDLC pack, today's software lifecycle on the engine. It registers
 /// <c>Definitions/sdlc.pipeline.yaml</c> (an embedded resource), the guard names of §4.52 (<see cref="SdlcGuardNames"/>),
-/// the <see cref="ReviewCycles"/> setting, every SDLC job type (<see cref="SdlcJobTypes"/>) and the artifacts its jobs
+/// the tool and context names (FR-317: <see cref="SdlcToolNames"/>, <see cref="SdlcContextNames"/>), the
+/// <see cref="ReviewCycles"/> setting, every SDLC job type (<see cref="SdlcJobTypes"/>) and the artifacts its jobs
 /// rather than its stages produce. It references only the engine (D-0.7.0-23): the guard implementations, the settings
 /// provider and the start selector are composed by the host from <c>Aide.Domain</c> rules.
 /// </summary>
@@ -36,6 +37,17 @@ public sealed class SdlcPack : IPipelinePack
         foreach (var guard in SdlcGuardNames.All)
         {
             registry.AddGuard(guard);
+        }
+
+        // FR-317: the repo tools (agent.tools) and the context sections the host's providers supply.
+        foreach (var tool in SdlcToolNames.All)
+        {
+            registry.AddTool(tool);
+        }
+
+        foreach (var name in SdlcContextNames.All)
+        {
+            registry.AddContextName(name);
         }
 
         registry.AddSetting(ReviewCycles);

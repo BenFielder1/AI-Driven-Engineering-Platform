@@ -65,14 +65,14 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump, CLAUDE.md, STACK.md, guide and ops page done (1ea2d98, 9fdb73b); changelog date, history page and docs/0.7.0 move at release (M63) |
-| FR-310 | Host run ids and redelivery | 3.10, 4.60 | backend | M62a | todo | |
-| FR-311 | Run events hooks | 3.10, 4.60 | backend | M62a | todo | |
-| FR-312 | Request options and run metadata | 3.10, 4.60 | backend | M62a | todo | |
-| FR-313 | Content transform hook | 3.10, 4.60 | backend | M62a | todo | |
-| FR-314 | Corrective input; plan validation in `validate:` | 3.10, 4.55 | backend | M62a, M62c | todo | |
-| FR-315 | Transactions and failure handling | 3.10, 4.60 | backend | M62a | todo | |
-| FR-316 | Pre-run and post-store host checks | 3.10, 4.60 | backend | M62a | todo | |
-| FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | todo | |
+| FR-310 | Host run ids and redelivery | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
+| FR-311 | Run events hooks | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
+| FR-312 | Request options and run metadata | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
+| FR-313 | Content transform hook | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
+| FR-314 | Corrective input; plan validation in `validate:` | 3.10, 4.55 | backend | M62a, M62c | partial | engine hook [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776); plan validation in M62c |
+| FR-315 | Transactions and failure handling | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
+| FR-316 | Pre-run and post-store host checks | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
+| FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | partial | providers, tools, pack names (M62b); `agent.tools` in the YAML with FR-321 |
 | FR-318 | Six document agents on the engine runner | 3.10, 4.61 | backend | M62c | todo | |
 | FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | todo | |
 | FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | todo | |
@@ -88,8 +88,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M60 Generic API (FR-299–FR-303, FR-298 endpoint): 8b28f8d, [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557)
 - [x] M61 Engine UI (FR-304–FR-308): M61a 6f82a51 ([CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906)), M61b d7a8f59 ([CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349))
 - [ ] M62 SDLC on the engine runner (FR-310–FR-321, D-0.7.0-38), branch `build/tevrin-0.7.0-sdlc-engine`; snapshots and golden prompt files unchanged at every commit
-  - [ ] M62a Hooks (FR-310–FR-316) with fixture tests and the §4.60 order test
-  - [ ] M62b SDLC context providers and tools (FR-317)
+  - [x] M62a Hooks (FR-310–FR-316) with fixture tests and the §4.60 order test: ba361b3, [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776). Two review rounds; §4.60 amended (commit with the verdict after validation, store veto)
+  - [x] M62b SDLC context providers and tools (FR-317): two review rounds. Live path unchanged; `agent.tools` in the YAML waits for FR-321
   - [ ] M62c Document agents, one commit each in §4.61 order (FR-318, FR-314)
   - [ ] M62d `build_fix`, then `code_generator`, with SDLC stage handlers (FR-319)
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)
@@ -212,6 +212,22 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Corrective-input hook:** previous output in `PREVIOUS_*`, with SDLC feedback wording and host error codes (`INVALID_PLAN`, `MISSING_SECTIONS`).
   - **Transactions and failures:** a separate run and token transaction; a transient failure keeps the run running.
   - **Host checks:** credential invalidation (FR-78), the provider-disabled check (FR-157), the source-items budget (FR-172), and the corruption alert and regeneration (FR-20).
+
+- **M62 open engine gaps** (from the M62a/M62b reviews, to close in M62c/M62d before the agents that need them move):
+  - **Prompt transform after render:** FR-121 `StackPrompt.Compose` (specialist steps, `code_generator`).
+  - **`AgentToolExecutor` parity with `RepoToolSession`:**
+    - `LimitReached` is always false, so `TOOL_LIMIT` doesn't force the final answer;
+    - `FallbackContextAsync` returns null (no repo listing);
+    - malformed-JSON arguments never reach the session (different message, no budget, no log);
+    - a tool exception becomes an error result instead of `PROVIDER_ERROR`;
+    - the "Unknown tool" text differs;
+    - the `tool_calls` format differs, and there is no `SecretScanner.Redact` or length cap on the arguments.
+  - **Tools without a snapshot:** 0.6.1 offered none; the engine path offers them and returns errors.
+  - **Snapshot open:** M62c/d must open it explicitly through `SdlcRepoToolScope.OpenAsync` from the extension's `CallOptionsAsync`, then call `Release()` after the call. A lazy open that throws on the first tool call is swallowed as a tool error, where 0.6.1 failed the run (`SdlcRepoToolScope.cs:83-90`).
+  - **Not wired yet:** the `snapshot_unavailable` warning (via `CallOptionsAsync().Warnings`) and the run's `tool_calls` on failure paths.
+  - **Host prompt values:** placeholders the engine path can't fill come from host `PromptValues` (`SdlcContextPromptTests.HostValues`). `USER_FEEDBACK` goes through `AppendFeedback = false` plus `AgentRunMetadata.UserFeedback`.
+  - **Recorded stage:** SDLC agent runs record `project.CurrentPhase` through `AgentRunMetadata.Stage`.
+  - **YAML (FR-321):** add `agent.tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code]` and stages for `repository_analyst`, `code_generator` and `build_fix`.
 
 - **D-0.7.0-35** (Build, M60, Claude, assumed): the generic API (FR-298–FR-303).
   - **Where:** endpoints, DTOs and readers live in `Tevrin.Engine.Api` (no SDLC types); the host plugs in project permissions, the gate service, the transitions table, job filtering and ProblemDetails through `IRunAccessPolicy`, `IGateDecisionService`, `IPipelineTransitionSource`, `IRunActivityPolicy` and `IEngineProblems` (`Aide.Api/Features/PipelineRuns`).

@@ -331,6 +331,9 @@ public static class AgentJobServiceCollectionExtensions
         services.AddScoped<AgentJobInputs>();
         services.AddScoped<IterationContextReader>();
         services.AddScoped<ArtifactAgentJob>();
+
+        // FR-317: the SDLC context providers and repo tools for the engine runner (no caller in the job path yet).
+        services.AddSdlcAgentExtensions();
         return services;
     }
 }
