@@ -2,7 +2,7 @@
 
 Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
-**`SPEC.md` is the source of truth.** **0.7.0 is being built** (the pipeline engine extraction): its spec and build log are the root [`SPEC.md`](SPEC.md) and [`PROGRESS.md`](PROGRESS.md), on branch `build/tevrin-0.7.0`. The latest released spec is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
+**`SPEC.md` is the source of truth.** **0.7.0 is being built** (the pipeline engine extraction): its spec and build log are the root [`SPEC.md`](SPEC.md) and [`PROGRESS.md`](PROGRESS.md), on branch `build/tevrin-0.7.0` (merged in PR #50), then `build/tevrin-0.7.0-sdlc-engine` (the SDLC moving onto the engine runner, SPEC §3.10). The latest released spec is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
 ## Versions
 
