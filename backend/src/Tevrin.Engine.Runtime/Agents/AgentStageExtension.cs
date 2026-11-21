@@ -83,6 +83,9 @@ public abstract class AgentStageExtension
     /// FR-313, step 8: the host stores the (transformed) content itself instead of the engine, and returns what it stored
     /// (default <c>null</c>: the engine stores it, after <see cref="ShouldStoreAsync"/>). The artifact it returns is the
     /// attempt's <see cref="AgentStageOutcome.Artifact"/>; <see cref="OnArtifactStoredAsync"/> isn't called for it.
+    /// D-0.7.0-42: it is also called for a secondary agent with no output (<see cref="AgentAttempt.IsSecondaryAgent"/>),
+    /// and again on every redelivery of such a run that already succeeded (the engine can't tell whether the host's save
+    /// happened), so for those it must be idempotent.
     /// </summary>
     public virtual Task<AgentStoreOverride?> StoreOverrideAsync(AgentAttempt attempt, string content, CancellationToken cancellationToken) =>
         Task.FromResult<AgentStoreOverride?>(null);

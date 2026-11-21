@@ -73,7 +73,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-315 | Transactions and failure handling | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
 | FR-316 | Pre-run and post-store host checks | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
 | FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | partial | providers, tools, pack names (M62b, 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872)); `agent.tools` in the YAML with FR-321 |
-| FR-318 | Six document agents on the engine runner | 3.10, 4.61 | backend | M62c | todo | |
+| FR-318 | Document agents on the engine runner (repository_analyst moves with the bound agents in M62d) | 3.10, 4.61 | backend | M62c | partial | five agents on the engine: 7fb025b, bd61f3a, 2f1588c, 18331756, f0b0f86 ([CI 44934488218](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44934488218)) |
 | FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | todo | |
 | FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | todo | |
 | FR-321 | SDLC definition version bump and start-up re-pin | 3.10, 5 | backend | M62e | todo | |
@@ -90,7 +90,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [ ] M62 SDLC on the engine runner (FR-310–FR-321, D-0.7.0-38), branch `build/tevrin-0.7.0-sdlc-engine`; snapshots and golden prompt files unchanged at every commit
   - [x] M62a Hooks (FR-310–FR-316) with fixture tests and the §4.60 order test: ba361b3, [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776). Two review rounds; §4.60 amended (commit with the verdict after validation, store veto)
   - [x] M62b SDLC context providers and tools (FR-317): 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872), two review rounds. Live path unchanged; `agent.tools` in the YAML waits for FR-321
-  - [ ] M62c Document agents, one commit each in §4.61 order (FR-318, FR-314). §4.61 reordered: agents with stages first; stageless agents bind via `agents:` (D-0.7.0-42)
+  - [x] M62c Document agents, one commit each in §4.61 order (FR-318, FR-314). §4.61 reordered: agents with stages first; stageless agents bind via `agents:` (D-0.7.0-42)
     - [x] `spec_generator` + `SdlcAgentExtension`: 7fb025b, [CI 44897521699](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44897521699) (attempt 2). Characterisation unchanged. Attempt 1's `rest` shard hit the 18-minute step timeout, and the re-run took about 18 minutes against about 14.5 before. Watch the shard time as more agents move. The review found 0 Critical/Major; its 7 Minor items are queued for the next move
     - [x] `idea_refinement` and the spec_generator review fixes:
       - per-attempt log scope and span;
@@ -102,9 +102,17 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
       bd61f3a, [CI 44929383412](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44929383412), characterisation unchanged. Three review rounds, 0 Critical/Major open
     - [x] `stack_analyst` (review clean); unit harness uses an offline `IEngineDbContext`
     - [x] `code_review`: the reply returns 0.6.1's `AgentRunOutcome`, and the optimisation plan draft is still stored by `RecordAsync` after scoring (`StoresDraft = false`, with a parse-only corrective check). Review: 0 Critical/Major
-    - [x] `plan_generator`: plan validation through the host hooks until FR-321. The draft Markdown is byte-identical. Review: 0 Critical/Major
+    - [x] `plan_generator`: f0b0f86, [CI 44934488218](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44934488218). All five staged agents are green, characterisation unchanged, `rest` shard 15 min. Plan validation through the host hooks until FR-321. The draft Markdown is byte-identical. Review: 0 Critical/Major
     - **CI:** the integration test step limit was raised from 18 to 22 minutes (job limit 25). The `rest` shard's trx durations rose about 30% evenly across unrelated tests (Bitbucket, release flows; 765 s → 983 s), which points to runner speed, not the agent moves. Rebalancing the shards is a later follow-up.
-  - [ ] M62d `build_fix`, then `code_generator`, with SDLC stage handlers (FR-319)
+  - [ ] M62d `repository_analyst`, `build_fix`, then `code_generator`, bound with `agents:` (D-0.7.0-42), with SDLC stage handlers (FR-319)
+    - [x] Engine `agents:` bindings:
+      - secondary agent bindings on a stage, selected by `AgentStageRequest.AgentKey`;
+      - validator rules, including duplicate primary keys and job types (the default `agent.run` may be shared);
+      - the resolver checks binding tools;
+      - redelivery calls the store override again;
+      - SDLC and fixture hashes unchanged and pinned.
+
+      Review: 1 Major fixed
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)
 - [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview
 
@@ -240,6 +248,12 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Not wired yet:** the `snapshot_unavailable` warning (via `CallOptionsAsync().Warnings`) and the run's `tool_calls` on failure paths.
   - **Host prompt values:** placeholders the engine path can't fill come from host `PromptValues` (`SdlcContextPromptTests.HostValues`). `USER_FEEDBACK` goes through `AppendFeedback = false` plus `AgentRunMetadata.UserFeedback`.
   - **Recorded stage:** SDLC agent runs record `project.CurrentPhase` through `AgentRunMetadata.Stage`.
+  - **Bound agents (D-0.7.0-42), SDLC side:**
+    - `SdlcAgentCall.ToStageRequest`, also used by `NextAttemptAsync`, must set `AgentKey`, or a corrective attempt runs the primary.
+    - `SdlcStageLocator` must find bindings as well as `s.Agent?.Key`.
+    - The extension's stage-keyed hooks check `attempt.IsSecondaryAgent` and `attempt.Agent.Key`.
+    - A bound agent's job type is unique and registered.
+    - The store override is idempotent, because redelivery calls it again.
   - **Plan validation in YAML (FR-321, M62e):** the `planning` stage gets `validate: [{ guard: sdlc.plan-valid }]` and `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }`.
     - The guard runs `ParseAgentOutput(reply, project.MaxFilesPerStep, agents, deployFiles)` then `RenderChecked` on the stage output content (trimmed; parsing doesn't depend on the trim), and returns `error.Message` as its one reason. It needs max files, and the agents and deploy-file check from the version's stack (heavier than a fact lookup).
     - The host's `ValidateOutputAsync` skips its planning check only when `attempt.Stage.Validate` declares `sdlc.plan-valid`. Otherwise each reason appears twice, and runs pinned to the earlier hash would lose the check.

@@ -34,7 +34,7 @@ public static partial class PipelineDefinitionValidator
     [GeneratedRegex("^[A-Z][A-Z0-9_]*$", RegexOptions.CultureInvariant)]
     private static partial Regex ErrorCodePattern();
 
-    private sealed class Run(PipelineDefinition definition, PackCatalog catalog)
+    private sealed partial class Run(PipelineDefinition definition, PackCatalog catalog)
     {
         private readonly List<DefinitionError> _errors = [];
         private readonly HashSet<string> _stageIds = new(definition.Stages.Select(s => s.Id), StringComparer.Ordinal);
@@ -58,6 +58,7 @@ public static partial class PipelineDefinitionValidator
             ValidateStatusChanges();
             ValidateConcurrency();
             ValidateStages();
+            ValidateAgentBindings();
             ValidateStart();
             ValidateReachability();
             ValidateProducers();
@@ -313,7 +314,7 @@ public static partial class PipelineDefinitionValidator
             }
 
             var name = agent.Prompt ?? agent.Key;
-            var at = agent.Prompt is null ? path + ".agent.key" : path + ".agent.prompt";
+            var at = agent.Prompt is null ? path + ".key" : path + ".prompt";
             if (!prompts.TryGetValue(name, out var source))
             {
                 Add(DefinitionErrorCodes.UnknownPrompt, at, $"No pack registered prompt '{name}'.");
@@ -348,7 +349,7 @@ public static partial class PipelineDefinitionValidator
                 }
 
                 CheckJobType(agent.JobType, path + ".agent.job_type");
-                CheckPrompt(stage, agent, path);
+                CheckPrompt(stage, agent, path + ".agent");
             }
 
             if (stage.EnqueueOnEnter is { } enqueue)
@@ -607,6 +608,9 @@ public static partial class PipelineDefinitionValidator
                 {
                     produced.Add(output);
                 }
+
+                // D-0.7.0-42: a secondary agent's output is produced too.
+                produced.UnionWith(stage.Agents.Select(b => b.Output).OfType<string>());
             }
 
             var reported = new HashSet<string>(StringComparer.Ordinal);
@@ -620,6 +624,20 @@ public static partial class PipelineDefinitionValidator
                     {
                         Add(DefinitionErrorCodes.ArtifactNoProducer, $"stages[{i}].inputs[{j}]",
                             $"Artifact '{key}' is read but no stage outputs it and no pack handler produces it.");
+                    }
+                }
+
+                var bindings = definition.Stages[i].Agents;
+                for (var b = 0; b < bindings.Count; b++)
+                {
+                    for (var j = 0; j < bindings[b].Inputs.Count; j++)
+                    {
+                        var key = bindings[b].Inputs[j];
+                        if (_artifactKeys.Contains(key) && !produced.Contains(key) && reported.Add(key))
+                        {
+                            Add(DefinitionErrorCodes.ArtifactNoProducer, $"stages[{i}].agents[{b}].inputs[{j}]",
+                                $"Artifact '{key}' is read but no stage outputs it and no pack handler produces it.");
+                        }
                     }
                 }
             }

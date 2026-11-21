@@ -130,7 +130,8 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
                 Check(PipelineComponentKind.StageHandler, "handler", handler);
             }
 
-            foreach (var tool in stage.Agent?.Tools ?? [])
+            // D-0.7.0-42: the secondary agents' tools too.
+            foreach (var tool in (stage.Agent?.Tools ?? []).Concat(stage.Agents.SelectMany(b => b.Tools)))
             {
                 Check(PipelineComponentKind.Tool, "tool", tool);
             }

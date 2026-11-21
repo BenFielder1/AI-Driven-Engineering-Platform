@@ -116,6 +116,12 @@ public static class DefinitionHash
             obj["agent"] = a;
         }
 
+        // D-0.7.0-42: omitted when empty, so a definition without secondary agents hashes as before.
+        if (s.Agents.Count > 0)
+        {
+            obj["agents"] = s.Agents.Select(b => (object?)Binding(b)).ToList();
+        }
+
         obj.AddIfSet("handler", s.Handler);
         obj.AddIfSet("output", s.Output);
         if (s.OnInvalid is { } onInvalid)
@@ -157,6 +163,15 @@ public static class DefinitionHash
             obj["loop"] = l;
         }
 
+        return obj;
+    }
+
+    /// <summary>D-0.7.0-42: a secondary binding with its defaults filled (inputs, tools); prompt and output only when set.</summary>
+    private static Obj Binding(AgentBindingDefinition b)
+    {
+        var obj = new Obj { ["key"] = b.Key, ["job_type"] = b.JobType, ["inputs"] = Strings(b.Inputs), ["tools"] = Strings(b.Tools) };
+        obj.AddIfSet("prompt", b.Prompt);
+        obj.AddIfSet("output", b.Output);
         return obj;
     }
 

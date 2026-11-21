@@ -275,6 +275,12 @@ public sealed record StageDefinition
     /// </summary>
     public string? EnqueueOnEnter { get; init; }
 
+    /// <summary>
+    /// <c>agents:</c> (D-0.7.0-42, addition to §4.49): secondary agents bound to this stage, run only when a request names
+    /// them (<see cref="AgentBindings.ForAgent"/>). They never change the stage's kind, transitions, gates, cascade or state.
+    /// </summary>
+    public IReadOnlyList<AgentBindingDefinition> Agents { get; init; } = [];
+
     /// <summary>The stage's kind; a stage with both an agent and a handler is invalid (<see cref="DefinitionErrorCodes.StageKind"/>)
     /// and reads as an agent stage.</summary>
     public StageKind Kind => Agent is not null ? StageKind.Agent : Handler is not null ? StageKind.Code : StageKind.Manual;

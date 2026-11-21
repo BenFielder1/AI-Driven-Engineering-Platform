@@ -90,8 +90,13 @@ public sealed partial class AgentStageRunner(
         }
 
         var definition = loaded.Definition;
-        var stage = definition.FindStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
-        var agent = stage.Agent ?? throw Permanent($"Stage '{stage.Id}' is not an agent stage.");
+        var defined = definition.FindStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
+
+        // D-0.7.0-42: the agent the request names (default: the primary), as a view of the stage with its binding.
+        var stage = defined.ForAgent(request.AgentKey) ?? throw Permanent(request.AgentKey is null
+            ? $"Stage '{defined.Id}' is not an agent stage."
+            : $"Stage '{defined.Id}' binds no agent '{request.AgentKey}'.");
+        var agent = stage.Agent!;
         activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
         var existing = request.AgentRunId is { } runId ? await store.FindAgentRunAsync(runId, cancellationToken) : null;
         if (existing is not null && (existing.ProjectId != run.ProjectId || existing.PipelineRunId != run.Id))

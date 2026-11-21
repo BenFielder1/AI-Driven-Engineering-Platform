@@ -35,6 +35,14 @@ public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigge
     /// <summary>FR-314: whether feedback goes into a template without <c>{{FEEDBACK}}</c> under the engine's heading (default <c>true</c>).</summary>
     public bool AppendFeedback { get; init; } = true;
 
+    /// <summary>
+    /// D-0.7.0-42: the agent to run on <see cref="StageId"/>: the stage's primary <c>agent.key</c> or one of its
+    /// <c>agents:</c> bindings, whose prompt, inputs, output, tools and job type the attempt then uses (with no
+    /// <c>validate:</c> guards or <c>on_invalid</c>, which belong to the stage's own output). <c>null</c>: the primary
+    /// agent. A key the stage doesn't bind fails the job with <c>VALIDATION</c>. Retries keep it.
+    /// </summary>
+    public string? AgentKey { get; init; }
+
     /// <summary>Whatever the host passes to its own <see cref="AgentStageExtension"/> (the engine never reads it).</summary>
     public object? HostState { get; init; }
 }

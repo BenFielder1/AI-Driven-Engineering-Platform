@@ -68,8 +68,10 @@ public static class PipelineDefinitionLoader
         private static readonly string[] StageKeys =
         [
             "id", "title", "status", "agent", "handler", "inputs", "output", "requires", "validate", "on_invalid", "gate",
-            "on_success", "on_reject", "loop", "enqueue_on_enter",
+            "on_success", "on_reject", "loop", "enqueue_on_enter", "agents",
         ];
+
+        private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools"];
 
         public PipelineDefinition Definition(YamlMapping map)
         {
@@ -192,14 +194,16 @@ public static class PipelineDefinitionLoader
                 return new StageDefinition { Id = string.Empty };
             }
 
+            var inputs = obj.StringList("inputs");
             return new StageDefinition
             {
                 Id = obj.String("id"),
                 Title = obj.String("title"),
                 Status = obj.String("status"),
                 Agent = Agent(obj),
+                Agents = Bindings(obj, inputs),
                 Handler = obj.OptionalString("handler"),
-                Inputs = obj.StringList("inputs"),
+                Inputs = inputs,
                 Output = obj.OptionalString("output"),
                 Requires = Requirements(obj, "requires"),
                 Validate = obj.List("validate", (item, itemPath) =>
@@ -231,6 +235,25 @@ public static class PipelineDefinitionLoader
                 obj.StringList("tools"),
                 obj.OptionalString("job_type") ?? EngineJobTypes.AgentRun);
         }
+
+        /// <summary>D-0.7.0-42: <c>agents:</c>; a binding's inputs default to the stage's (<paramref name="stageInputs"/>).
+        /// A missing <c>key</c> or <c>job_type</c> is left empty for the validator to report.</summary>
+        private List<AgentBindingDefinition> Bindings(Obj stage, IReadOnlyList<string> stageInputs) =>
+            stage.List("agents", (node, path) =>
+            {
+                if (AsObject(node, path, BindingKeys) is not { } obj)
+                {
+                    return null;
+                }
+
+                return new AgentBindingDefinition(
+                    obj.String("key"),
+                    obj.String("job_type"),
+                    obj.OptionalString("prompt"),
+                    obj.Get("inputs") is null or YamlScalar { IsNull: true } ? [.. stageInputs] : obj.StringList("inputs"),
+                    obj.OptionalString("output"),
+                    obj.StringList("tools"));
+            }).OfType<AgentBindingDefinition>().ToList();
 
         private List<StageRequirement> Requirements(Obj owner, string key) =>
             owner.List(key, (node, path) =>

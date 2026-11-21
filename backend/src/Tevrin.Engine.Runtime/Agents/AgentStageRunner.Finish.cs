@@ -54,7 +54,13 @@ public sealed partial class AgentStageRunner
     {
         var (run, stage, agentRun) = (attempt.Run, attempt.Stage, attempt.AgentRun!);
         Artifact? artifact = null;
-        if (artifactDefinition is not null)
+        if (artifactDefinition is null && attempt.IsSecondaryAgent)
+        {
+            // D-0.7.0-42: a secondary agent with no output stores no artifact, but the host may still store the result.
+            var stored = await extension.ToContentAsync(attempt, content, cancellationToken);
+            artifact = (await extension.StoreOverrideAsync(attempt, stored, cancellationToken))?.Artifact;
+        }
+        else if (artifactDefinition is not null)
         {
             var stored = await extension.ToContentAsync(attempt, content, cancellationToken);
             if (await extension.StoreOverrideAsync(attempt, stored, cancellationToken) is { } hostStored)
@@ -91,6 +97,13 @@ public sealed partial class AgentStageRunner
                 ? await extension.AttemptsExhaustedAsync(attempt, findings, cancellationToken)
                 : null;
             return new AgentStageOutcome(false, existing, null, findings, string.Empty, run, stage) { Failure = failure, Redelivered = true };
+        }
+
+        if (artifactDefinition is null && attempt.IsSecondaryAgent)
+        {
+            // D-0.7.0-42: the host may have stored the result through its override; the job may have stopped between the
+            // run's commit and that save, so the override runs again (it must be idempotent).
+            return await StoreOutputAsync(attempt, extension, null, content, string.Empty, redelivered: true, cancellationToken);
         }
 
         if (artifactDefinition is null)
