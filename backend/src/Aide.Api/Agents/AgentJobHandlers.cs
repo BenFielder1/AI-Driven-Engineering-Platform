@@ -205,6 +205,7 @@ public sealed class PlanGenerationJobHandler(
     AgentJobInputs inputs,
     IterationContextReader iterations,
     VersionStackLoader stacks,
+    SdlcPlanChecks planChecks,
     ILogger<PlanGenerationJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
@@ -228,9 +229,9 @@ public sealed class PlanGenerationJobHandler(
 
         // FR-124: the composition's specialists and composed rules, else none (generalist).
         var guidance = version.Stack is { } stack ? StackGuidance.Plan(stack, version.RepoEmpty, version.BaseFiles) : null;
-        var deployFiles = version.Stack is { } composed
-            ? new DeployFileCheck(StackRequiredFiles.For(composed), version.BaseFiles, Optimisation: false)
-            : null;
+        // FR-321: the same check backs the content and the planning stage's sdlc.plan-valid guard (no second stack read).
+        var check = SdlcPlanCheck.Of(maxFiles, version);
+        planChecks.Set(project.Id, check);
         AgentRunRequest Request(string? previousPlan, string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -255,13 +256,7 @@ public sealed class PlanGenerationJobHandler(
             Request(previous is null ? null : PreviousPlanJson(previous.Content, agents), payload.Feedback),
             new ArtifactAgentSpec(
                 SdlcArtifacts.ImplementationPlan,
-                text =>
-                {
-                    var plan = PlanDocument.ParseAgentOutput(text, maxFiles, agents, deployFiles);
-                    return plan.IsSuccess
-                        ? PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, plan.Value, maxFiles, agents)
-                        : Result.Failure<string>(plan.Error!);
-                },
+                check.ToContent,
                 (rejected, error) => Request(
                     AgentOutput.ExtractJsonObject(rejected) ?? rejected,
                     ArtifactAgentJob.JoinFeedback(payload.Feedback, PlanDocument.CorrectiveFeedback(error)))),

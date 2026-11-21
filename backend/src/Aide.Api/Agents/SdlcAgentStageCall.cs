@@ -33,6 +33,7 @@ public sealed record SdlcAgentStageCall(AgentRunRequest Request, ArtifactAgentSp
         new(runId, stageId, trigger)
         {
             AgentRunId = AgentRunRules.RunId(Request.Job.Id, Request.RunKey),
+            AgentKey = Request.Agent, // D-0.7.0-42: a bound agent (and its corrective attempt) runs, never the primary
             JobAttempt = Request.Job.Attempt,
             PromptValues = PromptValues(),
             AppendFeedback = false,

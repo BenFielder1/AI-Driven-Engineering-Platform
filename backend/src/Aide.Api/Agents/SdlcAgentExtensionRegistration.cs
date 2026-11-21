@@ -27,6 +27,7 @@ public static class SdlcAgentExtensionRegistration
 
         // FR-310–FR-316, FR-318: the engine runner with the SDLC behaviour (one extension and hooks instance per scope).
         services.AddScoped<ISdlcAgentRunData, SdlcAgentRunData>();
+        services.AddScoped<SdlcPlanChecks>();
         services.AddScoped<SdlcAgentStageHooks>();
         services.AddScoped<IAgentStageHooks>(sp => sp.GetRequiredService<SdlcAgentStageHooks>());
         services.AddScoped<SdlcAgentExtension>();

@@ -39,7 +39,8 @@ public sealed partial class SdlcAgentExtension
         return options with
         {
             Warnings = [.. request.Warnings.Concat(tools.Warning is { } warning ? [warning] : [])],
-            Tools = session,
+            // 0.6.1: no snapshot (or no repo scope) is a plain call, never the stage's tools.
+            Tools = (ILlmToolExecutor?)session ?? AgentToolExecutor.None,
             ToolCalls = request.Repo == RepoScope.None ? null : tools.ToolCallsJson,
         };
     }

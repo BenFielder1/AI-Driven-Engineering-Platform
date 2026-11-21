@@ -5,6 +5,7 @@ using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Agents;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Pipelines;
@@ -65,9 +66,16 @@ public sealed class SdlcStageLocator(AideDbContext db, PipelineDefinitionResolve
             return new SdlcStageTarget.Unavailable(run.Id, run.DefinitionHash, missing);
         }
 
-        return resolved.Definition.Stages.FirstOrDefault(s => s.Agent?.Key == agent) is { } stage
-            ? new SdlcStageTarget.Found(run.Id, stage.Id)
+        return StageOf(resolved.Definition, agent) is { } stageId
+            ? new SdlcStageTarget.Found(run.Id, stageId)
             : new SdlcStageTarget.NoStage(run.Id);
+    }
+
+    /// <summary>D-0.7.0-42: the stage whose primary agent, or one of whose <c>agents:</c> bindings, is <paramref name="agent"/>.</summary>
+    public static string? StageOf(PipelineDefinition definition, string agent)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Stages.FirstOrDefault(s => s.ForAgent(agent) is not null)?.Id;
     }
 }
 

@@ -113,6 +113,14 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
       - SDLC and fixture hashes unchanged and pinned.
 
       Review: 1 Major fixed
+    - [x] Engine tool session and prompt transform: 159c983, [CI 44937314434](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44937314434)
+    - [x] SDLC definition v2 (hash `d2f1c98b…`):
+      - repo tools on every agent;
+      - planning `validate: sdlc.plan-valid`;
+      - `agents:` bindings;
+      - FR-321 start-up re-pin from `90f1f065…`.
+
+      Review: 0 Critical/Major. Rollback and deploy-overlap notes are in the ops page and D-0.7.0-41
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)
 - [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview
 

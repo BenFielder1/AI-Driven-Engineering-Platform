@@ -88,10 +88,11 @@ public class SdlcContextProviderTests
     }
 
     /// <summary>
-    /// The hash of the 0.7.0 <c>sdlc.pipeline.yaml</c> (version 1, unchanged by FR-317: the hash covers the definition only,
-    /// not the pack's tool and context names). FR-321 changes it.
+    /// The hash of the 0.7.0 <c>sdlc.pipeline.yaml</c> (the hash covers the definition only, not the pack's tool and context
+    /// names). FR-321, D-0.7.0-41: version 2 (plan validation, the repo tools and the <c>agents:</c> bindings) changed it from version 1's
+    /// <c>90f1f065…</c>.
     /// </summary>
-    private const string SdlcDefinitionHash = "90f1f065397fe245955c62ef5057122a6fca2ae373941a90dc37b431ecf0c9e7";
+    private const string SdlcDefinitionHash = "d2f1c98b44e99bd673944f36cfdfd3abb64e072f893e3b7ea6d8366c3f689873";
 
     private sealed class FakeSource(Project? project) : ISdlcContextSource
     {

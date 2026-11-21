@@ -126,10 +126,11 @@ internal sealed class SdlcAgentStageHarness : IDisposable
         RunCallAsync(SpecCall(job, Data.Project.Id, previousSpec, feedback, missingInput), "specification");
 
     /// <summary>Runs <paramref name="call"/> on <paramref name="stageId"/> in a new scope, as the job does.</summary>
-    public async Task<AgentStageResult> RunCallAsync(SdlcAgentStageCall call, string stageId)
+    public async Task<AgentStageResult> RunCallAsync(SdlcAgentStageCall call, string stageId, Action<IServiceProvider>? prepare = null)
     {
         ArgumentNullException.ThrowIfNull(call);
         await using var scope = _provider.CreateAsyncScope();
+        prepare?.Invoke(scope.ServiceProvider);
         var result = await scope.ServiceProvider.GetRequiredService<AgentStageCoordinator>()
             .RunAsync(call.ToStageRequest(Run.Id, stageId, JobTriggers.StageEntered), TestContext.Current.CancellationToken);
         result.ThrowIfFailed();

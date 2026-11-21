@@ -11,8 +11,15 @@ namespace Tevrin.Engine.Tests.Pipelines;
 /// </summary>
 public class AgentBindingHashTests
 {
-    /// <summary>The 0.7.0 SDLC hash before D-0.7.0-42 (also pinned in <c>SdlcContextProviderTests</c>).</summary>
-    public const string SdlcHash = "90f1f065397fe245955c62ef5057122a6fca2ae373941a90dc37b431ecf0c9e7";
+    /// <summary>
+    /// The SDLC hash of <c>sdlc.pipeline.yaml</c> version 2 (also pinned in <c>SdlcContextProviderTests</c>). FR-321,
+    /// D-0.7.0-41: version 2 adds plan validation, the primary agents' repo tools and the <c>agents:</c> bindings, so the hash legitimately changed from
+    /// <see cref="SdlcVersion1Hash"/>; runs pinned to that one are re-pinned at start-up.
+    /// </summary>
+    public const string SdlcHash = "d2f1c98b44e99bd673944f36cfdfd3abb64e072f893e3b7ea6d8366c3f689873";
+
+    /// <summary>The 0.7.0 SDLC hash before FR-321 (version 1), unchanged by D-0.7.0-42's engine change.</summary>
+    public const string SdlcVersion1Hash = "90f1f065397fe245955c62ef5057122a6fca2ae373941a90dc37b431ecf0c9e7";
 
     public const string FixtureReviewHash = "680bed90acc8058107008946fef2874f660eafd1addf5c0f25fa3cbecb011f69";
 
@@ -23,7 +30,7 @@ public class AgentBindingHashTests
     private static string Hash(string yaml) => DefinitionHash.Compute(PipelineDefinitionLoader.Parse(yaml).Definition!);
 
     [Fact]
-    public void D_0_7_0_42_the_sdlc_hash_is_unchanged()
+    public void FR321_the_sdlc_hash_is_version_2s()
     {
         using var stream = SdlcPack.OpenDefinition();
         using var reader = new StreamReader(stream);

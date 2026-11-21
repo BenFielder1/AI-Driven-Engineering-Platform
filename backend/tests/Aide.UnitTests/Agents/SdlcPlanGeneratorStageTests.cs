@@ -4,6 +4,7 @@ using Aide.Domain.Execution;
 using Aide.Domain.Stack;
 using Aide.Infrastructure.Agents;
 using Aide.Infrastructure.Persistence.Conversion;
+using Microsoft.Extensions.DependencyInjection;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
@@ -61,6 +62,10 @@ public class SdlcPlanGeneratorStageTests
         return plan.IsSuccess ? PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, plan.Value, MaxFiles, null) : Result.Failure<string>(plan.Error!);
     }
 
+    /// <summary>FR-321: the plan job sets the check its stage's <c>sdlc.plan-valid</c> guard runs (as <see cref="PlanGenerationJobHandler"/> does).</summary>
+    private static Action<IServiceProvider> Checks(SdlcAgentStageHarness harness, DeployFileCheck? deployFiles = null) =>
+        services => services.GetRequiredService<SdlcPlanChecks>().Set(harness.Data.Project.Id, new SdlcPlanCheck(MaxFiles, null, deployFiles));
+
     private static SdlcAgentStageHarness Harness(params string?[] replies)
     {
         var harness = new SdlcAgentStageHarness(SdlcAgents.PlanGenerator, [], replies);
@@ -75,7 +80,7 @@ public class SdlcPlanGeneratorStageTests
         var job = SdlcAgentStageHarness.Job();
         var call = PlanCall(harness, job);
 
-        await harness.RunCallAsync(call, "planning");
+        await harness.RunCallAsync(call, "planning", Checks(harness));
 
         var run = Assert.Single(harness.Store.AgentRuns);
         var template = new EmbeddedPromptLibrary().Template(SdlcAgents.PlanGenerator);
@@ -101,7 +106,7 @@ public class SdlcPlanGeneratorStageTests
         using var harness = Harness([Invalid, null]);
         var job = SdlcAgentStageHarness.Job();
 
-        await harness.RunCallAsync(PlanCall(harness, job, feedback: "Split step 4"), "planning");
+        await harness.RunCallAsync(PlanCall(harness, job, feedback: "Split step 4"), "planning", Checks(harness));
 
         var corrective = AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey);
         var runs = harness.Store.AgentRuns;
@@ -121,7 +126,7 @@ public class SdlcPlanGeneratorStageTests
         using var harness = Harness([Invalid]);
         var job = SdlcAgentStageHarness.Job();
 
-        var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunCallAsync(PlanCall(harness, job), "planning"));
+        var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunCallAsync(PlanCall(harness, job), "planning", Checks(harness)));
 
         var error = PlanDocument.ParseAgentOutput(Invalid, MaxFiles).Error!;
         Assert.Equal(("INVALID_PLAN", error.Message, false), (ex.ErrorCode, ex.Message, ex.Transient));
@@ -144,7 +149,7 @@ public class SdlcPlanGeneratorStageTests
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             Optimisation: false);
 
-        await harness.RunCallAsync(PlanCall(harness, job, deployFiles: deployFiles), "planning");
+        await harness.RunCallAsync(PlanCall(harness, job, deployFiles: deployFiles), "planning", Checks(harness, deployFiles));
 
         var run = Assert.Single(harness.Store.AgentRuns);
         var draft = Assert.Single(harness.Store.Artifacts);
@@ -159,9 +164,9 @@ public class SdlcPlanGeneratorStageTests
     {
         using var harness = Harness([Invalid, null]);
         var job = SdlcAgentStageHarness.Job();
-        await harness.RunCallAsync(PlanCall(harness, job), "planning");
+        await harness.RunCallAsync(PlanCall(harness, job), "planning", Checks(harness));
 
-        await harness.RunCallAsync(PlanCall(harness, job with { Attempt = 2 }), "planning");
+        await harness.RunCallAsync(PlanCall(harness, job with { Attempt = 2 }), "planning", Checks(harness));
 
         Assert.Equal(2, harness.Provider.Requests.Count);
         Assert.Equal(2, harness.Store.AgentRuns.Count);

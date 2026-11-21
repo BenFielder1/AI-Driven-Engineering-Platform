@@ -157,9 +157,13 @@ internal sealed class SequenceProvider(FakeLlmProvider inner) : ILlmProvider, IT
 
     public Task<bool> SupportsToolsAsync(LlmRequest request, CancellationToken cancellationToken) => inner.SupportsToolsAsync(request, cancellationToken);
 
+    /// <summary>How many tool-loop turns were asked for (0: every call was a plain completion).</summary>
+    public int Turns { get; private set; }
+
     public Task<LlmToolTurn> CompleteTurnAsync(LlmToolRequest toolRequest, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(toolRequest);
+        Turns++;
         Requests.Add(toolRequest.Request);
         return Failures.TryDequeue(out var failure) ? throw failure : inner.CompleteTurnAsync(toolRequest, cancellationToken);
     }

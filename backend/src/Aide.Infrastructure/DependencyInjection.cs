@@ -86,6 +86,10 @@ public static class DependencyInjection
         // FR-79: fills last4 of LLM keys migrated from 0.1.0 projects (needs ISecretProtector from AddAideDataProtection).
         services.AddHostedService<LlmCredentialLast4Backfill>();
 
+        // FR-321, D-0.7.0-41: runs pinned to the earlier 0.7.0 SDLC definition move to the current one, before the backfill
+        // and the job worker (registered later).
+        services.AddHostedService<SdlcRunRepinService>();
+
         // FR-294, D-0.7.0-28: SDLC pipeline runs for 0.6.1 data, at start-up before the job worker (registered later) starts.
         services.AddHostedService<PipelineRunBackfillService>();
 

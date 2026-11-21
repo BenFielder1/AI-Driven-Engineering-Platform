@@ -26,6 +26,7 @@ public static class SdlcPipelineRegistration
         services.AddPipelineGuard<PlanStepsCompletedGuard>(SdlcGuardNames.PlanStepsCompleted);
         services.AddPipelineGuard<ReleaseEligibleGuard>(SdlcGuardNames.ReleaseEligible);
         services.AddPipelineGuard<ReviewCycleReadyGuard>(SdlcGuardNames.ReviewCycleReady);
+        services.AddPipelineGuard<Agents.SdlcPlanValidGuard>(SdlcGuardNames.PlanValid);
 
         services.AddScoped<IRunSettingsProvider, SdlcRunSettingsProvider>();
         services.AddScoped<IRunStartSelector, SdlcRunStartSelector>();

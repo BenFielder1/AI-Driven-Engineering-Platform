@@ -30,7 +30,13 @@ public static class SdlcGuardNames
     /// with steps left, and the working copy is prepared.</summary>
     public const string ReviewCycleReady = "sdlc.review-cycle-ready";
 
+    /// <summary>
+    /// FR-314, FR-321: the <c>planning</c> stage's <c>validate:</c> guard: the generated plan reads and passes the plan rules
+    /// (<c>INVALID_PLAN</c>). An output check, not an entry rule: it has no lifecycle condition.
+    /// </summary>
+    public const string PlanValid = "sdlc.plan-valid";
+
     /// <summary>Every SDLC guard name.</summary>
     public static IReadOnlyList<string> All { get; } =
-        [StartOnly, LeavingAnalysis, PlanHasSteps, WorkingCopyPrepared, PlanStepsCompleted, ReleaseEligible, ReviewCycleReady];
+        [StartOnly, LeavingAnalysis, PlanHasSteps, WorkingCopyPrepared, PlanStepsCompleted, ReleaseEligible, ReviewCycleReady, PlanValid];
 }

@@ -6,6 +6,7 @@ using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Agents;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Agents;
 
@@ -25,6 +26,12 @@ public sealed partial class SdlcAgentExtension
     public override Task<IReadOnlyList<string>> ValidateOutputAsync(AgentAttempt attempt, string content, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
+        if (DefinitionChecks(attempt))
+        {
+            // FR-321: the stage's validate: guard runs this check (sdlc.plan-valid); checking again would repeat each reason.
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+
         var error = Check(attempt).Error;
         return Task.FromResult<IReadOnlyList<string>>(error is null ? [] : [error.Message]);
     }
@@ -104,6 +111,16 @@ public sealed partial class SdlcAgentExtension
         SavingDraft = true;
         return new AgentStoreOverride(draft);
     }
+
+    /// <summary>
+    /// FR-321: whether the attempt's stage declares the guard that runs its job's check (the primary <c>plan_generator</c>
+    /// on a definition with <c>validate: [{ guard: sdlc.plan-valid }]</c>). Runs pinned to an earlier definition keep the
+    /// host check.
+    /// </summary>
+    private static bool DefinitionChecks(AgentAttempt attempt) =>
+        !attempt.IsSecondaryAgent
+        && attempt.Agent.Key == SdlcAgents.PlanGenerator
+        && attempt.Stage.Validate.Any(v => v.Guard == SdlcGuardNames.PlanValid);
 
     /// <summary>The job's reply check on the attempt's reply.</summary>
     private static Result<string> Check(AgentAttempt attempt) => CallOf(attempt).Spec.ToContent(ReplyOf(attempt.AgentRun!));
