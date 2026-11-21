@@ -102,6 +102,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
       bd61f3a, [CI 44929383412](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44929383412), characterisation unchanged. Three review rounds, 0 Critical/Major open
     - [x] `stack_analyst` (review clean); unit harness uses an offline `IEngineDbContext`
     - [x] `code_review`: the reply returns 0.6.1's `AgentRunOutcome`, and the optimisation plan draft is still stored by `RecordAsync` after scoring (`StoresDraft = false`, with a parse-only corrective check). Review: 0 Critical/Major
+    - [x] `plan_generator`: plan validation through the host hooks until FR-321. The draft Markdown is byte-identical. Review: 0 Critical/Major
     - **CI:** the integration test step limit was raised from 18 to 22 minutes (job limit 25). The `rest` shard's trx durations rose about 30% evenly across unrelated tests (Bitbucket, release flows; 765 s → 983 s), which points to runner speed, not the agent moves. Rebalancing the shards is a later follow-up.
   - [ ] M62d `build_fix`, then `code_generator`, with SDLC stage handlers (FR-319)
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)
@@ -239,6 +240,10 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Not wired yet:** the `snapshot_unavailable` warning (via `CallOptionsAsync().Warnings`) and the run's `tool_calls` on failure paths.
   - **Host prompt values:** placeholders the engine path can't fill come from host `PromptValues` (`SdlcContextPromptTests.HostValues`). `USER_FEEDBACK` goes through `AppendFeedback = false` plus `AgentRunMetadata.UserFeedback`.
   - **Recorded stage:** SDLC agent runs record `project.CurrentPhase` through `AgentRunMetadata.Stage`.
+  - **Plan validation in YAML (FR-321, M62e):** the `planning` stage gets `validate: [{ guard: sdlc.plan-valid }]` and `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }`.
+    - The guard runs `ParseAgentOutput(reply, project.MaxFilesPerStep, agents, deployFiles)` then `RenderChecked` on the stage output content (trimmed; parsing doesn't depend on the trim), and returns `error.Message` as its one reason. It needs max files, and the agents and deploy-file check from the version's stack (heavier than a fact lookup).
+    - The host's `ValidateOutputAsync` skips its planning check only when `attempt.Stage.Validate` declares `sdlc.plan-valid`. Otherwise each reason appears twice, and runs pinned to the earlier hash would lose the check.
+    - The corrective-input hook (`PREVIOUS_PLAN`), `RejectedErrorAsync` (null on a retry, `INVALID_PLAN: …` on the final failure), `AttemptsExhaustedAsync` (`INVALID_PLAN`) and the content transform stay.
   - **YAML (FR-321):** add `agent.tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code]` and stages for `repository_analyst`, `code_generator` and `build_fix`.
 
 - **D-0.7.0-35** (Build, M60, Claude, assumed): the generic API (FR-298–FR-303).

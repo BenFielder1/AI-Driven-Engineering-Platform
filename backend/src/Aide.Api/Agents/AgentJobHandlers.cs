@@ -197,9 +197,11 @@ public sealed class SpecGenerationJobHandler(
 /// scaffold first on an empty repository, the protected-path ownership exception); its warnings are shown with the draft.
 /// FR-242, FR-243: the guidance lists the deploy targets' required files, and a step is added for each one the plan and the
 /// base commit both lack (<see cref="DeployFileSteps"/>) before the plan is validated and stored.
+/// FR-318, FR-314: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>); until the definition declares
+/// <c>validate:</c> (FR-321), the plan check and its one corrective re-run are the SDLC extension's host hooks.
 /// </summary>
 public sealed class PlanGenerationJobHandler(
-    ArtifactAgentJob agentJob,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
     VersionStackLoader stacks,
@@ -263,6 +265,7 @@ public sealed class PlanGenerationJobHandler(
                 (rejected, error) => Request(
                     AgentOutput.ExtractJsonObject(rejected) ?? rejected,
                     ArtifactAgentJob.JoinFeedback(payload.Feedback, PlanDocument.CorrectiveFeedback(error)))),
+            payload.Trigger,
             cancellationToken);
     }
 
