@@ -5,16 +5,20 @@ using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Pipelines;
-using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Llm;
 using Tevrin.Engine.Runtime.Pipelines;
 
 namespace Tevrin.Engine.Runtime.Agents;
 
-/// <summary>An agent run's <c>output</c> (as the SDLC runner's): the answer, why it stopped, and loop warnings.</summary>
+/// <summary>
+/// An agent run's <c>output</c> (as the SDLC runner's): the answer, why it stopped, loop warnings, and (FR-312) the output
+/// token limit the call used when the host set one.
+/// </summary>
 public sealed record AgentStageRunOutput(string Text, string StopReason)
 {
     public IReadOnlyList<string>? Warnings { get; init; }
+
+    public int? MaxOutputTokens { get; init; }
 
     public int? Continuations { get; init; }
 }
@@ -27,20 +31,27 @@ public sealed partial class AgentStageRunner
     };
 
     /// <summary>
-    /// Calls the model. Every outcome finishes the agent run: success records tokens, cost, output and latency; a provider
-    /// error is stored sanitized and failed, and fails the job transiently or not as the provider said (FR-25); any other
-    /// exception is stored by type only (its text may quote the request); cancellation stores the run as cancelled.
+    /// Step 6: calls the model. Success records tokens, cost, output and latency. A provider error is stored sanitized and
+    /// goes to <see cref="AgentStageExtension.OnCallFailedAsync"/> (FR-315: fail, or stay <c>running</c> for the queue);
+    /// any other exception is stored by type only (its text may quote the request); a tool loop stopped between turns is
+    /// <c>BUDGET_EXCEEDED</c> (FR-26). Cancellation stores the run as cancelled, except under
+    /// <see cref="AgentRunPolicy.CommitRunSeparately"/> or for a run under the caller's id, where the run is left
+    /// <c>running</c> for the queue's retry (as 0.6.1). After the answer, the token hook gets
+    /// <see cref="CancellationToken.None"/>: the call was paid for.
     /// </summary>
     private async Task<LlmToolLoopResult> CallAsync(
-        PipelineRun run, AgentRun agentRun, LlmRequest request, AgentToolExecutor? executor, ResolvedLlm resolved, CancellationToken cancellationToken)
+        AgentAttempt attempt, AgentStageExtension extension, LlmRequest request, AgentToolExecutor? executor, AgentCallOptions options, CancellationToken cancellationToken)
     {
+        var (agentRun, resolved) = (attempt.AgentRun!, attempt.Llm!);
         using var firstToken = LlmFirstTokenProbe.Start(time);
         var started = time.GetTimestamp();
         var paid = default(LlmTurnTokens);
-        Task<bool> OnTurn(LlmTurnTokens soFar, CancellationToken _)
+        string? stopped = null;
+        async Task<bool> OnTurn(LlmTurnTokens soFar, CancellationToken token)
         {
             paid = soFar;
-            return Task.FromResult(true);
+            stopped = await extension.CheckToolTurnAsync(attempt, soFar, token);
+            return stopped is null;
         }
 
         LlmToolLoopResult answer;
@@ -48,61 +59,106 @@ public sealed partial class AgentStageRunner
         {
             answer = await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, executor, cancellationToken, OnTurn);
         }
+        catch (LlmToolLoopStoppedException ex)
+        {
+            var message = stopped ?? "The tool loop was stopped between turns.";
+            await RecordCallAsync(attempt, started, firstToken, executor, ex.Tokens);
+            await extension.OnBudgetExceededAsync(attempt, message, CancellationToken.None);
+            var failure = new AgentStageFailure(EngineErrorCodes.BudgetExceeded, message);
+            await EndFailedCallAsync(attempt, extension, new AgentRunFailureDecision(failure));
+            throw Failed(failure);
+        }
         catch (LlmProviderException ex)
         {
             var message = SecretRedaction.SanitizeProviderError(ex.Message, resolved.ApiKey);
-            await FailAsync(run, agentRun, AgentRunStatus.Failed, $"{ex.ErrorCode}: {message}", started, firstToken, executor, paid);
-            throw new JobFailedException(message, ex.Transient, ex.ErrorCode);
+            await RecordCallAsync(attempt, started, firstToken, executor, paid);
+            var decision = await extension.OnCallFailedAsync(attempt, new AgentStageFailure(ex.ErrorCode, message, ex.Transient), ex.StatusCode, CancellationToken.None);
+            await EndFailedCallAsync(attempt, extension, decision);
+            throw Failed(decision.Failure);
         }
         catch (OperationCanceledException)
         {
-            await FailAsync(run, agentRun, AgentRunStatus.Cancelled, "The run was cancelled.", started, firstToken, executor, paid);
+            if (!extension.Policy.CommitRunSeparately && attempt.Request.AgentRunId is null)
+            {
+                await RecordCallAsync(attempt, started, firstToken, executor, paid);
+                agentRun.Status = AgentRunStatus.Cancelled;
+                agentRun.Error = "The run was cancelled.";
+                await store.SaveChangesAsync(CancellationToken.None);
+            }
+
             throw;
         }
         catch (Exception ex)
         {
             var transient = ex is HttpRequestException or TimeoutException or IOException;
             var message = $"{resolved.Provider.ToWire()} call failed unexpectedly ({ex.GetType().Name}).";
-            await FailAsync(run, agentRun, AgentRunStatus.Failed, $"{EngineErrorCodes.ProviderError}: {message}", started, firstToken, executor, paid);
-            throw new JobFailedException(message, transient, EngineErrorCodes.ProviderError);
+            await RecordCallAsync(attempt, started, firstToken, executor, paid);
+            var decision = await extension.OnCallFailedAsync(attempt, new AgentStageFailure(EngineErrorCodes.ProviderError, message, transient), null, CancellationToken.None);
+            await EndFailedCallAsync(attempt, extension, decision);
+            throw Failed(decision.Failure);
         }
 
         var completion = answer.Completion;
         Finish(agentRun, started, firstToken, executor, completion.InputTokens, completion.OutputTokens);
         agentRun.Status = AgentRunStatus.Succeeded;
-        agentRun.Output = JsonSerializer.Serialize(
+        agentRun.Error = null;
+        IReadOnlyList<string> warnings = [.. options.Warnings.Concat(answer.Warnings).Where(w => !string.IsNullOrWhiteSpace(w)).Distinct(StringComparer.Ordinal)];
+        agentRun.Output = extension.SerializeOutput(
+            attempt,
             new AgentStageRunOutput(completion.Text, completion.StopReason)
             {
-                Warnings = answer.Warnings.Count == 0 ? null : answer.Warnings,
+                Warnings = warnings.Count == 0 ? null : warnings,
+                MaxOutputTokens = options.MaxTokens,
                 Continuations = answer.Continuations,
-            },
-            OutputJson);
-        await hooks.OnTokensUsedAsync(run, agentRun, (long)completion.InputTokens + completion.OutputTokens, cancellationToken);
+            });
+        await hooks.OnTokensUsedAsync(attempt.Run, agentRun, (long)completion.InputTokens + completion.OutputTokens, CancellationToken.None);
         return answer;
     }
 
-    private async Task FailAsync(
-        PipelineRun run, AgentRun agentRun, AgentRunStatus status, string error, long started, LlmFirstTokenProbe firstToken, AgentToolExecutor? executor, LlmTurnTokens paid)
+    /// <summary>The engine's <c>output</c> JSON: web JSON without nulls.</summary>
+    public static string SerializeOutput(AgentStageRunOutput output) => JsonSerializer.Serialize(output, OutputJson);
+
+    /// <summary>A failed call's timings, tool calls and paid turns (FR-26: counted for failed calls too).</summary>
+    private async Task RecordCallAsync(AgentAttempt attempt, long started, LlmFirstTokenProbe firstToken, AgentToolExecutor? executor, LlmTurnTokens paid)
     {
+        var agentRun = attempt.AgentRun!;
         Finish(agentRun, started, firstToken, executor, paid.InputTokens, paid.OutputTokens);
-        agentRun.Status = status;
-        agentRun.Error = error.Length > MaxErrorLength ? error[..MaxErrorLength] : error;
         if (paid.InputTokens + paid.OutputTokens > 0)
         {
-            await hooks.OnTokensUsedAsync(run, agentRun, (long)paid.InputTokens + paid.OutputTokens, CancellationToken.None);
+            await hooks.OnTokensUsedAsync(attempt.Run, agentRun, (long)paid.InputTokens + paid.OutputTokens, CancellationToken.None);
         }
-
-        await store.SaveChangesAsync(CancellationToken.None);
     }
 
-    /// <summary>Tokens, cost, duration, latency (FR-297) and tool calls of the attempt.</summary>
+    /// <summary>FR-315: a failed call either stays <c>running</c> (the queue retries) or fails the run and fires the failed hook.</summary>
+    private async Task EndFailedCallAsync(AgentAttempt attempt, AgentStageExtension extension, AgentRunFailureDecision decision)
+    {
+        var agentRun = attempt.AgentRun!;
+        var failure = decision.Failure;
+        agentRun.Error = Truncate($"{failure.ErrorCode}: {failure.Message}");
+        if (decision.KeepRunning && failure.Transient)
+        {
+            agentRun.Status = AgentRunStatus.Running;
+            agentRun.CompletedAt = null;
+            await CommitAsync(attempt, extension, AgentRunCommitPoint.KeptRunning, AgentRunVerdict.None, CancellationToken.None);
+            return;
+        }
+
+        agentRun.Status = AgentRunStatus.Failed;
+        await extension.OnRunFailedAsync(attempt, failure, CancellationToken.None);
+        await CommitAsync(attempt, extension, AgentRunCommitPoint.Failed, AgentRunVerdict.None, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Tokens, cost, duration, latency (FR-297) and tool calls of the attempt, added to what a resumed run already
+    /// recorded (a new run starts at zero).
+    /// </summary>
     private void Finish(AgentRun agentRun, long started, LlmFirstTokenProbe firstToken, AgentToolExecutor? executor, int inputTokens, int outputTokens)
     {
-        agentRun.InputTokens = inputTokens;
-        agentRun.OutputTokens = outputTokens;
-        agentRun.CostEstimate = AgentRunRules.EstimateCost(inputTokens, outputTokens, services.GetService(typeof(ILlmCatalog)) is ILlmCatalog catalog ? catalog.PriceOf(agentRun.Model) : null);
-        agentRun.DurationMs = (long)time.GetElapsedTime(started).TotalMilliseconds;
-        agentRun.LatencyMs = firstToken.LatencyMs(started);
+        agentRun.InputTokens += inputTokens;
+        agentRun.OutputTokens += outputTokens;
+        agentRun.CostEstimate = AgentRunRules.EstimateCost(agentRun.InputTokens, agentRun.OutputTokens, services.GetService(typeof(ILlmCatalog)) is ILlmCatalog catalog ? catalog.PriceOf(agentRun.Model) : null);
+        agentRun.DurationMs += (long)time.GetElapsedTime(started).TotalMilliseconds;
+        agentRun.LatencyMs = firstToken.LatencyMs(started) ?? agentRun.LatencyMs;
         agentRun.CompletedAt = time.GetUtcNow();
         agentRun.ToolCalls = executor?.CallsJson() ?? "[]";
     }

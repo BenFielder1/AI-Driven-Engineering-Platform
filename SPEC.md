@@ -462,11 +462,11 @@ The runner runs one attempt in this order. The order is 0.6.1's `AgentRunner` or
 3. Create or load the agent run by the host id (FR-310). If it already `succeeded`, return its stored output and stop.
 4. Run started hook (FR-311).
 5. Collect inputs and context providers, then render. On a retry, the corrective-input hook adds `PREVIOUS_*` and the feedback (FR-314).
-6. Call the model with the host options (FR-312). Tokens are recorded, and the run and tokens commit in their own transaction (FR-315).
-7. Validate (§4.55). If invalid, retry from step 5 or follow `then`.
-8. Content transform (FR-313), store the artifact version, post-store hook (FR-316), run completed hook.
+6. Call the model with the host options (FR-312). Tokens are recorded.
+7. Validate (§4.55). Then the run and its tokens commit in their own transaction with the run's verdict (FR-315). The host writes its run-completed or run-failed event in this commit, so 0.6.1's order (`RUN_COMPLETED` before `ARTIFACT_CREATED`) holds. This applies to rejected retry attempts too. If the output is invalid, retry from step 5 or follow `then`.
+8. Content transform (FR-313), an optional host veto on storing (0.6.1 skips a draft it may not create), store the artifact version, then the post-store hook (FR-316).
 
-On a transient failure at any step, the agent run stays `running` and the error is rethrown to the queue. On a permanent failure, the run failed hook fires and the run and job fail.
+On a transient failure at any step, the agent run stays `running` and the error is rethrown to the queue. On a permanent provider or pre-call failure, the run failed hook fires and the run and job fail. A `then: fail` verdict doesn't use that hook: the host writes its failure event from the step 7 commit, which carries the failure.
 
 ### 4.61 Move order and parity
 

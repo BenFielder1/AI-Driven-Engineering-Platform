@@ -29,7 +29,8 @@ internal sealed class AgentStageHarness : IDisposable
         Func<string, string>? editYaml = null,
         IEnumerable<IFakeToolScript>? scripts = null,
         IEnumerable<IAgentContextProvider>? contextProviders = null,
-        ILlmResolver? resolver = null)
+        ILlmResolver? resolver = null,
+        AgentStageExtension? extension = null)
     {
         var services = new ServiceCollection();
         services.AddPipelineRegistry();
@@ -44,6 +45,11 @@ internal sealed class AgentStageHarness : IDisposable
         foreach (var contextProvider in contextProviders ?? [])
         {
             services.AddSingleton(contextProvider);
+        }
+
+        if (extension is not null)
+        {
+            services.AddSingleton(extension);
         }
 
         services.AddAgentStages();
@@ -81,6 +87,10 @@ internal sealed class AgentStageHarness : IDisposable
 
     public Task<AgentStageResult> RunStageAsync(string stageId, string trigger = JobTriggers.StageEntered, string? feedback = null) =>
         Coordinator.RunAsync(new AgentStageRequest(Run.Id, stageId, trigger, feedback), TestContext.Current.CancellationToken);
+
+    /// <summary>FR-310: runs a stage under the caller's agent run id (as a job would on every delivery).</summary>
+    public Task<AgentStageResult> RunStageAsync(string stageId, Guid agentRunId) =>
+        Coordinator.RunAsync(new AgentStageRequest(Run.Id, stageId, JobTriggers.StageEntered) { AgentRunId = agentRunId }, TestContext.Current.CancellationToken);
 
     /// <summary>Locks the latest version of <paramref name="key"/> (as an approval would).</summary>
     public void Lock(string key) => Store.Artifacts.Where(a => a.Type == key).MaxBy(a => a.Version)!.Status = ArtifactStatus.Locked;

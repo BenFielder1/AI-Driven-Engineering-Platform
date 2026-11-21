@@ -1,6 +1,5 @@
-using System.Text.RegularExpressions;
+using System.Diagnostics;
 using Tevrin.Engine.Domain.Agents;
-using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Pipelines;
@@ -17,6 +16,7 @@ namespace Tevrin.Engine.Runtime.Agents;
 /// <see cref="ILlmResolver"/> with the stage's <see cref="IAgentTool"/>s, records the <see cref="AgentRun"/>, validates the
 /// output (artifact schema and <c>validate:</c> guards) and stores a valid output as a new artifact version (draft, or
 /// locked for <c>approval: auto_lock</c>). Retrying is <see cref="AgentStageCoordinator"/>'s job (scoped).
+/// FR-310–FR-316: the steps run in §4.60's order around the pipeline's <see cref="AgentStageExtension"/>.
 /// </summary>
 public sealed partial class AgentStageRunner(
     PipelineRegistry registry,
@@ -26,6 +26,7 @@ public sealed partial class AgentStageRunner(
     ArtifactSchemas schemas,
     IAgentStageHooks hooks,
     IEnumerable<IAgentContextProvider> contextProviders,
+    IEnumerable<AgentStageExtension> extensions,
     IServiceProvider services,
     TimeProvider time)
 {
@@ -57,7 +58,7 @@ public sealed partial class AgentStageRunner(
         }
     }
 
-    private async Task<AgentStageOutcome> RunAttemptAsync(AgentStageRequest request, System.Diagnostics.Activity? activity, CancellationToken cancellationToken)
+    private async Task<AgentStageOutcome> RunAttemptAsync(AgentStageRequest request, Activity? activity, CancellationToken cancellationToken)
     {
         var run = await store.FindRunAsync(request.RunId, cancellationToken) ?? throw Permanent($"Pipeline run {request.RunId} does not exist.");
         var loaded = registry.GetByHash(run.DefinitionHash) ?? throw Permanent($"The definition {run.DefinitionHash} of run {run.Id} is not registered.");
@@ -65,118 +66,123 @@ public sealed partial class AgentStageRunner(
         var stage = definition.FindStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
         var agent = stage.Agent ?? throw Permanent($"Stage '{stage.Id}' is not an agent stage.");
         activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
-
-        // A locked input whose content no longer matches its hash (FR-20) is absent, never fed to the model.
-        var inputs = (await store.LatestLockedAsync(run, stage.Inputs, cancellationToken))
-            .Where(a => ArtifactRules.IntegrityOf(a.Status, a.Content, a.ContentHash) == ArtifactIntegrity.Ok)
-            .ToList();
-        var context = new List<AgentContextSection>();
-        var contextRequest = new AgentContextRequest(run.Id, run.ProjectId, definition.Pipeline, stage.Id, agent.Key);
-        foreach (var provider in contextProviders.Where(p => p.PipelineId == definition.Pipeline))
+        var extension = AgentStageExtension.For(extensions, definition.Pipeline);
+        var existing = request.AgentRunId is { } runId ? await store.FindAgentRunAsync(runId, cancellationToken) : null;
+        if (existing is not null && (existing.ProjectId != run.ProjectId || existing.PipelineRunId != run.Id))
         {
-            context.AddRange(await provider.GetContextAsync(contextRequest, cancellationToken));
+            // FR-310: a caller's id names a run of this pipeline run, never another's. The stage isn't compared: a host may
+            // record another stage on the run (AgentRunMetadata.Stage).
+            throw Permanent($"Agent run {existing.Id} belongs to another project or pipeline run.");
         }
 
-        var promptName = agent.Prompt ?? agent.Key;
-        var source = prompts.Find(loaded.PackId, definition.Pipeline, promptName) ?? throw Permanent($"No prompt '{promptName}' is registered.");
-        var template = PromptTemplate.Parse(agent.Key, source);
-        if (!template.IsSuccess)
+        var separate = extension.Policy.CommitRunSeparately;
+        var attempt = new AgentAttempt(request, run, loaded.PackId, definition, stage, agent, existing);
+
+        // 1. FR-316: the host's pre-run check.
+        if (await extension.CheckBeforeRunAsync(attempt, cancellationToken) is { } refusal)
         {
-            throw Permanent($"Prompt '{promptName}' is invalid: {template.Error!.Message}");
+            await SaveIfSeparateAsync(separate);
+            throw Failed(refusal);
         }
 
-        var rendered = template.Value.Render(AgentStagePrompt.Values(inputs, context, request.Feedback));
-        if (!rendered.IsSuccess)
+        // 2. FR-26: the budget, for a new run only (a stored run already passed it, as 0.6.1).
+        if (existing is null && await hooks.CheckBudgetAsync(run, agent.Key, cancellationToken) is { } refused)
         {
-            throw new JobFailedException(rendered.Error!.Message, transient: false, rendered.Error.Code);
-        }
-
-        if (await hooks.CheckBudgetAsync(run, agent.Key, cancellationToken) is { } refused)
-        {
+            await extension.OnBudgetExceededAsync(attempt, refused, cancellationToken);
+            await SaveIfSeparateAsync(separate);
             throw new JobFailedException(refused, transient: false, EngineErrorCodes.BudgetExceeded);
         }
 
-        var user = AgentStagePrompt.UserMessage(template.Value, rendered.Value, request.Feedback);
-        var resolved = await llm.ResolveAsync(run.ProjectId, agent.Key, cancellationToken);
-        if (!resolved.IsConfigured)
+        // 3. FR-310: create the run, or load it by the caller's id.
+        var template = Template(loaded.PackId, definition, agent);
+        switch (existing?.Status)
         {
-            throw new JobFailedException($"No API key is configured for {resolved.Provider.ToWire()}.", transient: false, EngineErrorCodes.ProviderNotConfigured);
+            case AgentRunStatus.Succeeded:
+                return await RedeliverAsync(attempt, extension, existing, cancellationToken);
+            case AgentRunStatus.Failed or AgentRunStatus.Cancelled:
+                throw StoredFailure(existing);
         }
 
-        var tools = agent.Tools.Select(name => services.GetPipelineTool(name) ?? throw Permanent($"Tool '{name}' is not bound.")).ToList();
-        var executor = tools.Count > 0 ? new AgentToolExecutor(tools) : null;
-        var agentRun = NewAgentRun(run, stage, agent, resolved, template.Value.Version, inputs, request.Feedback);
-        RecordInput(agentRun, rendered.Value.System, user, resolved.ApiKey);
-        store.Add(agentRun);
+        var metadata = await StartRunAsync(attempt, extension, template.Version, cancellationToken);
+        var agentRun = attempt.AgentRun!;
+        PreparedCall prepared;
+        try
+        {
+            // 4. FR-311.
+            await extension.OnRunStartedAsync(attempt, cancellationToken);
+            if (separate && !attempt.Resumed)
+            {
+                await CommitAsync(attempt, extension, AgentRunCommitPoint.Started, AgentRunVerdict.None, cancellationToken);
+            }
+
+            // 5. FR-316's checks around inputs, context and render, then the key check.
+            prepared = await PrepareAsync(attempt, extension, template, metadata, cancellationToken);
+        }
+        catch (JobFailedException ex) when (!ex.Transient)
+        {
+            await FailBeforeCallAsync(attempt, extension, new AgentStageFailure(ex.ErrorCode ?? EngineErrorCodes.Validation, ex.Message));
+            throw;
+        }
+
+        // 6. FR-312: the call with the host's options; the run is committed first when the host commits separately.
+        var options = await extension.CallOptionsAsync(attempt, cancellationToken);
+        RecordInput(agentRun, prepared.System, prepared.User, attempt.Llm!.ApiKey);
+        agentRun.Attempts++;
+        if (separate)
+        {
+            await CommitAsync(attempt, extension, AgentRunCommitPoint.Calling, AgentRunVerdict.None, cancellationToken);
+        }
+        else if (!attempt.Resumed)
+        {
+            store.Add(agentRun);
+        }
 
         var llmRequest = new LlmRequest
         {
             Model = agentRun.Model,
-            System = rendered.Value.System,
-            Messages = [new LlmMessage(LlmRole.User, user)],
+            System = prepared.System,
+            Messages = [new LlmMessage(LlmRole.User, prepared.User)],
+            MaxTokens = options.MaxTokens,
+            ContextTokens = options.ContextTokens,
             Agent = agent.Key,
-            ApiKey = resolved.ApiKey,
+            ApiKey = attempt.Llm.ApiKey,
         };
-        var answer = await CallAsync(run, agentRun, llmRequest, executor, resolved, cancellationToken);
+        var answer = await CallAsync(attempt, extension, llmRequest, prepared.Executor, options, cancellationToken);
 
+        // 7–8. Validate, commit, store.
         var artifactDefinition = definition.FindArtifact(stage.Output);
         var content = AgentStagePrompt.Content(artifactDefinition?.Format ?? ArtifactFormat.Markdown, answer.Completion.Text);
-        var findings = await ValidateAsync(loaded.PackId, run, stage, artifactDefinition, content, cancellationToken);
-        Artifact? artifact = null;
-        if (findings is null)
-        {
-            artifact = artifactDefinition is null ? null : await StoreAsync(run, artifactDefinition, content, agentRun, cancellationToken);
-        }
-        else
-        {
-            // D-0.7.0-33: the call worked, so the run is succeeded, but the marker counts it as a failure in FR-298.
-            agentRun.Error = StageValidationRules.RejectedError(findings);
-        }
-
-        await store.SaveChangesAsync(cancellationToken);
-        return new AgentStageOutcome(findings is null, agentRun, artifact, findings, user, run, stage);
+        return await FinishAsync(attempt, extension, artifactDefinition, content, prepared.User, cancellationToken);
     }
 
-    private AgentRun NewAgentRun(
-        PipelineRun run,
-        StageDefinition stage,
-        AgentStageDefinition agent,
-        ResolvedLlm resolved,
-        string promptVersion,
-        IReadOnlyList<Artifact> inputs,
-        string? feedback) => new()
-        {
-            ProjectId = run.ProjectId,
-            ReleaseVersionId = run.SubjectId,
-            PipelineRunId = run.Id,
-            Agent = agent.Key,
-            Stage = stage.Id,
-            Provider = resolved.Provider,
-            Model = agent.Model ?? resolved.Model,
-            CredentialId = resolved.CredentialId,
-            PromptVersion = promptVersion,
-            InputArtifacts = [.. inputs.Select(a => new InputArtifactRef(a.Id, a.Type, a.Version))],
-            UserFeedback = feedback,
-            Status = AgentRunStatus.Running,
-            Attempts = 1,
-            CreatedAt = time.GetUtcNow(),
-        };
+    /// <summary>The old engine paths saved nothing on a refusal; a separately committing host gets its hook's changes saved.</summary>
+    private Task SaveIfSeparateAsync(bool separate) => separate ? store.SaveChangesAsync(CancellationToken.None) : Task.CompletedTask;
 
-    /// <summary>FR-297: the prompt as sent, redacted and capped; input the redaction can't process in time is left out.</summary>
-    private static void RecordInput(AgentRun agentRun, string system, string user, string? apiKey)
+    private PromptTemplate Template(string packId, PipelineDefinition definition, AgentStageDefinition agent)
     {
-        try
-        {
-            var recorded = AgentRunInput.Record([new("system", system), new("user", user)], apiKey);
-            agentRun.Input = recorded.Text;
-            agentRun.InputTruncated = recorded.Truncated;
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            agentRun.Input = null;
-            agentRun.InputTruncated = false;
-        }
+        var promptName = agent.Prompt ?? agent.Key;
+        var source = prompts.Find(packId, definition.Pipeline, promptName) ?? throw Permanent($"No prompt '{promptName}' is registered.");
+        var template = PromptTemplate.Parse(agent.Key, source);
+        return template.IsSuccess ? template.Value : throw Permanent($"Prompt '{promptName}' is invalid: {template.Error!.Message}");
     }
 
     private static JobFailedException Permanent(string message) => new(message, transient: false, EngineErrorCodes.Validation);
+
+    private static JobFailedException Failed(AgentStageFailure failure) => new(failure.Message, failure.Transient, failure.ErrorCode);
+
+    /// <summary>FR-310: a failed or cancelled stored run fails the job with its stored code (as 0.6.1).</summary>
+    private static JobFailedException StoredFailure(AgentRun run)
+    {
+        if (run.Error?.StartsWith(StageValidationRules.RejectedErrorPrefix, StringComparison.Ordinal) == true)
+        {
+            return new JobFailedException(run.Error, transient: false, EngineErrorCodes.Validation);
+        }
+
+        var code = run.Error?.Split(':', 2)[0] is { Length: > 0 } stored && stored.All(c => char.IsAsciiLetterUpper(c) || c == '_')
+            ? stored
+            : EngineErrorCodes.ProviderError;
+        return new JobFailedException(run.Error ?? "The run already failed.", transient: false, code);
+    }
+
+    private static string Truncate(string value) => value.Length > MaxErrorLength ? value[..MaxErrorLength] : value;
 }

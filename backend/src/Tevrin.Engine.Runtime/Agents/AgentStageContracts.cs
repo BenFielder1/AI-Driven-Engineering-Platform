@@ -12,7 +12,32 @@ namespace Tevrin.Engine.Runtime.Agents;
 /// <paramref name="Feedback"/> (a rejection comment, or validation findings on a retry) is given to the prompt;
 /// <paramref name="Attempt"/> is 1-based and counts validation retries (§4.55).
 /// </summary>
-public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigger, string? Feedback = null, int Attempt = 1);
+public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigger, string? Feedback = null, int Attempt = 1)
+{
+    /// <summary>
+    /// FR-310: the agent run's id from the caller (e.g. derived from its job), or <c>null</c> for a new id. A run already
+    /// stored under it is continued: a succeeded one returns its stored output without a model call, a running one (a lost
+    /// lease) is called again, and a failed or cancelled one fails the job with its stored error code.
+    /// </summary>
+    public Guid? AgentRunId { get; init; }
+
+    /// <summary>FR-314: extra prompt values (placeholder name → value) on top of the inputs and context, e.g. a retry's previous output.</summary>
+    public IReadOnlyDictionary<string, string?>? PromptValues { get; init; }
+
+    /// <summary>
+    /// FR-315: the 1-based delivery attempt of the job running this stage, or <c>null</c> when the caller doesn't say. The
+    /// default <see cref="AgentStageExtension.OnCallFailedAsync"/> uses it to fail a transient failure on the queue's last
+    /// attempt (<see cref="Domain.Agents.AgentRunRules.OnProviderFailure"/>); without it, the run stays <c>running</c> and
+    /// the host must fail it (e.g. when the job dead-letters) or override the hook.
+    /// </summary>
+    public int? JobAttempt { get; init; }
+
+    /// <summary>FR-314: whether feedback goes into a template without <c>{{FEEDBACK}}</c> under the engine's heading (default <c>true</c>).</summary>
+    public bool AppendFeedback { get; init; } = true;
+
+    /// <summary>Whatever the host passes to its own <see cref="AgentStageExtension"/> (the engine never reads it).</summary>
+    public object? HostState { get; init; }
+}
 
 /// <summary>
 /// FR-295: one agent run's result. <see cref="Valid"/>: the output passed validation and is stored as
@@ -26,7 +51,14 @@ public sealed record AgentStageOutcome(
     string? Findings,
     string Prompt,
     PipelineRun Run,
-    StageDefinition Stage);
+    StageDefinition Stage)
+{
+    /// <summary>FR-314: when this attempt ended the stage with <c>then: fail</c>, the job's failure.</summary>
+    public AgentStageFailure? Failure { get; init; }
+
+    /// <summary>FR-310: the run had already succeeded; its stored output was returned without a model call.</summary>
+    public bool Redelivered { get; init; }
+}
 
 /// <summary>How a stage's validate/retry loop ended (FR-296).</summary>
 public enum AgentStageEnd
@@ -52,10 +84,15 @@ public sealed record AgentStageResult(AgentStageEnd End, IReadOnlyList<AgentStag
     /// <summary>The findings of the last attempt, when it was invalid.</summary>
     public string? Findings => Last.Findings;
 
-    /// <summary>For the job layer: a <see cref="AgentStageEnd.Failed"/> stage fails its job at once (no retry), with
-    /// <c>VALIDATION</c> and the findings.</summary>
+    /// <summary>For the job layer: a <see cref="AgentStageEnd.Failed"/> stage fails its job at once (no retry), with the
+    /// extension's failure (FR-314; default <c>VALIDATION</c> and the findings).</summary>
     public void ThrowIfFailed()
     {
+        if (End == AgentStageEnd.Failed && Last.Failure is { } failure)
+        {
+            throw new JobFailedException(failure.Message, failure.Transient, failure.ErrorCode);
+        }
+
         if (End == AgentStageEnd.Failed)
         {
             throw new JobFailedException(

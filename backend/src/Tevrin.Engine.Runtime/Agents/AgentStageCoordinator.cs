@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
-using Tevrin.Engine.Domain.Jobs;
 
 namespace Tevrin.Engine.Runtime.Agents;
 
@@ -12,10 +11,15 @@ namespace Tevrin.Engine.Runtime.Agents;
 /// FR-296, §4.55: runs an agent stage until its output is valid or its <c>on_invalid</c> policy ends it. An invalid output
 /// is retried with the findings as feedback (trigger <c>validation_failed</c>) while <c>retry_with_feedback</c> and the
 /// attempt is below <c>max_attempts</c>; then <c>escalate</c> raises a pending <c>escalation</c> gate on the run, and
-/// <c>fail</c> marks the last agent run failed (the job layer fails the job with <see cref="AgentStageResult.ThrowIfFailed"/>).
+/// <c>fail</c> leaves the last agent run failed by the runner (the job layer fails the job with <see cref="AgentStageResult.ThrowIfFailed"/>).
 /// </summary>
 public sealed partial class AgentStageCoordinator(
-    AgentStageRunner runner, IAgentStageStore store, IAgentStageHooks hooks, TimeProvider time, ILogger<AgentStageCoordinator> logger)
+    AgentStageRunner runner,
+    IAgentStageStore store,
+    IAgentStageHooks hooks,
+    IEnumerable<AgentStageExtension> extensions,
+    TimeProvider time,
+    ILogger<AgentStageCoordinator> logger)
 {
     public async Task<AgentStageResult> RunAsync(AgentStageRequest request, CancellationToken cancellationToken)
     {
@@ -38,13 +42,11 @@ public sealed partial class AgentStageCoordinator(
                     var findingCount = FindingCount(outcome.Findings!);
                     LogValidationRetry(logger, outcome.Run.Id, outcome.Stage.Id, current.Attempt + 1, findingCount);
 
-                    // §4.55: the findings are appended to the request's own feedback (a rejection comment stays).
-                    current = current with
-                    {
-                        Trigger = JobTriggers.ValidationFailed,
-                        Feedback = StageValidationRules.RetryFeedback(request.Feedback, outcome.Findings!),
-                        Attempt = current.Attempt + 1,
-                    };
+                    // §4.55, FR-314: the extension builds the retry (default: the findings appended to the request's own
+                    // feedback, so a rejection comment stays). The attempt number is always the engine's.
+                    var extension = AgentStageExtension.For(extensions, outcome.Run.PipelineId);
+                    var next = await extension.NextAttemptAsync(request, current, outcome, cancellationToken);
+                    current = next with { Attempt = current.Attempt + 1 };
                     break;
 
                 case InvalidOutputAction.Escalate:
@@ -52,8 +54,7 @@ public sealed partial class AgentStageCoordinator(
                     return new AgentStageResult(AgentStageEnd.Escalated, attempts, gate);
 
                 default:
-                    outcome.AgentRun.Status = AgentRunStatus.Failed;
-                    await store.SaveChangesAsync(cancellationToken);
+                    // The runner already failed the run (FR-311's failed hook) and carries the failure (FR-314).
                     return new AgentStageResult(AgentStageEnd.Failed, attempts, null);
             }
         }
@@ -112,6 +113,14 @@ public static class AgentStageServiceCollectionExtensions
         services.TryAddScoped<AgentStageCoordinator>();
         services.TryAddSingleton<ArtifactSchemas>();
         services.TryAddSingleton<IPromptSource, PackPromptSource>();
+        return services;
+    }
+
+    /// <summary>FR-310–FR-316: registers a pipeline's <see cref="AgentStageExtension"/> (scoped; one per pipeline).</summary>
+    public static IServiceCollection AddAgentStageExtension<T>(this IServiceCollection services)
+        where T : AgentStageExtension
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<AgentStageExtension, T>());
         return services;
     }
 }
