@@ -12,8 +12,8 @@ namespace Tevrin.Engine.Runtime.Agents;
 
 public sealed partial class AgentStageRunner
 {
-    /// <summary>The rendered prompt of an attempt and the executor of its tools (<c>null</c>: none).</summary>
-    private sealed record PreparedCall(string System, string User, AgentToolExecutor? Executor);
+    /// <summary>The rendered prompt of an attempt and the stage's tools (the executor is built with the host's options).</summary>
+    private sealed record PreparedCall(string System, string User, IReadOnlyList<IAgentTool> Tools);
 
     /// <summary>
     /// Step 3 (FR-310, FR-312): continues a run left <c>running</c> (its provider and model, with the key resolved again),
@@ -105,6 +105,9 @@ public sealed partial class AgentStageRunner
             throw new JobFailedException(rendered.Error!.Message, transient: false, rendered.Error.Code);
         }
 
+        // FR-319: the host's transform of the rendered prompt (FR-121's specialist composition); default unchanged.
+        var prompt = await extension.TransformPromptAsync(attempt, rendered.Value, cancellationToken);
+
         if (metadata.InputArtifacts is null && !attempt.Resumed)
         {
             attempt.AgentRun!.InputArtifacts = [.. inputs.Select(a => new InputArtifactRef(a.Id, a.Type, a.Version))];
@@ -120,9 +123,9 @@ public sealed partial class AgentStageRunner
             throw new JobFailedException($"No API key is configured for {attempt.Llm.Provider.ToWire()}.", transient: false, EngineErrorCodes.ProviderNotConfigured);
         }
 
-        var user = AgentStagePrompt.UserMessage(template, rendered.Value, request.AppendFeedback ? request.Feedback : null);
+        var user = AgentStagePrompt.UserMessage(template, prompt, request.AppendFeedback ? request.Feedback : null);
         var tools = agent.Tools.Select(name => services.GetPipelineTool(name) ?? throw Permanent($"Tool '{name}' is not bound.")).ToList();
-        return new PreparedCall(rendered.Value.System, user, tools.Count > 0 ? new AgentToolExecutor(tools) : null);
+        return new PreparedCall(prompt.System, user, tools);
     }
 
     /// <summary>

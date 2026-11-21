@@ -170,6 +170,7 @@ public sealed partial class AgentStageRunner(
 
         // FR-312: what the host prepares just before the call (after the run, with its attempt, is saved).
         options = await extension.PrepareCallAsync(attempt, options, cancellationToken);
+        var executor = prepared.Tools.Count > 0 ? new AgentToolExecutor(prepared.Tools, options.ToolSession) : null;
 
         var llmRequest = new LlmRequest
         {
@@ -181,7 +182,7 @@ public sealed partial class AgentStageRunner(
             Agent = agent.Key,
             ApiKey = attempt.Llm.ApiKey,
         };
-        var answer = await CallAsync(attempt, extension, llmRequest, prepared.Executor, options, cancellationToken);
+        var answer = await CallAsync(attempt, extension, llmRequest, executor, options, cancellationToken);
 
         // 7–8. Validate, commit, store.
         var artifactDefinition = definition.FindArtifact(stage.Output);

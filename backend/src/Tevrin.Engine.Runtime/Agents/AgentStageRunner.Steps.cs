@@ -57,7 +57,9 @@ public sealed partial class AgentStageRunner
         LlmToolLoopResult answer;
         try
         {
-            answer = await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, options.Tools ?? executor, cancellationToken, OnTurn);
+            // FR-317: the host's tools, else the stage's; an executor with no tools (AgentToolExecutor.None) is a plain call.
+            var tools = options.Tools ?? executor;
+            answer = await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, tools is { Definitions.Count: 0 } ? null : tools, cancellationToken, OnTurn);
         }
         catch (LlmToolLoopStoppedException ex)
         {

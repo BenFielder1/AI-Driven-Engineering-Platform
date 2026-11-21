@@ -76,9 +76,17 @@ public sealed record AgentCallOptions(int? MaxTokens = null, int? ContextTokens 
 
     /// <summary>
     /// FR-317: the host's tools for this call, used instead of the stage's <c>agent.tools</c> (<c>null</c>: the stage's
-    /// tools, if any).
+    /// tools, if any). An executor with no definitions (<see cref="AgentToolExecutor.None"/>) offers no tools: the call is
+    /// a plain completion (0.6.1 without a repository snapshot).
     /// </summary>
     public ILlmToolExecutor? Tools { get; init; }
+
+    /// <summary>
+    /// FR-317, FR-319: the host's side of the stage's tool executor (limit, unknown-tool and invalid-argument results, tool
+    /// exceptions, fallback context, log format); <c>null</c>: <see cref="AgentToolSession.Default"/>. Not used when
+    /// <see cref="Tools"/> replaces the stage's tools.
+    /// </summary>
+    public AgentToolSession? ToolSession { get; init; }
 
     /// <summary>
     /// FR-317: the run's <c>tool_calls</c> log after the call (successful or failed), read instead of the stage tools' log;

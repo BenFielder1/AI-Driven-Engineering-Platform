@@ -90,6 +90,14 @@ public abstract class AgentStageExtension
     public virtual Task<AgentStoreOverride?> StoreOverrideAsync(AgentAttempt attempt, string content, CancellationToken cancellationToken) =>
         Task.FromResult<AgentStoreOverride?>(null);
 
+    /// <summary>
+    /// FR-319, step 5 after render (before the pre-call check and the key check): the prompt as sent, e.g. FR-121's
+    /// specialist composition of the base prompt (default: unchanged). The recorded input is the transformed prompt; a
+    /// <see cref="Jobs.JobFailedException"/> fails the run as a refused render does.
+    /// </summary>
+    public virtual Task<RenderedPrompt> TransformPromptAsync(AgentAttempt attempt, RenderedPrompt prompt, CancellationToken cancellationToken) =>
+        Task.FromResult(prompt);
+
     /// <summary>FR-26: between tool-loop turns (tokens so far in this call): a message stops the loop with <c>BUDGET_EXCEEDED</c>.</summary>
     public virtual Task<string?> CheckToolTurnAsync(AgentAttempt attempt, LlmTurnTokens soFar, CancellationToken cancellationToken) =>
         Task.FromResult<string?>(null);
