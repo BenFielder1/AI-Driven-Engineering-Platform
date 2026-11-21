@@ -53,8 +53,12 @@ public sealed partial class SdlcAgentExtension
             ?? throw new JobFailedException("The SDLC stage retry has no SDLC request.", transient: false, ErrorCodes.Validation);
         var text = ReplyOf(invalid.AgentRun);
         var error = call.Spec.ToContent(text).Error ?? new DomainError(ErrorCodes.Validation, invalid.Findings ?? string.Empty);
-        LogRejected(logger, call.Request.Agent, error.Code);
-        var corrective = new SdlcAgentStageCall(call.Spec.Corrective(text, error) with { RunKey = AgentOutput.CorrectiveRunKey }, call.Spec);
+        if (!call.Spec.LogsRejection)
+        {
+            LogRejected(logger, call.Request.Agent, error.Code);
+        }
+
+        var corrective = new SdlcAgentStageCall(call.Spec.Corrective(text, error) with { RunKey = AgentOutput.CorrectiveRunKey }, call.Spec.ForCorrective());
         var next = corrective.ToStageRequest(current.RunId, current.StageId, JobTriggers.ValidationFailed);
         return Task.FromResult(next with { Attempt = current.Attempt + 1 });
     }
@@ -79,6 +83,12 @@ public sealed partial class SdlcAgentExtension
         ArgumentNullException.ThrowIfNull(attempt);
         var call = CallOf(attempt);
         var run = attempt.AgentRun!;
+        if (!call.Spec.StoresDraft)
+        {
+            // The job decides what the accepted reply stores (FR-38: the review's optimisation plan, after scoring).
+            return new AgentStoreOverride(null);
+        }
+
         var (draft, added) = await data.AddDraftAsync(run.ProjectId, call.Spec.Type, content, run.Id, run.CompletedAt ?? run.CreatedAt, cancellationToken);
         if (draft is null)
         {

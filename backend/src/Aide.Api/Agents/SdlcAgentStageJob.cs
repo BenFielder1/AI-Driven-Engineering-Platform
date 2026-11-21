@@ -4,6 +4,7 @@ using Aide.Domain.Common;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Agents;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Pipelines;
@@ -90,12 +91,32 @@ public sealed partial class SdlcAgentStageJob(
     /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed); returns the id of the run that produced the draft.</summary>
     public async Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, string trigger, CancellationToken cancellationToken)
     {
+        var (runId, _) = await RunCoreAsync(request, spec, trigger, async () => (await legacy.RunAsync(request, spec, cancellationToken), null), cancellationToken);
+        return runId;
+    }
+
+    /// <summary>
+    /// FR-38: runs <paramref name="request"/> (with its corrective re-run if needed) without storing a draft
+    /// (<see cref="ArtifactAgentSpec.StoresDraft"/> off); returns the accepted run, as 0.6.1's runner returned it.
+    /// </summary>
+    public async Task<AgentRunOutcome> RunReplyAsync(AgentRunRequest request, ArtifactAgentSpec spec, string trigger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        var reply = spec with { StoresDraft = false };
+        var (_, outcome) = await RunCoreAsync(request, reply, trigger, async () => (default, await legacy.RunReplyAsync(request, reply, cancellationToken)), cancellationToken);
+        return outcome!;
+    }
+
+    private async Task<(Guid RunId, AgentRunOutcome? Outcome)> RunCoreAsync(
+        AgentRunRequest request, ArtifactAgentSpec spec, string trigger, Func<Task<(Guid, AgentRunOutcome?)>> legacyRun, CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(spec);
         switch (await locator.LocateAsync(request.ProjectId, request.Agent, cancellationToken))
         {
             case SdlcStageTarget.Found found:
-                return await RunOnEngineAsync(request, spec, found, trigger, cancellationToken);
+                var run = await RunOnEngineAsync(request, spec, found, trigger, cancellationToken);
+                return (run.Id, AgentRunner.Outcome(run));
             case SdlcStageTarget.Unavailable unavailable:
                 LogUnavailable(logger, request.Agent, unavailable.RunId, unavailable.DefinitionHash, unavailable.Missing);
                 throw ReleaseMoveFailure.Of(new DomainError(ErrorCodes.DefinitionUnavailable, SdlcLifecycle.DefinitionUnavailableMessage)
@@ -104,14 +125,14 @@ public sealed partial class SdlcAgentStageJob(
                 });
             case SdlcStageTarget.NoStage noStage:
                 LogNoStage(logger, request.Agent, noStage.RunId);
-                return await legacy.RunAsync(request, spec, cancellationToken);
+                return await legacyRun();
             default:
                 LogNoRun(logger, request.Agent);
-                return await legacy.RunAsync(request, spec, cancellationToken);
+                return await legacyRun();
         }
     }
 
-    private async Task<Guid> RunOnEngineAsync(AgentRunRequest request, ArtifactAgentSpec spec, SdlcStageTarget.Found target, string trigger, CancellationToken cancellationToken)
+    private async Task<AgentRun> RunOnEngineAsync(AgentRunRequest request, ArtifactAgentSpec spec, SdlcStageTarget.Found target, string trigger, CancellationToken cancellationToken)
     {
         // Each attempt opens its own log scope and span with its run id (SdlcAgentExtension.ObserveAttempt).
         var call = new SdlcAgentStageCall(request with { RunKey = null, Check = null }, spec);
@@ -128,7 +149,7 @@ public sealed partial class SdlcAgentStageJob(
         }
 
         result.ThrowIfFailed();
-        return result.Last.AgentRun.Id;
+        return result.Last.AgentRun;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "No pipeline run for {Agent} yet; running it on the SDLC runner")]

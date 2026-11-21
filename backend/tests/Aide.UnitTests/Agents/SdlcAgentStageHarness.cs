@@ -150,6 +150,20 @@ internal sealed class SdlcAgentStageHarness : IDisposable
         return await job.RunAsync(call.Request, call.Spec, JobTriggers.StageEntered, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Runs the job layer's reply-only path (<see cref="SdlcAgentStageJob.RunReplyAsync"/>) on the found stage.</summary>
+    public async Task<AgentRunOutcome> RunReplyJobAsync(SdlcAgentStageCall call, string stageId)
+    {
+        ArgumentNullException.ThrowIfNull(call);
+        await using var scope = _provider.CreateAsyncScope();
+        var job = new SdlcAgentStageJob(
+            scope.ServiceProvider.GetRequiredService<AgentStageCoordinator>(),
+            scope.ServiceProvider.GetRequiredService<SdlcAgentExtension>(),
+            new FixedLocator(new SdlcStageTarget.Found(Run.Id, stageId)),
+            new RecordingLegacyJob(),
+            NullLogger<SdlcAgentStageJob>.Instance);
+        return await job.RunReplyAsync(call.Request, call.Spec, JobTriggers.StageEntered, TestContext.Current.CancellationToken);
+    }
+
     public static JobExecution Job(int attempt = 1, Guid? id = null) =>
         new(id ?? Guid.CreateVersion7(), SdlcJobTypes.SpecGeneration, "{}", null, attempt);
 

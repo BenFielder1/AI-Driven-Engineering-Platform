@@ -179,6 +179,7 @@ internal sealed class AgentReplies(string agent, params string?[] replies) : IFa
     {
         Tevrin.Pack.Sdlc.SdlcAgents.IdeaRefinement => new Aide.Infrastructure.Agents.FakeIdeaRefinementResponder(),
         Tevrin.Pack.Sdlc.SdlcAgents.StackAnalyst => new Aide.Infrastructure.Agents.FakeStackAnalystResponder(),
+        Tevrin.Pack.Sdlc.SdlcAgents.CodeReview => new Aide.Infrastructure.Agents.FakeCodeReviewResponder(),
         _ => new Aide.Infrastructure.Agents.FakeSpecGeneratorResponder(),
     };
 }
@@ -220,6 +221,12 @@ internal sealed class RecordingLegacyJob : IArtifactAgentJob
     {
         Calls++;
         return Task.FromResult(RunId);
+    }
+
+    public Task<AgentRunOutcome> RunReplyAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
+    {
+        Calls++;
+        return Task.FromResult(new AgentRunOutcome(RunId, "legacy", "end_turn", LlmProvider.Fake, "fake-1", "1", 0, 0, DateTimeOffset.UnixEpoch));
     }
 }
 

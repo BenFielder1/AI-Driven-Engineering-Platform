@@ -28,6 +28,18 @@ public sealed record ArtifactAgentSpec(
 {
     /// <summary>Called with a newly added draft (not one a redelivered run already stored), before it is saved: e.g. its event (FR-193).</summary>
     public Action<Artifact, AgentRunOutcome>? OnAdded { get; init; }
+
+    /// <summary>The corrective re-run's check, when it differs from the first run's (FR-38: the review checks only that its reply reads).</summary>
+    public Func<string, Result<string>>? CorrectiveToContent { get; init; }
+
+    /// <summary>Whether the accepted reply becomes a draft here; <c>false</c>: the caller decides what it stores (FR-38's optimisation plan).</summary>
+    public bool StoresDraft { get; init; } = true;
+
+    /// <summary>The job logs a rejected reply itself (0.6.1's line), so the engine path doesn't log it again.</summary>
+    public bool LogsRejection { get; init; }
+
+    /// <summary>The spec of the corrective re-run (its check is <see cref="CorrectiveToContent"/> when set).</summary>
+    public ArtifactAgentSpec ForCorrective() => CorrectiveToContent is { } check ? this with { ToContent = check, CorrectiveToContent = null } : this;
 }
 
 /// <summary>
@@ -49,12 +61,26 @@ public interface IArtifactAgentJob
 {
     /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed); returns the id of the run that produced the draft.</summary>
     Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken);
+
+    /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed) without storing a draft; returns the accepted run.</summary>
+    Task<AgentRunOutcome> RunReplyAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken);
 }
 
 public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWriter drafts, AideDbContext db, ILogger<ArtifactAgentJob> logger) : IArtifactAgentJob
 {
     /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed); returns the id of the run that produced the draft.</summary>
     public async Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
+    {
+        var (run, content) = await RunCheckedAsync(request, spec, cancellationToken);
+        await AddDraftAsync(request.ProjectId, spec, content, run, cancellationToken);
+        return run.RunId;
+    }
+
+    public async Task<AgentRunOutcome> RunReplyAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken) =>
+        (await RunCheckedAsync(request, spec, cancellationToken)).Run;
+
+    /// <summary>The accepted run and its checked content: the first reply, else the corrective re-run's.</summary>
+    private async Task<(AgentRunOutcome Run, string Content)> RunCheckedAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(spec);
@@ -64,28 +90,31 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
         var checkedFirst = spec.ToContent(first.Text);
         if (checkedFirst.IsSuccess)
         {
-            await AddDraftAsync(request.ProjectId, spec, checkedFirst.Value, first, cancellationToken);
-            return first.RunId;
+            return (first, checkedFirst.Value);
         }
 
-        LogRejected(logger, request.Agent, checkedFirst.Error!.Code, checkedFirst.Error.Message);
-        var corrective = spec.Corrective(first.Text, checkedFirst.Error);
+        if (!spec.LogsRejection)
+        {
+            LogRejected(logger, request.Agent, checkedFirst.Error!.Code, checkedFirst.Error.Message);
+        }
+
+        var corrective = spec.Corrective(first.Text, checkedFirst.Error!);
+        var correctiveSpec = spec.ForCorrective();
         var second = await runner.RunAsync(
             corrective with
             {
                 RunKey = AgentOutput.CorrectiveRunKey,
-                Check = text => spec.ToContent(text) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                Check = text => correctiveSpec.ToContent(text) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
             },
             cancellationToken);
-        var checkedSecond = spec.ToContent(second.Text);
+        var checkedSecond = correctiveSpec.ToContent(second.Text);
         if (checkedSecond.IsFailure)
         {
             // Only reachable if a stored succeeded run no longer passes (e.g. the rules changed): never draft it.
             throw new JobFailedException(checkedSecond.Error!.Message, transient: false, checkedSecond.Error.Code);
         }
 
-        await AddDraftAsync(request.ProjectId, spec, checkedSecond.Value, second, cancellationToken);
-        return second.RunId;
+        return (second, checkedSecond.Value);
     }
 
     private async Task AddDraftAsync(Guid projectId, ArtifactAgentSpec spec, string content, AgentRunOutcome run, CancellationToken cancellationToken)
