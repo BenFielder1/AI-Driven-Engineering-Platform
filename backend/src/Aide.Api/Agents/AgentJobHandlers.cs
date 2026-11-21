@@ -110,9 +110,10 @@ public sealed class IdeaRefinementJobHandler(
 /// Iterations also get the codebase summary, the baseline spec and the repo tools at the base commit. FR-123: with a stack
 /// composition the prompt gets its summary, extra sections with guidance and conventions (<see cref="StackGuidance.Spec"/>),
 /// and validation requires those sections (a missing one is named in the corrective re-run).
+/// FR-318: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), with 0.6.1's records and order.
 /// </summary>
 public sealed class SpecGenerationJobHandler(
-    ArtifactAgentJob agentJob,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
     VersionStackLoader stacks,
@@ -175,6 +176,7 @@ public sealed class SpecGenerationJobHandler(
                 (rejected, error) => Request(
                     AgentOutput.UnwrapFence(rejected),
                     ArtifactAgentJob.JoinFeedback(payload.Feedback, SpecValidator.CorrectiveFeedback(error, context)))),
+            payload.Trigger,
             cancellationToken);
     }
 }
@@ -332,7 +334,7 @@ public static class AgentJobServiceCollectionExtensions
         services.AddScoped<IterationContextReader>();
         services.AddScoped<ArtifactAgentJob>();
 
-        // FR-317: the SDLC context providers and repo tools for the engine runner (no caller in the job path yet).
+        // FR-317, FR-318: the engine runner with the SDLC context providers, repo tools and extension.
         services.AddSdlcAgentExtensions();
         return services;
     }

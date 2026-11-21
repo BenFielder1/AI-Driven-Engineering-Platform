@@ -72,7 +72,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-314 | Corrective input; plan validation in `validate:` | 3.10, 4.55 | backend | M62a, M62c | partial | engine hook [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776); plan validation in M62c |
 | FR-315 | Transactions and failure handling | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
 | FR-316 | Pre-run and post-store host checks | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
-| FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | partial | providers, tools, pack names (M62b); `agent.tools` in the YAML with FR-321 |
+| FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | partial | providers, tools, pack names (M62b, 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872)); `agent.tools` in the YAML with FR-321 |
 | FR-318 | Six document agents on the engine runner | 3.10, 4.61 | backend | M62c | todo | |
 | FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | todo | |
 | FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | todo | |
@@ -89,8 +89,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M61 Engine UI (FR-304–FR-308): M61a 6f82a51 ([CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906)), M61b d7a8f59 ([CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349))
 - [ ] M62 SDLC on the engine runner (FR-310–FR-321, D-0.7.0-38), branch `build/tevrin-0.7.0-sdlc-engine`; snapshots and golden prompt files unchanged at every commit
   - [x] M62a Hooks (FR-310–FR-316) with fixture tests and the §4.60 order test: ba361b3, [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776). Two review rounds; §4.60 amended (commit with the verdict after validation, store veto)
-  - [x] M62b SDLC context providers and tools (FR-317): two review rounds. Live path unchanged; `agent.tools` in the YAML waits for FR-321
-  - [ ] M62c Document agents, one commit each in §4.61 order (FR-318, FR-314)
+  - [x] M62b SDLC context providers and tools (FR-317): 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872), two review rounds. Live path unchanged; `agent.tools` in the YAML waits for FR-321
+  - [ ] M62c Document agents, one commit each in §4.61 order (FR-318, FR-314). §4.61 reordered: agents with stages first; stageless agents bind via `agents:` (D-0.7.0-42)
+    - [x] `spec_generator` + `SdlcAgentExtension` (review: 0 Critical/Major, 7 Minor queued for the next move)
   - [ ] M62d `build_fix`, then `code_generator`, with SDLC stage handlers (FR-319)
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)
 - [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview

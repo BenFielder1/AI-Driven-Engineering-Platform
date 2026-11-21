@@ -18,8 +18,8 @@ public sealed partial class AgentStageRunner
         AgentAttempt attempt, AgentStageExtension extension, ArtifactDefinition? artifactDefinition, string content, string user, CancellationToken cancellationToken)
     {
         var (run, stage, agentRun) = (attempt.Run, attempt.Stage, attempt.AgentRun!);
-        var findings = await ValidateAsync(attempt.PackId, run, stage, artifactDefinition, content, CancellationToken.None);
-        var verdict = Verdict(stage, attempt.Request.Attempt, findings);
+        var findings = await ValidateAsync(attempt, extension, artifactDefinition, content, CancellationToken.None);
+        var verdict = Verdict(extension.OnInvalid(stage), attempt.Request.Attempt, findings);
         AgentStageFailure? failure = null;
         if (findings is not null)
         {
@@ -80,10 +80,10 @@ public sealed partial class AgentStageRunner
         var (run, stage) = (attempt.Run, attempt.Stage);
         var artifactDefinition = attempt.Definition.FindArtifact(stage.Output);
         var content = AgentStagePrompt.Content(artifactDefinition?.Format ?? ArtifactFormat.Markdown, ReadOutput(existing.Output)?.Text ?? string.Empty);
-        var findings = await ValidateAsync(attempt.PackId, run, stage, artifactDefinition, content, cancellationToken);
+        var findings = await ValidateAsync(attempt, extension, artifactDefinition, content, cancellationToken);
         if (findings is not null)
         {
-            var failure = Verdict(stage, attempt.Request.Attempt, findings) == AgentRunVerdict.Fail
+            var failure = Verdict(extension.OnInvalid(stage), attempt.Request.Attempt, findings) == AgentRunVerdict.Fail
                 ? await extension.AttemptsExhaustedAsync(attempt, findings, cancellationToken)
                 : null;
             return new AgentStageOutcome(false, existing, null, findings, string.Empty, run, stage) { Failure = failure, Redelivered = true };
@@ -103,10 +103,10 @@ public sealed partial class AgentStageRunner
     }
 
     /// <summary>§4.55: what an attempt's findings lead to.</summary>
-    private static AgentRunVerdict Verdict(StageDefinition stage, int attempt, string? findings) =>
+    private static AgentRunVerdict Verdict(OnInvalidPolicy? onInvalid, int attempt, string? findings) =>
         findings is null
             ? AgentRunVerdict.Valid
-            : StageValidationRules.OnInvalid(stage.OnInvalid, attempt) switch
+            : StageValidationRules.OnInvalid(onInvalid, attempt) switch
             {
                 InvalidOutputAction.Retry => AgentRunVerdict.Retry,
                 InvalidOutputAction.Escalate => AgentRunVerdict.Escalate,

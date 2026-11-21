@@ -348,7 +348,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 run.ProjectId,
-                new { agent = run.Agent, tokenBudget = budget.TokenBudget, tokensUsed = used, jobId = request.Job.Id, runId = run.Id },
+                SdlcRunEvents.BudgetStopped(run, budget.TokenBudget, used, request.Job.Id),
                 SystemActor.Name,
                 time.GetUtcNow());
             LogBudgetExceeded(logger, used, budget.TokenBudget);
@@ -367,7 +367,7 @@ public sealed partial class AgentRunner(
             {
                 // FR-78: the bound key was rejected: the connection is marked invalid and the run fails for good.
                 var rejected = $"The bound {run.Provider.ToWire()} connection's key was rejected (HTTP {ex.StatusCode}); its owner must replace it.";
-                await InvalidateCredentialAsync(run, credentialId);
+                await InvalidateCredentialAsync(db, time, logger, run, credentialId);
                 await FailAsync(run, ErrorCodes.CredentialInvalid, rejected, deadLetter: false);
                 throw new JobFailedException(rejected, transient: false, ErrorCodes.CredentialInvalid);
             }
@@ -470,7 +470,7 @@ public sealed partial class AgentRunner(
     /// <c>RUN_FAILED</c> notifies the project's Owners; the dedicated notification to the connection's owner is FR-92.
     /// Saved with the run's failure.
     /// </summary>
-    private async Task InvalidateCredentialAsync(AgentRun run, Guid credentialId)
+    internal static async Task InvalidateCredentialAsync(AideDbContext db, TimeProvider time, ILogger logger, AgentRun run, Guid credentialId)
     {
         var credential = await db.LlmCredentials.FirstOrDefaultAsync(c => c.Id == credentialId, CancellationToken.None);
         if (credential is null)
@@ -521,7 +521,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.BudgetExceeded,
                 project.Id,
-                new { agent = request.Agent, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed, jobId = request.Job.Id },
+                SdlcRunEvents.BudgetRefused(request.Agent, project.TokenBudget, project.TokensUsed, request.Job.Id),
                 SystemActor.Name,
                 now);
             await db.SaveChangesAsync(cancellationToken);
@@ -553,7 +553,7 @@ public sealed partial class AgentRunner(
         db.AddEvent(
             EventTypes.RunStarted,
             project.Id,
-            new { runId, jobId = request.Job.Id, agent = request.Agent, provider = resolved.Provider.ToWire(), model = resolved.Model, promptVersion = template.Version, stepId = request.StepId, stack = request.Stack?.CatalogLabel, agentKey = run.AgentKey, legacyAgentKey = request.LegacyAgentKey },
+            SdlcRunEvents.RunStarted(run, request.Job.Id, request.Stack?.CatalogLabel, request.LegacyAgentKey),
             SystemActor.Name,
             now);
         await db.SaveChangesAsync(cancellationToken);
@@ -626,7 +626,7 @@ public sealed partial class AgentRunner(
             db.AddEvent(
                 EventTypes.RunCompleted,
                 run.ProjectId,
-                new { runId = run.Id, agent = run.Agent, inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs, warnings },
+                SdlcRunEvents.RunCompleted(run, warnings),
                 SystemActor.Name,
                 now);
         }
@@ -656,18 +656,16 @@ public sealed partial class AgentRunner(
     /// <summary>Fails <paramref name="run"/> and adds its <c>RUN_FAILED</c> event (the caller saves).</summary>
     internal static void MarkFailed(AideDbContext db, AgentRun run, string errorCode, string message, bool deadLetter, DateTimeOffset now)
     {
-        run.Status = AgentRunStatus.Failed;
-        run.Error = Truncate($"{errorCode}: {message}");
-        run.CompletedAt = now;
+        SdlcRunEvents.Fail(run, errorCode, message, now);
         db.AddEvent(
             EventTypes.RunFailed,
             run.ProjectId,
-            new { runId = run.Id, agent = run.Agent, errorCode, error = run.Error, attempts = run.Attempts, deadLettered = deadLetter },
+            SdlcRunEvents.RunFailed(run, errorCode, deadLetter),
             SystemActor.Name,
             now);
     }
 
-    private static AgentRunOutcome Outcome(AgentRun run)
+    internal static AgentRunOutcome Outcome(AgentRun run)
     {
         var output = ReadOutput(run.Output);
         return new AgentRunOutcome(run.Id, output?.Text ?? string.Empty, output?.StopReason ?? string.Empty, run.Provider, run.Model, run.PromptVersion, run.InputTokens, run.OutputTokens, run.CompletedAt ?? run.CreatedAt)

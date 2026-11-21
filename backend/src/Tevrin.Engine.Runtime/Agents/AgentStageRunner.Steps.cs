@@ -57,12 +57,12 @@ public sealed partial class AgentStageRunner
         LlmToolLoopResult answer;
         try
         {
-            answer = await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, executor, cancellationToken, OnTurn);
+            answer = await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, options.Tools ?? executor, cancellationToken, OnTurn);
         }
         catch (LlmToolLoopStoppedException ex)
         {
             var message = stopped ?? "The tool loop was stopped between turns.";
-            await RecordCallAsync(attempt, started, firstToken, executor, ex.Tokens);
+            await RecordCallAsync(attempt, started, firstToken, executor, options, ex.Tokens);
             await extension.OnBudgetExceededAsync(attempt, message, CancellationToken.None);
             var failure = new AgentStageFailure(EngineErrorCodes.BudgetExceeded, message);
             await EndFailedCallAsync(attempt, extension, new AgentRunFailureDecision(failure));
@@ -71,7 +71,7 @@ public sealed partial class AgentStageRunner
         catch (LlmProviderException ex)
         {
             var message = SecretRedaction.SanitizeProviderError(ex.Message, resolved.ApiKey);
-            await RecordCallAsync(attempt, started, firstToken, executor, paid);
+            await RecordCallAsync(attempt, started, firstToken, executor, options, paid);
             var decision = await extension.OnCallFailedAsync(attempt, new AgentStageFailure(ex.ErrorCode, message, ex.Transient), ex.StatusCode, CancellationToken.None);
             await EndFailedCallAsync(attempt, extension, decision);
             throw Failed(decision.Failure);
@@ -80,7 +80,7 @@ public sealed partial class AgentStageRunner
         {
             if (!extension.Policy.CommitRunSeparately && attempt.Request.AgentRunId is null)
             {
-                await RecordCallAsync(attempt, started, firstToken, executor, paid);
+                await RecordCallAsync(attempt, started, firstToken, executor, options, paid);
                 agentRun.Status = AgentRunStatus.Cancelled;
                 agentRun.Error = "The run was cancelled.";
                 await store.SaveChangesAsync(CancellationToken.None);
@@ -92,14 +92,14 @@ public sealed partial class AgentStageRunner
         {
             var transient = ex is HttpRequestException or TimeoutException or IOException;
             var message = $"{resolved.Provider.ToWire()} call failed unexpectedly ({ex.GetType().Name}).";
-            await RecordCallAsync(attempt, started, firstToken, executor, paid);
+            await RecordCallAsync(attempt, started, firstToken, executor, options, paid);
             var decision = await extension.OnCallFailedAsync(attempt, new AgentStageFailure(EngineErrorCodes.ProviderError, message, transient), null, CancellationToken.None);
             await EndFailedCallAsync(attempt, extension, decision);
             throw Failed(decision.Failure);
         }
 
         var completion = answer.Completion;
-        Finish(agentRun, started, firstToken, executor, completion.InputTokens, completion.OutputTokens);
+        Finish(agentRun, started, firstToken, executor, options, completion.InputTokens, completion.OutputTokens);
         agentRun.Status = AgentRunStatus.Succeeded;
         agentRun.Error = null;
         IReadOnlyList<string> warnings = [.. options.Warnings.Concat(answer.Warnings).Where(w => !string.IsNullOrWhiteSpace(w)).Distinct(StringComparer.Ordinal)];
@@ -119,10 +119,10 @@ public sealed partial class AgentStageRunner
     public static string SerializeOutput(AgentStageRunOutput output) => JsonSerializer.Serialize(output, OutputJson);
 
     /// <summary>A failed call's timings, tool calls and paid turns (FR-26: counted for failed calls too).</summary>
-    private async Task RecordCallAsync(AgentAttempt attempt, long started, LlmFirstTokenProbe firstToken, AgentToolExecutor? executor, LlmTurnTokens paid)
+    private async Task RecordCallAsync(AgentAttempt attempt, long started, LlmFirstTokenProbe firstToken, AgentToolExecutor? executor, AgentCallOptions options, LlmTurnTokens paid)
     {
         var agentRun = attempt.AgentRun!;
-        Finish(agentRun, started, firstToken, executor, paid.InputTokens, paid.OutputTokens);
+        Finish(agentRun, started, firstToken, executor, options, paid.InputTokens, paid.OutputTokens);
         if (paid.InputTokens + paid.OutputTokens > 0)
         {
             await hooks.OnTokensUsedAsync(attempt.Run, agentRun, (long)paid.InputTokens + paid.OutputTokens, CancellationToken.None);
@@ -152,7 +152,7 @@ public sealed partial class AgentStageRunner
     /// Tokens, cost, duration, latency (FR-297) and tool calls of the attempt, added to what a resumed run already
     /// recorded (a new run starts at zero).
     /// </summary>
-    private void Finish(AgentRun agentRun, long started, LlmFirstTokenProbe firstToken, AgentToolExecutor? executor, int inputTokens, int outputTokens)
+    private void Finish(AgentRun agentRun, long started, LlmFirstTokenProbe firstToken, AgentToolExecutor? executor, AgentCallOptions options, int inputTokens, int outputTokens)
     {
         agentRun.InputTokens += inputTokens;
         agentRun.OutputTokens += outputTokens;
@@ -160,18 +160,19 @@ public sealed partial class AgentStageRunner
         agentRun.DurationMs += (long)time.GetElapsedTime(started).TotalMilliseconds;
         agentRun.LatencyMs = firstToken.LatencyMs(started) ?? agentRun.LatencyMs;
         agentRun.CompletedAt = time.GetUtcNow();
-        agentRun.ToolCalls = executor?.CallsJson() ?? "[]";
+        agentRun.ToolCalls = options.ToolCalls is { } log ? log() ?? agentRun.ToolCalls : executor?.CallsJson() ?? "[]";
     }
 
-    /// <summary>The findings of the output (schema errors and failed <c>validate:</c> guards), or <c>null</c> when valid.</summary>
+    /// <summary>The findings of the output (schema errors, failed <c>validate:</c> guards and the host's checks), or <c>null</c> when valid.</summary>
     private async Task<string?> ValidateAsync(
-        string packId, PipelineRun run, StageDefinition stage, ArtifactDefinition? artifact, string content, CancellationToken cancellationToken)
+        AgentAttempt attempt, AgentStageExtension extension, ArtifactDefinition? artifact, string content, CancellationToken cancellationToken)
     {
         IReadOnlyList<SchemaFinding> schemaErrors = artifact is { Format: ArtifactFormat.Json, Schema: { } schema }
-            ? schemas.Validate(packId, schema, content)
+            ? schemas.Validate(attempt.PackId, schema, content)
             : [];
         var reasons = new List<string>();
         var facts = FactBag.Empty.With(new StageOutputFact(artifact?.Key ?? string.Empty, artifact?.Format ?? ArtifactFormat.Markdown, content));
+        var (run, stage) = (attempt.Run, attempt.Stage);
         var guardContext = new GuardContext(run.Id, run.ProjectId, stage.Id, run.ApprovalMode, facts);
         foreach (var validation in stage.Validate)
         {
@@ -183,6 +184,8 @@ public sealed partial class AgentStageRunner
             }
         }
 
+        // FR-314: the host's own checks come after the guards' reasons.
+        reasons.AddRange(await extension.ValidateOutputAsync(attempt, content, cancellationToken));
         return reasons.Count == 0 && schemaErrors.Count == 0 ? null : StageValidationRules.Findings(reasons, schemaErrors);
     }
 

@@ -35,7 +35,8 @@ public sealed partial class AgentStageCoordinator(
                 return new AgentStageResult(AgentStageEnd.Stored, attempts, null);
             }
 
-            switch (StageValidationRules.OnInvalid(outcome.Stage.OnInvalid, current.Attempt))
+            var extension = AgentStageExtension.For(extensions, outcome.Run.PipelineId);
+            switch (StageValidationRules.OnInvalid(extension.OnInvalid(outcome.Stage), current.Attempt))
             {
                 case InvalidOutputAction.Retry:
                     // §8: each validation retry is logged with counts only, never the findings' content (NFR-SEC).
@@ -44,7 +45,6 @@ public sealed partial class AgentStageCoordinator(
 
                     // §4.55, FR-314: the extension builds the retry (default: the findings appended to the request's own
                     // feedback, so a rejection comment stays). The attempt number is always the engine's.
-                    var extension = AgentStageExtension.For(extensions, outcome.Run.PipelineId);
                     var next = await extension.NextAttemptAsync(request, current, outcome, cancellationToken);
                     current = next with { Attempt = current.Attempt + 1 };
                     break;

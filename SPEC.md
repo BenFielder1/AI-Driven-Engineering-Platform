@@ -470,7 +470,7 @@ On a transient failure at any step, the agent run stays `running` and the error 
 
 ### 4.61 Move order and parity
 
-Agents move one per commit, in this order: `repository_analyst`, `stack_analyst`, `idea_refinement`, `spec_generator`, `code_review`, `plan_generator`, `build_fix`, `code_generator`. Each commit keeps the characterisation snapshots, the golden prompt files and that agent's existing tests unchanged. There is no side-by-side parity mode: the snapshots and golden files are the parity check. If a snapshot change looks unavoidable, the build stops and asks Ben. Snapshots are never re-baselined without a decision.
+Agents move one per commit, in this order: `spec_generator`, `idea_refinement`, `stack_analyst`, `code_review`, `plan_generator`, then `repository_analyst`, `build_fix`, `code_generator`. *(Reordered in M62c: the first five already have an agent stage in `sdlc.pipeline.yaml`. The last three have none, and adding stages would change the stepper (FR-308), so they bind through an `agents:` list on an existing stage (D-0.7.0-42).)* Each commit keeps the characterisation snapshots, the golden prompt files and that agent's existing tests unchanged. There is no side-by-side parity mode: the snapshots and golden files are the parity check. If a snapshot change looks unavoidable, the build stops and asks Ben. Snapshots are never re-baselined without a decision.
 
 ### 4.56 Parity combinations (M58)
 
@@ -610,6 +610,7 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 | D-0.7.0-39 | The snapshot freeze (FR-261) holds through §3.10, with no re-baseline. The hooks exist so that the move changes nothing recorded. An unavoidable snapshot change stops the build for Ben's decision | Claude (from Ben's 0.7.0 brief: "the current SDLC orchestration must work in the same way") | assumed |
 | D-0.7.0-40 | Token limits (`MaxTokens`, `ContextTokens`) come from a host options hook, not from new definition fields, because they're project and admin settings (FR-312) | Claude | assumed |
 | D-0.7.0-41 | Non-final SDLC runs pinned to the earlier 0.7.0 SDLC hash are re-pinned at start-up instead of keeping both definitions runnable. The earlier definition is identical except that plan validation moved from host code into `validate:`, so behaviour is the same (FR-321). This narrows "editing the YAML never changes a run in progress" for this one SDLC upgrade | Claude | assumed |
+| D-0.7.0-42 | Agents with no stage of their own bind through an `agents:` list on an existing stage: each entry is `{ key, job_type, prompt?, inputs, output?, tools }`, and keys are unique across the pipeline. `code_generator` and `build_fix` go on `execution`, `repository_analyst` on `refinement`. Stages, transitions and the stepper are unchanged; `AgentStageRequest` names the agent (default: the stage's primary agent). It is additive to §4.49 and lands with the FR-321 hash bump | Ben (2026-11-21) | agreed |
 
 ## 11. Open questions
 

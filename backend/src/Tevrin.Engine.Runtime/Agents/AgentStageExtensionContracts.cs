@@ -60,6 +60,18 @@ public sealed record AgentCallOptions(int? MaxTokens = null, int? ContextTokens 
     public static AgentCallOptions None { get; } = new();
 
     public IReadOnlyList<string> Warnings { get; init; } = [];
+
+    /// <summary>
+    /// FR-317: the host's tools for this call, used instead of the stage's <c>agent.tools</c> (<c>null</c>: the stage's
+    /// tools, if any).
+    /// </summary>
+    public ILlmToolExecutor? Tools { get; init; }
+
+    /// <summary>
+    /// FR-317: the run's <c>tool_calls</c> log after the call (successful or failed), read instead of the stage tools' log;
+    /// a <c>null</c> result keeps the run's current log. <c>null</c>: the stage tools' log (<c>[]</c> without tools).
+    /// </summary>
+    public Func<string?>? ToolCalls { get; init; }
 }
 
 /// <summary>

@@ -2,6 +2,7 @@ using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Llm;
 
 namespace Tevrin.Engine.Runtime.Agents;
@@ -91,6 +92,23 @@ public abstract class AgentStageExtension
     /// </summary>
     public virtual Task<string?> RejectedErrorAsync(AgentAttempt attempt, string findings, AgentRunVerdict verdict, AgentStageFailure? failure, CancellationToken cancellationToken) =>
         Task.FromResult<string?>(StageValidationRules.RejectedError(findings));
+
+    /// <summary>
+    /// FR-314, step 7: the host's own checks of an answered output (<paramref name="content"/>, as the schema sees it),
+    /// added after the <c>validate:</c> guards' reasons. Any reason makes the output invalid (default: none).
+    /// </summary>
+    public virtual Task<IReadOnlyList<string>> ValidateOutputAsync(AgentAttempt attempt, string content, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>([]);
+
+    /// <summary>
+    /// FR-314, §4.55: the <c>on_invalid</c> policy of <paramref name="stage"/> for this pipeline's runs (default: the
+    /// definition's), e.g. for a host check (<see cref="ValidateOutputAsync"/>) on a stage that declares none.
+    /// </summary>
+    public virtual OnInvalidPolicy? OnInvalid(StageDefinition stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        return stage.OnInvalid;
+    }
 
     /// <summary>FR-312: the run's <c>output</c> JSON (default: web JSON without nulls).</summary>
     public virtual string SerializeOutput(AgentAttempt attempt, AgentStageRunOutput output) => AgentStageRunner.SerializeOutput(output);
