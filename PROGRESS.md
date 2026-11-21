@@ -91,7 +91,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] M62a Hooks (FR-310–FR-316) with fixture tests and the §4.60 order test: ba361b3, [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776). Two review rounds; §4.60 amended (commit with the verdict after validation, store veto)
   - [x] M62b SDLC context providers and tools (FR-317): 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872), two review rounds. Live path unchanged; `agent.tools` in the YAML waits for FR-321
   - [ ] M62c Document agents, one commit each in §4.61 order (FR-318, FR-314). §4.61 reordered: agents with stages first; stageless agents bind via `agents:` (D-0.7.0-42)
-    - [x] `spec_generator` + `SdlcAgentExtension` (review: 0 Critical/Major, 7 Minor queued for the next move)
+    - [x] `spec_generator` + `SdlcAgentExtension`: 7fb025b, [CI 44897521699](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44897521699) (attempt 2). Characterisation unchanged. Attempt 1's `rest` shard hit the 18-minute step timeout, and the re-run took about 18 minutes against about 14.5 before. Watch the shard time as more agents move. The review found 0 Critical/Major; its 7 Minor items are queued for the next move
   - [ ] M62d `build_fix`, then `code_generator`, with SDLC stage handlers (FR-319)
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)
 - [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview
