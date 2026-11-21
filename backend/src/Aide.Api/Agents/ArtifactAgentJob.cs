@@ -44,7 +44,14 @@ public sealed record ArtifactAgentSpec(
 /// already created. A conflict while saving the draft fails the job transiently; the retry re-uses the succeeded run, so
 /// the provider is never called (or paid) twice for one reply (FR-26).
 /// </summary>
-public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWriter drafts, AideDbContext db, ILogger<ArtifactAgentJob> logger)
+/// <summary>FR-318: the 0.6.1 artifact agent flow (a seam, so its engine replacement's fallback is tested without a database).</summary>
+public interface IArtifactAgentJob
+{
+    /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed); returns the id of the run that produced the draft.</summary>
+    Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken);
+}
+
+public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWriter drafts, AideDbContext db, ILogger<ArtifactAgentJob> logger) : IArtifactAgentJob
 {
     /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed); returns the id of the run that produced the draft.</summary>
     public async Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)

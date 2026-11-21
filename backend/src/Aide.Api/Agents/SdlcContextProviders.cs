@@ -1,7 +1,20 @@
 using Tevrin.Engine.Domain.Pipelines;
+using Tevrin.Engine.Runtime.Agents;
 using Tevrin.Pack.Sdlc;
+using static Aide.Api.Agents.SdlcContextNeed;
 
 namespace Aide.Api.Agents;
+
+/// <summary>FR-317: which SDLC context an agent stage still needs.</summary>
+internal static class SdlcContextNeed
+{
+    /// <summary>
+    /// Whether the agent uses any of <paramref name="names"/> that the host doesn't already supply as a prompt value (its
+    /// value would win): only then is the context read.
+    /// </summary>
+    public static bool Needed(AgentContextRequest request, IReadOnlyCollection<string> names) =>
+        SdlcAgentContext.NamesFor(request.AgentKey).Any(n => names.Contains(n) && !request.SuppliedPlaceholders.Contains(AgentStagePrompt.PlaceholderOf(n)));
+}
 
 /// <summary>
 /// FR-317: the project's context for an SDLC agent stage: <c>{{PROJECT_NAME}}</c>, <c>{{IDEA}}</c> and
@@ -16,7 +29,7 @@ public sealed class SdlcProjectContextProvider(ISdlcContextSource source) : IAge
     public async Task<IReadOnlyList<AgentContextSection>> GetContextAsync(AgentContextRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!SdlcAgentContext.NamesFor(request.AgentKey).Any(Names.Contains))
+        if (!Needed(request, Names))
         {
             return [];
         }
@@ -45,7 +58,7 @@ public sealed class SdlcIterationContextProvider(ISdlcContextSource source) : IA
     public async Task<IReadOnlyList<AgentContextSection>> GetContextAsync(AgentContextRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!SdlcAgentContext.NamesFor(request.AgentKey).Any(Names.Contains))
+        if (!Needed(request, Names))
         {
             return [];
         }

@@ -39,6 +39,18 @@ public sealed class RepoToolContext : IDisposable
         Tools = snapshot is null ? null : new RepoToolSession(snapshot.Root, time);
     }
 
+    private RepoToolContext(RepoToolSession tools)
+    {
+        Tools = tools;
+    }
+
+    /// <summary>Tools over a directory the caller manages (nothing to dispose), e.g. a test's repository.</summary>
+    public static RepoToolContext ForSession(RepoToolSession tools)
+    {
+        ArgumentNullException.ThrowIfNull(tools);
+        return new RepoToolContext(tools);
+    }
+
     public RepoToolSession? Tools { get; }
 
     public string? Warning { get; }

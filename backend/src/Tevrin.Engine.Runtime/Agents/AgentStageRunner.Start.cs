@@ -76,12 +76,18 @@ public sealed partial class AgentStageRunner
             throw Failed(notRendered);
         }
 
-        // A locked input whose content no longer matches its hash (FR-20) is absent, never fed to the model.
-        var inputs = (await store.LatestLockedAsync(run, stage.Inputs, cancellationToken))
+        // A locked input whose content no longer matches its hash (FR-20) is absent, never fed to the model. An input whose
+        // placeholder the host supplies isn't read (its value wins anyway), nor, when the host lists the run's inputs itself
+        // or the run is resumed, one the template doesn't use.
+        var supplied = new HashSet<string>(request.PromptValues?.Keys ?? [], StringComparer.Ordinal);
+        var listsInputs = metadata.InputArtifacts is null && !attempt.Resumed;
+        var used = template.Placeholders.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        var keys = stage.Inputs.Where(k => !supplied.Contains(AgentStagePrompt.PlaceholderOf(k)) && (listsInputs || used.Contains(AgentStagePrompt.PlaceholderOf(k)))).ToList();
+        var inputs = (await store.LatestLockedAsync(run, keys, cancellationToken))
             .Where(a => ArtifactRules.IntegrityOf(a.Status, a.Content, a.ContentHash) == ArtifactIntegrity.Ok)
             .ToList();
         var context = new List<AgentContextSection>();
-        var contextRequest = new AgentContextRequest(run.Id, run.ProjectId, attempt.Definition.Pipeline, stage.Id, agent.Key);
+        var contextRequest = new AgentContextRequest(run.Id, run.ProjectId, attempt.Definition.Pipeline, stage.Id, agent.Key) { SuppliedPlaceholders = supplied };
         foreach (var provider in contextProviders.Where(p => p.PipelineId == attempt.Definition.Pipeline))
         {
             context.AddRange(await provider.GetContextAsync(contextRequest, cancellationToken));

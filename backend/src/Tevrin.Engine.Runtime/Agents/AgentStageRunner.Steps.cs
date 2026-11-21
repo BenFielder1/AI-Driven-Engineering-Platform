@@ -93,7 +93,11 @@ public sealed partial class AgentStageRunner
             var transient = ex is HttpRequestException or TimeoutException or IOException;
             var message = $"{resolved.Provider.ToWire()} call failed unexpectedly ({ex.GetType().Name}).";
             await RecordCallAsync(attempt, started, firstToken, executor, options, paid);
-            var decision = await extension.OnCallFailedAsync(attempt, new AgentStageFailure(EngineErrorCodes.ProviderError, message, transient), null, CancellationToken.None);
+            var decision = await extension.OnCallFailedAsync(attempt, new AgentStageFailure(EngineErrorCodes.ProviderError, message, transient)
+            {
+                ExceptionType = ex.GetType().Name,
+                ExceptionDetail = SecretRedaction.SanitizeProviderError(ex.Message, resolved.ApiKey),
+            }, null, CancellationToken.None);
             await EndFailedCallAsync(attempt, extension, decision);
             throw Failed(decision.Failure);
         }

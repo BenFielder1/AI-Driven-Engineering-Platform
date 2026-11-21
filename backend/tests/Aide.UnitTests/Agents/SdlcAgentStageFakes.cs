@@ -43,7 +43,19 @@ internal sealed class MemoryAgentStageStore : IAgentStageStore
     {
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>The next save fails as a concurrent change would.</summary>
+    public bool ConflictOnNextSave { get; set; }
+
+    public Task SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        if (ConflictOnNextSave)
+        {
+            ConflictOnNextSave = false;
+            throw new Microsoft.EntityFrameworkCore.DbUpdateException("A concurrent change.");
+        }
+
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>The SDLC run data in memory: events as 0.6.1 stores them (<see cref="AideJson"/> payloads), commits, drafts.</summary>
@@ -58,7 +70,16 @@ internal sealed class MemoryRunData(MemoryAgentStageStore store) : ISdlcAgentRun
 
     public bool DraftAllowed { get; set; } = true;
 
-    public Task<Project?> ProjectAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<Project?>(Project);
+    /// <summary>Saving the next draft collides with a concurrent change.</summary>
+    public bool ConflictOnDraft { get; set; }
+
+    public int ProjectReads { get; private set; }
+
+    public Task<Project?> ProjectAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        ProjectReads++;
+        return Task.FromResult<Project?>(Project);
+    }
 
     public void AddEvent(string type, Guid projectId, object payload, DateTimeOffset at) => Events.Add((type, AideJson.Serialize(payload)));
 
@@ -100,6 +121,7 @@ internal sealed class MemoryRunData(MemoryAgentStageStore store) : ISdlcAgentRun
             CreatedAt = now,
         };
         store.Artifacts.Add(draft);
+        store.ConflictOnNextSave = ConflictOnDraft;
         Events.Add(("ARTIFACT_CREATED", AideJson.Serialize(new { artifactId = draft.Id, type, version, agentRunId })));
         return Task.FromResult<(Artifact?, bool)>((draft, true));
     }
@@ -118,8 +140,8 @@ internal sealed class FixedResolver(ILlmProvider provider) : ILlmResolver
     public ILlmProvider ProviderFor(LlmProvider kind) => provider;
 }
 
-/// <summary>A provider that throws the queued failures first, then answers with the inner provider; records each request.</summary>
-internal sealed class SequenceProvider(ILlmProvider inner) : ILlmProvider
+/// <summary>A provider that throws the queued failures first, then answers with the inner Fake (tools too); records each request.</summary>
+internal sealed class SequenceProvider(FakeLlmProvider inner) : ILlmProvider, IToolCallingLlmProvider
 {
     public Queue<Exception> Failures { get; } = new();
 
@@ -132,18 +154,30 @@ internal sealed class SequenceProvider(ILlmProvider inner) : ILlmProvider
         Requests.Add(request);
         return Failures.TryDequeue(out var failure) ? throw failure : inner.CompleteAsync(request, cancellationToken);
     }
+
+    public Task<bool> SupportsToolsAsync(LlmRequest request, CancellationToken cancellationToken) => inner.SupportsToolsAsync(request, cancellationToken);
+
+    public Task<LlmToolTurn> CompleteTurnAsync(LlmToolRequest toolRequest, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(toolRequest);
+        Requests.Add(toolRequest.Request);
+        return Failures.TryDequeue(out var failure) ? throw failure : inner.CompleteTurnAsync(toolRequest, cancellationToken);
+    }
 }
 
-/// <summary>Answers the spec generator with the scripted replies in order (the last repeats).</summary>
-internal sealed class SpecReplies(params string?[] replies) : IFakeAgentResponder
+/// <summary>Answers an agent with the scripted replies in order (the last repeats); <c>null</c> is its built-in Fake reply (valid).</summary>
+internal sealed class AgentReplies(string agent, params string?[] replies) : IFakeAgentResponder
 {
     private int _calls;
 
-    public string Agent => Tevrin.Pack.Sdlc.SdlcAgents.SpecGenerator;
+    public string Agent => agent;
 
-    /// <summary>A <c>null</c> reply is the built-in Fake spec (valid).</summary>
     public string Respond(LlmRequest request) =>
-        replies[Math.Min(++_calls, replies.Length) - 1] ?? new Aide.Infrastructure.Agents.FakeSpecGeneratorResponder().Respond(request);
+        replies[Math.Min(++_calls, replies.Length) - 1] ?? BuiltIn(agent).Respond(request);
+
+    private static IFakeAgentResponder BuiltIn(string agent) => agent == Tevrin.Pack.Sdlc.SdlcAgents.IdeaRefinement
+        ? new Aide.Infrastructure.Agents.FakeIdeaRefinementResponder()
+        : new Aide.Infrastructure.Agents.FakeSpecGeneratorResponder();
 }
 
 internal sealed class FixedOutputLimits : ILlmOutputLimits
@@ -153,14 +187,53 @@ internal sealed class FixedOutputLimits : ILlmOutputLimits
     public Task<int> ResolveAsync(LlmProvider provider, string model, string? apiKey, CancellationToken cancellationToken) => Task.FromResult(MaxTokens);
 }
 
-internal sealed class NoRepoOpener : IRepoToolOpener
+/// <summary>The repo tools an attempt opens (default: none), and how often they were opened.</summary>
+internal sealed class TestRepoOpener : IRepoToolOpener
 {
-    public Task<RepoToolContext> OpenAsync(Guid projectId, RepoScope scope, CancellationToken cancellationToken) => Task.FromResult(RepoToolContext.Empty);
+    public Func<RepoToolContext> Open { get; set; } = () => RepoToolContext.Empty;
+
+    public int Opened { get; private set; }
+
+    public Task<RepoToolContext> OpenAsync(Guid projectId, RepoScope scope, CancellationToken cancellationToken)
+    {
+        Opened++;
+        return Task.FromResult(Open());
+    }
+}
+
+/// <summary>A fixed stage target, and the legacy flow's calls.</summary>
+internal sealed class FixedLocator(SdlcStageTarget target) : ISdlcStageLocator
+{
+    public Task<SdlcStageTarget> LocateAsync(Guid projectId, string agent, CancellationToken cancellationToken) => Task.FromResult(target);
+}
+
+internal sealed class RecordingLegacyJob : IArtifactAgentJob
+{
+    public static readonly Guid RunId = Guid.CreateVersion7();
+
+    public int Calls { get; private set; }
+
+    public Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
+    {
+        Calls++;
+        return Task.FromResult(RunId);
+    }
 }
 
 internal sealed class NoIterationSource(MemoryRunData data) : ISdlcContextSource
 {
-    public Task<Project?> ProjectAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult<Project?>(data.Project);
+    /// <summary>How often a context provider read the project or the iteration.</summary>
+    public int Reads { get; private set; }
 
-    public Task<IterationContext> IterationAsync(Guid runId, Guid projectId, CancellationToken cancellationToken) => Task.FromResult(IterationContext.None);
+    public Task<Project?> ProjectAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        Reads++;
+        return Task.FromResult<Project?>(data.Project);
+    }
+
+    public Task<IterationContext> IterationAsync(Guid runId, Guid projectId, CancellationToken cancellationToken)
+    {
+        Reads++;
+        return Task.FromResult(IterationContext.None);
+    }
 }

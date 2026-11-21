@@ -29,14 +29,12 @@ public sealed partial class SdlcAgentExtension(
 {
     private bool _deadLetter;
     private (long? TokenBudget, long TokensUsed) _callBudget;
+    private SdlcAttemptObserver? _observer;
 
     public override string PipelineId => SdlcPack.PipelineId;
 
     /// <summary>FR-315: 0.6.1's order: the run is saved when it starts, before the call and when answered.</summary>
     public override AgentRunPolicy Policy => AgentRunPolicy.Separate;
-
-    /// <summary>The draft the last attempt stored (or found already stored), for the job's follow-ups.</summary>
-    public Artifact? Draft { get; private set; }
 
     /// <summary>Whether the attempt is saving its draft: a conflict then is the job's transient <c>CONFLICT</c>.</summary>
     public bool SavingDraft { get; private set; }
@@ -45,20 +43,35 @@ public sealed partial class SdlcAgentExtension(
         attempt.Request.HostState as SdlcAgentStageCall
             ?? throw new JobFailedException($"The {attempt.Agent.Key} stage was started without its SDLC request.", transient: false, ErrorCodes.Validation);
 
+    /// <summary>FR-311, NFR-OBS: 0.6.1's per-run log scope and <c>agent run</c> span (<see cref="SdlcAttemptObserver"/>).</summary>
+    public override IAgentAttemptObserver? ObserveAttempt(AgentStageRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _observer = request.HostState is SdlcAgentStageCall call ? new SdlcAttemptObserver(logger, request, call) : null;
+        return _observer;
+    }
+
     /// <summary>0.6.1: a new run of a project that is gone fails with <c>NOT_FOUND</c> (before the budget).</summary>
     public override async Task<AgentStageFailure?> CheckBeforeRunAsync(AgentAttempt attempt, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
         _ = CallOf(attempt);
-        Draft = null;
+        if (_observer is not null)
+        {
+            _observer.Attempt = attempt;
+        }
+
         SavingDraft = false;
         _deadLetter = false;
+        hooks.StartProject = null;
         if (attempt.Existing is not null)
         {
             return null;
         }
 
-        return await data.ProjectAsync(attempt.Run.ProjectId, cancellationToken) is null
+        // 0.6.1 read the project once at a run's start: its existence, budget, phase and version (shared with the hooks).
+        hooks.StartProject = await data.ProjectAsync(attempt.Run.ProjectId, cancellationToken);
+        return hooks.StartProject is null
             ? new AgentStageFailure(ErrorCodes.NotFound, "The project no longer exists.")
             : null;
     }
@@ -90,7 +103,7 @@ public sealed partial class SdlcAgentExtension(
     {
         ArgumentNullException.ThrowIfNull(attempt);
         var request = CallOf(attempt).Request;
-        var project = await data.ProjectAsync(attempt.Run.ProjectId, cancellationToken)
+        var project = hooks.StartProject ?? await data.ProjectAsync(attempt.Run.ProjectId, cancellationToken)
             ?? throw new JobFailedException("The project no longer exists.", transient: false, ErrorCodes.NotFound);
         attempt.AgentRun!.ReleaseVersionId = project.CurrentReleaseVersionId;
 
@@ -113,6 +126,11 @@ public sealed partial class SdlcAgentExtension(
     public override Task OnRunStartedAsync(AgentAttempt attempt, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
+        if (_observer is not null)
+        {
+            _observer.Run = attempt.AgentRun;
+        }
+
         if (attempt.Resumed)
         {
             return Task.CompletedTask;

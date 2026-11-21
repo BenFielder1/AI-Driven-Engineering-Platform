@@ -19,7 +19,7 @@ namespace Tevrin.Engine.Runtime.Agents;
 /// FR-310–FR-316: the steps run in §4.60's order around the pipeline's <see cref="AgentStageExtension"/>.
 /// </summary>
 public sealed partial class AgentStageRunner(
-    PipelineRegistry registry,
+    PipelineDefinitionResolver definitions,
     IAgentStageStore store,
     ILlmResolver llm,
     IPromptSource prompts,
@@ -61,12 +61,38 @@ public sealed partial class AgentStageRunner(
     private async Task<AgentStageOutcome> RunAttemptAsync(AgentStageRequest request, Activity? activity, CancellationToken cancellationToken)
     {
         var run = await store.FindRunAsync(request.RunId, cancellationToken) ?? throw Permanent($"Pipeline run {request.RunId} does not exist.");
-        var loaded = registry.GetByHash(run.DefinitionHash) ?? throw Permanent($"The definition {run.DefinitionHash} of run {run.Id} is not registered.");
-        var definition = loaded.Definition!;
+        var extension = AgentStageExtension.For(extensions, run.PipelineId);
+
+        // FR-311: the host observes the attempt (its log scope and span cover every later step).
+        using var observer = extension.ObserveAttempt(request);
+        try
+        {
+            var outcome = await RunObservedAsync(request, run, extension, activity, cancellationToken);
+            observer?.Completed(outcome);
+            return outcome;
+        }
+        catch (Exception ex) when (observer is not null)
+        {
+            observer.Failed(ex);
+            throw;
+        }
+    }
+
+    private async Task<AgentStageOutcome> RunObservedAsync(
+        AgentStageRequest request, PipelineRun run, AgentStageExtension extension, Activity? activity, CancellationToken cancellationToken)
+    {
+        // FR-277: the pinned definition, registered or stored (checked against its hash) with every name it uses registered.
+        var loaded = await definitions.ResolveAsync(run.DefinitionHash, cancellationToken);
+        if (loaded is not { Available: true })
+        {
+            throw new JobFailedException(
+                $"Run {run.Id} uses pipeline definition {run.DefinitionHash}, which this build can't run.", transient: false, EngineErrorCodes.DefinitionUnavailable);
+        }
+
+        var definition = loaded.Definition;
         var stage = definition.FindStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
         var agent = stage.Agent ?? throw Permanent($"Stage '{stage.Id}' is not an agent stage.");
         activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
-        var extension = AgentStageExtension.For(extensions, definition.Pipeline);
         var existing = request.AgentRunId is { } runId ? await store.FindAgentRunAsync(runId, cancellationToken) : null;
         if (existing is not null && (existing.ProjectId != run.ProjectId || existing.PipelineRunId != run.Id))
         {
@@ -136,6 +162,9 @@ public sealed partial class AgentStageRunner(
         {
             store.Add(agentRun);
         }
+
+        // FR-312: what the host prepares just before the call (after the run, with its attempt, is saved).
+        options = await extension.PrepareCallAsync(attempt, options, cancellationToken);
 
         var llmRequest = new LlmRequest
         {

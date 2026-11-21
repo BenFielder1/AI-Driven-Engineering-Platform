@@ -5,6 +5,7 @@ using Aide.Domain.Specs;
 using Aide.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Agents;
@@ -17,8 +18,8 @@ namespace Aide.UnitTests.Agents;
 
 /// <summary>
 /// FR-318: the SDLC's engine wiring as the host registers it (<see cref="SdlcAgentExtensionRegistration"/>, the SDLC
-/// pipeline, the infrastructure's LLM catalog), with the database seams in memory and a scripted Fake provider. A job is
-/// the spec generation job's request (<see cref="SpecGenerationJobHandler"/>'s, for a first version without a stack).
+/// pipeline, the infrastructure's LLM catalog), with the database seams in memory and a scripted Fake provider. A spec job
+/// is <see cref="SpecGenerationJobHandler"/>'s request for a first version without a stack.
 /// </summary>
 internal sealed class SdlcAgentStageHarness : IDisposable
 {
@@ -27,11 +28,18 @@ internal sealed class SdlcAgentStageHarness : IDisposable
     private readonly ServiceProvider _provider;
 
     public SdlcAgentStageHarness(params string?[] replies)
+        : this(SdlcAgents.SpecGenerator, [], replies)
     {
-        Provider = new SequenceProvider(new FakeLlmProvider([new SpecReplies(replies)]));
+    }
+
+    public SdlcAgentStageHarness(string agent, IEnumerable<IFakeToolScript> scripts, params string?[] replies)
+    {
+        Provider = new SequenceProvider(new FakeLlmProvider([new AgentReplies(agent, replies)], scripts));
         Data = new MemoryRunData(Store);
+        Context = new NoIterationSource(Data);
         var settings = new Dictionary<string, string?>
         {
+            ["ConnectionStrings:Aide"] = "Host=unused.invalid;Database=unused", // the resolver's context; never connects
             ["Llm:DefaultProvider"] = "fake",
             ["Llm:Providers:Anthropic:DefaultModel"] = "claude-opus-5-5",
             ["Llm:Providers:OpenAI:DefaultModel"] = "gpt-6-astra",
@@ -49,8 +57,8 @@ internal sealed class SdlcAgentStageHarness : IDisposable
         services.AddSingleton<ISdlcAgentRunData>(Data);
         services.AddSingleton<ILlmResolver>(new FixedResolver(Provider));
         services.AddSingleton<ILlmOutputLimits, FixedOutputLimits>();
-        services.AddSingleton<IRepoToolOpener, NoRepoOpener>();
-        services.AddSingleton<ISdlcContextSource>(new NoIterationSource(Data));
+        services.AddSingleton<IRepoToolOpener>(Repo);
+        services.AddSingleton<ISdlcContextSource>(Context);
         _provider = services.BuildServiceProvider();
 
         var registry = _provider.GetRequiredService<PipelineRegistry>();
@@ -72,12 +80,18 @@ internal sealed class SdlcAgentStageHarness : IDisposable
 
     public MemoryRunData Data { get; }
 
+    public NoIterationSource Context { get; }
+
+    public TestRepoOpener Repo { get; } = new();
+
     public SequenceProvider Provider { get; }
 
     public PipelineRun Run { get; }
 
+    public IServiceProvider Services => _provider;
+
     /// <summary>The spec job's request and spec, as <see cref="SpecGenerationJobHandler"/> builds them.</summary>
-    public static SdlcAgentStageCall SpecCall(JobExecution job, Guid projectId, string? previousSpec = null, string? feedback = null, IReadOnlyList<InputArtifactRef>? inputs = null, bool missingInput = false)
+    public static SdlcAgentStageCall SpecCall(JobExecution job, Guid projectId, string? previousSpec = null, string? feedback = null, bool missingInput = false)
     {
         var context = IterationContext.None.SpecContext;
         AgentRunRequest Request(string? previous, string? userFeedback) => new()
@@ -95,7 +109,6 @@ internal sealed class SdlcAgentStageHarness : IDisposable
                 ["PREVIOUS_SPECIFICATION"] = previous,
                 ["STACK_GUIDANCE"] = null,
             },
-            InputArtifacts = inputs ?? [],
             UserFeedback = userFeedback,
             Repo = RepoScope.BaseCommit,
         };
@@ -108,14 +121,32 @@ internal sealed class SdlcAgentStageHarness : IDisposable
     }
 
     /// <summary>Runs the spec stage for <paramref name="job"/> in a new scope, as the job does.</summary>
-    public async Task<AgentStageResult> RunAsync(JobExecution job, string? previousSpec = null, string? feedback = null, bool missingInput = false)
+    public Task<AgentStageResult> RunAsync(JobExecution job, string? previousSpec = null, string? feedback = null, bool missingInput = false) =>
+        RunCallAsync(SpecCall(job, Data.Project.Id, previousSpec, feedback, missingInput), "specification");
+
+    /// <summary>Runs <paramref name="call"/> on <paramref name="stageId"/> in a new scope, as the job does.</summary>
+    public async Task<AgentStageResult> RunCallAsync(SdlcAgentStageCall call, string stageId)
     {
+        ArgumentNullException.ThrowIfNull(call);
         await using var scope = _provider.CreateAsyncScope();
-        var call = SpecCall(job, Data.Project.Id, previousSpec, feedback, missingInput: missingInput);
         var result = await scope.ServiceProvider.GetRequiredService<AgentStageCoordinator>()
-            .RunAsync(call.ToStageRequest(Run.Id, "specification", JobTriggers.StageEntered), TestContext.Current.CancellationToken);
+            .RunAsync(call.ToStageRequest(Run.Id, stageId, JobTriggers.StageEntered), TestContext.Current.CancellationToken);
         result.ThrowIfFailed();
         return result;
+    }
+
+    /// <summary>Runs the job layer (<see cref="SdlcAgentStageJob"/>) with <paramref name="target"/> and a recording legacy flow.</summary>
+    public async Task<Guid> RunJobAsync(SdlcAgentStageCall call, SdlcStageTarget target, RecordingLegacyJob legacy)
+    {
+        ArgumentNullException.ThrowIfNull(call);
+        await using var scope = _provider.CreateAsyncScope();
+        var job = new SdlcAgentStageJob(
+            scope.ServiceProvider.GetRequiredService<AgentStageCoordinator>(),
+            scope.ServiceProvider.GetRequiredService<SdlcAgentExtension>(),
+            new FixedLocator(target),
+            legacy,
+            NullLogger<SdlcAgentStageJob>.Instance);
+        return await job.RunAsync(call.Request, call.Spec, JobTriggers.StageEntered, TestContext.Current.CancellationToken);
     }
 
     public static JobExecution Job(int attempt = 1, Guid? id = null) =>

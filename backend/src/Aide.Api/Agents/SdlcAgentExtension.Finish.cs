@@ -70,11 +70,11 @@ public sealed partial class SdlcAgentExtension
     }
 
     /// <summary>
-    /// FR-27–FR-29, step 8: the SDLC stores its draft itself, through 0.6.1's draft writer (phase check, <c>xmin</c>,
-    /// superseding, events, dated by the run's completion), so the engine stores nothing: this returns <c>false</c>. A
-    /// draft the phase no longer allows is skipped (0.6.1's log).
+    /// FR-27–FR-29, FR-313, step 8, the store override: the SDLC stores its draft itself, through 0.6.1's draft writer
+    /// (phase check, <c>xmin</c>, superseding, events, dated by the run's completion), and returns it as the attempt's
+    /// artifact. A draft the phase no longer allows is skipped (0.6.1's log; no artifact).
     /// </summary>
-    public override async Task<bool> ShouldStoreAsync(AgentAttempt attempt, string content, CancellationToken cancellationToken)
+    public override async Task<AgentStoreOverride?> StoreOverrideAsync(AgentAttempt attempt, string content, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
         var call = CallOf(attempt);
@@ -83,7 +83,7 @@ public sealed partial class SdlcAgentExtension
         if (draft is null)
         {
             LogDraftSkipped(logger, call.Spec.Type);
-            return false;
+            return new AgentStoreOverride(null);
         }
 
         if (added && call.Spec.OnAdded is { } onAdded)
@@ -91,9 +91,8 @@ public sealed partial class SdlcAgentExtension
             onAdded(draft, AgentRunner.Outcome(run));
         }
 
-        Draft = draft;
         SavingDraft = true;
-        return false;
+        return new AgentStoreOverride(draft);
     }
 
     /// <summary>The job's reply check on the attempt's reply.</summary>

@@ -25,9 +25,10 @@ namespace Aide.Api.Agents;
 /// version's locked project request and spec (all listed as input artifacts) and the repo tools at the base commit. If
 /// the summary doesn't exist yet the job waits for it (<see cref="SummaryWaiter"/>), then continues without it.
 /// </para>
+/// FR-318: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), with 0.6.1's records and order.
 /// </summary>
 public sealed class IdeaRefinementJobHandler(
-    ArtifactAgentJob agentJob,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
     VersionStackLoader stacks,
@@ -96,6 +97,7 @@ public sealed class IdeaRefinementJobHandler(
                 (_, error) => Request(ArtifactAgentJob.JoinFeedback(
                     payload.Feedback,
                     $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above."))),
+            payload.Trigger,
             cancellationToken);
     }
 }

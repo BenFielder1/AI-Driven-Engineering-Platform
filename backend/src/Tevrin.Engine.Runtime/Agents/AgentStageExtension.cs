@@ -65,6 +65,28 @@ public abstract class AgentStageExtension
     public virtual Task<AgentCallOptions> CallOptionsAsync(AgentAttempt attempt, CancellationToken cancellationToken) =>
         Task.FromResult(AgentCallOptions.None);
 
+    /// <summary>
+    /// FR-312, step 6 after the run is recorded and saved before the call (with <see cref="AgentRunPolicy.CommitRunSeparately"/>,
+    /// the attempt is counted): the options of <see cref="CallOptionsAsync"/> completed with what the host prepares just
+    /// before the call, e.g. its tools (default: unchanged). A failure here leaves the run as saved.
+    /// </summary>
+    public virtual Task<AgentCallOptions> PrepareCallAsync(AgentAttempt attempt, AgentCallOptions options, CancellationToken cancellationToken) =>
+        Task.FromResult(options);
+
+    /// <summary>
+    /// FR-311: observes one attempt of <paramref name="request"/> from before step 1 to its end, e.g. a log scope or a
+    /// trace span (default: none). Called once the pipeline is known.
+    /// </summary>
+    public virtual IAgentAttemptObserver? ObserveAttempt(AgentStageRequest request) => null;
+
+    /// <summary>
+    /// FR-313, step 8: the host stores the (transformed) content itself instead of the engine, and returns what it stored
+    /// (default <c>null</c>: the engine stores it, after <see cref="ShouldStoreAsync"/>). The artifact it returns is the
+    /// attempt's <see cref="AgentStageOutcome.Artifact"/>; <see cref="OnArtifactStoredAsync"/> isn't called for it.
+    /// </summary>
+    public virtual Task<AgentStoreOverride?> StoreOverrideAsync(AgentAttempt attempt, string content, CancellationToken cancellationToken) =>
+        Task.FromResult<AgentStoreOverride?>(null);
+
     /// <summary>FR-26: between tool-loop turns (tokens so far in this call): a message stops the loop with <c>BUDGET_EXCEEDED</c>.</summary>
     public virtual Task<string?> CheckToolTurnAsync(AgentAttempt attempt, LlmTurnTokens soFar, CancellationToken cancellationToken) =>
         Task.FromResult<string?>(null);

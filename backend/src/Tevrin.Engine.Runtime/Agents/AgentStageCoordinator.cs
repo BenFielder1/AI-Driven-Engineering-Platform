@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Pipelines;
 
 namespace Tevrin.Engine.Runtime.Agents;
 
@@ -108,6 +109,8 @@ public static class AgentStageServiceCollectionExtensions
     {
         services.AddLogging(); // the coordinator logs validation retries (§8); idempotent
         services.TryAddScoped<IAgentStageStore, EngineAgentStageStore>();
+        services.TryAddSingleton<PipelineDefinitionCache>();
+        services.TryAddScoped<PipelineDefinitionResolver>();
         services.TryAddScoped<IAgentStageHooks, NoAgentStageHooks>();
         services.TryAddScoped<AgentStageRunner>();
         services.TryAddScoped<AgentStageCoordinator>();

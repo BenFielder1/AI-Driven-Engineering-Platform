@@ -466,6 +466,8 @@ The runner runs one attempt in this order. The order is 0.6.1's `AgentRunner` or
 7. Validate (§4.55). Then the run and its tokens commit in their own transaction with the run's verdict (FR-315). The host writes its run-completed or run-failed event in this commit, so 0.6.1's order (`RUN_COMPLETED` before `ARTIFACT_CREATED`) holds. This applies to rejected retry attempts too. If the output is invalid, retry from step 5 or follow `then`.
 8. Content transform (FR-313), an optional host veto on storing (0.6.1 skips a draft it may not create), store the artifact version, then the post-store hook (FR-316).
 
+Inputs: an input the host supplies through prompt values is not read again. When the host lists the run's input artifacts itself, that list is stored. Otherwise the engine lists only the inputs it read. Context providers skip names the host supplies (`SuppliedPlaceholders`). The pinned definition is resolved as for lifecycle moves (D-0.7.0-37): registered, or stored and runnable. Otherwise `DEFINITION_UNAVAILABLE`.
+
 On a transient failure at any step, the agent run stays `running` and the error is rethrown to the queue. On a permanent provider or pre-call failure, the run failed hook fires and the run and job fail. A `then: fail` verdict doesn't use that hook: the host writes its failure event from the step 7 commit, which carries the failure.
 
 ### 4.61 Move order and parity

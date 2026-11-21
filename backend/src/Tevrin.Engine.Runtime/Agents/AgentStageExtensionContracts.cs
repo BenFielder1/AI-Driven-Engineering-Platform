@@ -49,7 +49,14 @@ public sealed class AgentAttempt
 }
 
 /// <summary>FR-316, FR-314, FR-315: why the engine refuses or fails an attempt: the job's error code and message.</summary>
-public sealed record AgentStageFailure(string ErrorCode, string Message, bool Transient = false);
+public sealed record AgentStageFailure(string ErrorCode, string Message, bool Transient = false)
+{
+    /// <summary>The type name of an unexpected exception behind a failed provider call (<c>null</c>: none, or a provider error).</summary>
+    public string? ExceptionType { get; init; }
+
+    /// <summary>That exception's text, redacted (<see cref="Domain.Agents.SecretRedaction.SanitizeProviderError"/> with the call's key), for the host's logs.</summary>
+    public string? ExceptionDetail { get; init; }
+}
 
 /// <summary>
 /// FR-312: per-call request options from the host (<c>null</c>: the provider's default). <see cref="Warnings"/> are known
@@ -171,3 +178,19 @@ public sealed record AgentRunPolicy(bool CommitRunSeparately = false)
 /// hook fires.
 /// </summary>
 public sealed record AgentRunFailureDecision(AgentStageFailure Failure, bool KeepRunning = false);
+
+/// <summary>
+/// FR-311: a host's view of one attempt (e.g. its log scope and trace span), from before step 1 to the attempt's end
+/// (<see cref="AgentStageExtension.ObserveAttempt"/>). Disposed when the attempt ends, after one of its callbacks.
+/// </summary>
+public interface IAgentAttemptObserver : IDisposable
+{
+    /// <summary>The attempt returned <paramref name="outcome"/> (valid, invalid, or failed with <c>then: fail</c>).</summary>
+    void Completed(AgentStageOutcome outcome);
+
+    /// <summary>The attempt threw <paramref name="exception"/> (rethrown after this).</summary>
+    void Failed(Exception exception);
+}
+
+/// <summary>FR-313: what a host's store override stored (<see cref="Artifact"/>: <c>null</c> when it skipped the content).</summary>
+public sealed record AgentStoreOverride(Artifact? Artifact);

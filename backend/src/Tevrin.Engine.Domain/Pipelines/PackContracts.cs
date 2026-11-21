@@ -159,7 +159,14 @@ public interface IAgentTool
 }
 
 /// <summary>What an agent's context is being built for.</summary>
-public sealed record AgentContextRequest(Guid RunId, Guid ProjectId, string PipelineId, string StageId, string AgentKey);
+public sealed record AgentContextRequest(Guid RunId, Guid ProjectId, string PipelineId, string StageId, string AgentKey)
+{
+    /// <summary>
+    /// The placeholders the host already supplies (its prompt values win over context): a provider may skip reading
+    /// sections that only fill these.
+    /// </summary>
+    public IReadOnlySet<string> SuppliedPlaceholders { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+}
 
 /// <summary>One named block of context for the prompt.</summary>
 public sealed record AgentContextSection(string Name, string Content);

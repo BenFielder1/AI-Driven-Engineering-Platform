@@ -48,7 +48,7 @@ public sealed partial class AgentStageRunner
         return await StoreOutputAsync(attempt, extension, artifactDefinition, content, user, redelivered: false, storing);
     }
 
-    /// <summary>Step 8: content transform (FR-313), the host's veto, store, post-store hook (FR-316), save.</summary>
+    /// <summary>Step 8: content transform (FR-313), the host's store override or veto, store, post-store hook (FR-316), save.</summary>
     private async Task<AgentStageOutcome> StoreOutputAsync(
         AgentAttempt attempt, AgentStageExtension extension, ArtifactDefinition? artifactDefinition, string content, string user, bool redelivered, CancellationToken cancellationToken)
     {
@@ -57,7 +57,11 @@ public sealed partial class AgentStageRunner
         if (artifactDefinition is not null)
         {
             var stored = await extension.ToContentAsync(attempt, content, cancellationToken);
-            if (await extension.ShouldStoreAsync(attempt, stored, cancellationToken))
+            if (await extension.StoreOverrideAsync(attempt, stored, cancellationToken) is { } hostStored)
+            {
+                artifact = hostStored.Artifact;
+            }
+            else if (await extension.ShouldStoreAsync(attempt, stored, cancellationToken))
             {
                 artifact = await StoreAsync(run, artifactDefinition, stored, agentRun, cancellationToken);
                 await extension.OnArtifactStoredAsync(attempt, artifact, cancellationToken);

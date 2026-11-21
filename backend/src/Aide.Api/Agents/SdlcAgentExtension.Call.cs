@@ -11,24 +11,32 @@ namespace Aide.Api.Agents;
 
 public sealed partial class SdlcAgentExtension
 {
-    /// <summary>
-    /// FR-160, FR-162, FR-71: the output limit (the request's, else the model's), the context window, and the repo tools
-    /// over the snapshot, opened now (0.6.1: after the key check; a missing snapshot is the <c>snapshot_unavailable</c>
-    /// warning). The budget the tool turns are checked against is read after the snapshot, as 0.6.1.
-    /// </summary>
+    /// <summary>FR-160, FR-162: the output limit (the request's, else the model's) and the context window.</summary>
     public override async Task<AgentCallOptions> CallOptionsAsync(AgentAttempt attempt, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
         var request = CallOf(attempt).Request;
         var run = attempt.AgentRun!;
         var maxOutputTokens = request.MaxTokens ?? await outputLimits.ResolveAsync(run.Provider, run.Model, attempt.Llm!.ApiKey, cancellationToken);
-        LogCalling(logger, run.Provider, run.Model, run.Attempts + 1, maxOutputTokens);
-
-        var session = request.Repo == RepoScope.None ? null : await tools.OpenAsync(cancellationToken);
         int? contextTokens = ContextWindow(run) is > 0 and var window ? window : null;
+        return new AgentCallOptions(maxOutputTokens, contextTokens);
+    }
+
+    /// <summary>
+    /// FR-71, as 0.6.1 after the run and its attempt are saved: the repo tools over the snapshot (a missing one is the
+    /// <c>snapshot_unavailable</c> warning, after the request's own), then the budget the tool turns are checked against.
+    /// </summary>
+    public override async Task<AgentCallOptions> PrepareCallAsync(AgentAttempt attempt, AgentCallOptions options, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(attempt);
+        ArgumentNullException.ThrowIfNull(options);
+        var request = CallOf(attempt).Request;
+        var run = attempt.AgentRun!;
+        LogCalling(logger, run.Provider, run.Model, run.Attempts, options.MaxTokens ?? 0);
+        var session = request.Repo == RepoScope.None ? null : await tools.OpenAsync(cancellationToken);
         var project = await data.ProjectAsync(run.ProjectId, cancellationToken);
         _callBudget = (project?.TokenBudget, project?.TokensUsed ?? 0);
-        return new AgentCallOptions(maxOutputTokens, contextTokens)
+        return options with
         {
             Warnings = [.. request.Warnings.Concat(tools.Warning is { } warning ? [warning] : [])],
             Tools = session,
@@ -60,7 +68,7 @@ public sealed partial class SdlcAgentExtension
         ArgumentNullException.ThrowIfNull(attempt);
         ArgumentNullException.ThrowIfNull(failure);
         var run = attempt.AgentRun!;
-        LogAttemptFailed(logger, run.Attempts, failure.Transient, statusCode, failure.ErrorCode);
+        LogAttempt(run, failure, statusCode);
         if (LlmConnectionRules.RunFailureInvalidatesKey(statusCode) && run.CredentialId is { } credentialId)
         {
             var rejected = $"The bound {run.Provider.ToWire()} connection's key was rejected (HTTP {statusCode}); its owner must replace it.";
@@ -102,8 +110,23 @@ public sealed partial class SdlcAgentExtension
     [LoggerMessage(Level = LogLevel.Information, Message = "Calling {Provider} model {Model} (attempt {Attempt}, max output tokens {MaxOutputTokens})")]
     private static partial void LogCalling(ILogger logger, LlmProvider provider, string model, int attempt, int maxOutputTokens);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Provider attempt {Attempt} failed (transient: {Transient}, status {StatusCode}) with {ErrorCode}")]
-    private static partial void LogAttemptFailed(ILogger logger, int attempt, bool transient, int? statusCode, string errorCode);
+    /// <summary>0.6.1's failed-attempt logs: a provider error with its (already redacted) reason, else the exception type and its redacted text.</summary>
+    private void LogAttempt(AgentRun run, AgentStageFailure failure, int? statusCode)
+    {
+        if (failure.ExceptionType is { } exceptionType)
+        {
+            LogUnexpectedFailure(logger, run.Attempts, failure.Transient, exceptionType, failure.ExceptionDetail ?? string.Empty);
+            return;
+        }
+
+        LogAttemptFailed(logger, run.Attempts, failure.Transient, statusCode, failure.Message);
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Provider attempt {Attempt} failed (transient: {Transient}, status {StatusCode}): {Reason}")]
+    private static partial void LogAttemptFailed(ILogger logger, int attempt, bool transient, int? statusCode, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Provider attempt {Attempt} failed unexpectedly (transient: {Transient}) with {ExceptionType}: {Reason}")]
+    private static partial void LogUnexpectedFailure(ILogger logger, int attempt, bool transient, string exceptionType, string reason);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Agent run failed with {ErrorCode} after {Attempts} provider attempts (dead letter: {DeadLetter})")]
     private static partial void LogFailed(ILogger logger, string errorCode, int attempts, bool deadLetter);
