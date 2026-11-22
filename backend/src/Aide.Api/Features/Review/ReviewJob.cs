@@ -467,7 +467,7 @@ public sealed partial class ReviewJobHandler(
             (_, problem) =>
             {
                 LogRejected(logger, problem.Code, problem.Message);
-                return Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem)));
+                return Request(ArtifactAgentSpec.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem)));
             })
         {
             CorrectiveToContent = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures, findingCheck) is { IsFailure: true } failed
@@ -684,7 +684,7 @@ public sealed partial class ReviewJobHandler(
         var rejected = payload.ArtifactId is { } id
             ? await db.Artifacts.AsNoTracking().Where(a => a.Id == id && a.ProjectId == project.Id).Select(a => (int?)a.Version).FirstOrDefaultAsync(cancellationToken)
             : null;
-        var feedback = ArtifactAgentJob.JoinFeedback(
+        var feedback = ArtifactAgentSpec.JoinFeedback(
             payload.Trigger == LifecycleJobPayload.ArtifactRejected
                 ? $"The optimization plan{(rejected is { } v ? $" v{v.ToString(CultureInfo.InvariantCulture)}" : string.Empty)} of this cycle was rejected. Revise the optimization plan; the rest of the review stands."
                 : "The optimization plan of this cycle was lost to an integrity failure. Produce it again.",

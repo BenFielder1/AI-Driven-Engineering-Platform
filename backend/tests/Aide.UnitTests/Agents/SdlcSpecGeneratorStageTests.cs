@@ -11,8 +11,8 @@ using Tevrin.Pack.Sdlc;
 namespace Aide.UnitTests.Agents;
 
 /// <summary>
-/// FR-318: <c>spec_generator</c> on the engine runner records what 0.6.1's <see cref="AgentRunner"/> and
-/// <see cref="ArtifactAgentJob"/> recorded (their integration tests, <c>SpecAndPlanAgentTests</c> and
+/// FR-318: <c>spec_generator</c> on the engine runner records what 0.6.1's <c>AgentRunner</c> and
+/// <c>ArtifactAgentJob</c> recorded (their integration tests, <c>SpecAndPlanAgentTests</c> and
 /// <c>AgentRunnerTests</c>, are the reference): the run row, the events with 0.6.1's payloads in 0.6.1's order, the
 /// prompt, the token commit and the draft. Expected payloads are 0.6.1's literals.
 /// </summary>
@@ -32,7 +32,7 @@ public class SdlcSpecGeneratorStageTests
 
         var run = Assert.Single(harness.Store.AgentRuns);
         var template = new EmbeddedPromptLibrary().Template(SdlcAgents.SpecGenerator);
-        var reply = AgentRunner.ReadOutput(run.Output)!.Text;
+        var reply = SdlcAgentRuns.ReadOutput(run.Output)!.Text;
         Assert.Equal(
             (job.Id, SdlcAgents.SpecGenerator, "specification", AgentRunStatus.Succeeded, 1, (string?)null, (string?)null, harness.Data.Project.CurrentReleaseVersionId, template.Version),
             (run.Id, run.Agent, run.Stage, run.Status, run.Attempts, run.Error, run.UserFeedback, run.ReleaseVersionId, run.PromptVersion));
@@ -88,7 +88,7 @@ public class SdlcSpecGeneratorStageTests
         var runs = harness.Store.AgentRuns;
         Assert.Equal([(job.Id, AgentRunStatus.Succeeded, (string?)null), (corrective, AgentRunStatus.Succeeded, null)], runs.Select(r => (r.Id, r.Status, r.Error)));
         var error = SpecValidator.Check(Invalid, Context).Error!;
-        Assert.Equal(ArtifactAgentJob.JoinFeedback(null, SpecValidator.CorrectiveFeedback(error, Context)), runs[1].UserFeedback);
+        Assert.Equal(ArtifactAgentSpec.JoinFeedback(null, SpecValidator.CorrectiveFeedback(error, Context)), runs[1].UserFeedback);
         Assert.Contains("Only an overview.", harness.Provider.Requests[1].Messages[^1].Content, StringComparison.Ordinal);
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED"], harness.Data.Events.Select(e => e.Type));
         Assert.Equal((Guid?)corrective, Assert.Single(harness.Store.Artifacts).AgentRunId);

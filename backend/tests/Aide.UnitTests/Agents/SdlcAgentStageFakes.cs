@@ -213,29 +213,10 @@ internal sealed class TestRepoOpener : IRepoToolOpener
     }
 }
 
-/// <summary>A fixed stage target, and the legacy flow's calls.</summary>
+/// <summary>A fixed stage target.</summary>
 internal sealed class FixedLocator(SdlcStageTarget target) : ISdlcStageLocator
 {
     public Task<SdlcStageTarget> LocateAsync(Guid projectId, string agent, CancellationToken cancellationToken) => Task.FromResult(target);
-}
-
-internal sealed class RecordingLegacyJob : IArtifactAgentJob
-{
-    public static readonly Guid RunId = Guid.CreateVersion7();
-
-    public int Calls { get; private set; }
-
-    public Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
-    {
-        Calls++;
-        return Task.FromResult(RunId);
-    }
-
-    public Task<AgentRunOutcome> RunReplyAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
-    {
-        Calls++;
-        return Task.FromResult(new AgentRunOutcome(RunId, "legacy", "end_turn", LlmProvider.Fake, "fake-1", "1", 0, 0, DateTimeOffset.UnixEpoch));
-    }
 }
 
 internal sealed class NoIterationSource(MemoryRunData data) : ISdlcContextSource

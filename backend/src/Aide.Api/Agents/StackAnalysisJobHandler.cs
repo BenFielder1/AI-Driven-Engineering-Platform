@@ -115,7 +115,7 @@ public sealed partial class StackAnalysisJobHandler(
                 ["DETECTOR_PROFILE"] = StackProfile.ToJson(detectorProfile),
                 ["CATALOG_OPTIONS"] = options,
                 ["PREVIOUS_PROFILE"] = previous?.Content,
-                [AgentRunner.FeedbackInput] = feedback,
+                [SdlcAgentRuns.FeedbackInput] = feedback,
             },
             InputArtifacts = [.. new[] { summary, previous }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
             UserFeedback = feedback,
@@ -138,7 +138,7 @@ public sealed partial class StackAnalysisJobHandler(
                 var reconciled = StackProfile.Reconcile(reply.Value.Document, repoBase.Detection, repoBase.RepoVcs, version.BaseCommitSha);
                 return Result.Success(StackProfile.Render(reply.Value.Narrative, reconciled));
             },
-            (_, error) => Request(ArtifactAgentJob.JoinFeedback(payload.Feedback, StackProfile.CorrectiveFeedback(error, catalog))))
+            (_, error) => Request(ArtifactAgentSpec.JoinFeedback(payload.Feedback, StackProfile.CorrectiveFeedback(error, catalog))))
         {
             OnAdded = (draft, run) =>
             {

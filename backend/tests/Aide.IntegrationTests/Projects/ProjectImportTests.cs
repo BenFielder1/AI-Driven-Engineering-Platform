@@ -244,7 +244,7 @@ public sealed class ProjectImportTests(AideApiFactory factory) : IAsyncLifetime
         var run = Assert.Single(await AgentJobs.RunsAsync(app, project.Id));
         Assert.Equal((SdlcAgents.IdeaRefinement, AgentRunStatus.Succeeded), (run.Agent, run.Status));
         Assert.DoesNotContain(run.InputArtifacts, a => a.Type == SdlcArtifacts.CodebaseSummary);
-        Assert.Equal([AgentRunWarnings.SummaryWaitTimeout], AgentRunner.ReadOutput(run.Output)!.Warnings);
+        Assert.Equal([AgentRunWarnings.SummaryWaitTimeout], SdlcAgentRuns.ReadOutput(run.Output)!.Warnings);
         var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(app, project.Id, EventTypes.RunCompleted)).Payload);
         Assert.Equal(AgentRunWarnings.SummaryWaitTimeout, Assert.Single(completed.GetProperty("warnings").EnumerateArray()).GetString());
         var detail = await ProjectApi.ReadAsync<AgentRunDetailDto>(await owner.Client.GetAsync(new Uri($"/api/projects/{project.Id}/runs/{run.Id}", UriKind.Relative), Ct));

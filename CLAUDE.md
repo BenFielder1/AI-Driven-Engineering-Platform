@@ -44,6 +44,7 @@ Router, auth and background-work choices come from SPEC.md; if SPEC.md changes t
 backend/
   Aide.slnx
   src/Aide.Api/             endpoints, DI, auth, ProblemDetails, OpenAPI, hosted background workers
+                            Agents/ — SDLC agent job handlers; every SDLC agent runs on the engine runner (`SdlcAgentStageJob` + `SdlcAgentExtension` hooks)
   src/Aide.Domain/          pure SDLC rules: SDLC guards and machine adapter (`SdlcMachine`), review, gate and artifact rules, versioning (no EF, no ASP.NET)
   src/Aide.Infrastructure/  Persistence/AideDbContext + entity configs, Migrations/, LLM providers, Git providers, notification channels
                             Agents/Prompts/*.md — versioned prompt templates (SPEC FR-24)

@@ -284,7 +284,7 @@ public sealed partial class RefinementService(
 
             IReadOnlyList<RefinementQuestion>? questions = null;
             if (status == AgentRunStatus.Succeeded && final is not null
-                && AgentRunner.ReadOutput(final.Output) is { } output
+                && SdlcAgentRuns.ReadOutput(final.Output) is { } output
                 && RefinementRules.Parse(output.Text) is { IsSuccess: true } parsed)
             {
                 questions = parsed.Value.Questions;

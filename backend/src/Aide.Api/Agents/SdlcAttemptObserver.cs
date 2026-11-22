@@ -10,7 +10,7 @@ namespace Aide.Api.Agents;
 
 /// <summary>
 /// FR-311, NFR-OBS: 0.6.1's log scope (<c>RunId</c>, <c>Agent</c>, <c>ProjectId</c>) and <c>agent run</c> span of one SDLC
-/// agent attempt on the engine runner, as <see cref="AgentRunner.RunAsync"/> opened them: the span carries the run id,
+/// agent attempt on the engine runner, as 0.6.1's runner opened them: the span carries the run id,
 /// agent and project, then the run's status, pipeline run and stage; a failure (or a rejected final attempt) is an error
 /// span described by its code, never its message.
 /// </summary>

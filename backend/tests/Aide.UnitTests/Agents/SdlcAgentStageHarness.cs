@@ -117,7 +117,7 @@ internal sealed class SdlcAgentStageHarness : IDisposable
         var spec = new ArtifactAgentSpec(
             SdlcArtifacts.TechnicalSpecification,
             text => SpecValidator.Check(AgentOutput.UnwrapFence(text), context),
-            (rejected, error) => Request(AgentOutput.UnwrapFence(rejected), ArtifactAgentJob.JoinFeedback(feedback, SpecValidator.CorrectiveFeedback(error, context))));
+            (rejected, error) => Request(AgentOutput.UnwrapFence(rejected), ArtifactAgentSpec.JoinFeedback(feedback, SpecValidator.CorrectiveFeedback(error, context))));
         return new SdlcAgentStageCall(Request(previousSpec, feedback), spec);
     }
 
@@ -137,8 +137,8 @@ internal sealed class SdlcAgentStageHarness : IDisposable
         return result;
     }
 
-    /// <summary>Runs the job layer (<see cref="SdlcAgentStageJob"/>) with <paramref name="target"/> and a recording legacy flow.</summary>
-    public async Task<Guid> RunJobAsync(SdlcAgentStageCall call, SdlcStageTarget target, RecordingLegacyJob legacy)
+    /// <summary>Runs the job layer (<see cref="SdlcAgentStageJob"/>) with <paramref name="target"/>.</summary>
+    public async Task<Guid> RunJobAsync(SdlcAgentStageCall call, SdlcStageTarget target)
     {
         ArgumentNullException.ThrowIfNull(call);
         await using var scope = _provider.CreateAsyncScope();
@@ -146,7 +146,6 @@ internal sealed class SdlcAgentStageHarness : IDisposable
             scope.ServiceProvider.GetRequiredService<AgentStageCoordinator>(),
             scope.ServiceProvider.GetRequiredService<SdlcAgentExtension>(),
             new FixedLocator(target),
-            legacy,
             NullLogger<SdlcAgentStageJob>.Instance);
         return await job.RunAsync(call.Request, call.Spec, JobTriggers.StageEntered, TestContext.Current.CancellationToken);
     }
@@ -160,7 +159,6 @@ internal sealed class SdlcAgentStageHarness : IDisposable
             scope.ServiceProvider.GetRequiredService<AgentStageCoordinator>(),
             scope.ServiceProvider.GetRequiredService<SdlcAgentExtension>(),
             new FixedLocator(new SdlcStageTarget.Found(Run.Id, stageId)),
-            new RecordingLegacyJob(),
             NullLogger<SdlcAgentStageJob>.Instance);
         return await job.RunReplyAsync(call.Request, call.Spec, JobTriggers.StageEntered, TestContext.Current.CancellationToken);
     }

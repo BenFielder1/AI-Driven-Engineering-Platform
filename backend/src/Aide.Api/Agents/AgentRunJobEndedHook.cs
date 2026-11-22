@@ -64,7 +64,7 @@ public sealed partial class AgentRunJobEndedHook(TimeProvider time, ILogger<Agen
             : $"{reason}: {SecretRedaction.SanitizeProviderError(job.Error)}";
         foreach (var run in runs)
         {
-            AgentRunner.MarkFailed(db, run, ErrorCodes.ProviderError, message, job.DeadLettered, now);
+            SdlcAgentRuns.MarkFailed(db, run, ErrorCodes.ProviderError, message, job.DeadLettered, now);
             LogRunFailed(logger, run.Id, job.JobId, job.DeadLettered);
         }
     }

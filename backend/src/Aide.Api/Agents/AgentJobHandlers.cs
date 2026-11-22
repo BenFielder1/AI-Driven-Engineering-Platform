@@ -75,7 +75,7 @@ public sealed class IdeaRefinementJobHandler(
                 ["PREVIOUS_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
                 ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Refinement(resolution, stack.Detection) : null,
                 ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
-                [AgentRunner.FeedbackInput] = feedback,
+                [SdlcAgentRuns.FeedbackInput] = feedback,
             },
             Stack = stack.Stack,
             InputArtifacts = [.. new[] { draft, sourceItems }.OfType<Artifact>().Concat(iteration.Artifacts).Select(AgentJobInputs.Ref)],
@@ -94,7 +94,7 @@ public sealed class IdeaRefinementJobHandler(
                     var parsed = RefinementRules.Parse(text);
                     return parsed.IsSuccess ? Result.Success(parsed.Value.ProjectRequest) : Result.Failure<string>(parsed.Error!);
                 },
-                (_, error) => Request(ArtifactAgentJob.JoinFeedback(
+                (_, error) => Request(ArtifactAgentSpec.JoinFeedback(
                     payload.Feedback,
                     $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above."))),
             payload.Trigger,
@@ -177,7 +177,7 @@ public sealed class SpecGenerationJobHandler(
                 text => SpecValidator.Check(AgentOutput.UnwrapFence(text), context),
                 (rejected, error) => Request(
                     AgentOutput.UnwrapFence(rejected),
-                    ArtifactAgentJob.JoinFeedback(payload.Feedback, SpecValidator.CorrectiveFeedback(error, context)))),
+                    ArtifactAgentSpec.JoinFeedback(payload.Feedback, SpecValidator.CorrectiveFeedback(error, context)))),
             payload.Trigger,
             cancellationToken);
     }
@@ -259,7 +259,7 @@ public sealed class PlanGenerationJobHandler(
                 check.ToContent,
                 (rejected, error) => Request(
                     AgentOutput.ExtractJsonObject(rejected) ?? rejected,
-                    ArtifactAgentJob.JoinFeedback(payload.Feedback, PlanDocument.CorrectiveFeedback(error)))),
+                    ArtifactAgentSpec.JoinFeedback(payload.Feedback, PlanDocument.CorrectiveFeedback(error)))),
             payload.Trigger,
             cancellationToken);
     }
@@ -332,7 +332,6 @@ public static class AgentJobServiceCollectionExtensions
     {
         services.AddScoped<AgentJobInputs>();
         services.AddScoped<IterationContextReader>();
-        services.AddScoped<ArtifactAgentJob>();
 
         // FR-317, FR-318: the engine runner with the SDLC context providers, repo tools and extension.
         services.AddSdlcAgentExtensions();

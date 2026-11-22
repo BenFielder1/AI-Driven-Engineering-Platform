@@ -175,7 +175,7 @@ public class SdlcDefinitionV2Tests
         var request = Assert.Single(harness.Provider.Requests);
         var plain = await new Tevrin.Engine.Runtime.Llm.FakeLlmProvider([new AgentReplies(SdlcAgents.SpecGenerator, [null])]).CompleteAsync(request, TestContext.Current.CancellationToken);
         Assert.Equal((0, plain.InputTokens, plain.OutputTokens, "[]"), (harness.Provider.Turns, run.InputTokens, run.OutputTokens, run.ToolCalls));
-        Assert.Null(AgentRunner.ReadOutput(run.Output)!.Warnings);
+        Assert.Null(SdlcAgentRuns.ReadOutput(run.Output)!.Warnings);
     }
 
     [Fact]

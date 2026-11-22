@@ -11,8 +11,8 @@ using Tevrin.Pack.Sdlc;
 namespace Aide.UnitTests.Agents;
 
 /// <summary>
-/// FR-318: <c>idea_refinement</c> on the engine runner records what 0.6.1's <see cref="AgentRunner"/> and
-/// <see cref="ArtifactAgentJob"/> recorded for <see cref="IdeaRefinementJobHandler"/>'s request (a first version without
+/// FR-318: <c>idea_refinement</c> on the engine runner records what 0.6.1's <c>AgentRunner</c> and
+/// <c>ArtifactAgentJob</c> recorded for <see cref="IdeaRefinementJobHandler"/>'s request (a first version without
 /// a summary or stack): the prompt, the run (answers and feedback as its <c>user_feedback</c>), the events with 0.6.1's
 /// payload literals, the warnings, the corrective re-run with 0.6.1's wording and <c>INVALID_OUTPUT</c>.
 /// </summary>
@@ -43,7 +43,7 @@ public class SdlcIdeaRefinementStageTests
                 ["PREVIOUS_SPECIFICATION"] = null,
                 ["STACK_GUIDANCE"] = null,
                 ["STACK_DETECTION"] = null,
-                [AgentRunner.FeedbackInput] = runFeedback,
+                [SdlcAgentRuns.FeedbackInput] = runFeedback,
             },
             UserFeedback = RefinementRules.RunFeedback(Answers, runFeedback),
             Repo = RepoScope.BaseCommit,
@@ -57,7 +57,7 @@ public class SdlcIdeaRefinementStageTests
                 var parsed = RefinementRules.Parse(text);
                 return parsed.IsSuccess ? Result.Success(parsed.Value.ProjectRequest) : Result.Failure<string>(parsed.Error!);
             },
-            (_, error) => Request(ArtifactAgentJob.JoinFeedback(feedback, $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above.")));
+            (_, error) => Request(ArtifactAgentSpec.JoinFeedback(feedback, $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above.")));
         return new SdlcAgentStageCall(Request(feedback), spec);
     }
 
@@ -85,7 +85,7 @@ public class SdlcIdeaRefinementStageTests
         Assert.Equal(
             (job.Id, SdlcAgents.IdeaRefinement, "refinement", AgentRunStatus.Succeeded, 1, (string?)null, RefinementRules.RunFeedback(Answers, "Keep it small")),
             (run.Id, run.Agent, run.Stage, run.Status, run.Attempts, run.Error, run.UserFeedback));
-        var reply = AgentRunner.ReadOutput(run.Output)!;
+        var reply = SdlcAgentRuns.ReadOutput(run.Output)!;
         Assert.Equal([AgentRunWarnings.SummaryWaitTimeout], reply.Warnings);
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED"], harness.Data.Events.Select(e => e.Type));
         Assert.Equal(
@@ -112,7 +112,7 @@ public class SdlcIdeaRefinementStageTests
         var runs = harness.Store.AgentRuns;
         Assert.Equal([(job.Id, AgentRunStatus.Succeeded, (string?)null), (corrective, AgentRunStatus.Succeeded, null)], runs.Select(r => (r.Id, r.Status, r.Error)));
         var error = RefinementRules.Parse(Unreadable).Error!;
-        var wording = ArtifactAgentJob.JoinFeedback("Keep it small", $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above.");
+        var wording = ArtifactAgentSpec.JoinFeedback("Keep it small", $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above.");
         Assert.Equal(RefinementRules.RunFeedback(Answers, wording), runs[1].UserFeedback);
         Assert.Contains("Your previous reply was rejected:", harness.Provider.Requests[1].Messages[^1].Content, StringComparison.Ordinal);
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED"], harness.Data.Events.Select(e => e.Type));

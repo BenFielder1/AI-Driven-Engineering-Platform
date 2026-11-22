@@ -5,8 +5,8 @@ namespace Aide.Api.Agents;
 
 /// <summary>
 /// FR-311: the payloads of the SDLC's agent run events (<c>RUN_STARTED</c>, <c>RUN_COMPLETED</c>, <c>RUN_FAILED</c>,
-/// <c>BUDGET_EXCEEDED</c>) and the failed-run fields, 0.6.1's exactly. Shared by <see cref="AgentRunner"/> and the
-/// engine path (<see cref="SdlcAgentExtension"/>), so both write the same rows.
+/// <c>BUDGET_EXCEEDED</c>) and the failed-run fields, 0.6.1's exactly. Written by the
+/// engine path (<see cref="SdlcAgentExtension"/>) and <see cref="AgentRunJobEndedHook"/>.
 /// </summary>
 internal static class SdlcRunEvents
 {
@@ -35,5 +35,5 @@ internal static class SdlcRunEvents
         run.CompletedAt = now;
     }
 
-    public static string Truncate(string value) => value.Length > AgentRunner.MaxErrorLength ? value[..AgentRunner.MaxErrorLength] : value;
+    public static string Truncate(string value) => value.Length > SdlcAgentRuns.MaxErrorLength ? value[..SdlcAgentRuns.MaxErrorLength] : value;
 }

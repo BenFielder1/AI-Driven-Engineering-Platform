@@ -175,8 +175,8 @@ builder.Services.AddScoped<ArtifactReader>();
 builder.Services.AddScoped<ArtifactService>();
 builder.Services.AddScoped<AgentDraftWriter>();
 
-// Agents (FR-22–FR-26): the runner used by agent job handlers; providers and prompts come from Aide.Infrastructure.
-builder.Services.AddScoped<AgentRunner>();
+// Agents (FR-22–FR-26, FR-320): job handlers run agents on the engine runner (AddAgentJobs → AddSdlcAgentExtensions);
+// providers and prompts come from Aide.Infrastructure.
 builder.Services.AddScoped<AgentRepoContext>();
 builder.Services.AddScoped<IJobEndedHook, AgentRunJobEndedHook>();
 

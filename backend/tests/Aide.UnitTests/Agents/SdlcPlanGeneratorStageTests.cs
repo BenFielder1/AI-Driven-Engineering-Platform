@@ -15,7 +15,7 @@ namespace Aide.UnitTests.Agents;
 
 /// <summary>
 /// FR-318, FR-314 (FR-29, FR-243): <c>plan_generator</c> on the engine runner records what 0.6.1's
-/// <see cref="AgentRunner"/> and <see cref="ArtifactAgentJob"/> recorded for <see cref="PlanGenerationJobHandler"/>'s
+/// <c>AgentRunner</c> and <c>ArtifactAgentJob</c> recorded for <see cref="PlanGenerationJobHandler"/>'s
 /// request: the prompt, the run and events with 0.6.1's payload literals, the draft rendered by
 /// <see cref="PlanDocument.RenderChecked"/> (with the <c>aide-plan</c> block and the added deploy-file steps), the one
 /// corrective re-run with <c>PREVIOUS_PLAN</c> and 0.6.1's wording, <c>INVALID_PLAN</c>, and redelivery.
@@ -51,7 +51,7 @@ public class SdlcPlanGeneratorStageTests
         var spec = new ArtifactAgentSpec(
             SdlcArtifacts.ImplementationPlan,
             text => ToContent(text, deployFiles),
-            (rejected, error) => Request(AgentOutput.ExtractJsonObject(rejected) ?? rejected, ArtifactAgentJob.JoinFeedback(feedback, PlanDocument.CorrectiveFeedback(error))));
+            (rejected, error) => Request(AgentOutput.ExtractJsonObject(rejected) ?? rejected, ArtifactAgentSpec.JoinFeedback(feedback, PlanDocument.CorrectiveFeedback(error))));
         return new SdlcAgentStageCall(Request(previousPlan, feedback), spec);
     }
 
@@ -89,7 +89,7 @@ public class SdlcPlanGeneratorStageTests
         Assert.Equal((rendered.System, rendered.User), (request.System, request.Messages[^1].Content));
         Assert.Equal((job.Id, "planning", AgentRunStatus.Succeeded, (string?)null), (run.Id, run.Stage, run.Status, run.Error));
         var draft = Assert.Single(harness.Store.Artifacts);
-        var expected = ToContent(AgentRunner.ReadOutput(run.Output)!.Text, null).Value;
+        var expected = ToContent(SdlcAgentRuns.ReadOutput(run.Output)!.Text, null).Value;
         Assert.Equal((SdlcArtifacts.ImplementationPlan, (Guid?)job.Id, expected), (draft.Type, draft.AgentRunId, draft.Content));
         Assert.Contains("```aide-plan", draft.Content, StringComparison.Ordinal);
         Assert.Equal(4, PlanDocument.ParseMarkdown(draft.Content, MaxFiles).Value.Count);
@@ -113,7 +113,7 @@ public class SdlcPlanGeneratorStageTests
         Assert.Equal([(job.Id, AgentRunStatus.Succeeded, (string?)null), (corrective, AgentRunStatus.Succeeded, null)], runs.Select(r => (r.Id, r.Status, r.Error)));
         var error = PlanDocument.ParseAgentOutput(Invalid, MaxFiles).Error!;
         Assert.Equal("INVALID_PLAN", error.Code);
-        Assert.Equal(ArtifactAgentJob.JoinFeedback("Split step 4", PlanDocument.CorrectiveFeedback(error)), runs[1].UserFeedback);
+        Assert.Equal(ArtifactAgentSpec.JoinFeedback("Split step 4", PlanDocument.CorrectiveFeedback(error)), runs[1].UserFeedback);
         var retryPrompt = harness.Provider.Requests[1].Messages[^1].Content;
         Assert.Contains("\"dependencies\":[5]", retryPrompt, StringComparison.Ordinal); // the rejected plan as PREVIOUS_PLAN
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED"], harness.Data.Events.Select(e => e.Type));
@@ -153,7 +153,7 @@ public class SdlcPlanGeneratorStageTests
 
         var run = Assert.Single(harness.Store.AgentRuns);
         var draft = Assert.Single(harness.Store.Artifacts);
-        Assert.Equal(ToContent(AgentRunner.ReadOutput(run.Output)!.Text, deployFiles).Value, draft.Content);
+        Assert.Equal(ToContent(SdlcAgentRuns.ReadOutput(run.Output)!.Text, deployFiles).Value, draft.Content);
         var steps = PlanDocument.ParseMarkdown(draft.Content, MaxFiles).Value;
         Assert.Equal(5, steps.Count);
         Assert.Contains(steps, s => s.Files.Any(f => f.Path == "vercel.json"));

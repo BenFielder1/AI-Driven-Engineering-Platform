@@ -13,8 +13,8 @@ using Tevrin.Pack.Sdlc;
 namespace Aide.UnitTests.Agents;
 
 /// <summary>
-/// FR-318: <c>stack_analyst</c> on the engine runner records what 0.6.1's <see cref="AgentRunner"/> and
-/// <see cref="ArtifactAgentJob"/> recorded for <see cref="StackAnalysisJobHandler"/>'s request (no summary, detector
+/// FR-318: <c>stack_analyst</c> on the engine runner records what 0.6.1's <c>AgentRunner</c> and
+/// <c>ArtifactAgentJob</c> recorded for <see cref="StackAnalysisJobHandler"/>'s request (no summary, detector
 /// profile from the base commit, the catalog's options): the prompt, the run, the events in 0.6.1's order with its payload
 /// literals (including <c>STACK_PROFILE_CREATED</c> after <c>ARTIFACT_CREATED</c>), the reconciled draft, the corrective
 /// re-run with the allowed options, and <c>STACK_PROFILE_INVALID</c>.
@@ -51,7 +51,7 @@ public class SdlcStackAnalystStageTests
                 ["DETECTOR_PROFILE"] = StackProfile.ToJson(detectorProfile),
                 ["CATALOG_OPTIONS"] = "- frontend: fe-vue (Vue + Vite)",
                 ["PREVIOUS_PROFILE"] = null,
-                [AgentRunner.FeedbackInput] = feedback,
+                [SdlcAgentRuns.FeedbackInput] = feedback,
             },
             UserFeedback = feedback,
             Repo = RepoScope.BaseCommit,
@@ -67,7 +67,7 @@ public class SdlcStackAnalystStageTests
                     ? Result.Failure<string>(reply.Error!)
                     : Result.Success(StackProfile.Render(reply.Value.Narrative, StackProfile.Reconcile(reply.Value.Document, null, StackPinning.GitHubVcs, BaseCommit)));
             },
-            (_, error) => Request(ArtifactAgentJob.JoinFeedback(null, StackProfile.CorrectiveFeedback(error, catalog))))
+            (_, error) => Request(ArtifactAgentSpec.JoinFeedback(null, StackProfile.CorrectiveFeedback(error, catalog))))
         {
             OnAdded = (draft, run) => harness.Data.AddEvent(
                 "STACK_PROFILE_CREATED",
@@ -105,7 +105,7 @@ public class SdlcStackAnalystStageTests
             AideJson.Serialize(new { runId = job.Id, agent = SdlcAgents.StackAnalyst, inputTokens = run.InputTokens, outputTokens = run.OutputTokens, costEstimate = run.CostEstimate, durationMs = run.DurationMs, warnings = new[] { AgentRunWarnings.SummaryUnavailable } }),
             harness.Data.Events[1].Payload);
         var draft = Assert.Single(harness.Store.Artifacts);
-        Assert.Equal((SdlcArtifacts.StackProfile, (Guid?)job.Id, call.Spec.ToContent(AgentRunner.ReadOutput(run.Output)!.Text).Value), (draft.Type, draft.AgentRunId, draft.Content));
+        Assert.Equal((SdlcArtifacts.StackProfile, (Guid?)job.Id, call.Spec.ToContent(SdlcAgentRuns.ReadOutput(run.Output)!.Text).Value), (draft.Type, draft.AgentRunId, draft.Content));
         Assert.Equal(
             AideJson.Serialize(new { artifactId = draft.Id, version = draft.Version, releaseVersionId = ReleaseVersionId, agentRunId = job.Id, unresolvedLayers = StackProfile.Unresolved(StackProfile.Parse(draft.Content).Value.Document) }),
             harness.Data.Events[3].Payload);
@@ -123,7 +123,7 @@ public class SdlcStackAnalystStageTests
         var corrective = AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey);
         var runs = harness.Store.AgentRuns;
         Assert.Equal([(job.Id, AgentRunStatus.Succeeded, (string?)null), (corrective, AgentRunStatus.Succeeded, null)], runs.Select(r => (r.Id, r.Status, r.Error)));
-        var error = StackProfile.CheckReply(AgentRunner.ReadOutput(runs[0].Output)!.Text, new StackProfileContext(StackTestCatalog.Catalog, StackPinning.GitHubVcs, BaseFiles)).Error!;
+        var error = StackProfile.CheckReply(SdlcAgentRuns.ReadOutput(runs[0].Output)!.Text, new StackProfileContext(StackTestCatalog.Catalog, StackPinning.GitHubVcs, BaseFiles)).Error!;
         Assert.Equal(StackProfile.CorrectiveFeedback(error, StackTestCatalog.Catalog), runs[1].UserFeedback);
         Assert.Contains("Your previous stack profile was rejected", harness.Provider.Requests[1].Messages[^1].Content, StringComparison.Ordinal);
         Assert.Equal(

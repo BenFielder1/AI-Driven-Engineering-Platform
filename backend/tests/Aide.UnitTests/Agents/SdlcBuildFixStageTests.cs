@@ -15,7 +15,7 @@ namespace Aide.UnitTests.Agents;
 
 /// <summary>
 /// FR-318, FR-319 (FR-256, §4.48), D-0.7.0-42: <c>build_fix</c>, bound on <c>execution</c>, on the engine runner records
-/// what 0.6.1's <c>BuildFixJobHandler</c> got from <see cref="AgentRunner"/>: the prompt from the check (<c>FAILURES</c>,
+/// what 0.6.1's <c>BuildFixJobHandler</c> got from <c>AgentRunner</c>: the prompt from the check (<c>FAILURES</c>,
 /// <c>ERROR_SUMMARY</c>, <c>PLAN_STEPS</c>, <c>REPO_FILES</c>), runs keyed by the check (<c>build-fix-&lt;check&gt;-1</c>,
 /// <c>-2</c>), the one corrective re-run whose reply is accepted whatever it says (a still invalid plan exhausts the check
 /// in the job, no run fails), the repo tools on the working tree, and redelivery. The run stores nothing.

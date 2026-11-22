@@ -170,13 +170,18 @@ public sealed partial class ExecutionJobHandler(
         await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, outcome.RunId, cancellationToken);
     }
 
+    /// <summary>The label of <see cref="ReplySpec"/>: a step's code, not an artifact type.</summary>
+    public const string StepCodeLabel = "step code";
+
     /// <summary>
     /// FR-318, FR-319: the Code Generator's reply is accepted as sent, as 0.6.1's runner had no check for it: the Guardian
     /// judges it afterwards (an unreadable reply rejects the step, never the run), so there is no corrective re-run and
-    /// nothing is stored by the run.
+    /// nothing is stored by the run. The type is only the spec's label (the run stores no artifact, so it never names a
+    /// draft): the step's code isn't an artifact. The corrective builder is unreachable, because every reply is accepted;
+    /// it throws rather than invent a re-run 0.6.1 never made.
     /// </summary>
     public static readonly ArtifactAgentSpec ReplySpec = new(
-        SdlcArtifacts.ImplementationPlan,
+        StepCodeLabel,
         text => Result.Success(text),
         (_, error) => throw new JobFailedException($"The code generator's reply has no corrective re-run ({error.Code}).", transient: false, error.Code))
     {

@@ -15,8 +15,8 @@ using Tevrin.Pack.Sdlc;
 namespace Aide.UnitTests.Agents;
 
 /// <summary>
-/// FR-318: the job layer of the engine path (<see cref="SdlcAgentStageJob"/>: where it runs, the 0.6.1 fallback, the
-/// draft conflict), the repo tools (FR-71: <c>tool_calls</c>, <c>snapshot_unavailable</c>, the budget between tool
+/// FR-318: the job layer of the engine path (<see cref="SdlcAgentStageJob"/>: where it runs, the refusals that
+/// replaced 0.6.1's fallback (FR-320), the draft conflict), the repo tools (FR-71: <c>tool_calls</c>, <c>snapshot_unavailable</c>, the budget between tool
 /// turns), the reads an attempt makes, and 0.6.1's <c>agent run</c> span.
 /// </summary>
 public class SdlcAgentStageJobTests
@@ -29,35 +29,35 @@ public class SdlcAgentStageJobTests
     {
         using var harness = new SdlcAgentStageHarness([null]);
         var job = SdlcAgentStageHarness.Job();
-        var legacy = new RecordingLegacyJob();
 
-        var runId = await harness.RunJobAsync(Spec(harness, job), new SdlcStageTarget.Found(harness.Run.Id, "specification"), legacy);
+        var runId = await harness.RunJobAsync(Spec(harness, job), new SdlcStageTarget.Found(harness.Run.Id, "specification"));
 
-        Assert.Equal((job.Id, 0), (runId, legacy.Calls));
+        Assert.Equal(job.Id, runId);
         Assert.Single(harness.Store.Artifacts);
     }
 
     [Fact]
-    public async Task FR318_a_project_without_a_pipeline_run_falls_back_to_the_0_6_1_flow()
+    public async Task FR320_a_project_still_without_a_pipeline_run_fails_permanently_with_INVALID_STATE_and_no_call()
     {
         using var harness = new SdlcAgentStageHarness([null]);
-        var legacy = new RecordingLegacyJob();
 
-        var runId = await harness.RunJobAsync(Spec(harness, SdlcAgentStageHarness.Job()), new SdlcStageTarget.NoRun(), legacy);
+        var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunJobAsync(Spec(harness, SdlcAgentStageHarness.Job()), new SdlcStageTarget.NoRun()));
 
-        Assert.Equal((RecordingLegacyJob.RunId, 1), (runId, legacy.Calls));
+        Assert.Equal(("INVALID_STATE", false, SdlcAgentStageJob.NoRunMessage), (ex.ErrorCode, ex.Transient, ex.Message));
         Assert.Empty(harness.Provider.Requests);
+        Assert.Empty(harness.Store.AgentRuns);
     }
 
     [Fact]
-    public async Task FR318_a_definition_without_the_agents_stage_falls_back_to_the_0_6_1_flow()
+    public async Task FR320_a_definition_without_the_agents_stage_fails_permanently_with_DEFINITION_UNAVAILABLE_and_no_call()
     {
         using var harness = new SdlcAgentStageHarness([null]);
-        var legacy = new RecordingLegacyJob();
 
-        await harness.RunJobAsync(Spec(harness, SdlcAgentStageHarness.Job()), new SdlcStageTarget.NoStage(harness.Run.Id), legacy);
+        var ex = await Assert.ThrowsAsync<JobFailedException>(() =>
+            harness.RunJobAsync(Spec(harness, SdlcAgentStageHarness.Job()), new SdlcStageTarget.NoStage(harness.Run.Id)));
 
-        Assert.Equal(1, legacy.Calls);
+        Assert.Equal(("DEFINITION_UNAVAILABLE", false), (ex.ErrorCode, ex.Transient));
+        Assert.Empty(harness.Provider.Requests);
         Assert.Empty(harness.Store.AgentRuns);
     }
 
@@ -65,12 +65,12 @@ public class SdlcAgentStageJobTests
     public async Task FR318_FR277_an_unregistered_pinned_definition_fails_permanently_with_DEFINITION_UNAVAILABLE()
     {
         using var harness = new SdlcAgentStageHarness([null]);
-        var legacy = new RecordingLegacyJob();
 
         var ex = await Assert.ThrowsAsync<JobFailedException>(() =>
-            harness.RunJobAsync(Spec(harness, SdlcAgentStageHarness.Job()), new SdlcStageTarget.Unavailable(harness.Run.Id, "sha256:unknown", "tool:missing.tool"), legacy));
+            harness.RunJobAsync(Spec(harness, SdlcAgentStageHarness.Job()), new SdlcStageTarget.Unavailable(harness.Run.Id, "sha256:unknown", "tool:missing.tool")));
 
-        Assert.Equal(("DEFINITION_UNAVAILABLE", false, 0), (ex.ErrorCode, ex.Transient, legacy.Calls));
+        Assert.Equal(("DEFINITION_UNAVAILABLE", false), (ex.ErrorCode, ex.Transient));
+        Assert.Empty(harness.Store.AgentRuns);
         Assert.Empty(harness.Provider.Requests);
     }
 
@@ -95,7 +95,7 @@ public class SdlcAgentStageJobTests
         });
         var job = SdlcAgentStageHarness.Job();
 
-        var runId = await harness.RunJobAsync(Spec(harness, job), new SdlcStageTarget.Found(run.Id, "specification"), new RecordingLegacyJob());
+        var runId = await harness.RunJobAsync(Spec(harness, job), new SdlcStageTarget.Found(run.Id, "specification"));
 
         Assert.Equal(job.Id, runId);
         Assert.Single(harness.Store.Artifacts);
@@ -109,13 +109,13 @@ public class SdlcAgentStageJobTests
         var job = SdlcAgentStageHarness.Job();
         var target = new SdlcStageTarget.Found(harness.Run.Id, "specification");
 
-        var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunJobAsync(Spec(harness, job), target, new RecordingLegacyJob()));
+        var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunJobAsync(Spec(harness, job), target));
 
         Assert.Equal(("CONFLICT", true), (ex.ErrorCode, ex.Transient));
         Assert.Equal("The technical_specification draft collided with a concurrent change: DbUpdateException.", ex.Message);
         harness.Data.ConflictOnDraft = false;
         harness.Store.Artifacts.Clear();
-        await harness.RunJobAsync(Spec(harness, job with { Attempt = 2 }), target, new RecordingLegacyJob());
+        await harness.RunJobAsync(Spec(harness, job with { Attempt = 2 }), target);
         Assert.Single(harness.Provider.Requests);
         Assert.Single(harness.Store.Artifacts);
     }
@@ -154,7 +154,7 @@ public class SdlcAgentStageJobTests
         await harness.RunAsync(SdlcAgentStageHarness.Job());
 
         var run = Assert.Single(harness.Store.AgentRuns);
-        Assert.Equal([AgentRunWarnings.SnapshotUnavailable], AgentRunner.ReadOutput(run.Output)!.Warnings);
+        Assert.Equal([AgentRunWarnings.SnapshotUnavailable], SdlcAgentRuns.ReadOutput(run.Output)!.Warnings);
         Assert.Equal("[]", run.ToolCalls);
         Assert.Contains("\"warnings\":[\"snapshot_unavailable\"]", harness.Data.Events.Single(e => e.Type == "RUN_COMPLETED").Payload, StringComparison.Ordinal);
     }

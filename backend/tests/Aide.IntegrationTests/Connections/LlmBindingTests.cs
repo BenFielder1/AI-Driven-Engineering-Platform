@@ -11,7 +11,6 @@ using Aide.Domain.Entities;
 using Aide.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Tevrin.Pack.Sdlc;
 
@@ -427,7 +426,6 @@ public sealed class LlmBindingTests(AideApiFactory factory) : IDisposable
 
     private static async Task<AgentRunOutcome> RunAsync(WebApplicationFactory<Program> app, AgentRunRequest request)
     {
-        await using var scope = app.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<AgentRunner>().RunAsync(request, Ct);
+        return await EngineAgentRuns.RunAsync(app.Services, request, Ct);
     }
 }

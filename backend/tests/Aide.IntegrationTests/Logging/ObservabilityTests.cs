@@ -120,13 +120,9 @@ public sealed partial class ObservabilityTests(AideApiFactory factory)
         var job = new JobExecution(Guid.CreateVersion7(), SdlcJobTypes.SpecGeneration, "{}", fixture.Project.Id, 1);
         using var spans = new SpanRecorder(AideTelemetry.SourceName);
 
-        await using (var scope = factory.Services.CreateAsyncScope())
-        {
-            var runner = scope.ServiceProvider.GetRequiredService<AgentRunner>();
-            var request = new AgentRunRequest { ProjectId = fixture.Project.Id, Agent = SdlcAgents.SpecGenerator, Job = job };
-            var ex = await Assert.ThrowsAsync<JobFailedException>(() => runner.RunAsync(request, Ct));
-            Assert.Equal(ErrorCodes.MissingInput, ex.ErrorCode);
-        }
+        var request = new AgentRunRequest { ProjectId = fixture.Project.Id, Agent = SdlcAgents.SpecGenerator, Job = job };
+        var ex = await Assert.ThrowsAsync<JobFailedException>(() => EngineAgentRuns.RunAsync(factory.Services, request, Ct));
+        Assert.Equal(ErrorCodes.MissingInput, ex.ErrorCode);
 
         var runId = AgentRunRules.RunId(job.Id, null).ToString();
         var span = await spans.WaitForSingleAsync(a => Equals(a.GetTagItem(AideTelemetry.RunIdTag), runId));

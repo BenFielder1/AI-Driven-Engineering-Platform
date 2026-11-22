@@ -106,7 +106,7 @@ public sealed partial class SdlcAgentExtension
 
         if (added && call.Spec.OnAdded is { } onAdded)
         {
-            onAdded(draft, AgentRunner.Outcome(run));
+            onAdded(draft, SdlcAgentRuns.Outcome(run));
         }
 
         SavingDraft = true;
@@ -127,7 +127,7 @@ public sealed partial class SdlcAgentExtension
     private static Result<string> Check(AgentAttempt attempt) => CallOf(attempt).Spec.ToContent(ReplyOf(attempt.AgentRun!));
 
     /// <summary>The reply as the provider sent it (0.6.1 checked the raw text, not the engine's trimmed content).</summary>
-    private static string ReplyOf(AgentRun run) => AgentRunner.ReadOutput(run.Output)?.Text ?? string.Empty;
+    private static string ReplyOf(AgentRun run) => SdlcAgentRuns.ReadOutput(run.Output)?.Text ?? string.Empty;
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The {Agent} reply was rejected with {ErrorCode}; re-running once with the reasons as feedback")]
     private static partial void LogRejected(ILogger logger, string agent, string errorCode);

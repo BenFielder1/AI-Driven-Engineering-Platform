@@ -16,7 +16,7 @@ namespace Aide.UnitTests.Agents;
 
 /// <summary>
 /// FR-318 (FR-38): <c>code_review</c> on the engine runner records what 0.6.1's <c>ReviewJobHandler</c> got from
-/// <see cref="AgentRunner"/>: the prompt from the job's values (the cycle, findings, previous review, code and its own
+/// <c>AgentRunner</c>: the prompt from the job's values (the cycle, findings, previous review, code and its own
 /// plan view win over the stage inputs), the run and its events with 0.6.1's payload literals, the repo tools on the working
 /// tree, the corrective re-run (the first reply must read and meet the requirement, the second only read) and the
 /// failure. No draft is stored with the run: the job stores the optimisation plan after scoring.
@@ -57,7 +57,7 @@ public class SdlcCodeReviewStageTests
                 var problem = parsed.IsSuccess ? (parsed.Value.OptimizationPlan.Count == 0 ? ReviewAssessment.MissingOptimizationPlanError() : null) : parsed.Error!;
                 return problem is null ? Result.Success(text) : Result.Failure<string>(problem);
             },
-            (_, problem) => Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))))
+            (_, problem) => Request(ArtifactAgentSpec.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))))
         {
             CorrectiveToContent = text => CodeReviewOutput.Parse(text, 5) is { IsFailure: true } failed ? Result.Failure<string>(failed.Error!) : Result.Success(text),
         };
@@ -87,7 +87,7 @@ public class SdlcCodeReviewStageTests
         Assert.Equal((rendered.System, rendered.User), (request.System, request.Messages[^1].Content));
         Assert.Contains("# Optimization plan v1", request.Messages[^1].Content, StringComparison.Ordinal);
         Assert.Equal((job.Id, "review", AgentRunStatus.Succeeded, (string?)null, "Check the API"), (run.Id, run.Stage, run.Status, run.Error, run.UserFeedback));
-        Assert.Equal((job.Id, AgentRunner.ReadOutput(run.Output)!.Text, run.CompletedAt!.Value, run.InputTokens), (outcome.RunId, outcome.Text, outcome.CompletedAt, outcome.InputTokens));
+        Assert.Equal((job.Id, SdlcAgentRuns.ReadOutput(run.Output)!.Text, run.CompletedAt!.Value, run.InputTokens), (outcome.RunId, outcome.Text, outcome.CompletedAt, outcome.InputTokens));
         Assert.True(CodeReviewOutput.Parse(outcome.Text, 5).IsSuccess);
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED"], harness.Data.Events.Select(e => e.Type));
         Assert.Equal(
@@ -109,7 +109,7 @@ public class SdlcCodeReviewStageTests
         var runs = harness.Store.AgentRuns;
         Assert.Equal([(job.Id, AgentRunStatus.Succeeded, (string?)null), (corrective, AgentRunStatus.Succeeded, null)], runs.Select(r => (r.Id, r.Status, r.Error)));
         Assert.Equal(corrective, outcome.RunId);
-        Assert.Equal(ArtifactAgentJob.JoinFeedback(null, CodeReviewOutput.CorrectiveFeedback(CodeReviewOutput.Parse(Unreadable, 5).Error!)), runs[1].UserFeedback);
+        Assert.Equal(ArtifactAgentSpec.JoinFeedback(null, CodeReviewOutput.CorrectiveFeedback(CodeReviewOutput.Parse(Unreadable, 5).Error!)), runs[1].UserFeedback);
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED"], harness.Data.Events.Select(e => e.Type));
         Assert.Empty(harness.Store.Artifacts);
     }
@@ -133,7 +133,7 @@ public class SdlcCodeReviewStageTests
 
         Assert.Equal(AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey), outcome.RunId);
         Assert.Empty(CodeReviewOutput.Parse(outcome.Text, 5).Value.OptimizationPlan);
-        Assert.Equal(ArtifactAgentJob.JoinFeedback(null, CodeReviewOutput.CorrectiveFeedback(ReviewAssessment.MissingOptimizationPlanError())), harness.Store.AgentRuns[1].UserFeedback);
+        Assert.Equal(ArtifactAgentSpec.JoinFeedback(null, CodeReviewOutput.CorrectiveFeedback(ReviewAssessment.MissingOptimizationPlanError())), harness.Store.AgentRuns[1].UserFeedback);
     }
 
     [Fact]

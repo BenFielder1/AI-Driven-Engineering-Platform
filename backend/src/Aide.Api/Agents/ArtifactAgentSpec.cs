@@ -1,7 +1,5 @@
 using Aide.Api.Features.Artifacts;
 using Aide.Api.Jobs;
-using Aide.Api.Logging;
-using Aide.Domain.Agents;
 using Aide.Domain.Artifacts;
 using Aide.Domain.Common;
 using Aide.Domain.Entities;
@@ -40,109 +38,6 @@ public sealed record ArtifactAgentSpec(
 
     /// <summary>The spec of the corrective re-run (its check is <see cref="CorrectiveToContent"/> when set).</summary>
     public ArtifactAgentSpec ForCorrective() => CorrectiveToContent is { } check ? this with { ToContent = check, CorrectiveToContent = null } : this;
-}
-
-/// <summary>
-/// The shared flow of the refinement, spec and plan jobs (FR-27–FR-29), on top of <see cref="AgentRunner"/>:
-/// <list type="number">
-/// <item>Run the agent. The runner commits the run's completion and token count on its own; if the reply is accepted,
-/// the draft is then added (agent-authored, parent = latest, older draft superseded) and saved.</item>
-/// <item>If the reply is rejected, re-run once (run key <see cref="AgentOutput.CorrectiveRunKey"/>) with the reasons as
-/// feedback. That run is given the check: if its reply is rejected too, the run fails with the error's code and no
-/// draft is created.</item>
-/// </list>
-/// Redelivery is idempotent: run ids are derived from the job id, a succeeded run returns its stored reply without a
-/// provider call, the same deterministic check picks the same branch, and the draft writer returns the draft a run
-/// already created. A conflict while saving the draft fails the job transiently; the retry re-uses the succeeded run, so
-/// the provider is never called (or paid) twice for one reply (FR-26).
-/// </summary>
-/// <summary>FR-318: the 0.6.1 artifact agent flow (a seam, so its engine replacement's fallback is tested without a database).</summary>
-public interface IArtifactAgentJob
-{
-    /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed); returns the id of the run that produced the draft.</summary>
-    Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken);
-
-    /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed) without storing a draft; returns the accepted run.</summary>
-    Task<AgentRunOutcome> RunReplyAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken);
-}
-
-public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWriter drafts, AideDbContext db, ILogger<ArtifactAgentJob> logger) : IArtifactAgentJob
-{
-    /// <summary>Runs <paramref name="request"/> (with its corrective re-run if needed); returns the id of the run that produced the draft.</summary>
-    public async Task<Guid> RunAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
-    {
-        var (run, content) = await RunCheckedAsync(request, spec, cancellationToken);
-        await AddDraftAsync(request.ProjectId, spec, content, run, cancellationToken);
-        return run.RunId;
-    }
-
-    public async Task<AgentRunOutcome> RunReplyAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken) =>
-        (await RunCheckedAsync(request, spec, cancellationToken)).Run;
-
-    /// <summary>The accepted run and its checked content: the first reply, else the corrective re-run's.</summary>
-    private async Task<(AgentRunOutcome Run, string Content)> RunCheckedAsync(AgentRunRequest request, ArtifactAgentSpec spec, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(spec);
-
-        // The first reply is kept on a succeeded run even when rejected: the corrective re-run gets it as context.
-        var first = await runner.RunAsync(request with { Check = null }, cancellationToken);
-        var checkedFirst = spec.ToContent(first.Text);
-        if (checkedFirst.IsSuccess)
-        {
-            return (first, checkedFirst.Value);
-        }
-
-        if (!spec.LogsRejection)
-        {
-            LogRejected(logger, request.Agent, checkedFirst.Error!.Code, checkedFirst.Error.Message);
-        }
-
-        var corrective = spec.Corrective(first.Text, checkedFirst.Error!);
-        var correctiveSpec = spec.ForCorrective();
-        var second = await runner.RunAsync(
-            corrective with
-            {
-                RunKey = corrective.RunKey ?? AgentOutput.CorrectiveRunKey,
-                Check = text => correctiveSpec.ToContent(text) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
-            },
-            cancellationToken);
-        var checkedSecond = correctiveSpec.ToContent(second.Text);
-        if (checkedSecond.IsFailure)
-        {
-            // Only reachable if a stored succeeded run no longer passes (e.g. the rules changed): never draft it.
-            throw new JobFailedException(checkedSecond.Error!.Message, transient: false, checkedSecond.Error.Code);
-        }
-
-        return (second, checkedSecond.Value);
-    }
-
-    private async Task AddDraftAsync(Guid projectId, ArtifactAgentSpec spec, string content, AgentRunOutcome run, CancellationToken cancellationToken)
-    {
-        var type = spec.Type;
-        var draft = await drafts.AddAsync(projectId, type, content, run.RunId, run.CompletedAt, cancellationToken);
-        if (draft is null)
-        {
-            LogDraftSkipped(logger, type);
-            return;
-        }
-
-        if (spec.OnAdded is { } onAdded && db.Entry(draft).State == EntityState.Added)
-        {
-            onAdded(draft, run);
-        }
-
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex)
-        {
-            // The project changed (e.g. a rollback or phase fallback), a concurrent writer took the version or changed the
-            // superseded draft: retry. The retry re-uses the succeeded run and re-checks whether the draft is still allowed.
-            throw new JobFailedException($"The {type} draft collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
-        }
-    }
 
     /// <summary>Joins feedback parts (blank ones dropped), or <c>null</c>.</summary>
     public static string? JoinFeedback(params string?[] parts)
@@ -150,12 +45,6 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
         var kept = parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()).ToList();
         return kept.Count == 0 ? null : string.Join("\n\n", kept);
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The {Agent} reply was rejected with {ErrorCode}; re-running once with the reasons as feedback: {Reason}")]
-    private static partial void LogRejected(ILogger logger, LoggedKey agent, string errorCode, string reason);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "No {ArtifactType} draft created: the project's phase no longer allows it")]
-    private static partial void LogDraftSkipped(ILogger logger, LoggedKey artifactType);
 }
 
 /// <summary>The project and artifact inputs of an agent job (FR-24), read with their integrity re-checked (FR-20).</summary>

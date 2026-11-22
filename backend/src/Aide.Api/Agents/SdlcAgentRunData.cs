@@ -9,7 +9,7 @@ namespace Aide.Api.Agents;
 
 /// <summary>
 /// FR-311–FR-316: the database work of <see cref="SdlcAgentExtension"/> (a seam, so its rules are tested without a
-/// database), done as 0.6.1's <see cref="AgentRunner"/> did it.
+/// database), done as 0.6.1's runner did it.
 /// </summary>
 public interface ISdlcAgentRunData
 {
@@ -37,7 +37,7 @@ public interface ISdlcAgentRunData
 }
 
 /// <summary><see cref="ISdlcAgentRunData"/> on the SDLC database (scoped: the engine store's unit of work).</summary>
-public sealed class SdlcAgentRunData(AideDbContext db, AgentDraftWriter drafts, TimeProvider time, ILogger<AgentRunner> logger) : ISdlcAgentRunData
+public sealed class SdlcAgentRunData(AideDbContext db, AgentDraftWriter drafts, TimeProvider time, ILogger<SdlcAgentRunData> logger) : ISdlcAgentRunData
 {
     public Task<Project?> ProjectAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
@@ -60,7 +60,7 @@ public sealed class SdlcAgentRunData(AideDbContext db, AgentDraftWriter drafts, 
     }
 
     public Task InvalidateCredentialAsync(AgentRun run, Guid credentialId) =>
-        AgentRunner.InvalidateCredentialAsync(db, time, logger, run, credentialId);
+        SdlcAgentRuns.InvalidateCredentialAsync(db, time, logger, run, credentialId);
 
     public async Task<(Artifact? Draft, bool Added)> AddDraftAsync(Guid projectId, string type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
     {

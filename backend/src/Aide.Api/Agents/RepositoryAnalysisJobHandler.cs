@@ -99,7 +99,7 @@ public sealed partial class RepositoryAnalysisJobHandler(
                 ["BASE"] = baseText,
                 ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Analysis(resolution, stack.Detection) : null,
                 ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
-                [AgentRunner.FeedbackInput] = feedback,
+                [SdlcAgentRuns.FeedbackInput] = feedback,
             },
             Stack = stack.Stack,
             UserFeedback = feedback,

@@ -35,7 +35,6 @@ public static class SdlcAgentExtensionRegistration
         services.AddSingleton<IPromptSource, SdlcPromptSource>();
         services.AddAgentStages();
         services.AddScoped<ISdlcStageLocator, SdlcStageLocator>();
-        services.AddScoped<IArtifactAgentJob>(sp => sp.GetRequiredService<ArtifactAgentJob>());
         services.AddScoped<SdlcAgentStageJob>();
         return services;
     }

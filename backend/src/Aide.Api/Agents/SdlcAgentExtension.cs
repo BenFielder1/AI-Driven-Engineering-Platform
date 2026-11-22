@@ -11,8 +11,8 @@ using Tevrin.Pack.Sdlc;
 namespace Aide.Api.Agents;
 
 /// <summary>
-/// FR-310–FR-316, FR-318: the SDLC's agent stages on the engine runner, with 0.6.1's <see cref="AgentRunner"/> and
-/// <see cref="ArtifactAgentJob"/> behaviour: the run commits on its own (started, before the call, answered with its
+/// FR-310–FR-316, FR-318: the SDLC's agent stages on the engine runner, with 0.6.1's runner and artifact
+/// agent flow behaviour (FR-320: the only SDLC agent path): the run commits on its own (started, before the call, answered with its
 /// tokens) before the draft is stored; the same checks, codes and order (budget, source items, render, provider enabled,
 /// key); the same run fields, events, output JSON and failure decisions; the reply check with one corrective re-run; and
 /// the draft through <see cref="Features.Artifacts.AgentDraftWriter"/>. Each attempt's 0.6.1 request is its
@@ -97,7 +97,7 @@ public sealed partial class SdlcAgentExtension(
 
     /// <summary>
     /// FR-312: 0.6.1's run fields: the phase as the stage, the release version, the step, the full input list, the
-    /// feedback, and the stack stamp (<see cref="AgentRunner.StampStack"/>).
+    /// feedback, and the stack stamp (<see cref="SdlcAgentRuns.StampStack"/>).
     /// </summary>
     public override async Task<AgentRunMetadata> DescribeRunAsync(AgentAttempt attempt, CancellationToken cancellationToken)
     {
@@ -108,7 +108,7 @@ public sealed partial class SdlcAgentExtension(
         attempt.AgentRun!.ReleaseVersionId = project.CurrentReleaseVersionId;
 
         var stamped = new AgentRun { Agent = request.Agent };
-        AgentRunner.StampStack(stamped, request);
+        SdlcAgentRuns.StampStack(stamped, request);
         return new AgentRunMetadata
         {
             CatalogVersion = stamped.CatalogVersion,

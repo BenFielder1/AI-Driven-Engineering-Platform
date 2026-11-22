@@ -13,7 +13,7 @@ namespace Aide.UnitTests.Agents;
 
 /// <summary>
 /// FR-318, FR-319 (FR-70), D-0.7.0-42: <c>repository_analyst</c>, bound on <c>refinement</c>, on the engine runner records
-/// what 0.6.1's <c>RepositoryAnalysisJobHandler</c> got from <see cref="AgentRunner"/>: the prompt from the payload's
+/// what 0.6.1's <c>RepositoryAnalysisJobHandler</c> got from <c>AgentRunner</c>: the prompt from the payload's
 /// version (<c>VERSION_REQUEST</c>, <c>BASE</c>), the run recorded under the project's current phase, the events with
 /// 0.6.1's payload literals, the one corrective re-run with the missing sections, <c>MISSING_SECTIONS</c>, and redelivery.
 /// The run stores nothing: the job stores the summary locked afterwards, as 0.6.1.
@@ -40,7 +40,7 @@ public class SdlcRepositoryAnalystStageTests
                 ["BASE"] = BaseText,
                 ["STACK_GUIDANCE"] = null,
                 ["STACK_DETECTION"] = StackGuidance.DetectionInput(null),
-                [AgentRunner.FeedbackInput] = feedback,
+                [SdlcAgentRuns.FeedbackInput] = feedback,
             },
             UserFeedback = feedback,
             Repo = RepoScope.BaseCommit,

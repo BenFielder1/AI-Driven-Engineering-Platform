@@ -18,7 +18,7 @@ namespace Aide.UnitTests.Agents;
 
 /// <summary>
 /// FR-318, FR-319 (FR-31–FR-35, FR-121), D-0.7.0-42: <c>code_generator</c>, bound on <c>execution</c>, on the engine runner
-/// records what 0.6.1's <c>ExecutionJobHandler</c> got from <see cref="AgentRunner"/>: the step's prompt values, the run
+/// records what 0.6.1's <c>ExecutionJobHandler</c> got from <c>AgentRunner</c>: the step's prompt values, the run
 /// keyed by the step attempt (<c>step-&lt;id&gt;-attempt-&lt;n&gt;</c>) with the step id, the specialist prompt
 /// (<see cref="StackPrompt.Compose"/>) and stack stamp, the reply accepted as sent (the Guardian judges it; no corrective
 /// re-run), the repo tools on the working tree with the <c>TOOL_LIMIT</c> forced answer, failures, and redelivery.
@@ -29,7 +29,7 @@ public class SdlcCodeGeneratorStageTests
 
     private static readonly Guid StepId = Guid.CreateVersion7();
 
-    /// <summary>0.6.1's <c>packs</c> JSON options (<c>AgentRunner.StampStack</c>).</summary>
+    /// <summary>0.6.1's <c>packs</c> JSON options (<c>SdlcAgentRuns.StampStack</c>).</summary>
     private static readonly JsonSerializerOptions PacksJson = new(JsonSerializerDefaults.Web);
 
     /// <summary>0.6.1's literal run key of the step's first attempt.</summary>
@@ -153,7 +153,7 @@ public class SdlcCodeGeneratorStageTests
             PacksJson);
         Assert.Equal((specialist.Key, stack.CatalogVersion, packs), (run.AgentKey, run.CatalogVersion, run.Packs));
         Assert.Equal(AideJson.Serialize(RunStarted(run, job, stack.CatalogLabel, specialist.Key, "backend")), harness.Data.Events[0].Payload);
-        Assert.Equal([AgentRunWarnings.LegacyAgentMapped], AgentRunner.ReadOutput(run.Output)!.Warnings);
+        Assert.Equal([AgentRunWarnings.LegacyAgentMapped], SdlcAgentRuns.ReadOutput(run.Output)!.Warnings);
         Assert.Contains("\"warnings\":[\"legacy_agent_mapped\"]", harness.Data.Events.Single(e => e.Type == "RUN_COMPLETED").Payload, StringComparison.Ordinal);
     }
 
@@ -251,7 +251,7 @@ public class SdlcCodeGeneratorStageTests
 
         Assert.Equal(0, harness.Provider.Turns);
         var run = Assert.Single(harness.Store.AgentRuns);
-        Assert.Equal([AgentRunWarnings.SnapshotUnavailable], AgentRunner.ReadOutput(run.Output)!.Warnings);
+        Assert.Equal([AgentRunWarnings.SnapshotUnavailable], SdlcAgentRuns.ReadOutput(run.Output)!.Warnings);
     }
 
     [Fact]

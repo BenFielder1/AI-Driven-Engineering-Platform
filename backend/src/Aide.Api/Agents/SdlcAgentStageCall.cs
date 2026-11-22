@@ -20,7 +20,7 @@ public sealed record SdlcAgentStageCall(AgentRunRequest Request, ArtifactAgentSp
     public IReadOnlyDictionary<string, string?> PromptValues()
     {
         var values = new Dictionary<string, string?>(Request.Inputs, StringComparer.Ordinal);
-        values.TryAdd(AgentRunner.FeedbackInput, Request.UserFeedback);
+        values.TryAdd(SdlcAgentRuns.FeedbackInput, Request.UserFeedback);
         return values;
     }
 

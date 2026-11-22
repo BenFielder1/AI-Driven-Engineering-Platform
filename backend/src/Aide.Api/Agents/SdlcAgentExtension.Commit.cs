@@ -34,7 +34,7 @@ public sealed partial class SdlcAgentExtension
                 }
                 else
                 {
-                    IReadOnlyList<string> warnings = AgentRunner.ReadOutput(run.Output)?.Warnings ?? [];
+                    IReadOnlyList<string> warnings = SdlcAgentRuns.ReadOutput(run.Output)?.Warnings ?? [];
                     data.AddEvent(EventTypes.RunCompleted, run.ProjectId, SdlcRunEvents.RunCompleted(run, warnings), now);
                 }
 
