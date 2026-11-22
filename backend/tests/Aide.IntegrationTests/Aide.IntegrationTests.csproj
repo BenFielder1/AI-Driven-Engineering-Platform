@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- FR-321: the SDLC definition version 1, as runs were pinned to it before the re-pin. -->
+    <None Include="Pipelines/Fixtures/*.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
     <!-- M55 (FR-264–FR-268): types moved from Aide.* to the engine are imported project-wide, so the frozen
          characterisation suite (Characterisation/, FR-261) compiles unchanged. -->
