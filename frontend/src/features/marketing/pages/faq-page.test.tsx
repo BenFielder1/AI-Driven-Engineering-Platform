@@ -38,7 +38,7 @@ const REQUIRED = [
   'Which Git hosts, trackers and platforms are supported?',
   'Is it free?',
   'How do I self-host it?',
-  'Is there a CLI or API?',
+  'Is there an API?',
   'Was it called AIDE?',
 ]
 

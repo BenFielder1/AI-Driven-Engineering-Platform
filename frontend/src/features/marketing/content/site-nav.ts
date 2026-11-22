@@ -6,7 +6,7 @@ import { DOCS_URL } from '../../../lib/site'
  */
 export const GITHUB_URL = 'https://github.com/BenFielder1/AI-Driven-Engineering-Platform'
 
-/** A page on the docs site (FR-224), e.g. `docsUrl('guides/cli/')`. */
+/** A page on the docs site (FR-224), e.g. `docsUrl('reference/api-and-contract/')`. */
 export function docsUrl(path = ''): string {
   return `${DOCS_URL}${path}`
 }
@@ -52,7 +52,6 @@ export const footerColumns: readonly FooterColumn[] = [
     title: 'Developers',
     links: [
       docsLink,
-      { label: 'CLI', href: docsUrl('guides/cli/'), external: true },
       { label: 'API reference', href: docsUrl('reference/api-and-contract/'), external: true },
       githubLink,
     ],

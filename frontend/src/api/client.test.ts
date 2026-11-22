@@ -50,19 +50,19 @@ describe('API client antiforgery (NFR-SEC)', () => {
           return problem(403, 'ANTIFORGERY', 'Missing token.')
         }
         return HttpResponse.json(
-          { id: '00000000-0000-7000-8000-000000000001', name: 'cli', token: 'aide_pat_x', expiresAt: null },
+          { id: '00000000-0000-7000-8000-000000000001', name: 'script', token: 'aide_pat_x', expiresAt: null },
           { status: 201 },
         )
       }),
     )
 
-    const { data, response } = await api.POST('/api/me/tokens', { body: { name: 'cli' } })
+    const { data, response } = await api.POST('/api/me/tokens', { body: { name: 'script' } })
 
     expect(response.status).toBe(201)
-    expect(data?.name).toBe('cli')
+    expect(data?.name).toBe('script')
     expect(attempts).toEqual([
-      { header: 'stale', body: { name: 'cli' } },
-      { header: 'xsrf-1', body: { name: 'cli' } },
+      { header: 'stale', body: { name: 'script' } },
+      { header: 'xsrf-1', body: { name: 'script' } },
     ])
   })
 

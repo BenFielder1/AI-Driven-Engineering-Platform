@@ -101,13 +101,13 @@ export const faqs: readonly FaqItem[] = [
     link: { label: 'Self-host', href: '/self-host' },
   },
   {
-    id: 'cli-and-api',
-    question: 'Is there a CLI or API?',
+    id: 'api',
+    question: 'Is there an API?',
     answer: [
-      'Yes. The tevrin command-line tool, a .NET global tool, uses a personal API token from your Account page to list and create projects, approve artifacts, run execution and review, release and roll back.',
-      'The web app talks to an HTTP API described by an OpenAPI contract in the repository.',
+      'Yes. The web app talks to a REST API, and your scripts can call it too. Create a personal API token on your Account page and send it as a bearer token.',
+      'The API is described by an OpenAPI contract in the repository.',
     ],
-    link: { label: 'CLI guide', href: docsUrl('guides/cli/'), external: true },
+    link: { label: 'API reference', href: docsUrl('reference/api-and-contract/'), external: true },
   },
   {
     id: 'aide',

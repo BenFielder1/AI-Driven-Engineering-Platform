@@ -1,6 +1,6 @@
 # Tevrin — Specification (0.7.0)
 
-2026-11-17 · Ben Fielder · **0.7.0**, built on the 0.6.1 codebase in this repo. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) … [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's 0.7.0 brief (2026-11-17), the research notes in [`docs/0.7.0/tevrin-engine-extraction.md`](docs/0.7.0/tevrin-engine-extraction.md) (all suggestions, order-of-work steps 1–5), the interview answers in §10, and a survey of the lifecycle, gate, job, agent and artifact code. **Amended 2026-11-21** (Ben): 0.7.0 also moves the whole SDLC pack onto the engine runner (§3.10, step 6 below), superseding D-0.7.0-34.
+2026-11-17 · Ben Fielder · **0.7.0**, built on the 0.6.1 codebase in this repo. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) … [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's 0.7.0 brief (2026-11-17), the research notes in [`docs/0.7.0/tevrin-engine-extraction.md`](docs/0.7.0/tevrin-engine-extraction.md) (all suggestions, order-of-work steps 1–5), the interview answers in §10, and a survey of the lifecycle, gate, job, agent and artifact code. **Amended 2026-11-21** (Ben): 0.7.0 also moves the whole SDLC pack onto the engine runner (§3.10, step 6 below), superseding D-0.7.0-34. **Amended 2026-11-22** (Ben): 0.7.0 retires the `tevrin` CLI (§3.11).
 
 > **How this spec relates to 0.1.0–0.6.1.** 0.7.0 is an increment on the released 0.6.1 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends …)*. New requirements continue from **FR-260**, domain rules from **§4.49**, decisions use **`D-0.7.0-n`**, and milestones continue from **M54**. Earlier tests stay green unless an amendment changes what they assert; then update the test and name the amendment in it.
 
@@ -27,7 +27,7 @@ Success means:
 - Every agent run records its input, output, tokens, latency, model and prompt version, so the run replay shows it. Each stage has timings and each run has a cost total.
 - Every SDLC agent runs through the engine `AgentStageRunner`. `AgentRunner` and `ArtifactAgentJob` no longer exist, and the golden prompt tests and characterisation snapshots are unchanged (§3.10).
 
-**In scope (0.7.0):** characterisation tests (§3.1) · engine projects and the lift (§3.2) · string keys (§3.3) · pipeline definitions and packs (§3.4) · the generic state machine and switch-over (§3.5) · generic stage execution and run logging (§3.6) · generic API (§3.7) · engine UI (§3.8) · release housekeeping (§3.9) · the SDLC on the engine runner (§3.10).
+**In scope (0.7.0):** characterisation tests (§3.1) · engine projects and the lift (§3.2) · string keys (§3.3) · pipeline definitions and packs (§3.4) · the generic state machine and switch-over (§3.5) · generic stage execution and run logging (§3.6) · generic API (§3.7) · engine UI (§3.8) · release housekeeping (§3.9) · the SDLC on the engine runner (§3.10) · retiring the CLI (§3.11).
 
 **Out of scope (0.7.0):**
 - **Any pack other than SDLC.** The coaching pack (Impulse) and the other candidate pipelines (debate desk, forecasting, QA lab, job applications, on-call triage, content studio, agent economy) are future work. Engine tests use fixture definitions only.
@@ -37,7 +37,7 @@ Success means:
 - Parallel stages, fan-out, ensembles, map-reduce, agent-to-agent conversation, tool permission tiers, mid-stage approval of tool calls, outcome scoring and a per-agent feedback store. They are added when a pack needs them (research notes: "let the engine grow out of three real packs").
 - Uploading or editing definitions at runtime. Definitions ship inside pack assemblies.
 - Renaming the existing `Aide.*` projects, namespaces, tables or stored identifiers (0.6.0 §4.29 stays). Only new projects use `Tevrin.*`.
-- Deciding the engine's licence (Q1).
+- Changing the engine's licence: it stays PolyForm Shield for now (D-0.7.0-46).
 - Any change to SDLC behaviour, prompts, copy, scoring or the review decision table.
 
 ## 2. Users and permissions
@@ -69,6 +69,7 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 | 0.1.0 one execution job per project (`ux_jobs_project_id_active_execution`) | Declared in the definition's `concurrency` block. The index stays for the SDLC | FR-286 |
 | 0.1.0 agent run record | Adds the run, the stage, the redacted rendered input and per-stage timings | FR-297 |
 | CLAUDE.md Layout and Stack | New `Tevrin.Engine.*` and `Tevrin.Pack.Sdlc` projects, `frontend/src/engine/` | FR-262, FR-309 |
+| 0.1.0 FR-52 CLI, and the CLI parts of 0.2.0 FR-93, 0.4.0 FR-156, 0.5.0 FR-194, 0.6.0 FR-200 and D-V6-2/D-V6-14 (the `tevrin` command, the `aide` alias, the Tevrin.Cli and Aide.Cli packages, the CLI environment variables such as `TEVRIN_TOKEN` and `TEVRIN_GIT_TOKEN`) | Retired; the spec-verifier treats these CLI acceptance criteria as retired, not missing: the CLI projects, tests, CI pack step, docs guide and marketing links are removed. API tokens stay for scripts and the API. A rebuild guide is in the docs | FR-322 |
 | 0.1.0 FR-24–FR-26 agent runs, 0.6.1 plan validation (the SDLC `AgentRunner`) | Every SDLC agent runs through the engine `AgentStageRunner` with SDLC hooks, context providers and tools; plan validation is a `validate:` block. Same prompts, records, events, retries and errors | FR-310–FR-321, §4.60 |
 
 ### 3.1 Characterisation tests (step 1)
@@ -282,6 +283,19 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 
 **FR-321 acceptance**
 - Given a run in `review` pinned to the earlier SDLC hash, when the API starts, then the run is pinned to the new hash, one log entry is written, and the next review cycle behaves as before. A second start changes nothing.
+
+### 3.11 Retiring the CLI
+
+*(Added 2026-11-22, D-0.7.0-45.)* Ben retired the command-line tool. The API it called stays, and so do personal API tokens.
+
+| ID | Requirement | Layer |
+| --- | --- | --- |
+| FR-322 | The `tevrin` CLI and the deprecated `aide` alias are removed: `Aide.Cli`, `Aide.Cli.Alias` and `Aide.Cli.Tests`, their solution entries, the System.CommandLine package, and the CI pack and test steps. The docs guide, the configuration and error-code sections, and the marketing nav, FAQ and product entries no longer mention it. The Account page describes tokens as being for scripts and the API. A docs page, **Reference → Retired CLI**, records the snapshot commit (`e8c3990`): the commands, config, exit codes, dependencies and tests, and step-by-step restore instructions. The changelog entry for 0.7.0 says the CLI is retired | backend + frontend + docs + CI |
+
+**FR-322 acceptance**
+- Given the repo, then no `Aide.Cli*` project or `System.CommandLine` reference exists, CI has no CLI step, and `openapi/api.json` is unchanged.
+- Given the docs site, then no page links `guides/cli/`, and the Retired CLI page lists the files at `e8c3990` and the restore steps.
+- Given the Account page, then the token copy mentions scripts and the API, not the CLI. Creating and revoking tokens works as before.
 
 ## 4. Domain rules
 
@@ -617,15 +631,19 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 | D-0.7.0-42 | Agents with no stage of their own bind through an `agents:` list on an existing stage: each entry is `{ key, job_type, prompt?, inputs, output?, tools }`, and keys are unique across the pipeline. `code_generator` and `build_fix` go on `execution`, `repository_analyst` on `refinement`. Stages, transitions and the stepper are unchanged; `AgentStageRequest` names the agent (default: the stage's primary agent). It is additive to §4.49 and lands with the FR-321 hash bump | Ben (2026-11-21) | agreed |
 | D-0.7.0-43 | FR-319 is built as written: the SDLC's code-stage work (the execution step loop with commits and pushes, and the build check) runs as `IStageHandler`s named by `handler:` on the stage, and the engine dispatches them. The jobs and their queueing, the step and commit events and the run timeline stay exactly as in 0.6.1 (snapshots frozen). If that proves impossible, the build stops for Ben. Shape: a `handlers: [<pack>.<name>]` list on a stage (like `agents:`, D-0.7.0-42). It never changes the stage's kind, handler names are unique across the pipeline, an unregistered entry is `DEF_UNKNOWN_HANDLER`, and the list is left out of the canonical JSON when empty. The SDLC's `execution` stage declares `handlers: [sdlc.execution, sdlc.build-check]` and stays a `manual` stage, so the definitions API data is unchanged. The engine's `StageHandlerRunner` resolves a handler by name from the pinned definition. The job handlers stay the entry points, so queueing is unchanged. Runs on a definition that doesn't declare the handler call the SDLC handler directly | Ben (2026-11-22) | agreed |
 | D-0.7.0-44 | FR-314 is built as written: every SDLC output check is a `validate:` guard in the definition, not only plan validation. That covers spec sections, stack profile, review parse and requirement, refinement parse, repository-analysis sections, and the build-fix plan. Each keeps 0.6.1's attempt count, retry wording and final code. Together with D-0.7.0-43 this is definition **version 3**, one hash bump. The start-up re-pin moves non-final runs from v1 **and** v2 to v3 | Ben (2026-11-22) | agreed |
+| D-0.7.0-45 | The CLI is retired in 0.7.0. The snapshot is the docs page plus commit `e8c3990` (current `main` when the CLI was removed), with no tag and no source copy in the repo. API tokens are kept | Ben (2026-11-22) | agreed |
+| D-0.7.0-46 | Q1: the engine keeps the PolyForm Shield licence for now. Revisit when its packages are published | Ben (2026-11-22) | agreed |
+| D-0.7.0-47 | Q2: stored agent-run inputs keep the 1 MB cap | Ben (2026-11-22) | agreed |
+| D-0.7.0-48 | Q4: JsonSchema.Net stays pinned at 8.0.5, the last MIT release. Don't upgrade to 9.x (commercial OSMF EULA) | Ben (2026-11-22) | agreed |
 
 ## 11. Open questions
 
 | ID | Question | Who | Blocks |
 | --- | --- | --- | --- |
-| Q1 | Should the engine keep PolyForm Shield or get a more permissive licence when its packages are published? | Ben | nothing in 0.7.0 (packaging is out) |
-| Q2 | Is 1 MB per agent run the right cap for stored inputs, given execution prompts with large repo context? | Ben | nothing (default applies) |
+| Q1 | Should the engine keep PolyForm Shield or get a more permissive licence when its packages are published? | Ben | **resolved:** keep it for now (D-0.7.0-46) |
+| Q2 | Is 1 MB per agent run the right cap for stored inputs, given execution prompts with large repo context? | Ben | **resolved:** keep 1 MB (D-0.7.0-47) |
 | Q3 | Should the gate inbox replace the Home dashboard's pending-gates card, or sit beside it? Default: beside it | Ben | nothing (default applies) |
-| Q4 | JsonSchema.Net is pinned at 8.0.5, the last MIT release, because 9.x uses the commercial OSMF EULA (D-0.7.0-26). Stay on 8.x, accept the EULA, or switch libraries? | Ben | nothing (8.0.5 works) |
+| Q4 | JsonSchema.Net is pinned at 8.0.5, the last MIT release, because 9.x uses the commercial OSMF EULA (D-0.7.0-26). Stay on 8.x, accept the EULA, or switch libraries? | Ben | **resolved:** stay on 8.0.5, MIT (D-0.7.0-48) |
 
 ## 12. Milestones
 
@@ -644,4 +662,5 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
    - **M62d Bound agents** (FR-319, FR-321, D-0.7.0-42): engine `agents:` bindings, engine tool session, definition v2 and the re-pin, then `repository_analyst`, `build_fix` and `code_generator`.
    - **M62e Removal** (FR-320): delete the old runner, add the architecture test, update the docs guide and CLAUDE.md.
    - **M62f Stage handlers and guards** (FR-319, FR-314, D-0.7.0-43/-44): engine dispatch of `handler:` stages, SDLC execution and build-check handlers, `validate:` guards for every SDLC output check, definition v3, and a re-pin of v1 and v2.
-10. **M63 Release 0.7.0** (after M62, on Ben's confirmation): changelog date, docs guide "Pipelines and packs", `docs/history/0.7.0.md`, SPEC and PROGRESS to `docs/0.7.0/`, CLAUDE.md row and layout. Manual checks for Ben: a full SDLC project on preview behaves as on 0.6.1 (strict and advisory), an existing 0.6.1 project mid-review continues after the deploy, the Pipeline tab and replay on a real run, the gate inbox, and the Docker Desktop redeploy and smoke test.
+10. **M63 Retire the CLI** (FR-322; branch `build/tevrin-0.7.0-remove-cli`, third build PR): remove the projects, tests, CI steps, docs and marketing references, and add the Retired CLI docs page.
+11. **M64 Release 0.7.0** (after M63, on Ben's confirmation): changelog date, docs guide "Pipelines and packs", `docs/history/0.7.0.md`, SPEC and PROGRESS to `docs/0.7.0/`, CLAUDE.md row and layout. Manual checks for Ben: a full SDLC project on preview behaves as on 0.6.1 (strict and advisory), an existing 0.6.1 project mid-review continues after the deploy, the Pipeline tab and replay on a real run, the gate inbox, and the Docker Desktop redeploy and smoke test.

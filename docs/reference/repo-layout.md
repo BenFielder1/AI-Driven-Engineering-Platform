@@ -12,8 +12,6 @@ backend/
   src/Aide.Domain/          pure business rules: state machine, gates, versioning, guardian, review scoring
   src/Aide.Infrastructure/  EF Core (Persistence, Migrations), LLM, Git hosts (GitHub, GitLab, Bitbucket), deployment
                             platforms, databases, notifications, Agents/Prompts and Agents/Stack (embedded catalog)
-  src/Aide.Cli/             the `tevrin` .NET global tool (package Tevrin.Cli)
-  src/Aide.Cli.Alias/       the deprecated `aide` command (package Aide.Cli), same sources
   tests/                    Aide.UnitTests, Aide.IntegrationTests (Testcontainers)
   openapi/api.json          GENERATED contract (committed)
 frontend/

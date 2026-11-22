@@ -62,13 +62,13 @@ test('FR-4: create a token (shown once) and revoke it', async ({ page, context }
   await page.goto('/account')
   await expect(page.getByRole('heading', { level: 1, name: 'Account', exact: true })).toBeVisible()
 
-  await page.getByLabel('Name', { exact: true }).fill('E2E CLI')
+  await page.getByLabel('Name', { exact: true }).fill('E2E token')
   await page.getByRole('button', { name: 'Create token' }).click()
   await expect(page.getByLabel('Your new token')).toHaveValue(/^aide_pat_/)
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByLabel('Your new token')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Revoke E2E CLI' }).click()
+  await page.getByRole('button', { name: 'Revoke E2E token' }).click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke token' }).click()
   await expect(page.getByRole('list', { name: 'API tokens' }).getByText('Revoked')).toBeVisible()
 })

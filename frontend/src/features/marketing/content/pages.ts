@@ -37,7 +37,7 @@ export const marketingPages: Record<MarketingPath, MarketingPage> = {
   '/product': page(
     '/product',
     'Product',
-    'Lifecycle and gates, versioned artifacts, agents and LLM providers, Git hosts, issue-tracker imports, deployments, notifications, admin and the CLI.',
+    'Lifecycle and gates, versioned artifacts, agents and LLM providers, Git hosts, issue-tracker imports, deployments, notifications and admin.',
   ),
   '/how-it-works': page(
     '/how-it-works',

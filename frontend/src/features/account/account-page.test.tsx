@@ -59,13 +59,13 @@ describe('AccountPage', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 
-    await user.type(await screen.findByLabelText('Name'), 'Laptop CLI')
+    await user.type(await screen.findByLabelText('Name'), 'Deploy script')
     await user.click(screen.getByRole('button', { name: 'Create token' }))
 
     expect(await screen.findByLabelText('Your new token')).toHaveValue(PLAIN)
     expect(screen.getByText("Copy it now. You won't be able to see it again.")).toBeInTheDocument()
     const list = await screen.findByRole('list', { name: 'API tokens' })
-    expect(within(list).getByText('Laptop CLI')).toBeInTheDocument()
+    expect(within(list).getByText('Deploy script')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Copy token' }))
     expect(writeText).toHaveBeenCalledWith(PLAIN)
@@ -83,7 +83,7 @@ describe('AccountPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Create token' }))
 
-    expect(await screen.findAllByText('Give the token a name, such as "Laptop CLI".')).toHaveLength(2)
+    expect(await screen.findAllByText('Give the token a name, such as "Deploy script".')).toHaveLength(2)
     expect(authDb.tokens).toHaveLength(0)
   })
 

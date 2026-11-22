@@ -10,7 +10,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pull requests, pushes to `ma
 
 | Job | Checks |
 | --- | --- |
-| backend | Release build with warnings as errors, `openapi/api.json` up to date, no pending EF model changes, CLI packs, tests (Testcontainers), `dotnet format` |
+| backend | Release build with warnings as errors, `openapi/api.json` up to date, no pending EF model changes, tests (Testcontainers), `dotnet format` |
 | backend-integration | Integration tests (Testcontainers), sharded |
 | frontend | Client regenerated and unchanged, typecheck, lint, tests, build |
 | manifests | `validate-manifests.sh`: Kustomize render plus kubeconform for both overlays (`local`, `local-e2e`) |

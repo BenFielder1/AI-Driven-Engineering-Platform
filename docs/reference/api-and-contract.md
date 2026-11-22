@@ -28,11 +28,11 @@ flowchart LR
 | Prefix | Routes live under `/api`, including the SignalR hub at `/api/hubs/` |
 | Health | `/api/health/live` and `/api/health/ready`. Ready fails while migrations are pending |
 | Errors | RFC 9457 problem details with an `errorCode` extension. See [Error codes](error-codes.md) |
-| Auth | A session cookie (`aide.auth`) with an antiforgery token header for browsers, or a bearer API token (`aide_pat_...`) for the CLI |
+| Auth | A session cookie (`aide.auth`) with an antiforgery token header for browsers, or a bearer API token (`aide_pat_...`) for scripts and the API |
 | Concurrency | Edited aggregates carry a version, and a stale write returns 409 `CONFLICT` |
 | IDs and times | UUID v7 keys, UTC timestamps |
 | Stack options | `POST /api/stack/options` and `/validate` return compatibility answers computed in the backend |
 
 ## Create an API token
 
-Open **Account** in the app and create a token. It is shown once. Use it with the [CLI](../guides/cli.md) or send it as a bearer token.
+Open **Account** in the app and create a token. It is shown once. Send it as a bearer token (`Authorization: Bearer aide_pat_...`) from scripts. The command-line tool that used it is retired: see [Retired CLI](retired-cli.md).

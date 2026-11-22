@@ -14,7 +14,7 @@ This is separate from the stack catalog, which describes the stacks of the proje
 flowchart LR
   Browser -->|"http://localhost:8080"| Web["web: Next.js server (Node)"]
   Web -->|"/api (same origin, incl. WebSocket /api/hubs)"| Api["api: ASP.NET Core<br/>endpoints + hosted workers + SignalR"]
-  CLI["tevrin CLI"] -->|"Bearer API token"| Web
+  Script["scripts"] -->|"Bearer API token"| Web
   Api --> Db[("PostgreSQL 18<br/>data + job/outbox table")]
   Api --> Vol[/"aide-data volume<br/>working copies, Data Protection keys"/]
   Api -.-> LLM["Anthropic / OpenAI / Ollama"]
@@ -42,7 +42,7 @@ The contract flows one way. The backend build writes `backend/openapi/api.json`,
 
 Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. The stack catalog (`Aide.Infrastructure/Agents/Stack`: `catalog.json`, `packs/`, `agents/`, `core/`) is content-hashed, and each release version pins the composition and catalog version it was built with.
 
-- The Domain owns the compatibility rules. `POST /api/stack/options` and `/validate` serve the wizard, Settings, the API and the CLI.
+- The Domain owns the compatibility rules. `POST /api/stack/options` and `/validate` serve the wizard, Settings and the API.
 - The origin model says how the browser reaches the backend: `same-origin`, `proxy` or `cross-origin`. The options depend on the chosen frontend, backend and hosts.
 
 ## Migrations

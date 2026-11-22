@@ -64,7 +64,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
-| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump, CLAUDE.md, STACK.md, guide and ops page done (1ea2d98, 9fdb73b); changelog date, history page and docs/0.7.0 move at release (M63) |
+| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump, CLAUDE.md, STACK.md, guide and ops page done (1ea2d98, 9fdb73b); changelog date, history page and docs/0.7.0 move at release (M64) |
 | FR-310 | Host run ids and redelivery | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
 | FR-311 | Run events hooks | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
 | FR-312 | Request options and run metadata | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
@@ -77,6 +77,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | done | bound agents (40d49cb); stage handlers in v3: d5e9659 ([CI 45032877150](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45032877150)) |
 | FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | done | 98d021e ([CI 45028066508](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45028066508)) |
 | FR-321 | SDLC definition version bump and start-up re-pin | 3.10, 5 | backend | M62e | done | v2 and re-pin 5b99e27, 75de158 ([CI 45007169435](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45007169435)) |
+| FR-322 | Retire the CLI, with a rebuild guide | 3.11 | backend + frontend + docs + CI | M63 | done | 209c964 ([CI 45039801909](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45039801909)) |
 
 ## Phases
 - [x] M54 Version and characterisation (FR-260, FR-261, FR-309 bump): snapshots 8dce91a, re-sorted d4d84f8 (D-0.7.0-22); freeze step in CI
@@ -136,17 +137,18 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
     Review: 1 Major fixed (resolver checks binding guards). d5e9659, [CI 45032877150](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45032877150)
   - Acceptance audit (2026-11-22, on 98d021e): 8 Done, 4 Partial, 0 Missing. Golden files, snapshots and api.json are byte-identical to 5e44622; no assertion weakened. Ben chose to build FR-319 and FR-314 as written (M62f). Still to do: assert the FR-321 log entry and a review cycle after the re-pin
-- [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview
+- [x] M63 Retire the CLI (FR-322, D-0.7.0-45), branch `build/tevrin-0.7.0-remove-cli`; snapshot = docs/reference/retired-cli.md + commit e8c3990. Open questions resolved: Q1 keep licence (D-0.7.0-46), Q2 keep 1 MB (D-0.7.0-47), Q4 stay on JsonSchema.Net 8.0.5 (D-0.7.0-48). 209c964, [CI 45039801909](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45039801909); review 0 Critical, 1 Major fixed (the earlier CLI requirements marked retired in §3.0)
+- [ ] M64 Release 0.7.0 (FR-309), after Ben confirms on preview
 
 ## Acceptance audit (2026-11-19)
-41 Done, 9 Partial, 0 Missing on 1d2ed57. Three partials are agreed deferrals: FR-295/FR-296 SDLC side (D-0.7.0-34) and FR-309 release-time docs (M63). The FR-295/FR-296 SDLC side is now §3.10 (D-0.7.0-38). The rest were closed in ca9dc04 and a0217a0:
+41 Done, 9 Partial, 0 Missing on 1d2ed57. Three partials are agreed deferrals: FR-295/FR-296 SDLC side (D-0.7.0-34) and FR-309 release-time docs (M64). The FR-295/FR-296 SDLC side is now §3.10 (D-0.7.0-38). The rest were closed in ca9dc04 and a0217a0:
 - pinning for SDLC moves (FR-277);
 - concurrency taken from the definition (FR-286, D-0.7.0-37);
 - the hub-events test (FR-302);
 - the §8 observability and performance items;
 - a SPEC amendment for FR-265–FR-267.
 
-CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR [#50](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/50) was merged with every check green. M62 (§3.10, D-0.7.0-38) is done on `build/tevrin-0.7.0-sdlc-engine`: second build PR [#59](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/59), CI green on d5e9659. Next: Ben merges #59, tests on preview, then M63 release prep after Ben confirms.
+CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR [#50](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/50) was merged with every check green. M62 (§3.10, D-0.7.0-38) is done on `build/tevrin-0.7.0-sdlc-engine`: second build PR [#59](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/59), CI green on d5e9659. #59 merged. Next: M63 (retire the CLI) as a third build PR, then the preview test, then M64 release prep after Ben confirms.
 
 ## Decisions
 See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.

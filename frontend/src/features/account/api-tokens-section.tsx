@@ -30,7 +30,7 @@ const createTokenSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, { error: 'Give the token a name, such as "Laptop CLI".' })
+    .min(1, { error: 'Give the token a name, such as "Deploy script".' })
     .max(100, { error: 'Token names are at most 100 characters.' }),
   expiresOn: z
     .string()
@@ -216,7 +216,7 @@ export function ApiTokensSection() {
         API tokens
       </h2>
       <p className="mb-4 mt-1 text-sm text-muted-foreground">
-        Personal tokens let the <code>tevrin</code> CLI act as you. Treat them like passwords.
+        Personal tokens let scripts and other tools call the Tevrin API as you. Treat them like passwords.
       </p>
 
       {created && (
@@ -239,7 +239,7 @@ export function ApiTokensSection() {
       {tokens.isPending && <LoadingState label="Loading tokens…" />}
       {tokens.isError && <ErrorState error={tokens.error} onRetry={() => void tokens.refetch()} />}
       {tokens.isSuccess && tokens.data.length === 0 && (
-        <EmptyState title="No tokens yet">Create one above to use the CLI.</EmptyState>
+        <EmptyState title="No tokens yet">Create one above to call the API.</EmptyState>
       )}
       {tokens.isSuccess && tokens.data.length > 0 && (
         <ul className="divide-y divide-border/60 rounded-lg border border-border/60" aria-label="API tokens">
@@ -293,7 +293,7 @@ export function ApiTokensSection() {
           setToRevoke(null)
         }}
       >
-        Anything using this token, such as the CLI, stops working immediately. This can&apos;t be undone.
+        Anything using this token, such as a script, stops working immediately. This can&apos;t be undone.
       </ConfirmDialog>
     </section>
   )

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # FR-229 / FR-231: the Tevrin release version is one semver x.y.z, written in three places that must agree:
-#   backend/Directory.Build.props                          <Version> (every assembly and both CLI packages)
+#   backend/Directory.Build.props                          <Version> (every assembly)
 #   frontend/package.json                                  "version" (and both versions in frontend/package-lock.json)
 #   frontend/src/features/marketing/content/changelog.ts   the newest entry (the first `version: '…'`)
 # Usage: scripts/ci/check-version.sh [EXPECTED]

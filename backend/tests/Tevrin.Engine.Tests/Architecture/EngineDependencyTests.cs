@@ -114,8 +114,8 @@ public class EngineDependencyTests
         Assert.Contains("framework:Microsoft.AspNetCore.App", ProjectItems("Tevrin.Engine.Api"));
     }
 
-    /// <summary>Ours but not the engine: <c>Aide</c>, <c>Aide.*</c>, <c>aide</c> (the CLI alias) or <c>Tevrin.*</c> outside
-    /// <c>Tevrin.Engine.*</c> (packs, the CLI).</summary>
+    /// <summary>Ours but not the engine: <c>Aide</c>, <c>Aide.*</c>, <c>aide</c> or <c>Tevrin.*</c> outside
+    /// <c>Tevrin.Engine.*</c> (packs).</summary>
     private static bool IsOursButNotEngine(string reference) =>
         reference.Equals("Aide", StringComparison.OrdinalIgnoreCase)
         || reference.StartsWith("Aide.", StringComparison.OrdinalIgnoreCase)

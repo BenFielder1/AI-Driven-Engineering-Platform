@@ -15,3 +15,4 @@ permalink: /reference/
 | [Testing](testing.md) | Unit, integration, E2E, accessibility and performance commands |
 | [Error codes](error-codes.md) | The `errorCode` values the API returns |
 | [Repo layout](repo-layout.md) | What lives where |
+| [Retired CLI](retired-cli.md) | What the `tevrin` CLI did and how to rebuild it from its snapshot |

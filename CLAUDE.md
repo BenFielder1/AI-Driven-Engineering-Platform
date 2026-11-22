@@ -2,7 +2,7 @@
 
 Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
-**`SPEC.md` is the source of truth.** **0.7.0 is being built** (the pipeline engine extraction): its spec and build log are the root [`SPEC.md`](SPEC.md) and [`PROGRESS.md`](PROGRESS.md), on branch `build/tevrin-0.7.0` (merged in PR #50), then `build/tevrin-0.7.0-sdlc-engine` (the SDLC moving onto the engine runner, SPEC §3.10). The latest released spec is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
+**`SPEC.md` is the source of truth.** **0.7.0 is being built** (the pipeline engine extraction): its spec and build log are the root [`SPEC.md`](SPEC.md) and [`PROGRESS.md`](PROGRESS.md), on branch `build/tevrin-0.7.0` (merged in PR #50), then `build/tevrin-0.7.0-sdlc-engine` (the SDLC moving onto the engine runner, SPEC §3.10, PR #59), then `build/tevrin-0.7.0-remove-cli` (the CLI retired, SPEC §3.11; restore guide in docs/reference/retired-cli.md). The latest released spec is [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
 ## Versions
 
@@ -30,7 +30,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
   - Pages are client components (SPEC D-V3-2), and routing goes through `src/lib/navigation.ts`.
   - The web server is `frontend/server.ts`, a custom Node server run with Node 24 type stripping. It serves Next, proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL` read at runtime, sets the CSP nonce and security headers, and writes redacted JSON request logs.
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 18 via Npgsql (SPEC D-V5-1) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
-- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; don't upgrade without a decision, SPEC Q4). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*` (architecture test).
+- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; stay on 8.x, SPEC D-0.7.0-48). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*` (architecture test).
 - **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` (after green CI on `main`) and `production` (when a GitHub release `x.y.z` is published, or by dispatch), deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
@@ -52,8 +52,6 @@ backend/
   src/Tevrin.Engine.Runtime/  YAML loader, pipeline registry, job queue, LLM providers, artifact store, gates, notifications, run log, `AgentStageRunner`
   src/Tevrin.Engine.Api/      generic endpoints (definitions, pipeline runs, timeline, replay, gate inbox) and hub events
   src/Tevrin.Pack.Sdlc/       the SDLC pack: Definitions/sdlc.pipeline.yaml, key constants (`SdlcAgents`, `SdlcArtifacts`, `SdlcGates`, `SdlcJobTypes`), `SdlcPack`
-  src/Aide.Cli/             `tevrin` .NET global tool, package Tevrin.Cli (SPEC FR-52, D-V6-2)
-  src/Aide.Cli.Alias/       deprecated `aide` command (package Aide.Cli), same sources as Aide.Cli
   tests/Aide.UnitTests/     domain + application tests
   tests/Tevrin.Engine.Tests/ engine tests: definitions, state machine, agent stages, architecture rules; fixtures in Fixtures/ (`fixture-review.pipeline.yaml`)
   tests/Aide.IntegrationTests/ WebApplicationFactory + Testcontainers

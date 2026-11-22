@@ -192,7 +192,7 @@ In 0.7.0 the SDLC runs on the engine runner. All eight SDLC agents run as agent 
 - Starting, advancing, cancelling or rolling back a run through the generic API. SDLC runs still use the project endpoints. The generic API reads runs and decides gates.
 - Parallel stages, fan-out, agent-to-agent conversation, tool permission tiers, outcome scoring and a per-agent feedback store.
 - Uploading or editing definitions at runtime. Definitions ship inside pack assemblies.
-- Any pack other than SDLC, and packaging (NuGet and npm packages, a pack template, CLI commands).
+- Any pack other than SDLC, and packaging (NuGet and npm packages, a pack template, command-line tooling).
 - Re-running a recorded run against a new prompt version. Replay is read-only.
 
 ## Packages

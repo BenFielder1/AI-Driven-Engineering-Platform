@@ -39,7 +39,7 @@ Tevrin's own stack. [`STACK.md`](STACK.md) holds the packs and shared convention
 ```mermaid
 flowchart LR
   Browser --> Web["web: Next.js server"]
-  CLI["tevrin CLI"] -->|"Bearer token"| Web
+  Script["scripts"] -->|"Bearer token"| Web
   Web -->|"/api, same origin"| Api["api: ASP.NET Core<br/>endpoints, workers, SignalR"]
   Api --> Db[("PostgreSQL 18<br/>data and job table")]
   Api -.-> Ext["LLMs, Git hosts, platforms,<br/>notification channels"]
@@ -56,7 +56,7 @@ flowchart LR
 ## Repo layout
 
 ```
-backend/    src/Aide.Api, Aide.Domain, Aide.Infrastructure, Aide.Cli · tests/ · openapi/api.json (generated)
+backend/    src/Aide.Api, Aide.Domain, Aide.Infrastructure · tests/ · openapi/api.json (generated)
 frontend/   src/app, src/features, src/api/generated (generated) · server.ts · e2e/
 deploy/     k8s/ (Kustomize) · scripts/ · railway/ (ops docs)
 .railway/   Railway infrastructure as code
@@ -77,9 +77,9 @@ STACK.md · CLAUDE.md
 | --- | --- |
 | [Overview](docs/index.md) | What Tevrin is and where to start |
 | [Getting started](docs/getting-started/index.md) | Prerequisites, dev loop, your first project |
-| [Guides](docs/guides/index.md) | Connections, GitHub App, GitLab, Bitbucket, LLM providers, trackers, stacks, deployments, notifications, CLI |
+| [Guides](docs/guides/index.md) | Connections, GitHub App, GitLab, Bitbucket, LLM providers, trackers, stacks, deployments, notifications |
 | [Operations](docs/operations/index.md) | Local Kubernetes, Railway, PostgreSQL 17 to 18 upgrade, CI |
-| [Reference](docs/reference/index.md) | Configuration, API, architecture, testing, error codes, repo layout |
+| [Reference](docs/reference/index.md) | Configuration, API, architecture, testing, error codes, repo layout, the retired CLI |
 | [History](docs/history/index.md) | Specs and build logs for versions 0.1.0 to 0.6.1 |
 | [Brand](docs/brand.md) | Logo files, colours, usage rules |
 
