@@ -12,6 +12,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Pack.Sdlc;
 
@@ -35,9 +36,10 @@ namespace Aide.Api.Agents;
 /// detected packs and any mismatch with the composition (<see cref="StackAnalysis.Check"/>, validated and re-run like the
 /// sections).
 /// </para>
+/// <para>FR-318, FR-319: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), bound on <c>refinement</c>.</para>
 /// </summary>
 public sealed partial class RepositoryAnalysisJobHandler(
-    AgentRunner runner,
+    SdlcAgentStageJob agentJob,
     AgentDraftWriter writer,
     AgentJobInputs inputs,
     AideDbContext db,
@@ -104,24 +106,28 @@ public sealed partial class RepositoryAnalysisJobHandler(
             Repo = RepoScope.BaseCommit,
         };
 
-        var first = await runner.RunAsync(Request(null), cancellationToken);
-        var content = Check(first.Text);
-        var produced = first;
+        // FR-318, FR-319: on the engine runner (bound on refinement, D-0.7.0-42): a reply missing sections is re-run once with
+        // their names; still missing fails with its code. The summary is stored locked below, as 0.6.1, not by the run.
+        var produced = await agentJob.RunReplyAsync(
+            Request(null),
+            new ArtifactAgentSpec(
+                SdlcArtifacts.CodebaseSummary,
+                Check,
+                (_, error) =>
+                {
+                    LogRejected(logger, error.Code, error.Message);
+                    return Request(StackAnalysis.CorrectiveFeedback(error));
+                })
+            {
+                LogsRejection = true,
+            },
+            JobTriggers.StageEntered,
+            cancellationToken);
+        var content = Check(produced.Text);
         if (content.IsFailure)
         {
-            LogRejected(logger, content.Error!.Code, content.Error.Message);
-            produced = await runner.RunAsync(
-                Request(StackAnalysis.CorrectiveFeedback(content.Error)) with
-                {
-                    RunKey = AgentOutput.CorrectiveRunKey,
-                    Check = text => Check(text) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
-                },
-                cancellationToken);
-            content = Check(produced.Text);
-            if (content.IsFailure)
-            {
-                throw new JobFailedException(content.Error!.Message, transient: false, content.Error.Code);
-            }
+            // Only reachable if a stored succeeded run no longer passes (e.g. the rules changed).
+            throw new JobFailedException(content.Error!.Message, transient: false, content.Error.Code);
         }
 
         var summary = await writer.AddLockedAsync(project.Id, version.Id, SdlcArtifacts.CodebaseSummary, content.Value, produced.RunId, produced.CompletedAt, cancellationToken);

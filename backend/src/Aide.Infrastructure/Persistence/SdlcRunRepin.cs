@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Persistence;
 using Tevrin.Engine.Runtime.Pipelines;
@@ -49,10 +50,11 @@ public static class SdlcRunRepin
             return 0;
         }
 
+        // The final generic statuses come from the engine's rule, so a status added later as final is never re-pinned.
+        var finals = Enum.GetValues<GenericRunStatus>().Where(PipelineRunRules.IsFinal).ToList();
         await StoredDefinitions.StoreAsync(db, current, now, cancellationToken);
         return await db.PipelineRuns
-            .Where(r => r.PipelineId == pipeline && from.Contains(r.DefinitionHash)
-                && r.Status != GenericRunStatus.Completed && r.Status != GenericRunStatus.Failed && r.Status != GenericRunStatus.Cancelled)
+            .Where(r => r.PipelineId == pipeline && from.Contains(r.DefinitionHash) && !finals.Contains(r.Status))
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.DefinitionHash, hash), cancellationToken);
     }
 }
