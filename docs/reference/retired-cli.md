@@ -349,7 +349,7 @@ The test step ran `dotnet test --project tests/Aide.Cli.Tests` beside the unit t
 6. Restore the docs from `e8c3990` (`git checkout e8c3990 -- <path>` for whole files, `git diff e8c3990 -- <path>` to merge the rest):
    - `docs/guides/cli.md`, and its row `| [CLI](cli.md) | Drive Tevrin from a terminal |` in `docs/guides/index.md`.
    - `docs/reference/configuration.md`: the "CLI variables" section and the intro sentence "Only the CLI variables were renamed, see the last table."
-   - `docs/reference/error-codes.md`: the line linking the CLI guide. `docs/reference/api-and-contract.md`: "for the CLI" in the Auth row and "Use it with the [CLI](../guides/cli.md)".
+   - `docs/reference/error-codes.md`: the line linking the CLI guide. `docs/reference/api-and-contract.md`: "for the CLI" in the Auth row and `Use it with the [CLI](../guides/cli.md)`.
    - `docs/reference/repo-layout.md`: the `src/Aide.Cli/` and `src/Aide.Cli.Alias/` lines. `docs/reference/architecture.md` and `README.md`: the `CLI["tevrin CLI"] -->|"Bearer token"| Web` diagram node, "Aide.Cli" in the README backend line and "CLI" in its Guides row.
    - `docs/getting-started/first-project.md` (Script it row), `docs/guides/issue-trackers.md`, `docs/guides/stacks-and-inference.md`, `docs/guides/pipelines-and-packs.md` ("CLI commands"), `docs/operations/ci.md` ("CLI packs") and `docs/operations/releases.md` ("both CLI packages").
    - Frontend copy that mentioned the CLI at `e8c3990`:
