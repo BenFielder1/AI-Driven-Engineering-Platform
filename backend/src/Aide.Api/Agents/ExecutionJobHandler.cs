@@ -14,6 +14,7 @@ using Aide.Infrastructure.Persistence.Conversion;
 using Aide.Infrastructure.Stack;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
@@ -59,10 +60,12 @@ public interface IExecutionCompletionHook
 /// immutable. A <c>generalist</c> step (an optimisation plan) runs the base prompt. §4.23, FR-129: a step of a plan locked
 /// before the upgrade that still names a 0.2.0 agent key runs as its mapped specialist (<see cref="LegacyPresets.MapInPlay"/>);
 /// the step keeps the 0.2.0 key in <c>legacy_agent_key</c>, which its runs report as <c>legacyAgentKey</c>.
+/// FR-318, FR-319: the Code Generator runs on the engine runner (<see cref="SdlcAgentStageJob"/>), bound on <c>execution</c>
+/// (D-0.7.0-42); the step loop, commits, pushes and step statuses stay here.
 /// </summary>
 public sealed partial class ExecutionJobHandler(
     AideDbContext db,
-    AgentRunner runner,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
@@ -133,13 +136,15 @@ public sealed partial class ExecutionJobHandler(
         }
 
         var request = await RequestAsync(job, project, planId, step, steps, cancellationToken);
-        var outcome = await runner.RunAsync(
+        var outcome = await agentJob.RunReplyAsync(
             request with
             {
                 Stack = version.Stack,
                 LegacyAgentKey = step.LegacyAgentKey,
                 Warnings = legacyWarning is null ? request.Warnings : [.. request.Warnings, AgentRunWarnings.LegacyAgentMapped],
             },
+            ReplySpec,
+            JobTriggers.StageEntered,
             cancellationToken);
         var reply = CodeGeneration.Parse(outcome.Text);
         var buildFix = step.Origin == StepOrigin.BuildFix;
@@ -164,6 +169,20 @@ public sealed partial class ExecutionJobHandler(
         var commit = await Git(() => workingCopies.CommitStepAsync(project.Id, working.Branch, step.Id, normalised, message, cancellationToken));
         await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, outcome.RunId, cancellationToken);
     }
+
+    /// <summary>
+    /// FR-318, FR-319: the Code Generator's reply is accepted as sent, as 0.6.1's runner had no check for it: the Guardian
+    /// judges it afterwards (an unreadable reply rejects the step, never the run), so there is no corrective re-run and
+    /// nothing is stored by the run.
+    /// </summary>
+    public static readonly ArtifactAgentSpec ReplySpec = new(
+        SdlcArtifacts.ImplementationPlan,
+        text => Result.Success(text),
+        (_, error) => throw new JobFailedException($"The code generator's reply has no corrective re-run ({error.Code}).", transient: false, error.Code))
+    {
+        StoresDraft = false,
+        LogsRejection = true,
+    };
 
     /// <summary>
     /// FR-257: the working copy's content of the produced files before the step (missing or unreadable files are absent, so

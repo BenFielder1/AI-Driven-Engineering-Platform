@@ -45,6 +45,23 @@ public sealed partial class SdlcAgentExtension
         };
     }
 
+    /// <summary>
+    /// FR-121, FR-319: a specialist step's prompt is <see cref="Domain.Stack.StackPrompt.Compose"/> of the rendered base
+    /// template (base → composition summary → role → skills, the user message unchanged), keyed by the run's
+    /// <c>agent_key</c> (a resumed run's stored one), as 0.6.1's runner composed it after the render. Runs without a
+    /// specialist in play (every other agent, a <c>generalist</c> step, no composition) are sent as rendered.
+    /// </summary>
+    public override Task<RenderedPrompt> TransformPromptAsync(AgentAttempt attempt, RenderedPrompt prompt, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(attempt);
+        ArgumentNullException.ThrowIfNull(prompt);
+        var request = CallOf(attempt).Request;
+        return Task.FromResult(
+            attempt.AgentRun?.AgentKey is { } key && request.Stack is { } stack && stack.Specialist(key) is not null
+                ? Domain.Stack.StackPrompt.Compose(prompt, stack, key).Value
+                : prompt);
+    }
+
     /// <summary>FR-26, FR-71: the budget between tool turns, as of the call's start plus this run's tokens.</summary>
     public override Task<string?> CheckToolTurnAsync(AgentAttempt attempt, LlmTurnTokens soFar, CancellationToken cancellationToken)
     {
