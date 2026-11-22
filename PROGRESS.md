@@ -146,7 +146,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - the §8 observability and performance items;
 - a SPEC amendment for FR-265–FR-267.
 
-CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR [#50](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/50) was merged with every check green. Next is M62 (§3.10, D-0.7.0-38) on `build/tevrin-0.7.0-sdlc-engine` and its own build PR, then the preview test, then M63 release prep after Ben confirms.
+CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR [#50](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/50) was merged with every check green. M62 (§3.10, D-0.7.0-38) is done on `build/tevrin-0.7.0-sdlc-engine`: second build PR [#59](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/59), CI green on d5e9659. Next: Ben merges #59, tests on preview, then M63 release prep after Ben confirms.
 
 ## Decisions
 See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
