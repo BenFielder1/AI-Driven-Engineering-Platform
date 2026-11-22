@@ -186,6 +186,7 @@ internal sealed class AgentReplies(string agent, params string?[] replies) : IFa
         Tevrin.Pack.Sdlc.SdlcAgents.CodeReview => new Aide.Infrastructure.Agents.FakeCodeReviewResponder(),
         Tevrin.Pack.Sdlc.SdlcAgents.PlanGenerator => new Aide.Infrastructure.Agents.FakePlanGeneratorResponder(),
         Tevrin.Pack.Sdlc.SdlcAgents.RepositoryAnalyst => new Aide.Infrastructure.Agents.FakeRepositoryAnalystResponder(),
+        Tevrin.Pack.Sdlc.SdlcAgents.BuildFix => new Aide.Infrastructure.Agents.FakeBuildFixResponder(),
         _ => new Aide.Infrastructure.Agents.FakeSpecGeneratorResponder(),
     };
 }

@@ -86,7 +86,7 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
         ArgumentNullException.ThrowIfNull(spec);
 
         // The first reply is kept on a succeeded run even when rejected: the corrective re-run gets it as context.
-        var first = await runner.RunAsync(request with { RunKey = null, Check = null }, cancellationToken);
+        var first = await runner.RunAsync(request with { Check = null }, cancellationToken);
         var checkedFirst = spec.ToContent(first.Text);
         if (checkedFirst.IsSuccess)
         {
@@ -103,7 +103,7 @@ public sealed partial class ArtifactAgentJob(AgentRunner runner, AgentDraftWrite
         var second = await runner.RunAsync(
             corrective with
             {
-                RunKey = AgentOutput.CorrectiveRunKey,
+                RunKey = corrective.RunKey ?? AgentOutput.CorrectiveRunKey,
                 Check = text => correctiveSpec.ToContent(text) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
             },
             cancellationToken);

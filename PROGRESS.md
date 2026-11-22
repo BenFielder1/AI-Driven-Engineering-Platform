@@ -76,7 +76,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-318 | Document agents on the engine runner (repository_analyst moves with the bound agents in M62d) | 3.10, 4.61 | backend | M62c | partial | five agents on the engine: 7fb025b, bd61f3a, 2f1588c, 18331756, f0b0f86 ([CI 44934488218](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44934488218)) |
 | FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | todo | |
 | FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | todo | |
-| FR-321 | SDLC definition version bump and start-up re-pin | 3.10, 5 | backend | M62e | todo | |
+| FR-321 | SDLC definition version bump and start-up re-pin | 3.10, 5 | backend | M62e | done | v2 and re-pin 5b99e27, 75de158 ([CI 45007169435](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45007169435)) |
 
 ## Phases
 - [x] M54 Version and characterisation (FR-260, FR-261, FR-309 bump): snapshots 8dce91a, re-sorted d4d84f8 (D-0.7.0-22); freeze step in CI
@@ -104,7 +104,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
     - [x] `code_review`: the reply returns 0.6.1's `AgentRunOutcome`, and the optimisation plan draft is still stored by `RecordAsync` after scoring (`StoresDraft = false`, with a parse-only corrective check). Review: 0 Critical/Major
     - [x] `plan_generator`: f0b0f86, [CI 44934488218](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44934488218). All five staged agents are green, characterisation unchanged, `rest` shard 15 min. Plan validation through the host hooks until FR-321. The draft Markdown is byte-identical. Review: 0 Critical/Major
     - **CI:** the integration test step limit was raised from 18 to 22 minutes (job limit 25). The `rest` shard's trx durations rose about 30% evenly across unrelated tests (Bitbucket, release flows; 765 s → 983 s), which points to runner speed, not the agent moves. Rebalancing the shards is a later follow-up.
-  - [ ] M62d `repository_analyst` (done, bound on refinement; review clean), `build_fix`, then `code_generator`, bound with `agents:` (D-0.7.0-42), with SDLC stage handlers (FR-319)
+  - [ ] M62d `repository_analyst` (done, bound on refinement; review clean), `build_fix` (done, bound on execution; run keys `build-fix-<check>-n`, only the first reply checked as in 0.6.1; review clean), then `code_generator`, bound with `agents:` (D-0.7.0-42), with SDLC stage handlers (FR-319)
     - [x] Engine `agents:` bindings:
       - secondary agent bindings on a stage, selected by `AgentStageRequest.AgentKey`;
       - validator rules, including duplicate primary keys and job types (the default `agent.run` may be shared);
@@ -120,7 +120,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
       - `agents:` bindings;
       - FR-321 start-up re-pin from `90f1f065…`.
 
-      Review: 0 Critical/Major. Rollback and deploy-overlap notes are in the ops page and D-0.7.0-41
+      Review: 0 Critical/Major. Rollback and deploy-overlap notes are in the ops page and D-0.7.0-41. 5b99e27; the re-pin tests' seeding was fixed in 75de158; green with `repository_analyst` (67cebeb) on [CI 45007169435](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45007169435)
   - [ ] M62e Old runner removed, architecture test, re-pin, docs (FR-320, FR-321)
 - [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview
 

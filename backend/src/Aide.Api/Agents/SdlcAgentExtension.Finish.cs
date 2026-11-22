@@ -65,7 +65,8 @@ public sealed partial class SdlcAgentExtension
             LogRejected(logger, call.Request.Agent, error.Code);
         }
 
-        var corrective = new SdlcAgentStageCall(call.Spec.Corrective(text, error) with { RunKey = AgentOutput.CorrectiveRunKey }, call.Spec.ForCorrective());
+        var correctiveRequest = call.Spec.Corrective(text, error);
+        var corrective = new SdlcAgentStageCall(correctiveRequest with { RunKey = correctiveRequest.RunKey ?? AgentOutput.CorrectiveRunKey }, call.Spec.ForCorrective());
         var next = corrective.ToStageRequest(current.RunId, current.StageId, JobTriggers.ValidationFailed);
         return Task.FromResult(next with { Attempt = current.Attempt + 1 });
     }

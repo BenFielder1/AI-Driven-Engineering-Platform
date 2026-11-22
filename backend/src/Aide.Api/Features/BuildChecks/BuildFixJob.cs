@@ -13,6 +13,7 @@ using Aide.Infrastructure.Git;
 using Aide.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Pack.Sdlc;
 
@@ -35,10 +36,11 @@ namespace Aide.Api.Features.BuildChecks;
 /// check starts.</item>
 /// </list>
 /// Redelivery is safe: run ids derive from the job, and a check that already has fix steps is left alone.
+/// FR-318, FR-319: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), bound on <c>execution</c>.
 /// </summary>
 public sealed partial class BuildFixJobHandler(
     AideDbContext db,
-    AgentRunner runner,
+    SdlcAgentStageJob agentJob,
     WorkingCopyPreparer preparer,
     IWorkingCopies workingCopies,
     VersionStackLoader stacks,
@@ -139,14 +141,30 @@ public sealed partial class BuildFixJobHandler(
             Repo = RepoScope.WorkingTree,
         };
 
-        var first = await runner.RunAsync(Request(1, null), cancellationToken);
-        var processed = BuildFixPlanning.Process(first.Text, planCheck);
-        if (processed.IsFailure && BuildCheckRules.RetryFixPlanning(0))
-        {
-            LogRetry(logger, check.Id, processed.Error!.Code);
-            var second = await runner.RunAsync(Request(2, BuildFixPlanning.CorrectiveFeedback(processed.Error!)), cancellationToken);
-            processed = BuildFixPlanning.Process(second.Text, planCheck);
-        }
+        // FR-318, FR-319: on the engine runner (bound on execution, D-0.7.0-42). An invalid first reply is re-run once (run key
+        // build-fix-<check>-2) with every reason; the second reply is accepted whatever it says, and still invalid it
+        // exhausts the check below (no run fails), as 0.6.1.
+        var reply = await agentJob.RunReplyAsync(
+            Request(1, null),
+            new ArtifactAgentSpec(
+                SdlcArtifacts.OptimizationPlan,
+                text =>
+                {
+                    var checkedReply = BuildFixPlanning.Process(text, planCheck);
+                    return checkedReply.IsFailure && BuildCheckRules.RetryFixPlanning(0) ? Result.Failure<string>(checkedReply.Error!) : Result.Success(text);
+                },
+                (_, error) =>
+                {
+                    LogRetry(logger, check.Id, error.Code);
+                    return Request(2, BuildFixPlanning.CorrectiveFeedback(error));
+                })
+            {
+                CorrectiveToContent = text => Result.Success(text),
+                LogsRejection = true,
+            },
+            JobTriggers.StageEntered,
+            cancellationToken);
+        var processed = BuildFixPlanning.Process(reply.Text, planCheck);
 
         var now = time.GetUtcNow();
         if (processed.IsFailure)

@@ -143,7 +143,8 @@ public sealed partial class SdlcAgentStageJob(
     private async Task<AgentRun> RunOnEngineAsync(AgentRunRequest request, ArtifactAgentSpec spec, SdlcStageTarget.Found target, string trigger, CancellationToken cancellationToken)
     {
         // Each attempt opens its own log scope and span with its run id (SdlcAgentExtension.ObserveAttempt).
-        var call = new SdlcAgentStageCall(request with { RunKey = null, Check = null }, spec);
+        // The job's run key is kept: 0.6.1's build fix keys its runs by the check (build-fix-<check>-<attempt>).
+        var call = new SdlcAgentStageCall(request with { Check = null }, spec);
         AgentStageResult result;
         try
         {
