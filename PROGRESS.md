@@ -65,17 +65,17 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump, CLAUDE.md, STACK.md, guide and ops page done (1ea2d98, 9fdb73b); changelog date, history page and docs/0.7.0 move at release (M63) |
-| FR-310 | Host run ids and redelivery | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
-| FR-311 | Run events hooks | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
-| FR-312 | Request options and run metadata | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
-| FR-313 | Content transform hook | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
-| FR-314 | Corrective input; plan validation in `validate:` | 3.10, 4.55 | backend | M62a, M62c | partial | engine hook [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776); plan validation in M62c |
-| FR-315 | Transactions and failure handling | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
-| FR-316 | Pre-run and post-store host checks | 3.10, 4.60 | backend | M62a | engine hooks done | [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves |
-| FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | partial | providers, tools, pack names (M62b, 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872)); `agent.tools` in the YAML with FR-321 |
+| FR-310 | Host run ids and redelivery | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-311 | Run events hooks | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-312 | Request options and run metadata | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-313 | Content transform hook | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-314 | Corrective input; plan validation in `validate:` | 3.10, 4.55 | backend | M62a, M62c | partial | plan validation in v2 (5b99e27); the remaining guards in M62f (D-0.7.0-44) |
+| FR-315 | Transactions and failure handling | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-316 | Pre-run and post-store host checks | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | done | providers, tools, pack names (M62b, 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872)); `agent.tools` in the YAML with FR-321; `agent.tools` in v2 (5b99e27) |
 | FR-318 | Document agents on the engine runner (repository_analyst moves with the bound agents in M62d) | 3.10, 4.61 | backend | M62c | done | five agents on the engine: 7fb025b, bd61f3a, 2f1588c, 18331756, f0b0f86 ([CI 44934488218](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44934488218)) |
-| FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | done | all eight agents on the engine; 40d49cb ([CI 45019672155](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45019672155)) |
-| FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | done | M62e (CI pending) |
+| FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | partial | bound agents done (40d49cb); stage handlers in M62f (D-0.7.0-43) |
+| FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | done | 98d021e ([CI 45028066508](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45028066508)) |
 | FR-321 | SDLC definition version bump and start-up re-pin | 3.10, 5 | backend | M62e | done | v2 and re-pin 5b99e27, 75de158 ([CI 45007169435](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45007169435)) |
 
 ## Phases
@@ -128,7 +128,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
     - `AgentCallBoundaryTests` scans the IL; only `SdlcAgentExtension` may call providers.
     - Docs updated.
 
-    Review: 0 Critical/Major
+    Review: 0 Critical/Major. 98d021e, [CI 45028066508](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45028066508)
+  - [ ] M62f Stage handlers and validate: guards (FR-319, FR-314, D-0.7.0-43/-44), definition v3, re-pin of v1+v2; freeze check extended to the golden prompt files (audit gap)
+  - Acceptance audit (2026-11-22, on 98d021e): 8 Done, 4 Partial, 0 Missing. Golden files, snapshots and api.json are byte-identical to 5e44622; no assertion weakened. Ben chose to build FR-319 and FR-314 as written (M62f). Still to do: assert the FR-321 log entry and a review cycle after the re-pin
 - [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview
 
 ## Acceptance audit (2026-11-19)

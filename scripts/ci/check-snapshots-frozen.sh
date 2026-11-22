@@ -16,3 +16,18 @@ if ! git diff --exit-code --stat "$base" -- "$dir"; then
   exit 1
 fi
 echo "Characterisation snapshots unchanged since M54 ($base)"
+
+# FR-317-FR-321 (§3.10): the golden prompt files pin all eight SDLC agents' templates and rendered prompts. They were
+# committed in b593268 (M59) and stay frozen while the SDLC moves onto the engine runner.
+golden_base=b593268b11278a6912b0685f9e7e5885a916f7ce
+golden_dir=backend/tests/Aide.UnitTests/Agents/Golden
+
+if ! git cat-file -e "${golden_base}^{commit}" 2>/dev/null; then
+  git fetch --quiet --depth=1 origin "$golden_base"
+fi
+
+if ! git diff --exit-code --stat "$golden_base" -- "$golden_dir"; then
+  echo "::error::The golden prompt files in $golden_dir differ from M59 ($golden_base). They are frozen for 0.7.0 (§3.10): fix the prompt change instead." >&2
+  exit 1
+fi
+echo "Golden prompt files unchanged since M59 ($golden_base)"
