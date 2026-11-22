@@ -32,6 +32,7 @@ export const changelog: readonly ChangelogEntry[] = [
       'A Pipeline tab on each project shows the run, its stages with timings, the timeline, artifacts and the cost so far.',
       "Replay steps through a run one event at a time, with each agent's input and output and each artifact's diff.",
       'A gate inbox lists every approval waiting for you across your projects.',
+      "The tevrin command-line tool is retired. API tokens still work for scripts, and the CLI's source is archived in the docs (Reference → Retired CLI).",
     ],
     specHref: docsUrl('history/0.7.0/'),
   },

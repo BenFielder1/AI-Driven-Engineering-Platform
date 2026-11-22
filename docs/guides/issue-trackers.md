@@ -36,4 +36,4 @@ With real trackers the API calls these hosts. Allow them if outbound traffic is 
 
 `Trackers:Provider=Fake` makes no tracker calls. It is for tests and E2E only, and is never set on Railway.
 
-From the command line, see `tevrin sources` in the [CLI guide](cli.md).
+Scripts can call the same imports API (`/api/projects/{id}/sources`) with an API token. The retired command-line tool had `tevrin sources`: see [Retired CLI](../reference/retired-cli.md).

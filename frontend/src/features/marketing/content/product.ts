@@ -2,7 +2,7 @@
  * FR-213, FR-212, FR-222: the Product page, one anchored section per feature area. Sources: the 0.1.0–0.5.0 specs and the
  * docs guides (lifecycle §4.1–§4.5, artifacts §4.3, agents FR-23/FR-70/FR-180, Git hosts 0.2.0 §3.7 and 0.4.0 §3.5–§3.7,
  * trackers 0.5.0 §3.2, stacks 0.4.0 §3.1 and 0.5.0 §3.4, deployments 0.4.0 §3.8–§3.10 and 0.5.0 §3.5, notifications FR-47–FR-49,
- * admin FR-51, CLI FR-52 and docs/guides/cli.md).
+ * admin FR-51, API tokens FR-4 and docs/reference/api-and-contract.md).
  */
 export type ProductPreview = 'gates' | 'artifacts' | 'runs' | 'deployments'
 
@@ -142,16 +142,16 @@ export const productSections: readonly ProductSection[] = [
     visual: { icon: 'shield' },
   },
   {
-    id: 'cli-and-api',
-    title: 'CLI and API',
+    id: 'api',
+    title: 'API and tokens',
     body: [
-      'The tevrin command-line tool covers the lifecycle from a terminal, with personal API tokens.',
-      'The web app uses the same HTTP API, described by a generated OpenAPI contract.',
+      'Everything the web app does goes through a REST API, described by a generated OpenAPI contract.',
+      'Scripts and other tools call the same API with personal API tokens.',
     ],
     bullets: [
       'Create projects, approve artifacts, execute, review, release and roll back',
-      'Start versions, set stacks and import tracker items',
-      'JSON output from status for scripts',
+      'Personal API tokens from your Account page, revocable at any time',
+      'OpenAPI contract committed with the code',
     ],
     visual: { icon: 'terminal' },
   },

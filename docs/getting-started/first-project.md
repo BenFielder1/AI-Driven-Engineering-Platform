@@ -54,4 +54,4 @@ These views work for any pipeline definition, not only the software lifecycle. S
 | Choose a stack | [Stacks and inference](../guides/stacks-and-inference.md) |
 | Deploy what you build | [Deployments and databases](../guides/deployments-and-databases.md) |
 | Get notified at gates | [Notifications](../guides/notifications.md) |
-| Script it | [CLI](../guides/cli.md) |
+| Script it | [API tokens](../reference/api-and-contract.md#create-an-api-token) |

@@ -1,4 +1,4 @@
-# Mirrors the CLAUDE.md gate, plus contract/client freshness, Railway IaC typecheck + actionlint, EF model drift, CLI packaging, manifest validation of both
+# Mirrors the CLAUDE.md gate, plus contract/client freshness, Railway IaC typecheck + actionlint, EF model drift, manifest validation of both
 # overlays (local, local-e2e; kubeconform), shell script checks, image builds with container smoke checks (web: read-only
 # root FS, /healthz, CSP nonce, 502 when the API is absent; api: setpriv drop to uid 1654, efbundle as non-root) and
 # Playwright E2E against the API + a production Next.js server (`next build && npm start`) in E2E mode (core specs, flows specs and a11y as parallel shards).
@@ -37,7 +37,7 @@ env:
 
 jobs:
   backend:
-    name: Backend (build, contract, EF drift, CLI pack, test, format)
+    name: Backend (build, contract, EF drift, test, format)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -62,17 +62,12 @@ jobs:
           dotnet ef migrations has-pending-model-changes
           --project src/Aide.Infrastructure --startup-project src/Aide.Api
           --configuration Release --no-build
-      - name: CLI packs as a .NET tool (FR-52)
-        run: |
-          dotnet pack src/Aide.Cli -c Release --no-build -o "$RUNNER_TEMP/nupkg"
-          dotnet pack src/Aide.Cli.Alias -c Release --no-build -o "$RUNNER_TEMP/nupkg"
-      - name: Test (unit, CLI)
+      - name: Test (unit)
         # Integration tests run in the backend-integration shards below.
         timeout-minutes: 10
         run: |
           dotnet test --project tests/Aide.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
           dotnet test --project tests/Tevrin.Engine.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
-          dotnet test --project tests/Aide.Cli.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
       - name: Format
         run: dotnet format --verify-no-changes --no-restore
       - uses: actions/upload-artifact@v7

@@ -34,7 +34,7 @@ describe('FR-213 Product', () => {
       'deployments',
       'notifications',
       'admin',
-      'cli-and-api',
+      'api',
     ])
     sections.forEach((section, i) => {
       expect(within(section).getByRole('heading', { level: 2 })).toHaveTextContent(productSections[i]?.title ?? '')

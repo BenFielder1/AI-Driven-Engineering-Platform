@@ -75,7 +75,7 @@ export function signInAs(overrides: Partial<StoredUser> = {}): User {
 export function seedToken(overrides: Partial<Token> = {}): Token {
   const token: Token = {
     id: nextId(),
-    name: 'Laptop CLI',
+    name: 'Deploy script',
     createdAt: '2026-09-01T10:00:00Z',
     lastUsedAt: null,
     expiresAt: null,

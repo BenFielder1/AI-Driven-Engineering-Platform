@@ -34,7 +34,7 @@ API errors are RFC 9457 problem details with an `errorCode` extension. The backe
 | Stacks and analysis | `STACK_INCOMPATIBLE`, `STACK_LOCKED`, `STACK_INFER_NO_CODE`, `STACK_PROFILE_INCOMPLETE`, `DEPLOYMENT_GROUP_INVALID` |
 | Agent runs (recorded on the run) | `MISSING_INPUT`, `INVALID_PLAN`, `MISSING_SECTIONS`, `MISSING_REQUIREMENT_IDS` |
 
-The CLI maps some of these to exit codes: see the [CLI guide](../guides/cli.md).
+The retired command-line tool mapped some of these to exit codes: see [Retired CLI](retired-cli.md).
 
 ## Where each code is specified
 

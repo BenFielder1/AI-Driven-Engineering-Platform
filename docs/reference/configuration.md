@@ -14,7 +14,7 @@ ASP.NET Core reads `appsettings.json`, `appsettings.Development.json`, user-secr
 
 Values are never shown here. "Secret" means: never commit it, set it only through user-secrets, `secrets.env` or Railway variables.
 
-Server settings keep their internal `aide` names (for example `ConnectionStrings__Aide`). Only the CLI variables were renamed, see the last table.
+Server settings keep their internal `aide` names (for example `ConnectionStrings__Aide`). The retired command-line tool had its own variables: see [Retired CLI](retired-cli.md).
 
 ## Settings
 
@@ -112,17 +112,6 @@ Server settings keep their internal `aide` names (for example `ConnectionStrings
 | Other non-secrets | `appsettings*.json` or environment variables | `deploy/k8s/base/configmap.yaml` |
 
 Platform tokens (Vercel, Netlify, Cloudflare, Render, Railway, Supabase), database connection strings, user LLM keys, GitHub, GitLab and Bitbucket user tokens, registered GitLab instances and the Bitbucket consumer, the registered GitHub App and deployment env values are not configuration. They are stored encrypted in the database and are never shown.
-
-## CLI variables
-
-| Variable | Purpose | Fallback |
-| --- | --- | --- |
-| `TEVRIN_TOKEN` | API token for the CLI | `AIDE_TOKEN` |
-| `TEVRIN_API_URL` | API base URL | `AIDE_API_URL` |
-| `TEVRIN_CONFIG` | CLI config file path | `AIDE_CONFIG` |
-| `TEVRIN_GIT_TOKEN` | Git host PAT for `project init` and `stack detect` | `AIDE_GIT_TOKEN` |
-
-Resolution order: flag, `TEVRIN_*`, `AIDE_*`, config file, default. An empty value counts as unset. See the [CLI guide](../guides/cli.md).
 
 ## Railway
 

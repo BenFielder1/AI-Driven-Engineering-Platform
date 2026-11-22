@@ -135,7 +135,7 @@ describe('FR-210 marketing shell', () => {
       'Trust',
     ])
     expect(nav.getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/product')
-    expect(nav.getByRole('link', { name: /^CLI/ })).toHaveAttribute('href', `${DOCS_URL}guides/cli/`)
+    expect(nav.queryByRole('link', { name: /^CLI/ })).not.toBeInTheDocument()
     expect(nav.getByRole('link', { name: /^API reference/ })).toHaveAttribute('href', `${DOCS_URL}reference/api-and-contract/`)
     expect(nav.getByRole('link', { name: /^Install/ })).toHaveAttribute('href', `${DOCS_URL}getting-started/`)
     expect(nav.getByRole('link', { name: /^Requirements/ })).toHaveAttribute('href', `${DOCS_URL}getting-started/prerequisites/`)

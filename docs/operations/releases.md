@@ -21,7 +21,7 @@ Spec IDs (`D-V6-1`) keep `V<N>`, which means version 0.N.0. Folders (`docs/0.6.0
 
 The version is written in three places, and CI fails if they differ (`scripts/ci/check-version.sh`):
 
-- `<Version>` in `backend/Directory.Build.props`, used by every assembly and both CLI packages
+- `<Version>` in `backend/Directory.Build.props`, used by every assembly
 - `version` in `frontend/package.json` and its lock file
 - the newest entry of the marketing changelog, `frontend/src/features/marketing/content/changelog.ts`
 
