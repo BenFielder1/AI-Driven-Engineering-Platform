@@ -88,7 +88,7 @@ public sealed class PipelineApiReadTests(AideApiFactory factory)
     {
         using var fixture = await ProjectApi.FixtureAsync(factory);
         var runId = await PipelineApiGateTests.RunIdAsync(factory, fixture.Project.Id);
-        // timestamptz keeps microseconds: truncate so the stored times compare equal to these (as AgentRunner does).
+        // timestamptz keeps microseconds: truncate so the stored times compare equal to these (as the SDLC agent runs do).
         var now = DateTimeOffset.UtcNow.AddDays(1);
         var start = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
         await ProjectApi.WithDbAsync(factory, async db =>

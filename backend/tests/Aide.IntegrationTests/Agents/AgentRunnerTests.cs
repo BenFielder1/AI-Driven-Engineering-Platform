@@ -20,8 +20,10 @@ using Tevrin.Pack.Sdlc;
 namespace Aide.IntegrationTests.Agents;
 
 /// <summary>
-/// FR-22–FR-26, NFR-OBS: the agent runner against PostgreSQL, with the real providers pointed at fake HTTP handlers
-/// and the Fake provider's responders counted — no test reaches a real LLM API.
+/// FR-22–FR-26, NFR-OBS: SDLC agent runs against PostgreSQL, with the real providers pointed at fake HTTP handlers
+/// and the Fake provider's responders counted — no test reaches a real LLM API. FR-320: since 0.6.1's runner was removed,
+/// every request runs on the engine runner (<see cref="SdlcAgentStageJob"/>, <see cref="EngineAgentRuns"/>) with the
+/// same assertions.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
@@ -81,6 +83,70 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
         var state = await ProjectApi.ReadAsync<ProjectStateDto>(await fixture.Viewer.Client.GetAsync(new Uri($"{fixture.Path}/state", UriKind.Relative), Ct));
         Assert.Equal(run.InputTokens + run.OutputTokens, state.TokensUsed);
         Assert.Equal([EventTypes.RunStarted, EventTypes.RunCompleted], await RunEventsAsync(fixture.Project.Id));
+    }
+
+    [Fact]
+    public async Task FR320_a_project_without_a_pipeline_run_gets_one_created_and_its_agent_runs_on_it()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var id = fixture.Project.Id;
+        var oldRunId = await ProjectApi.WithDbAsync(app, async db =>
+        {
+            // A project that predates pipeline runs (0.6.1 data the start-up backfill hasn't reached).
+            var runIds = await db.PipelineRuns.Where(r => r.ProjectId == id).Select(r => r.Id).ToListAsync(Ct);
+            await db.AgentRuns.Where(r => r.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(r => r.PipelineRunId, (Guid?)null), Ct);
+            await db.ApprovalGates.Where(g => g.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(g => g.PipelineRunId, (Guid?)null), Ct);
+            await db.Artifacts.Where(a => a.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(a => a.PipelineRunId, (Guid?)null), Ct);
+            await db.StateTransitions.Where(t => t.ProjectId == id).ExecuteUpdateAsync(s => s.SetProperty(t => t.PipelineRunId, (Guid?)null), Ct);
+            await db.PipelineRuns.Where(r => r.ProjectId == id).ExecuteDeleteAsync(Ct);
+            return Assert.Single(runIds);
+        });
+
+        var outcome = await RunAsync(app, Spec(id, NewJob(id)));
+
+        var created = await ProjectApi.WithDbAsync(app, db => db.PipelineRuns.AsNoTracking().Where(r => r.ProjectId == id).Select(r => r.Id).ToListAsync(Ct));
+        var newRunId = Assert.Single(created);
+        Assert.NotEqual(oldRunId, newRunId);
+        var run = await LoadRunAsync(outcome.RunId);
+        Assert.Equal((AgentRunStatus.Succeeded, (Guid?)newRunId), (run.Status, run.PipelineRunId));
+        Assert.Equal(1, _spec.Calls);
+    }
+
+    [Fact]
+    public async Task FR320_a_retried_job_resumes_the_running_run_a_0_6_1_build_left_without_a_pipeline_run()
+    {
+        var app = App();
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var id = fixture.Project.Id;
+        var job = NewJob(id) with { Attempt = 2 };
+        var pipelineRunId = await ProjectApi.WithDbAsync(app, async db =>
+        {
+            // A rolling 0.6.1 → 0.7.0 deploy: the 0.6.1 replica stored the job's run, unlinked, and stopped mid-call.
+            var versionId = await db.Projects.Where(p => p.Id == id).Select(p => p.CurrentReleaseVersionId).SingleAsync(Ct);
+            db.AgentRuns.Add(new AgentRun
+            {
+                Id = job.Id,
+                ProjectId = id,
+                ReleaseVersionId = versionId,
+                Agent = SdlcAgents.SpecGenerator,
+                Stage = Aide.Domain.Lifecycle.Phase.Specification.ToWire(),
+                Provider = LlmProvider.Fake,
+                Model = "fake-1",
+                PromptVersion = "7",
+                Status = AgentRunStatus.Running,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+            await db.AgentRuns.Where(r => r.Id == job.Id).ExecuteUpdateAsync(s => s.SetProperty(r => r.PipelineRunId, (Guid?)null), Ct);
+            return await db.PipelineRuns.Where(r => r.ProjectId == id).Select(r => r.Id).SingleAsync(Ct);
+        });
+
+        var outcome = await RunAsync(app, Spec(id, job));
+
+        var run = await LoadRunAsync(outcome.RunId);
+        Assert.Equal((job.Id, AgentRunStatus.Succeeded, (Guid?)pipelineRunId), (run.Id, run.Status, run.PipelineRunId));
+        Assert.Equal(1, _spec.Calls);
     }
 
     [Fact]
@@ -162,7 +228,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
 
         var outcome = await RunAsync(app, Spec(fixture.Project.Id, NewJob(fixture.Project.Id)));
 
-        Assert.Equal(0, AgentRunner.ReadOutput((await LoadRunAsync(outcome.RunId)).Output)!.Continuations);
+        Assert.Equal(0, SdlcAgentRuns.ReadOutput((await LoadRunAsync(outcome.RunId)).Output)!.Continuations);
     }
 
     [Fact]
@@ -177,7 +243,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
 
         var body = JsonDocument.Parse(Assert.Single(_ollama.Requests).Body).RootElement;
         Assert.Equal(16_000, body.GetProperty("options").GetProperty("num_predict").GetInt32());
-        Assert.Equal(16_000, AgentRunner.ReadOutput((await LoadRunAsync(outcome.RunId)).Output)!.MaxOutputTokens);
+        Assert.Equal(16_000, SdlcAgentRuns.ReadOutput((await LoadRunAsync(outcome.RunId)).Output)!.MaxOutputTokens);
     }
 
     [Fact]
@@ -606,8 +672,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
 
     private static async Task<AgentRunOutcome> RunAsync(WebApplicationFactory<Program> app, AgentRunRequest request)
     {
-        await using var scope = app.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<AgentRunner>().RunAsync(request, Ct);
+        return await EngineAgentRuns.RunAsync(app.Services, request, Ct);
     }
 
     private static async Task UseOllamaAsync(ProjectFixture fixture)
@@ -669,7 +734,7 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
     /// <summary>A worker that runs the spec generator for <see cref="TestJobType"/> jobs (phase 7 registers the real handlers).</summary>
     private static JobWorker Worker(WebApplicationFactory<Program> app, TimeProvider clock) => new(
         app.Services.GetRequiredService<IServiceScopeFactory>(),
-        [new JobHandlerRegistration(TestJobType, sp => new SpecJobHandler(sp.GetRequiredService<AgentRunner>()))],
+        [new JobHandlerRegistration(TestJobType, sp => new SpecJobHandler(sp))],
         Options.Create(new JobOptions { Enabled = true, Concurrency = 1 }),
         clock,
         app.Services.GetRequiredService<ILogger<JobWorker>>());
@@ -690,10 +755,10 @@ public sealed class AgentRunnerTests(AideApiFactory factory) : IDisposable
             .ToListAsync(Ct));
     }
 
-    private sealed class SpecJobHandler(AgentRunner runner) : IJobHandler
+    private sealed class SpecJobHandler(IServiceProvider scoped) : IJobHandler
     {
         public Task HandleAsync(JobExecution job, CancellationToken cancellationToken) =>
-            runner.RunAsync(Spec(job.ProjectId!.Value, job), cancellationToken);
+            EngineAgentRuns.RunInScopeAsync(scoped, Spec(job.ProjectId!.Value, job), cancellationToken);
     }
 
     private sealed class CountingResponder(string agent, string text) : IFakeAgentResponder

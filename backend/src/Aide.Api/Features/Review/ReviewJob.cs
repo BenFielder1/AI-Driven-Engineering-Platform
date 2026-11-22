@@ -115,7 +115,7 @@ internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult 
 /// </summary>
 public sealed partial class ReviewJobHandler(
     AideDbContext db,
-    AgentRunner runner,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
     AgentDraftWriter drafts,
@@ -198,7 +198,7 @@ public sealed partial class ReviewJobHandler(
             return ReviewAssessment.LacksOptimizationPlan(decision, result.OptimizationPlan.Count) ? ReviewAssessment.MissingOptimizationPlanError() : null;
         }
 
-        var outcome = await RunAgentAsync(job, project, cycle, material, previousText, payload.Feedback, MissingPlan, cancellationToken);
+        var outcome = await RunAgentAsync(job, payload.Trigger, project, cycle, material, previousText, payload.Feedback, MissingPlan, cancellationToken);
         await RecordAsync(job, cycle, material, outcome, previous?.Score, checks, preview, cancellationToken);
     }
 
@@ -391,6 +391,7 @@ public sealed partial class ReviewJobHandler(
     /// </summary>
     private async Task<ReviewAgentOutcome> RunAgentAsync(
         JobExecution job,
+        string trigger,
         Project project,
         int cycle,
         ReviewMaterial material,
@@ -453,33 +454,39 @@ public sealed partial class ReviewJobHandler(
                 : read;
         }
 
-        var first = await runner.RunAsync(Request(feedback) with { RunKey = null, Check = null }, cancellationToken);
-        var parsed = Parse(first.Text);
-        var problem = parsed.IsSuccess ? requirement(parsed.Value) : parsed.Error!;
-        if (problem is null)
-        {
-            LogDroppedEvidence(parsed.Value);
-            LogRefusedWaivers(project.Id, cycle, parsed.Value, material.Findings);
-            return new ReviewAgentOutcome(first, parsed.Value);
-        }
-
-        LogRejected(logger, problem.Code, problem.Message);
-        var second = await runner.RunAsync(
-            Request(ArtifactAgentJob.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem))) with
+        // FR-318: on the engine runner. The first reply must read and meet the requirement; the one corrective
+        // re-run only has to read (0.6.1's check). The optimisation plan draft is stored by RecordAsync, after scoring.
+        var spec = new ArtifactAgentSpec(
+            SdlcArtifacts.OptimizationPlan,
+            text =>
             {
-                RunKey = AgentOutput.CorrectiveRunKey,
-                Check = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures, findingCheck) is { IsFailure: true } failed ? Result.Failure(failed.Error!) : Result.Success(),
+                var parsed = Parse(text);
+                var problem = parsed.IsSuccess ? requirement(parsed.Value) : parsed.Error!;
+                return problem is null ? Result.Success(text) : Result.Failure<string>(problem);
             },
-            cancellationToken);
-        var reparsed = Parse(second.Text);
+            (_, problem) =>
+            {
+                LogRejected(logger, problem.Code, problem.Message);
+                return Request(ArtifactAgentSpec.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem)));
+            })
+        {
+            CorrectiveToContent = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures, findingCheck) is { IsFailure: true } failed
+                ? Result.Failure<string>(failed.Error!)
+                : Result.Success(text),
+            StoresDraft = false,
+            LogsRejection = true,
+        };
+        var run = await agentJob.RunReplyAsync(Request(feedback), spec, trigger, cancellationToken);
+        var reparsed = Parse(run.Text);
         if (reparsed.IsFailure)
         {
+            // Only reachable if a stored succeeded run no longer reads (e.g. the rules changed).
             throw new JobFailedException(reparsed.Error!.Message, transient: false, reparsed.Error.Code);
         }
 
         LogDroppedEvidence(reparsed.Value);
         LogRefusedWaivers(project.Id, cycle, reparsed.Value, material.Findings);
-        return new ReviewAgentOutcome(second, reparsed.Value);
+        return new ReviewAgentOutcome(run, reparsed.Value);
     }
 
     /// <summary>
@@ -677,13 +684,14 @@ public sealed partial class ReviewJobHandler(
         var rejected = payload.ArtifactId is { } id
             ? await db.Artifacts.AsNoTracking().Where(a => a.Id == id && a.ProjectId == project.Id).Select(a => (int?)a.Version).FirstOrDefaultAsync(cancellationToken)
             : null;
-        var feedback = ArtifactAgentJob.JoinFeedback(
+        var feedback = ArtifactAgentSpec.JoinFeedback(
             payload.Trigger == LifecycleJobPayload.ArtifactRejected
                 ? $"The optimization plan{(rejected is { } v ? $" v{v.ToString(CultureInfo.InvariantCulture)}" : string.Empty)} of this cycle was rejected. Revise the optimization plan; the rest of the review stands."
                 : "The optimization plan of this cycle was lost to an integrity failure. Produce it again.",
             payload.Feedback);
         var outcome = await RunAgentAsync(
             job,
+            payload.Trigger,
             project,
             report.ReviewCycle,
             material,

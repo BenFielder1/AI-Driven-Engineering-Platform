@@ -41,3 +41,14 @@ The 0.7.0 migration only adds tables and columns. A host service, `PipelineRunBa
 - It logs `Pipeline run backfill: N run(s) created, M row(s) linked`. If it fails it logs a warning and runs again on the next start.
 
 Projects keep `current_phase`, `status` and `checkpoint` in step with the run, written in the same transaction, so a deploy rollback to 0.6.1 still works. Runs started before 0.7.0 have no stage timings for earlier stages.
+
+## SDLC definition re-pin at start-up
+
+The SDLC definition moved to version 3 during 0.7.0. Version 2 added the repo tools, plan validation as a `validate:` block, and `agents:` bindings for the code generator, build fix and repository analyst. Version 3 makes every other agent output check a `validate:` guard, on the agent's stage or on its `agents:` binding. It also lists the execution stage's handlers (`handlers: [sdlc.execution, sdlc.build-check]`). Before the job worker and the run backfill start, the API re-pins every non-final SDLC run from the earlier 0.7.0 hashes (version 1 `90f1f065…` and version 2 `d2f1c98b…`) to version 3. All three versions behave the same; the earlier ones left those checks to host code.
+
+- It is one `UPDATE`, idempotent and safe on several replicas **of the same build**. It logs one `re-pinned N SDLC run(s)` entry, only when runs moved, and is skipped while migrations are pending.
+- Final runs and runs on any other hash are left alone. Runs still on the earlier hash (for example if the re-pin failed) keep working, because that stored definition only names guards and tools this build registers.
+- **Rollback:**
+  - Rolling back to **0.6.1** is safe: 0.6.1 doesn't read pipeline runs.
+  - Rolling back to an **earlier 0.7.0 build** isn't: that build can't parse the version-2 definition (`agents:` is unknown to its loader). Re-pinned runs then get 409 `DEFINITION_UNAVAILABLE` on lifecycle moves, and their agent jobs dead-letter until you roll forward again. After rolling forward, retry the dead letters from Admin → Jobs.
+- **Deploy overlap:** while the new container starts and re-pins, the old container can still be serving. For that short window, jobs the old container picks up for re-pinned runs fail with `DEFINITION_UNAVAILABLE`. Retry those dead letters after the deploy.

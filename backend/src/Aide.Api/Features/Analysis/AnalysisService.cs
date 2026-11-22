@@ -316,7 +316,7 @@ public sealed partial class AnalysisService(
             trigger,
             code,
             error,
-            AgentRunner.ReadOutput(run?.Output)?.Warnings ?? [],
+            SdlcAgentRuns.ReadOutput(run?.Output)?.Warnings ?? [],
             draft?.Id,
             draft?.Version,
             job.CreatedAt,

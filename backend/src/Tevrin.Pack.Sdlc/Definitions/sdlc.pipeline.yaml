@@ -3,7 +3,12 @@
 # and the jobs queued on entering a stage (enqueue_on_enter, D-0.7.0-27) are 0.6.1's, pinned by Aide.UnitTests (FR290_*).
 # Changing any value changes the definition hash (§4.50).
 pipeline: sdlc
-version: 1
+# FR-321, D-0.7.0-41: version 2 adds plan validation (validate: on planning), the repo tools of the agents 0.6.1 gave them
+# (agent.tools, FR-317) and the agents: bindings (D-0.7.0-42); runs
+# pinned to version 1 are re-pinned at start-up.
+# D-0.7.0-43, D-0.7.0-44: version 3 declares every SDLC output check as a validate: guard (on the stage, or on its
+# agents: binding) and execution's stage handlers (handlers:); runs pinned to version 1 or 2 are re-pinned (FR-321).
+version: 3
 title: Software delivery
 trigger: { kind: manual }
 approval_modes: [strict, advisory, autonomous]
@@ -56,46 +61,69 @@ stages:
   - id: analysis
     title: Analysis
     status: active
-    agent: { key: stack_analyst, job_type: stack_analysis }
+    agent: { key: stack_analyst, job_type: stack_analysis, tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code] }
     inputs: [codebase_summary]
     output: stack_profile
     requires: [{ guard: sdlc.start-only }]
+    # FR-314, D-0.7.0-44: the stack profile (STACK_PROFILE_INVALID, allowed-options feedback), one corrective re-run.
+    validate: [{ guard: sdlc.stack-profile-valid }]
+    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }
 
   # FR-27: refinement rounds are started by the user, so nothing is queued on entry. stack_profile is an input because
   # the pinned composition it approves feeds refinement (and so a new profile invalidates the project request, §4.27).
   - id: refinement
     title: Refinement
     status: active
-    agent: { key: idea_refinement, job_type: idea_refinement }
+    agent: { key: idea_refinement, job_type: idea_refinement, tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code] }
+    # D-0.7.0-42: the Repository Analyst (FR-70) runs for a version with existing code; it writes the codebase summary.
+    agents:
+      # FR-314, D-0.7.0-44: the summary's sections (MISSING_SECTIONS), one corrective re-run.
+      - { key: repository_analyst, job_type: repository_analysis, inputs: [], output: codebase_summary, tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code], validate: [{ guard: sdlc.summary-sections }], on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail } }
     inputs: [stack_profile, source_items, codebase_summary]
     output: project_request
     requires: [{ guard: sdlc.leaving-analysis }]
+    # FR-314, D-0.7.0-44: the refined request reads (INVALID_OUTPUT), one corrective re-run.
+    validate: [{ guard: sdlc.refinement-valid }]
+    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }
 
   # FR-28: spec_generation is queued on entry.
   - id: specification
     title: Specification
     status: active
     enqueue_on_enter: spec_generation
-    agent: { key: spec_generator, job_type: spec_generation }
+    agent: { key: spec_generator, job_type: spec_generation, tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code] }
     inputs: [project_request, source_items, codebase_summary]
     output: technical_specification
     requires: [{ artifact_locked: project_request }]
+    # FR-314, D-0.7.0-44: the required sections (MISSING_SECTIONS), one corrective re-run.
+    validate: [{ guard: sdlc.spec-sections }]
+    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }
 
   # FR-29: plan_generation is queued on entry.
   - id: planning
     title: Planning
     status: active
     enqueue_on_enter: plan_generation
-    agent: { key: plan_generator, job_type: plan_generation }
+    agent: { key: plan_generator, job_type: plan_generation, tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code] }
     inputs: [project_request, technical_specification, codebase_summary]
     output: implementation_plan
     requires: [{ artifact_locked: technical_specification }]
     gate: { type: spec_approval, modes: [strict, advisory], approves: technical_specification, approval_links: true }
+    # FR-314: the plan rules (INVALID_PLAN) with one corrective re-run, as 0.6.1.
+    validate: [{ guard: sdlc.plan-valid }]
+    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }
 
   # FR-31–FR-37: manual; execution is started by POST /execution/start (the execution job).
   - id: execution
     title: Execution
     status: building
+    # D-0.7.0-42: the code generator (each plan step, FR-31) and the build fix (FR-257) work in execution.
+    agents:
+      - { key: code_generator, job_type: execution, inputs: [project_request, technical_specification, implementation_plan, codebase_summary], tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code] }
+      # FR-314, D-0.7.0-44: the first fix plan is checked; the corrective re-run is accepted as sent (0.6.1).
+      - { key: build_fix, job_type: build_fix, inputs: [], tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code], validate: [{ guard: sdlc.fix-plan-valid }], on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail } }
+    # D-0.7.0-43: the execution job's step loop and the build check run as stage handlers; the stage stays manual (no handler:).
+    handlers: [sdlc.execution, sdlc.build-check]
     requires:
       - { artifact_locked: technical_specification }
       - { artifact_locked: implementation_plan }
@@ -109,10 +137,13 @@ stages:
     title: Review
     status: reviewing
     enqueue_on_enter: review
-    agent: { key: code_review, job_type: review }
+    agent: { key: code_review, job_type: review, tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code] }
     inputs: [technical_specification, implementation_plan, codebase_summary]
     output: optimization_plan
     requires: [{ guard: sdlc.plan-steps-completed }]
+    # FR-314, D-0.7.0-44: the first reply reads and meets the requirement, the corrective re-run only reads.
+    validate: [{ guard: sdlc.review-valid }]
+    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }
     loop:
       title: Review cycle
       to: execution

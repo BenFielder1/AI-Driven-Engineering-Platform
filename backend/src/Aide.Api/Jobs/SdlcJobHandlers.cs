@@ -8,6 +8,8 @@ using Aide.Api.Features.Release;
 using Aide.Api.Features.Review;
 using Aide.Api.Features.Trackers;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Pipelines;
+using Tevrin.Engine.Runtime.Stages;
 using Tevrin.Pack.Sdlc;
 
 namespace Aide.Api.Jobs;
@@ -52,6 +54,13 @@ public static class SdlcJobHandlers
         services.AddJobHandler<DatabaseProvisioningJobHandler>(SdlcJobTypes.DatabaseProvisioning);
         services.AddJobHandler<DatabaseExpirySweepJobHandler>(SdlcJobTypes.DatabaseExpirySweep);
         services.AddJobHandler<PreviewDatabaseResetJobHandler>(SdlcJobTypes.PreviewDatabaseReset);
+
+        // FR-319, D-0.7.0-43: the stage work the execution and build check jobs run through the engine.
+        services.AddStageHandlers();
+        services.AddScoped<ISdlcRunPins, SdlcRunPins>();
+        services.AddScoped<SdlcStageHandlerJob>();
+        services.AddPipelineStageHandler<SdlcExecutionStageHandler>(SdlcStageHandlerNames.Execution);
+        services.AddPipelineStageHandler<SdlcBuildCheckStageHandler>(SdlcStageHandlerNames.BuildCheck);
         return services;
     }
 }

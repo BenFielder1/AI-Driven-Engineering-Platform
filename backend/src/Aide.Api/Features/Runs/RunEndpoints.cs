@@ -152,7 +152,7 @@ public static class RunEndpoints
             return ApiProblems.NotFound("The agent run was not found.");
         }
 
-        var stored = AgentRunner.ReadOutput(run.Output);
+        var stored = SdlcAgentRuns.ReadOutput(run.Output);
         var text = stored?.Text ?? run.Output;
         var truncated = text is { Length: > MaxOutputLength };
         var label = run.CredentialId is { } credentialId

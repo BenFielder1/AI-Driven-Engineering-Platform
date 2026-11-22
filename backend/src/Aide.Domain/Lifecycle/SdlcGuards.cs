@@ -31,6 +31,11 @@ public static class SdlcGuards
         SdlcGuardNames.PlanStepsCompleted => PlanStepsCompleted(snapshot),
         SdlcGuardNames.ReleaseEligible => ReleaseEligible(state, snapshot),
         SdlcGuardNames.ReviewCycleReady => ReviewCycleReady(state, snapshot),
+        // FR-314: an output check (the planning stage's validate:), never an entry rule.
+        SdlcGuardNames.PlanValid => [],
+        // D-0.7.0-44: the other output checks (validate: on their stage or binding), never entry rules either.
+        SdlcGuardNames.SpecSections or SdlcGuardNames.StackProfileValid or SdlcGuardNames.RefinementValid
+            or SdlcGuardNames.SummarySections or SdlcGuardNames.ReviewValid or SdlcGuardNames.FixPlanValid => [],
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Not an SDLC guard."),
     };
 

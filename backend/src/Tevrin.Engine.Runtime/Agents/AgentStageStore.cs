@@ -31,6 +31,12 @@ public interface IAgentStageStore
     /// <summary>The pending gate of <paramref name="type"/> on <paramref name="run"/>, or <c>null</c>.</summary>
     Task<ApprovalGate?> PendingGateAsync(PipelineRun run, string type, CancellationToken cancellationToken);
 
+    /// <summary>FR-310: the agent run with <paramref name="agentRunId"/>, tracked, or <c>null</c> (the runner refuses one of another pipeline run or stage).</summary>
+    Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken);
+
+    /// <summary>FR-310: the run subject's version of <paramref name="key"/> that agent run <paramref name="agentRunId"/> produced, or <c>null</c>.</summary>
+    Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken);
+
     void Add(AgentRun agentRun);
 
     void Add(Artifact artifact);
@@ -107,6 +113,12 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
         ArgumentNullException.ThrowIfNull(run);
         return db.ApprovalGates.FirstOrDefaultAsync(g => g.PipelineRunId == run.Id && g.Type == type && g.Status == GateStatus.Pending, cancellationToken);
     }
+
+    public Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken) =>
+        db.AgentRuns.FirstOrDefaultAsync(r => r.Id == agentRunId, cancellationToken);
+
+    public Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken) =>
+        db.Artifacts.Where(AgentStageScope.InSubject(run)).FirstOrDefaultAsync(a => a.Type == key && a.AgentRunId == agentRunId, cancellationToken);
 
     public void Add(AgentRun agentRun) => db.AgentRuns.Add(agentRun);
 

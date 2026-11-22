@@ -1,6 +1,6 @@
 # Tevrin — Specification (0.7.0)
 
-2026-11-17 · Ben Fielder · **0.7.0**, built on the 0.6.1 codebase in this repo. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) … [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's 0.7.0 brief (2026-11-17), the research notes in [`docs/0.7.0/tevrin-engine-extraction.md`](docs/0.7.0/tevrin-engine-extraction.md) (all suggestions, order-of-work steps 1–5), the interview answers in §10, and a survey of the lifecycle, gate, job, agent and artifact code.
+2026-11-17 · Ben Fielder · **0.7.0**, built on the 0.6.1 codebase in this repo. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) … [`docs/0.6.1/SPEC.md`](docs/0.6.1/SPEC.md). Stack: [`STACK.md`](STACK.md). Source: Ben's 0.7.0 brief (2026-11-17), the research notes in [`docs/0.7.0/tevrin-engine-extraction.md`](docs/0.7.0/tevrin-engine-extraction.md) (all suggestions, order-of-work steps 1–5), the interview answers in §10, and a survey of the lifecycle, gate, job, agent and artifact code. **Amended 2026-11-21** (Ben): 0.7.0 also moves the whole SDLC pack onto the engine runner (§3.10, step 6 below), superseding D-0.7.0-34.
 
 > **How this spec relates to 0.1.0–0.6.1.** 0.7.0 is an increment on the released 0.6.1 app. **Everything in the earlier specs stays in force unless this document amends it.** Amended items are listed in §3.0 and marked *(amends …)*. New requirements continue from **FR-260**, domain rules from **§4.49**, decisions use **`D-0.7.0-n`**, and milestones continue from **M54**. Earlier tests stay green unless an amendment changes what they assert; then update the test and name the amendment in it.
 
@@ -15,6 +15,7 @@ The work follows steps 1–5 of the research notes:
 3. **String keys.** `AgentKind`, `ArtifactType` and `GateType` become string keys, with the current values as constants in the SDLC pack.
 4. **Generic state machine.** A definition model, loader and validator, and a generic `Apply(run, transition)` with guards. The SDLC lifecycle is written as a definition plus guards. Old and new machines run side by side until they agree everywhere, then the old one is removed.
 5. **Generic API and UI.** Definition-driven read endpoints and gate decisions, and engine views (run timeline, stage list, artifact viewer and diff, gate inbox, run replay) that work for any definition with no frontend code.
+6. **The SDLC on the engine runner** *(added 2026-11-21)*. The engine `AgentStageRunner` gains the hooks the SDLC needs, then all eight SDLC agents move onto it one at a time, and the SDLC's own agent runner is deleted.
 
 Success means:
 - **The SDLC works exactly as in 0.6.1.** The characterisation snapshot from M54 is unchanged at the end of every milestone, and every 0.1.0–0.6.1 test stays green (renamed or moved where the code moved).
@@ -24,8 +25,9 @@ Success means:
 - A fixture definition in the engine tests (not a product pack) runs end to end: agent stage → code-guarded stage with retry and feedback → gate → agent stage. It also renders in the engine UI with no frontend change.
 - Each run is pinned to its definition hash, so editing the YAML never changes a run already in progress.
 - Every agent run records its input, output, tokens, latency, model and prompt version, so the run replay shows it. Each stage has timings and each run has a cost total.
+- Every SDLC agent runs through the engine `AgentStageRunner`. `AgentRunner` and `ArtifactAgentJob` no longer exist, and the golden prompt tests and characterisation snapshots are unchanged (§3.10).
 
-**In scope (0.7.0):** characterisation tests (§3.1) · engine projects and the lift (§3.2) · string keys (§3.3) · pipeline definitions and packs (§3.4) · the generic state machine and switch-over (§3.5) · generic stage execution and run logging (§3.6) · generic API (§3.7) · engine UI (§3.8) · release housekeeping (§3.9).
+**In scope (0.7.0):** characterisation tests (§3.1) · engine projects and the lift (§3.2) · string keys (§3.3) · pipeline definitions and packs (§3.4) · the generic state machine and switch-over (§3.5) · generic stage execution and run logging (§3.6) · generic API (§3.7) · engine UI (§3.8) · release housekeeping (§3.9) · the SDLC on the engine runner (§3.10).
 
 **Out of scope (0.7.0):**
 - **Any pack other than SDLC.** The coaching pack (Impulse) and the other candidate pipelines (debate desk, forecasting, QA lab, job applications, on-call triage, content studio, agent economy) are future work. Engine tests use fixture definitions only.
@@ -67,6 +69,7 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 | 0.1.0 one execution job per project (`ux_jobs_project_id_active_execution`) | Declared in the definition's `concurrency` block. The index stays for the SDLC | FR-286 |
 | 0.1.0 agent run record | Adds the run, the stage, the redacted rendered input and per-stage timings | FR-297 |
 | CLAUDE.md Layout and Stack | New `Tevrin.Engine.*` and `Tevrin.Pack.Sdlc` projects, `frontend/src/engine/` | FR-262, FR-309 |
+| 0.1.0 FR-24–FR-26 agent runs, 0.6.1 plan validation (the SDLC `AgentRunner`) | Every SDLC agent runs through the engine `AgentStageRunner` with SDLC hooks, context providers and tools; plan validation is a `validate:` block. Same prompts, records, events, retries and errors | FR-310–FR-321, §4.60 |
 
 ### 3.1 Characterisation tests (step 1)
 
@@ -181,7 +184,7 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 
 | ID | Requirement | Layer |
 | --- | --- | --- |
-| FR-295 | An engine `AgentStageRunner` runs any agent stage: load the pinned definition, collect the latest locked versions of the stage's `inputs`, ask registered `IAgentContextProvider`s for extra context, render the prompt, call the LLM through the resolver with the stage's tools, validate the output (FR-296), store it as a new draft (or auto-locked) artifact version, and record the agent run. The SDLC's repository and Git context (`AgentRepoContext`, iteration context, repo tools) become SDLC context providers and `IAgentTool`s. `AgentRunner`, `ArtifactAgentJob` and the SDLC agent job handlers call the engine runner; SDLC-specific job handlers (execution, repository and stack analysis, build check, release) stay in the SDLC side | backend | *(Amended by D-0.7.0-34: in 0.7.0 the SDLC agents keep their own runner, pinned by golden prompt tests; the engine runner ships for new packs and is proven on the fixture pipeline.)*
+| FR-295 | An engine `AgentStageRunner` runs any agent stage: load the pinned definition, collect the latest locked versions of the stage's `inputs`, ask registered `IAgentContextProvider`s for extra context, render the prompt, call the LLM through the resolver with the stage's tools, validate the output (FR-296), store it as a new draft (or auto-locked) artifact version, and record the agent run. The SDLC's repository and Git context (`AgentRepoContext`, iteration context, repo tools) become SDLC context providers and `IAgentTool`s. `AgentRunner`, `ArtifactAgentJob` and the SDLC agent job handlers call the engine runner; SDLC-specific job handlers (execution, repository and stack analysis, build check, release) stay in the SDLC side | backend | *(Amended by D-0.7.0-34: in 0.7.0 the SDLC agents keep their own runner, pinned by golden prompt tests; the engine runner ships for new packs and is proven on the fixture pipeline. D-0.7.0-38 supersedes this: the SDLC moves onto the engine runner in §3.10.)*
 | FR-296 | `validate:` on an agent stage: when a guard or the schema rejects the output, the stage reruns the agent with the findings appended as feedback (trigger `validation_failed`) up to `max_attempts`, then follows `then:` (`escalate` raises an `escalation` gate; `fail` marks the agent run and job failed). Where the SDLC validates output today (plan validation, build-fix plans), it is expressed this way with today's attempt counts and end result (§4.55) | backend |
 | FR-297 | Run logging: `agent_runs` gains `pipeline_run_id`, `stage_id`, `input` (the rendered prompt and messages, redacted with `SecretRedaction`, capped at 1 MB with `input_truncated`) and `latency_ms` (time to first token, when streaming). A new `stage_executions` table records each entry into a stage (run, stage, iteration, checkpoint, entered and exited times, outcome). The run exposes a cost total (sum of its agent runs' `cost_estimate`) and a token total | backend + data |
 | FR-298 | **Prompt comparison**: an endpoint groups a pipeline's agent runs by agent key and prompt version, with counts and average tokens, cost, latency, duration and failure rate (§6) | backend |
@@ -239,6 +242,47 @@ Auth is unchanged (0.1.0–0.6.0: email and password, GitHub OAuth, API tokens).
 | --- | --- | --- |
 | FR-309 | Version 0.7.0 in the three version sources; a changelog entry ("Pipeline engine": SDLC unchanged, Pipeline tab, gate inbox, replay); `CLAUDE.md` Layout, Stack and rule 8 updated for the engine projects; `STACK.md` notes YamlDotNet and the JSON Schema validator; a docs-site guide **Pipelines and packs** (engine architecture, definition reference from §4.49, writing a guard, the dependency rule) and an operations note on definition pinning. At release: `docs/history/0.7.0.md`, SPEC and PROGRESS to `docs/0.7.0/` | frontend + docs |
 
+### 3.10 The SDLC on the engine runner (step 6)
+
+*(Added 2026-11-21, D-0.7.0-38.)* The whole SDLC pack runs on the engine. Every SDLC agent runs through `AgentStageRunner`, and the SDLC's other stage work runs as pack extension points. Users see no change: the characterisation snapshots (FR-261) and the golden prompt tests (`GoldenPromptTests`, all eight agents) stay unchanged at every commit. The hooks below are engine extension points with no SDLC types. The SDLC supplies its implementations in `Tevrin.Pack.Sdlc` or the `Aide.*` host.
+
+| ID | Requirement | Layer |
+| --- | --- | --- |
+| FR-310 | **Host run ids and redelivery.** The runner takes the agent run id from the caller. A redelivered job whose agent run already `succeeded` returns the stored output and makes no LLM call and no new agent run. A run left `running` by a lost lease is handled as in 0.6.1 | backend |
+| FR-311 | **Run events.** `IAgentStageHooks` gains run started, completed and failed hooks, and the budget refusal reaches the host. The SDLC hook writes `RUN_STARTED`, `RUN_COMPLETED`, `RUN_FAILED` and `BUDGET_EXCEEDED` with 0.6.1's payloads, actors and order | backend |
+| FR-312 | **Request options and run metadata.** A host hook supplies per-call `MaxTokens` (0.5.0 FR-160) and `ContextTokens` (FR-162), because they're project and admin settings, not definition fields. The agent run records the catalogue version, packs, agent key and the full list of input artifact versions, as in 0.6.1 | backend |
+| FR-313 | **Content transform.** A pack hook turns validated model output into stored artifact content. The SDLC's renders the plan into Markdown with the `aide-plan` block and adds the deploy-file steps (0.6.1), byte for byte as today | backend |
+| FR-314 | **Corrective input.** A pack hook builds a retry's input: the previous output in `PREVIOUS_*` variables, the SDLC feedback wording, and the host error codes (`INVALID_PLAN`, `MISSING_SECTIONS`). The planning stage gets `validate: [{ guard: sdlc.plan-valid }]` with `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }` (§4.55). Every other place the SDLC validates output today is expressed the same way, with today's attempt counts | backend |
+| FR-315 | **Transactions and failures.** The agent run and its token accounting commit in their own transaction, before the artifact is stored, as in 0.6.1. A transient provider failure leaves the agent run `running` and the queue retries the job. A permanent failure fails it with 0.6.1's error code and message. Where the engine default differs, a host hook chooses | backend |
+| FR-316 | **Host checks.** A pre-run hook can refuse a run with an error code before the model is called. The SDLC uses it for credential invalidation (0.2.0 FR-78), the provider-disabled check (FR-157) and the source-items budget (FR-172). A post-store hook carries the corruption alert and regeneration (0.1.0 FR-20) | backend |
+| FR-317 | **SDLC context and tools.** `AgentRepoContext`, the iteration context and the codebase summary become SDLC `IAgentContextProvider`s. The repository tools used by the execution and build-fix agents become `IAgentTool`s, listed in each stage's `agent.tools` | backend |
+| FR-318 | **Document agents move.** `repository_analyst`, `stack_analyst`, `idea_refinement`, `spec_generator`, `code_review` and `plan_generator` run through the engine runner. Their job handlers (`AgentJobHandlers`, `RepositoryAnalysisJobHandler`, `StackAnalysisJobHandler`, `ReviewJobHandler`, and the `RefinementService` and `AnalysisService` callers) only load the job, call the runner and apply the SDLC follow-ups (review decision, analysis chaining) | backend |
+| FR-319 | **Tool agents move.** `code_generator` (execution) and `build_fix` run through the engine runner with the SDLC tools. The step loop, commits, pushes and build-check orchestration stay SDLC code, registered as `IStageHandler`s where they are stage work (`handler:` on the stage) | backend |
+| FR-320 | **Old runner removed.** Once all eight agents have moved: `AgentRunner`, `ArtifactAgentJob` and their SDLC-only helpers are deleted, along with the run-path code in `AgentRunJobEndedHook`. An architecture test fails if an `Aide.*` type outside the engine hooks calls the LLM resolver directly. The docs guide **Pipelines and packs** and CLAUDE.md Layout say the SDLC runs on the engine runner | backend + docs |
+| FR-321 | **Definition version and re-pin.** The `sdlc.pipeline.yaml` changes (FR-314, FR-319) bump its `version` and so its hash. At start-up, non-final SDLC runs pinned to the earlier 0.7.0 SDLC hash are re-pinned once to the new hash. This is idempotent, logged, and safe on several replicas of the same build, because both definitions describe the same behaviour (the earlier one left plan validation to host code). Runs pinned to any other unknown hash still get 409 `DEFINITION_UNAVAILABLE` | backend |
+
+**FR-310 acceptance**
+- Given a `spec_generation` job whose agent run succeeded, when the job is redelivered, then the Fake provider gets no new call, no new agent run is created, and the artifact is unchanged.
+
+**FR-311, FR-315 acceptance**
+- Given each agent's move commit, then every characterisation snapshot and golden prompt file is unchanged (CI's freeze step).
+- Given the Fake provider failing transiently once and then succeeding, then the agent run stays `running`, the job is retried and succeeds, and the events match 0.6.1's existing test.
+- Given a project over its token budget, then the job fails with `BUDGET_EXCEEDED`, the event is written, and the model is never called.
+
+**FR-313, FR-314 acceptance**
+- Given the §4.55 SDLC example (plan invalid on attempt 1, valid on attempt 2), then there are two agent runs, the second prompt carries `PREVIOUS_*` and 0.6.1's feedback wording, and the stored plan is identical to 0.6.1's output for the same Fake response.
+- Given a plan invalid on both attempts, then the job fails with `INVALID_PLAN`, as in 0.6.1.
+
+**FR-316 acceptance**
+- Given a disabled provider, an invalidated credential, or source items over budget, then the run is refused with 0.6.1's error code and the model is never called.
+- Given scenario 14 (a corrupted artifact regenerated), then its snapshot is unchanged.
+
+**FR-320 acceptance**
+- Given the backend source, then no `AgentRunner` or `ArtifactAgentJob` type exists, and the architecture test passes.
+
+**FR-321 acceptance**
+- Given a run in `review` pinned to the earlier SDLC hash, when the API starts, then the run is pinned to the new hash, one log entry is written, and the next review cycle behaves as before. A second start changes nothing.
+
 ## 4. Domain rules
 
 ### 4.49 Definition shape and validation
@@ -266,6 +310,7 @@ stages:
     status: <status>
     agent?: { key, prompt, model?, tools?: [<pack>.<tool>], job_type? }   # job_type defaults to agent.run
     handler?: <pack>.<name>
+    handlers?: [<pack>.<name>]         # D-0.7.0-43: secondary stage handlers, run only when named; the stage's kind is unchanged
     inputs?: [<artifact key>]
     output?: <artifact key>
     requires?: [{ artifact_locked: <key> } | { no_pending_gates: { except: [<gate>] } } | { guard: <pack>.<name> }]
@@ -275,6 +320,7 @@ stages:
     on_success?: <stage> ; on_reject?: <stage>
     loop?: { to: <earlier stage>, on: <outcome>, max_iterations: <1-100> | { setting: <name> }, requires?: [...], title?: <text> }
     enqueue_on_enter?: <job_type>      # D-0.7.0-27
+    agents?: [{ key, job_type, prompt?, inputs?, output?, tools?, validate?, on_invalid? }]   # D-0.7.0-42; validate/on_invalid check the binding's output (D-0.7.0-44)
 rollback_status?: <status>          # D-0.7.0-26
 ```
 
@@ -407,7 +453,28 @@ Attempt n's output fails validation → if `retry_with_feedback` and n < `max_at
 
 Example (fixture): `max_attempts: 3`, `then: escalate`. Attempt 1 fails "weekly volume +25% > 10%", attempt 2 fails the same, attempt 3 fails "taper missing" → 3 agent runs, 2 with feedback, then one pending `escalation` gate on the run. With `then: fail`, the third agent run and its job end `failed`.
 
-SDLC: *(amended by D-0.7.0-34)* the plan generator keeps its own validation and corrective re-run in 0.7.0 (`INVALID_PLAN`, one retry). The equivalent definition is `validate: [{ guard: sdlc.plan-valid }]` with `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }`. It is adopted when the SDLC moves onto the engine runner.
+SDLC: *(amended by D-0.7.0-34, then D-0.7.0-38)* the planning stage declares `validate: [{ guard: sdlc.plan-valid }]` with `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }` (FR-314). The retry input comes from the SDLC corrective-input hook, and a final failure is `INVALID_PLAN`. Example: attempt 1 fails `sdlc.plan-valid` with one of 0.6.1's plan-validation messages → attempt 2 receives the previous plan (`PREVIOUS_*`) plus that message in 0.6.1's wording and returns a valid plan → two agent runs, one plan artifact version, the job succeeds.
+
+### 4.60 Agent stage order with hooks
+
+The runner runs one attempt in this order. The order is 0.6.1's `AgentRunner` order, and the snapshots check it:
+
+1. Pre-run host check (FR-316). On refusal, the job fails with the hook's code and no model call is made.
+2. Budget check (FR-26). On refusal, `BUDGET_EXCEEDED`.
+3. Create or load the agent run by the host id (FR-310). If it already `succeeded`, return its stored output and stop.
+4. Run started hook (FR-311).
+5. Collect inputs and context providers, then render. On a retry, the corrective-input hook adds `PREVIOUS_*` and the feedback (FR-314).
+6. Call the model with the host options (FR-312). Tokens are recorded.
+7. Validate (§4.55). Then the run and its tokens commit in their own transaction with the run's verdict (FR-315). The host writes its run-completed or run-failed event in this commit, so 0.6.1's order (`RUN_COMPLETED` before `ARTIFACT_CREATED`) holds. This applies to rejected retry attempts too. If the output is invalid, retry from step 5 or follow `then`.
+8. Content transform (FR-313), an optional host veto on storing (0.6.1 skips a draft it may not create), store the artifact version, then the post-store hook (FR-316).
+
+Inputs: an input the host supplies through prompt values is not read again. When the host lists the run's input artifacts itself, that list is stored. Otherwise the engine lists only the inputs it read. Context providers skip names the host supplies (`SuppliedPlaceholders`). The pinned definition is resolved as for lifecycle moves (D-0.7.0-37): registered, or stored and runnable. Otherwise `DEFINITION_UNAVAILABLE`.
+
+On a transient failure at any step, the agent run stays `running` and the error is rethrown to the queue. On a permanent provider or pre-call failure, the run failed hook fires and the run and job fail. A `then: fail` verdict doesn't use that hook: the host writes its failure event from the step 7 commit, which carries the failure.
+
+### 4.61 Move order and parity
+
+Agents move one per commit, in this order: `spec_generator`, `idea_refinement`, `stack_analyst`, `code_review`, `plan_generator`, then `repository_analyst`, `build_fix`, `code_generator`. *(Reordered in M62c: the first five already have an agent stage in `sdlc.pipeline.yaml`. The last three have none, and adding stages would change the stepper (FR-308), so they bind through an `agents:` list on an existing stage (D-0.7.0-42).)* Each commit keeps the characterisation snapshots, the golden prompt files and that agent's existing tests unchanged. There is no side-by-side parity mode: the snapshots and golden files are the parity check. If a snapshot change looks unavoidable, the build stops and asks Ben. Snapshots are never re-baselined without a decision.
 
 ### 4.56 Parity combinations (M58)
 
@@ -445,9 +512,11 @@ One additive migration in M56 only if column types change (FR-274), and these in
 
 `projects.current_phase`, `status`, `checkpoint` stay, written with the run in one transaction (D-0.7.0-8). Removing them is a later contract step. Retention unchanged.
 
+§3.10 needs no schema change: it writes the same `agent_runs`, `artifacts`, `events` and `stage_executions` rows as 0.6.1. Any column it does turn out to need is added by an expand-only migration. The re-pin (FR-321) updates `pipeline_runs.definition_hash` and writes the new definition to `pipeline_definitions`.
+
 ## 6. API
 
-All existing endpoints are unchanged in route, behaviour and JSON values (FR-274 may turn enum schemas into strings). New, additive, contract and client regenerated:
+All existing endpoints are unchanged in route, behaviour and JSON values (FR-274 may turn enum schemas into strings). §3.10 changes no endpoint, and `openapi/api.json` stays byte-identical. New, additive, contract and client regenerated:
 
 | Method | Route | Response | Errors | Auth |
 | --- | --- | --- | --- | --- |
@@ -537,10 +606,17 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 | D-0.7.0-31 | Switch-over: lifecycle decisions go only through the engine and fail closed. The old state machine, `PhaseOrder`, `TransitionKind`, phase-keyed `GateRules` lookups, `InvalidationCascade.Effect`, `PhaseJobs` and the parity code are removed. Decisions read the current run; when run and project disagree the project copy wins and it is logged. The `Phase` enum stays as the SDLC's typed stage id. `status_changes.*.wrong_stage_message` reproduces 0.6.1's `WRONG_PHASE` text. Transition tests became `SdlcLifecycleTransitionTests` with the same expected results | Claude | assumed |
 | D-0.7.0-32 | Run logging data (amends §5): no `stage_id` column on `agent_runs` (the existing `phase` column holds it). Migration `RunLogging` adds `input`, `input_truncated` and `latency_ms`, and `stage_executions`. Input is `[role]` blocks redacted and capped at 1 MB; latency is time to the first streamed output. Stage executions are written by the run-sync interceptor, with no history backfill. Reads skip the input column | Claude | assumed |
 | D-0.7.0-33 | The engine agent stage runner (adds `DEF_UNKNOWN_PROMPT` to §4.49): prompts come from the pack's registered prompts and are checked only for a pack that registers some. Inputs fill `{{KEY}}`, context `{{NAME}}`, feedback `{{FEEDBACK}}`. Each attempt is its own agent run. Validate/retry findings are `pointer: message`, capped at 8,000 characters; a rejected attempt's run stays `succeeded` with a `validation_rejected` error. `IAgentStageHooks` lets the host add budget checks and audit events | Claude | assumed |
-| D-0.7.0-34 | The SDLC's agents stay on their own runner in 0.7.0. Moving them would change recorded behaviour: run ids, run events, token options, retry wording, plan post-processing, and transaction and failure handling. Golden prompt tests pin all eight agents. The engine `AgentStageRunner` ships for new packs. The hooks it needs before the SDLC can move are listed in PROGRESS.md | Ben (2026-11-19) | agreed |
+| D-0.7.0-34 | The SDLC's agents stay on their own runner in 0.7.0. Moving them would change recorded behaviour: run ids, run events, token options, retry wording, plan post-processing, and transaction and failure handling. Golden prompt tests pin all eight agents. The engine `AgentStageRunner` ships for new packs. The hooks it needs before the SDLC can move are listed in PROGRESS.md | Ben (2026-11-19) | superseded by D-0.7.0-38 |
 | D-0.7.0-35 | The generic API (FR-298–FR-303): endpoints live in `Tevrin.Engine.Api` with no SDLC types, and the host plugs in permissions, the gate service, transitions, job filtering and ProblemDetails through `IRunAccessPolicy`, `IGateDecisionService`, `IPipelineTransitionSource`, `IRunActivityPolicy` and `IEngineProblems`. The current stage is `active` and later stages `pending`, also after a rollback or loop. `DEFINITION_UNAVAILABLE` applies when the pinned definition names something this build doesn't register. The timeline is one flat item type with cursor (time, kind, id); replay caps each input and output at 200,000 characters. Migration `PipelineTimelineIndexes` adds indexes | Claude | assumed |
 | D-0.7.0-36 | Gate inbox (FR-307): the reject comment is optional, as today (corrects FR-307's wording). The engine `GateDecision` dialog reuses `gate-dialogs`' copy, not its code. A gate whose type no stage declares is an escalation and links to the project. The page joins the live groups of at most 10 listed projects. The sidebar's Lifecycle list keeps the hard-coded phases; the stepper and Previous/Next buttons read the definition | Claude | assumed |
 | D-0.7.0-37 | Audit fixes: SDLC moves decide with the run's pinned definition (registry, then stored JSON) and refuse an unrunnable one with 409 `DEFINITION_UNAVAILABLE`; one-per-project exclusivity comes from `concurrency.exclusive` (`scope: run` is refused with `DEF_PARSE` in 0.7.0, as jobs carry no run id); the engine has a `Tevrin.Engine` activity source for stage-execution and agent-stage spans; the 300 ms timeline target is measured, not gated (the test gates at 1,000 ms) | Claude | assumed |
+| D-0.7.0-38 | 0.7.0 also moves the whole SDLC pack onto the engine runner (§3.10): the D-0.7.0-34 hooks are built, all eight agents move, and the old runner is deleted. The work ships in a second build PR, before the release PR | Ben (2026-11-21) | agreed |
+| D-0.7.0-39 | The snapshot freeze (FR-261) holds through §3.10, with no re-baseline. The hooks exist so that the move changes nothing recorded. An unavoidable snapshot change stops the build for Ben's decision | Claude (from Ben's 0.7.0 brief: "the current SDLC orchestration must work in the same way") | assumed |
+| D-0.7.0-40 | Token limits (`MaxTokens`, `ContextTokens`) come from a host options hook, not from new definition fields, because they're project and admin settings (FR-312) | Claude | assumed |
+| D-0.7.0-41 | Non-final SDLC runs pinned to the earlier 0.7.0 SDLC hash are re-pinned at start-up instead of keeping both definitions runnable. The earlier definition differs only in where behaviour is declared: v2 adds the repo tools (`agent.tools`), the `agents:` bindings and plan validation as `validate:`, and v3 adds the remaining `validate:` guards and stage handlers (D-0.7.0-43/-44). The behaviour is the same (FR-321). This narrows "editing the YAML never changes a run in progress" for this one SDLC upgrade. Rolling back to an earlier 0.7.0 build after the re-pin isn't supported: that build can't parse version 2, so re-pinned runs get `DEFINITION_UNAVAILABLE` until you roll forward. 0.6.1 is unaffected. The same short window applies during a deploy overlap (documented in docs/operations/pipeline-definitions.md) | Claude | assumed |
+| D-0.7.0-42 | Agents with no stage of their own bind through an `agents:` list on an existing stage: each entry is `{ key, job_type, prompt?, inputs, output?, tools }`, and keys are unique across the pipeline. `code_generator` and `build_fix` go on `execution`, `repository_analyst` on `refinement`. Stages, transitions and the stepper are unchanged; `AgentStageRequest` names the agent (default: the stage's primary agent). It is additive to §4.49 and lands with the FR-321 hash bump | Ben (2026-11-21) | agreed |
+| D-0.7.0-43 | FR-319 is built as written: the SDLC's code-stage work (the execution step loop with commits and pushes, and the build check) runs as `IStageHandler`s named by `handler:` on the stage, and the engine dispatches them. The jobs and their queueing, the step and commit events and the run timeline stay exactly as in 0.6.1 (snapshots frozen). If that proves impossible, the build stops for Ben. Shape: a `handlers: [<pack>.<name>]` list on a stage (like `agents:`, D-0.7.0-42). It never changes the stage's kind, handler names are unique across the pipeline, an unregistered entry is `DEF_UNKNOWN_HANDLER`, and the list is left out of the canonical JSON when empty. The SDLC's `execution` stage declares `handlers: [sdlc.execution, sdlc.build-check]` and stays a `manual` stage, so the definitions API data is unchanged. The engine's `StageHandlerRunner` resolves a handler by name from the pinned definition. The job handlers stay the entry points, so queueing is unchanged. Runs on a definition that doesn't declare the handler call the SDLC handler directly | Ben (2026-11-22) | agreed |
+| D-0.7.0-44 | FR-314 is built as written: every SDLC output check is a `validate:` guard in the definition, not only plan validation. That covers spec sections, stack profile, review parse and requirement, refinement parse, repository-analysis sections, and the build-fix plan. Each keeps 0.6.1's attempt count, retry wording and final code. Together with D-0.7.0-43 this is definition **version 3**, one hash bump. The start-up re-pin moves non-final runs from v1 **and** v2 to v3 | Ben (2026-11-22) | agreed |
 
 ## 11. Open questions
 
@@ -561,4 +637,11 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 6. **M59 Stage execution and run logging** (after M58; FR-295–FR-298): `AgentStageRunner`, context providers and tools, validate/retry (§4.55), `stage_executions`, agent run input and latency, cost totals, prompt stats. Snapshots unchanged.
 7. **M60 Generic API** (after M59; FR-299–FR-303): endpoints, hub events, contract and client regenerated, integration tests including approving a gate through both routes.
 8. **M61 Engine UI** (after M60; FR-304–FR-308): `src/engine/` and its lint boundary, Pipeline tab, replay, gate inbox, prompt comparison, definition-driven stepper, MSW fixture-definition tests.
-9. **M62 Release 0.7.0** (after M61, on Ben's confirmation): changelog date, docs guide "Pipelines and packs", `docs/history/0.7.0.md`, SPEC and PROGRESS to `docs/0.7.0/`, CLAUDE.md row and layout. Manual checks for Ben: a full SDLC project on preview behaves as on 0.6.1 (strict and advisory), an existing 0.6.1 project mid-review continues after the deploy, the Pipeline tab and replay on a real run, the gate inbox, and the Docker Desktop redeploy and smoke test.
+9. **M62 SDLC on the engine runner** (after M61; FR-310–FR-321; branch `build/tevrin-0.7.0-sdlc-engine`, second build PR). Snapshots and golden prompt files are unchanged at every commit.
+   - **M62a Hooks** (FR-310–FR-316): engine hooks with fixture-pipeline tests in `Tevrin.Engine.Tests`, and SDLC hook implementations with no caller yet. Includes the §4.60 order test.
+   - **M62b Context and tools** (FR-317): SDLC context providers and tools; prompts rendered through them match the golden files.
+   - **M62c Document agents** (FR-318): the five agents with a stage, one commit each, in §4.61 order.
+   - **M62d Bound agents** (FR-319, FR-321, D-0.7.0-42): engine `agents:` bindings, engine tool session, definition v2 and the re-pin, then `repository_analyst`, `build_fix` and `code_generator`.
+   - **M62e Removal** (FR-320): delete the old runner, add the architecture test, update the docs guide and CLAUDE.md.
+   - **M62f Stage handlers and guards** (FR-319, FR-314, D-0.7.0-43/-44): engine dispatch of `handler:` stages, SDLC execution and build-check handlers, `validate:` guards for every SDLC output check, definition v3, and a re-pin of v1 and v2.
+10. **M63 Release 0.7.0** (after M62, on Ben's confirmation): changelog date, docs guide "Pipelines and packs", `docs/history/0.7.0.md`, SPEC and PROGRESS to `docs/0.7.0/`, CLAUDE.md row and layout. Manual checks for Ben: a full SDLC project on preview behaves as on 0.6.1 (strict and advisory), an existing 0.6.1 project mid-review continues after the deploy, the Pipeline tab and replay on a real run, the gate inbox, and the Docker Desktop redeploy and smoke test.

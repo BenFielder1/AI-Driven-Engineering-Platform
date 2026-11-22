@@ -25,9 +25,10 @@ namespace Aide.Api.Agents;
 /// version's locked project request and spec (all listed as input artifacts) and the repo tools at the base commit. If
 /// the summary doesn't exist yet the job waits for it (<see cref="SummaryWaiter"/>), then continues without it.
 /// </para>
+/// FR-318: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), with 0.6.1's records and order.
 /// </summary>
 public sealed class IdeaRefinementJobHandler(
-    ArtifactAgentJob agentJob,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
     VersionStackLoader stacks,
@@ -74,7 +75,7 @@ public sealed class IdeaRefinementJobHandler(
                 ["PREVIOUS_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
                 ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Refinement(resolution, stack.Detection) : null,
                 ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
-                [AgentRunner.FeedbackInput] = feedback,
+                [SdlcAgentRuns.FeedbackInput] = feedback,
             },
             Stack = stack.Stack,
             InputArtifacts = [.. new[] { draft, sourceItems }.OfType<Artifact>().Concat(iteration.Artifacts).Select(AgentJobInputs.Ref)],
@@ -93,9 +94,10 @@ public sealed class IdeaRefinementJobHandler(
                     var parsed = RefinementRules.Parse(text);
                     return parsed.IsSuccess ? Result.Success(parsed.Value.ProjectRequest) : Result.Failure<string>(parsed.Error!);
                 },
-                (_, error) => Request(ArtifactAgentJob.JoinFeedback(
+                (_, error) => Request(ArtifactAgentSpec.JoinFeedback(
                     payload.Feedback,
                     $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above."))),
+            payload.Trigger,
             cancellationToken);
     }
 }
@@ -110,9 +112,10 @@ public sealed class IdeaRefinementJobHandler(
 /// Iterations also get the codebase summary, the baseline spec and the repo tools at the base commit. FR-123: with a stack
 /// composition the prompt gets its summary, extra sections with guidance and conventions (<see cref="StackGuidance.Spec"/>),
 /// and validation requires those sections (a missing one is named in the corrective re-run).
+/// FR-318: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), with 0.6.1's records and order.
 /// </summary>
 public sealed class SpecGenerationJobHandler(
-    ArtifactAgentJob agentJob,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
     VersionStackLoader stacks,
@@ -174,7 +177,8 @@ public sealed class SpecGenerationJobHandler(
                 text => SpecValidator.Check(AgentOutput.UnwrapFence(text), context),
                 (rejected, error) => Request(
                     AgentOutput.UnwrapFence(rejected),
-                    ArtifactAgentJob.JoinFeedback(payload.Feedback, SpecValidator.CorrectiveFeedback(error, context)))),
+                    ArtifactAgentSpec.JoinFeedback(payload.Feedback, SpecValidator.CorrectiveFeedback(error, context)))),
+            payload.Trigger,
             cancellationToken);
     }
 }
@@ -193,12 +197,15 @@ public sealed class SpecGenerationJobHandler(
 /// scaffold first on an empty repository, the protected-path ownership exception); its warnings are shown with the draft.
 /// FR-242, FR-243: the guidance lists the deploy targets' required files, and a step is added for each one the plan and the
 /// base commit both lack (<see cref="DeployFileSteps"/>) before the plan is validated and stored.
+/// FR-318, FR-314: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>); until the definition declares
+/// <c>validate:</c> (FR-321), the plan check and its one corrective re-run are the SDLC extension's host hooks.
 /// </summary>
 public sealed class PlanGenerationJobHandler(
-    ArtifactAgentJob agentJob,
+    SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
     IterationContextReader iterations,
     VersionStackLoader stacks,
+    SdlcPlanChecks planChecks,
     ILogger<PlanGenerationJobHandler> logger) : IJobHandler
 {
     public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
@@ -222,9 +229,9 @@ public sealed class PlanGenerationJobHandler(
 
         // FR-124: the composition's specialists and composed rules, else none (generalist).
         var guidance = version.Stack is { } stack ? StackGuidance.Plan(stack, version.RepoEmpty, version.BaseFiles) : null;
-        var deployFiles = version.Stack is { } composed
-            ? new DeployFileCheck(StackRequiredFiles.For(composed), version.BaseFiles, Optimisation: false)
-            : null;
+        // FR-321: the same check backs the content and the planning stage's sdlc.plan-valid guard (no second stack read).
+        var check = SdlcPlanCheck.Of(maxFiles, version);
+        planChecks.Set(project.Id, check);
         AgentRunRequest Request(string? previousPlan, string? feedback) => new()
         {
             ProjectId = project.Id,
@@ -249,16 +256,11 @@ public sealed class PlanGenerationJobHandler(
             Request(previous is null ? null : PreviousPlanJson(previous.Content, agents), payload.Feedback),
             new ArtifactAgentSpec(
                 SdlcArtifacts.ImplementationPlan,
-                text =>
-                {
-                    var plan = PlanDocument.ParseAgentOutput(text, maxFiles, agents, deployFiles);
-                    return plan.IsSuccess
-                        ? PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, plan.Value, maxFiles, agents)
-                        : Result.Failure<string>(plan.Error!);
-                },
+                check.ToContent,
                 (rejected, error) => Request(
                     AgentOutput.ExtractJsonObject(rejected) ?? rejected,
-                    ArtifactAgentJob.JoinFeedback(payload.Feedback, PlanDocument.CorrectiveFeedback(error)))),
+                    ArtifactAgentSpec.JoinFeedback(payload.Feedback, PlanDocument.CorrectiveFeedback(error)))),
+            payload.Trigger,
             cancellationToken);
     }
 
@@ -330,7 +332,9 @@ public static class AgentJobServiceCollectionExtensions
     {
         services.AddScoped<AgentJobInputs>();
         services.AddScoped<IterationContextReader>();
-        services.AddScoped<ArtifactAgentJob>();
+
+        // FR-317, FR-318: the engine runner with the SDLC context providers, repo tools and extension.
+        services.AddSdlcAgentExtensions();
         return services;
     }
 }

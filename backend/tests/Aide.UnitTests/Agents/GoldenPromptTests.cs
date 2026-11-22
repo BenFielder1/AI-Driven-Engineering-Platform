@@ -44,7 +44,13 @@ public class GoldenPromptTests
     public void FR295_plan_generator_prompt_is_unchanged() => FR295_prompt_is_unchanged(SdlcAgents.PlanGenerator);
 
     /// <summary>The golden text: version, placeholders, then the full and the required-only renders.</summary>
-    internal static string Render(string agent)
+    internal static string Render(string agent) => Render(agent, (_, values) => values);
+
+    /// <summary>
+    /// The golden text, rendering each seeded value set through <paramref name="values"/> (FR-317: e.g. the engine's
+    /// prompt path, which rebuilds the values from input artifacts, context sections and host values).
+    /// </summary>
+    internal static string Render(string agent, Func<PromptTemplate, Dictionary<string, string?>, IReadOnlyDictionary<string, string?>> values)
     {
         var template = new EmbeddedPromptLibrary().Template(agent);
         var builder = new StringBuilder();
@@ -58,10 +64,10 @@ public class GoldenPromptTests
             .Select(p => p.Name)
             .Distinct(StringComparer.Ordinal)
             .ToDictionary(name => name, name => (string?)Seed(template, name), StringComparer.Ordinal);
-        AppendRender(builder, "all placeholders", template, all);
+        AppendRender(builder, "all placeholders", template, values(template, all));
 
         var required = template.RequiredInputs.ToDictionary(name => name, name => (string?)Seed(template, name), StringComparer.Ordinal);
-        AppendRender(builder, "required only", template, required);
+        AppendRender(builder, "required only", template, values(template, required));
         return builder.ToString();
     }
 
@@ -72,7 +78,7 @@ public class GoldenPromptTests
         return $"Seeded {name} line 1.\nSeeded {name} line 2 {tag} after the tag.";
     }
 
-    private static void AppendRender(StringBuilder builder, string label, PromptTemplate template, Dictionary<string, string?> values)
+    private static void AppendRender(StringBuilder builder, string label, PromptTemplate template, IReadOnlyDictionary<string, string?> values)
     {
         builder.Append("\n===== ").Append(label).Append(" =====\n");
         var rendered = template.Render(values);

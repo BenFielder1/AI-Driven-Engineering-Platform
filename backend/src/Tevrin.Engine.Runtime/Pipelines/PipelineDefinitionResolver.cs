@@ -119,18 +119,21 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
         {
             var guards = stage.Requires.OfType<GuardRequirement>().Select(r => r.Guard)
                 .Concat(stage.Validate.Select(v => v.Guard))
-                .Concat(stage.Loop?.Requires.OfType<GuardRequirement>().Select(r => r.Guard) ?? []);
+                .Concat(stage.Loop?.Requires.OfType<GuardRequirement>().Select(r => r.Guard) ?? [])
+                .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard)); // D-0.7.0-44: the bindings' own checks
             foreach (var guard in guards)
             {
                 Check(PipelineComponentKind.Guard, "guard", guard);
             }
 
-            if (stage.Handler is { } handler)
+            // D-0.7.0-43: the primary handler, then the secondary ones.
+            foreach (var handler in stage.AllHandlers())
             {
                 Check(PipelineComponentKind.StageHandler, "handler", handler);
             }
 
-            foreach (var tool in stage.Agent?.Tools ?? [])
+            // D-0.7.0-42: the secondary agents' tools too.
+            foreach (var tool in (stage.Agent?.Tools ?? []).Concat(stage.Agents.SelectMany(b => b.Tools)))
             {
                 Check(PipelineComponentKind.Tool, "tool", tool);
             }

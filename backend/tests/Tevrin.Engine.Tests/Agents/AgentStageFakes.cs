@@ -45,6 +45,15 @@ internal sealed class InMemoryAgentStageStore : IAgentStageStore
     public Task<ApprovalGate?> PendingGateAsync(PipelineRun run, string type, CancellationToken cancellationToken) =>
         Task.FromResult(Gates.FirstOrDefault(g => g.PipelineRunId == run.Id && g.Type == type && g.Status == GateStatus.Pending));
 
+    public Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken) =>
+        Task.FromResult(AgentRuns.FirstOrDefault(r => r.Id == agentRunId));
+
+    public Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken)
+    {
+        var inSubject = AgentStageScope.InSubject(run).Compile();
+        return Task.FromResult(Artifacts.FirstOrDefault(a => inSubject(a) && a.Type == key && a.AgentRunId == agentRunId));
+    }
+
     public void Add(AgentRun agentRun) => AgentRuns.Add(agentRun);
 
     public void Add(Artifact artifact) => Artifacts.Add(artifact);

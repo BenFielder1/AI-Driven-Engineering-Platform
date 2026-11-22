@@ -116,7 +116,7 @@ jobs:
       # which the rest shard outgrew. Turn off config reload in test hosts and raise the limit.
       - run: sudo sysctl -w fs.inotify.max_user_instances=1024
       - name: Integration tests (${{ matrix.shard }})
-        timeout-minutes: 18
+        timeout-minutes: 22
         env:
           DOTNET_hostBuilder__reloadConfigOnChange: "false"
         run: >-

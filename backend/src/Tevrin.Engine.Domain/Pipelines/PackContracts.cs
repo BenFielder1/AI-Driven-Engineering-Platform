@@ -90,6 +90,14 @@ public interface IGuard
 public sealed record StageOutputFact(string ArtifactKey, ArtifactFormat Format, string Content);
 
 /// <summary>
+/// D-0.7.0-44: the agent attempt whose output a <c>validate:</c> guard checks, next to its <see cref="StageOutputFact"/>:
+/// the attempt number (1 = first), the reply as the provider sent it (before the engine trims it into the output), and the
+/// request's opaque host state, so a pack's guard can apply the check of that attempt (e.g. a corrective re-run checked
+/// less strictly than the first). Absent outside an agent stage's validation.
+/// </summary>
+public sealed record StageAttemptFact(int Attempt, string Reply, object? HostState);
+
+/// <summary>
 /// An immutable bag of typed facts, keyed by type: one value per fact type. Extensible without changing the contexts
 /// that carry it.
 /// </summary>
@@ -121,7 +129,10 @@ public sealed class FactBag
     }
 }
 
-/// <summary>What a code stage's handler runs with.</summary>
+/// <summary>
+/// What a code stage's handler runs with: the run, its project, the stage that declares the handler in the run's pinned
+/// definition, and <see cref="Facts"/> from the host (e.g. the job the work runs in, as the runtime's <c>StageJobFact</c>).
+/// </summary>
 public sealed record StageHandlerContext(Guid RunId, Guid ProjectId, string StageId, FactBag Facts);
 
 public enum StageHandlerOutcome
@@ -135,7 +146,12 @@ public enum StageHandlerOutcome
     Failed = 2,
 }
 
-public sealed record StageHandlerResult(StageHandlerOutcome Outcome, string? Message = null);
+public sealed record StageHandlerResult(StageHandlerOutcome Outcome, string? Message = null)
+{
+    /// <summary>D-0.7.0-43: a <see cref="StageHandlerOutcome.Failed"/> result's error code (the job fails with it);
+    /// <c>null</c> means <c>VALIDATION</c>.</summary>
+    public string? ErrorCode { get; init; }
+}
 
 /// <summary>FR-280: the work of a code stage (<c>handler: &lt;pack&gt;.&lt;name&gt;</c>).</summary>
 public interface IStageHandler
@@ -159,7 +175,14 @@ public interface IAgentTool
 }
 
 /// <summary>What an agent's context is being built for.</summary>
-public sealed record AgentContextRequest(Guid RunId, Guid ProjectId, string PipelineId, string StageId, string AgentKey);
+public sealed record AgentContextRequest(Guid RunId, Guid ProjectId, string PipelineId, string StageId, string AgentKey)
+{
+    /// <summary>
+    /// The placeholders the host already supplies (its prompt values win over context): a provider may skip reading
+    /// sections that only fill these.
+    /// </summary>
+    public IReadOnlySet<string> SuppliedPlaceholders { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+}
 
 /// <summary>One named block of context for the prompt.</summary>
 public sealed record AgentContextSection(string Name, string Content);

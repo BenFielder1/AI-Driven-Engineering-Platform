@@ -116,16 +116,24 @@ public static class DefinitionHash
             obj["agent"] = a;
         }
 
+        // D-0.7.0-42: omitted when empty, so a definition without secondary agents hashes as before.
+        if (s.Agents.Count > 0)
+        {
+            obj["agents"] = s.Agents.Select(b => (object?)Binding(b)).ToList();
+        }
+
         obj.AddIfSet("handler", s.Handler);
+
+        // D-0.7.0-43: omitted when empty, so a definition without secondary handlers hashes as before.
+        if (s.Handlers.Count > 0)
+        {
+            obj["handlers"] = Strings(s.Handlers);
+        }
+
         obj.AddIfSet("output", s.Output);
         if (s.OnInvalid is { } onInvalid)
         {
-            obj["on_invalid"] = new Obj
-            {
-                ["retry_with_feedback"] = onInvalid.RetryWithFeedback,
-                ["max_attempts"] = onInvalid.MaxAttempts,
-                ["then"] = onInvalid.Then.ToWire(),
-            };
+            obj["on_invalid"] = OnInvalid(onInvalid);
         }
 
         if (s.Gate is { } gate)
@@ -155,6 +163,34 @@ public static class DefinitionHash
             l.AddIfSet("on", loop.On);
             l.AddIfSet("max_iterations", Cap(loop.MaxIterations));
             obj["loop"] = l;
+        }
+
+        return obj;
+    }
+
+    /// <summary>D-0.7.0-42: a secondary binding with its defaults filled (inputs, tools); prompt and output only when set.</summary>
+    private static Obj OnInvalid(OnInvalidPolicy onInvalid) => new()
+    {
+        ["retry_with_feedback"] = onInvalid.RetryWithFeedback,
+        ["max_attempts"] = onInvalid.MaxAttempts,
+        ["then"] = onInvalid.Then.ToWire(),
+    };
+
+    private static Obj Binding(AgentBindingDefinition b)
+    {
+        var obj = new Obj { ["key"] = b.Key, ["job_type"] = b.JobType, ["inputs"] = Strings(b.Inputs), ["tools"] = Strings(b.Tools) };
+        obj.AddIfSet("prompt", b.Prompt);
+        obj.AddIfSet("output", b.Output);
+
+        // D-0.7.0-44: omitted when unset, so a binding without its own validation hashes as before.
+        if (b.Validate.Count > 0)
+        {
+            obj["validate"] = b.Validate.Select(v => (object?)new Obj { ["guard"] = v.Guard }).ToList();
+        }
+
+        if (b.OnInvalid is { } onInvalid)
+        {
+            obj["on_invalid"] = OnInvalid(onInvalid);
         }
 
         return obj;

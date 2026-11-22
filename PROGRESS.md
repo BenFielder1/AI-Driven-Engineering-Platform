@@ -1,6 +1,6 @@
 # Build progress (0.7.0)
 
-Spec: `SPEC.md` (0.7.0; 0.1.0–0.6.1 in `docs/`) · Research: `docs/0.7.0/tevrin-engine-extraction.md` · Stack: `STACK.md` · Branch: `build/tevrin-0.7.0` (build PR #50) · Started: 2026-11-17
+Spec: `SPEC.md` (0.7.0; 0.1.0–0.6.1 in `docs/`) · Research: `docs/0.7.0/tevrin-engine-extraction.md` · Stack: `STACK.md` · Branch: `build/tevrin-0.7.0` (build PR #50, merged), then `build/tevrin-0.7.0-sdlc-engine` (§3.10, D-0.7.0-38) · Started: 2026-11-17
 
 **Gate:** GitHub Actions CI on the pushed head commit, after a static `stack-reviewer` pass (CLAUDE.md "Commit gate").
 Agents never run the full gate, Docker, Testcontainers or E2E locally.
@@ -64,7 +64,19 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-306 | Pipeline tab + replay | 3.8, 7 | frontend | M61 | done | [CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906) |
 | FR-307 | Gate inbox page | 3.8, 7 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
 | FR-308 | SDLC stepper reads the definition | 3.8 | frontend | M61 | done | [CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349) |
-| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump, CLAUDE.md, STACK.md, guide and ops page done (1ea2d98, 9fdb73b); changelog date, history page and docs/0.7.0 move at release (M62) |
+| FR-309 | Version 0.7.0, changelog, CLAUDE.md, STACK.md, docs guide, history | 3.9 | frontend + docs | M54, M62 | partial | bump, CLAUDE.md, STACK.md, guide and ops page done (1ea2d98, 9fdb73b); changelog date, history page and docs/0.7.0 move at release (M63) |
+| FR-310 | Host run ids and redelivery | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-311 | Run events hooks | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-312 | Request options and run metadata | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-313 | Content transform hook | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-314 | Corrective input; plan validation in `validate:` | 3.10, 4.55 | backend | M62a, M62c | done | every output check as `validate:` in v3: d5e9659 ([CI 45032877150](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45032877150)) |
+| FR-315 | Transactions and failure handling | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-316 | Pre-run and post-store host checks | 3.10, 4.60 | backend | M62a | done | hooks [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776) (ba361b3); SDLC implementations with the moves; SDLC implementations with the moves (7fb025b–40d49cb) |
+| FR-317 | SDLC context providers and tools | 3.10 | backend | M62b | done | providers, tools, pack names (M62b, 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872)); `agent.tools` in the YAML with FR-321; `agent.tools` in v2 (5b99e27) |
+| FR-318 | Document agents on the engine runner (repository_analyst moves with the bound agents in M62d) | 3.10, 4.61 | backend | M62c | done | five agents on the engine: 7fb025b, bd61f3a, 2f1588c, 18331756, f0b0f86 ([CI 44934488218](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44934488218)) |
+| FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | done | bound agents (40d49cb); stage handlers in v3: d5e9659 ([CI 45032877150](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45032877150)) |
+| FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | done | 98d021e ([CI 45028066508](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45028066508)) |
+| FR-321 | SDLC definition version bump and start-up re-pin | 3.10, 5 | backend | M62e | done | v2 and re-pin 5b99e27, 75de158 ([CI 45007169435](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45007169435)) |
 
 ## Phases
 - [x] M54 Version and characterisation (FR-260, FR-261, FR-309 bump): snapshots 8dce91a, re-sorted d4d84f8 (D-0.7.0-22); freeze step in CI
@@ -75,17 +87,66 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [x] M59 Stage execution and run logging (FR-295–FR-298): run logging (cd28064), engine agent runner (34d9fd0), SDLC golden prompt tests with the SDLC keeping its runner (b593268, D-0.7.0-34), [CI 44495561155](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44495561155). The FR-298 endpoint comes in M60
 - [x] M60 Generic API (FR-299–FR-303, FR-298 endpoint): 8b28f8d, [CI 44524585557](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44524585557)
 - [x] M61 Engine UI (FR-304–FR-308): M61a 6f82a51 ([CI 44532306906](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44532306906)), M61b d7a8f59 ([CI 44545934349](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44545934349))
-- [ ] M62 Release 0.7.0 (FR-309), after Ben confirms on preview
+- [x] M62 SDLC on the engine runner (FR-310–FR-321, D-0.7.0-38), branch `build/tevrin-0.7.0-sdlc-engine`; snapshots and golden prompt files unchanged at every commit
+  - [x] M62a Hooks (FR-310–FR-316) with fixture tests and the §4.60 order test: ba361b3, [CI 44890972776](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44890972776). Two review rounds; §4.60 amended (commit with the verdict after validation, store veto)
+  - [x] M62b SDLC context providers and tools (FR-317): 473c13f, [CI 44893342872](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44893342872), two review rounds. Live path unchanged; `agent.tools` in the YAML waits for FR-321
+  - [x] M62c Document agents, one commit each in §4.61 order (FR-318, FR-314). §4.61 reordered: agents with stages first; stageless agents bind via `agents:` (D-0.7.0-42)
+    - [x] `spec_generator` + `SdlcAgentExtension`: 7fb025b, [CI 44897521699](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44897521699) (attempt 2). Characterisation unchanged. Attempt 1's `rest` shard hit the 18-minute step timeout, and the re-run took about 18 minutes against about 14.5 before. Watch the shard time as more agents move. The review found 0 Critical/Major; its 7 Minor items are queued for the next move
+    - [x] `idea_refinement` and the spec_generator review fixes:
+      - per-attempt log scope and span;
+      - fallback only when there is no pipeline run;
+      - pinned definitions resolved as for lifecycle moves (registered, or stored and runnable), else `DEFINITION_UNAVAILABLE`;
+      - store override;
+      - 2 project reads per attempt.
+
+      bd61f3a, [CI 44929383412](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44929383412), characterisation unchanged. Three review rounds, 0 Critical/Major open
+    - [x] `stack_analyst` (review clean); unit harness uses an offline `IEngineDbContext`
+    - [x] `code_review`: the reply returns 0.6.1's `AgentRunOutcome`, and the optimisation plan draft is still stored by `RecordAsync` after scoring (`StoresDraft = false`, with a parse-only corrective check). Review: 0 Critical/Major
+    - [x] `plan_generator`: f0b0f86, [CI 44934488218](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44934488218). All five staged agents are green, characterisation unchanged, `rest` shard 15 min. Plan validation through the host hooks until FR-321. The draft Markdown is byte-identical. Review: 0 Critical/Major
+    - **CI:** the integration test step limit was raised from 18 to 22 minutes (job limit 25). The `rest` shard's trx durations rose about 30% evenly across unrelated tests (Bitbucket, release flows; 765 s → 983 s), which points to runner speed, not the agent moves. Rebalancing the shards is a later follow-up.
+  - [x] M62d `repository_analyst` (done, bound on refinement; review clean), `build_fix` (done, bound on execution; run keys `build-fix-<check>-n`, only the first reply checked as in 0.6.1; review clean; cb9a80f, [CI 45014384362](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45014384362)), then `code_generator` (done, bound on execution: the step loop stays in the SDLC job handler, with no IStageHandler, so the execution queueing and the run timeline are unchanged; FR-121 via `TransformPromptAsync`; review clean; 40d49cb, [CI 45019672155](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45019672155)). All bound with `agents:` (D-0.7.0-42) (FR-319)
+    - [x] Engine `agents:` bindings:
+      - secondary agent bindings on a stage, selected by `AgentStageRequest.AgentKey`;
+      - validator rules, including duplicate primary keys and job types (the default `agent.run` may be shared);
+      - the resolver checks binding tools;
+      - redelivery calls the store override again;
+      - SDLC and fixture hashes unchanged and pinned.
+
+      Review: 1 Major fixed
+    - [x] Engine tool session and prompt transform: 159c983, [CI 44937314434](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44937314434)
+    - [x] SDLC definition v2 (hash `d2f1c98b…`):
+      - repo tools on every agent;
+      - planning `validate: sdlc.plan-valid`;
+      - `agents:` bindings;
+      - FR-321 start-up re-pin from `90f1f065…`.
+
+      Review: 0 Critical/Major. Rollback and deploy-overlap notes are in the ops page and D-0.7.0-41. 5b99e27; the re-pin tests' seeding was fixed in 75de158; green with `repository_analyst` (67cebeb) on [CI 45007169435](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45007169435)
+  - [x] M62e Old runner removed (FR-320); the re-pin was done in M62d (FR-321):
+    - `AgentRunner` and `ArtifactAgentJob` are deleted, and the helpers still in use moved unchanged to `SdlcAgentRuns`.
+    - No legacy fallback: a project with no pipeline run gets one created on demand (the interceptor's lazy backfill steps). A 0.6.1 run left unlinked is linked, so it resumes. Otherwise the job fails permanently (`INVALID_STATE` / `DEFINITION_UNAVAILABLE`).
+    - Retargeted tests keep every assertion; none was deleted.
+    - `AgentCallBoundaryTests` scans the IL; only `SdlcAgentExtension` may call providers.
+    - Docs updated.
+
+    Review: 0 Critical/Major. 98d021e, [CI 45028066508](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45028066508)
+  - [x] M62f Stage handlers and validate: guards (FR-319, FR-314, D-0.7.0-43/-44), definition v3, re-pin of v1+v2; freeze check extended to the golden prompt files (audit gap).
+    - Engine `StageHandlerRunner`, plus a `handlers:` list on stages. Execution declares `handlers: [sdlc.execution, sdlc.build-check]` and stays `manual`. The moved loop code is unchanged.
+    - Six reply-check guards via `SdlcReplyCheckGuard`; bindings get their own `validate`/`on_invalid`.
+    - v3 hash `a3079621…`; FR-321 log and lifecycle-move tests added.
+
+    Review: 1 Major fixed (resolver checks binding guards). d5e9659, [CI 45032877150](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45032877150)
+  - Acceptance audit (2026-11-22, on 98d021e): 8 Done, 4 Partial, 0 Missing. Golden files, snapshots and api.json are byte-identical to 5e44622; no assertion weakened. Ben chose to build FR-319 and FR-314 as written (M62f). Still to do: assert the FR-321 log entry and a review cycle after the re-pin
+- [ ] M63 Release 0.7.0 (FR-309), after Ben confirms on preview
 
 ## Acceptance audit (2026-11-19)
-41 Done, 9 Partial, 0 Missing on 1d2ed57. Three partials are agreed deferrals: FR-295/FR-296 SDLC side (D-0.7.0-34) and FR-309 release-time docs (M62). The rest were closed in ca9dc04 and a0217a0:
+41 Done, 9 Partial, 0 Missing on 1d2ed57. Three partials are agreed deferrals: FR-295/FR-296 SDLC side (D-0.7.0-34) and FR-309 release-time docs (M63). The FR-295/FR-296 SDLC side is now §3.10 (D-0.7.0-38). The rest were closed in ca9dc04 and a0217a0:
 - pinning for SDLC moves (FR-277);
 - concurrency taken from the definition (FR-286, D-0.7.0-37);
 - the hub-events test (FR-302);
 - the §8 observability and performance items;
 - a SPEC amendment for FR-265–FR-267.
 
-CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR [#50](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/50) is open, with every check green, including the docs-site build and internal link check. It waits for Ben to merge; then comes the preview test, then M62 release prep after Ben confirms.
+CI is green on head a0217a0: [CI 44573294302](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/44573294302). Build PR [#50](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/50) was merged with every check green. M62 (§3.10, D-0.7.0-38) is done on `build/tevrin-0.7.0-sdlc-engine`: second build PR [#59](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/59), CI green on d5e9659. Next: Ben merges #59, tests on preview, then M63 release prep after Ben confirms.
 
 ## Decisions
 See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
@@ -185,7 +246,7 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
 
 - **Watch (flaky test):** `DeliveryTimeoutTests.FR49_An_SMTP_server_that_never_answers_times_out_as_a_transient_failure` failed twice in local unit runs on this memory-starved machine and passes on its own. It is green on CI so far; if it fails there, give it a `FakeTimeProvider` or wider margins (the M58c review also flagged wall-clock tests in `LlmStreamingTests`, `LlmKeyCheckTests` and `CheckFailureLogTests`).
 
-- **D-0.7.0-34** (Ben, 2026-11-19, agreed): the SDLC agents keep their own runner in 0.7.0 (`AgentRunner`, `ArtifactAgentJob`). M59b2 moved no agent, because each move would change the characterisation snapshots. Golden prompt tests (`backend/tests/Aide.UnitTests/Agents/GoldenPromptTests.cs`, `Golden/*.txt`) pin all eight agents' templates and rendered prompts. Before the SDLC can move onto the engine runner, the engine needs:
+- **D-0.7.0-34** (Ben, 2026-11-19, agreed): the SDLC agents keep their own runner in 0.7.0 (`AgentRunner`, `ArtifactAgentJob`). M59b2 moved no agent, because each move would change the characterisation snapshots. Golden prompt tests (`backend/tests/Aide.UnitTests/Agents/GoldenPromptTests.cs`, `Golden/*.txt`) pin all eight agents' templates and rendered prompts. **Superseded by D-0.7.0-38 (2026-11-21):** these hooks are now FR-310–FR-316. Before the SDLC can move onto the engine runner, the engine needs:
   - **Run ids:** supplied by the host, with redelivery that returns the stored reply.
   - **Run events:** lifecycle hooks for `RUN_STARTED`, `RUN_COMPLETED`, `RUN_FAILED` and `BUDGET_EXCEEDED`.
   - **Request options:** `MaxTokens` (FR-160) and `ContextTokens` (FR-162).
@@ -194,6 +255,32 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
   - **Corrective-input hook:** previous output in `PREVIOUS_*`, with SDLC feedback wording and host error codes (`INVALID_PLAN`, `MISSING_SECTIONS`).
   - **Transactions and failures:** a separate run and token transaction; a transient failure keeps the run running.
   - **Host checks:** credential invalidation (FR-78), the provider-disabled check (FR-157), the source-items budget (FR-172), and the corruption alert and regeneration (FR-20).
+
+- **M62 open engine gaps** (from the M62a/M62b reviews, to close in M62c/M62d before the agents that need them move):
+  - **Prompt transform after render:** FR-121 `StackPrompt.Compose` (specialist steps, `code_generator`).
+  - **`AgentToolExecutor` parity with `RepoToolSession`:**
+    - `LimitReached` is always false, so `TOOL_LIMIT` doesn't force the final answer;
+    - `FallbackContextAsync` returns null (no repo listing);
+    - malformed-JSON arguments never reach the session (different message, no budget, no log);
+    - a tool exception becomes an error result instead of `PROVIDER_ERROR`;
+    - the "Unknown tool" text differs;
+    - the `tool_calls` format differs, and there is no `SecretScanner.Redact` or length cap on the arguments.
+  - **Tools without a snapshot:** 0.6.1 offered none; the engine path offers them and returns errors.
+  - **Snapshot open:** M62c/d must open it explicitly through `SdlcRepoToolScope.OpenAsync` from the extension's `CallOptionsAsync`, then call `Release()` after the call. A lazy open that throws on the first tool call is swallowed as a tool error, where 0.6.1 failed the run (`SdlcRepoToolScope.cs:83-90`).
+  - **Not wired yet:** the `snapshot_unavailable` warning (via `CallOptionsAsync().Warnings`) and the run's `tool_calls` on failure paths.
+  - **Host prompt values:** placeholders the engine path can't fill come from host `PromptValues` (`SdlcContextPromptTests.HostValues`). `USER_FEEDBACK` goes through `AppendFeedback = false` plus `AgentRunMetadata.UserFeedback`.
+  - **Recorded stage:** SDLC agent runs record `project.CurrentPhase` through `AgentRunMetadata.Stage`.
+  - **Bound agents (D-0.7.0-42), SDLC side:**
+    - `SdlcAgentCall.ToStageRequest`, also used by `NextAttemptAsync`, must set `AgentKey`, or a corrective attempt runs the primary.
+    - `SdlcStageLocator` must find bindings as well as `s.Agent?.Key`.
+    - The extension's stage-keyed hooks check `attempt.IsSecondaryAgent` and `attempt.Agent.Key`.
+    - A bound agent's job type is unique and registered.
+    - The store override is idempotent, because redelivery calls it again.
+  - **Plan validation in YAML (FR-321, M62e):** the `planning` stage gets `validate: [{ guard: sdlc.plan-valid }]` and `on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }`.
+    - The guard runs `ParseAgentOutput(reply, project.MaxFilesPerStep, agents, deployFiles)` then `RenderChecked` on the stage output content (trimmed; parsing doesn't depend on the trim), and returns `error.Message` as its one reason. It needs max files, and the agents and deploy-file check from the version's stack (heavier than a fact lookup).
+    - The host's `ValidateOutputAsync` skips its planning check only when `attempt.Stage.Validate` declares `sdlc.plan-valid`. Otherwise each reason appears twice, and runs pinned to the earlier hash would lose the check.
+    - The corrective-input hook (`PREVIOUS_PLAN`), `RejectedErrorAsync` (null on a retry, `INVALID_PLAN: …` on the final failure), `AttemptsExhaustedAsync` (`INVALID_PLAN`) and the content transform stay.
+  - **YAML (FR-321):** add `agent.tools: [sdlc.list-files, sdlc.read-file, sdlc.search-code]` and stages for `repository_analyst`, `code_generator` and `build_fix`.
 
 - **D-0.7.0-35** (Build, M60, Claude, assumed): the generic API (FR-298–FR-303).
   - **Where:** endpoints, DTOs and readers live in `Tevrin.Engine.Api` (no SDLC types); the host plugs in project permissions, the gate service, the transitions table, job filtering and ProblemDetails through `IRunAccessPolicy`, `IGateDecisionService`, `IPipelineTransitionSource`, `IRunActivityPolicy` and `IEngineProblems` (`Aide.Api/Features/PipelineRuns`).
@@ -221,6 +308,12 @@ See SPEC §10 (D-0.7.0-1 … D-0.7.0-19). Build-time decisions are added below.
 - An existing 0.6.1 project mid-review continues after the 0.7.0 deploy.
 - Pipeline tab and replay on a real run; gate inbox.
 - Docker Desktop redeploy and smoke test.
+- **After the second build PR (§3.10, the SDLC on the engine runner):**
+  - A project mid-review when it deploys continues: the start-up re-pin moves it to v3, and the log shows `re-pinned`.
+  - The execution of a specialist-stack project: repo tool calls and the composed stack prompt.
+  - A build check that fails once and is fixed.
+  - A rejected spec draft rerun with feedback.
+  - Don't roll back to the PR #50 build after this deploys (D-0.7.0-41); 0.6.1 is fine.
   - **M58c review notes for M58d:**
     - With `review_cycles` at least `review_cycle + 1`, the engine's loop cap never binds for the SDLC, so the backstop is effectively off there. The SDLC review decision rules remain the only limit, as in 0.6.1.
     - `projects.review_cycle` stays the authoritative review counter. The review job counts it up and rollback restores it, as in 0.6.1, and it is mirrored into `pipeline_runs.iterations`. M58d must not derive it from the engine's `RunTransition.Iterations`, which counts entries into `review` and isn't compared by parity.
