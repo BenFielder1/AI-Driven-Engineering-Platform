@@ -77,7 +77,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-319 | `build_fix` and `code_generator` on the engine runner | 3.10 | backend | M62d | done | bound agents (40d49cb); stage handlers in v3: d5e9659 ([CI 45032877150](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45032877150)) |
 | FR-320 | Old runner removed, architecture test, docs | 3.10 | backend + docs | M62e | done | 98d021e ([CI 45028066508](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45028066508)) |
 | FR-321 | SDLC definition version bump and start-up re-pin | 3.10, 5 | backend | M62e | done | v2 and re-pin 5b99e27, 75de158 ([CI 45007169435](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45007169435)) |
-| FR-322 | Retire the CLI, with a rebuild guide | 3.11 | backend + frontend + docs + CI | M63 | todo | |
+| FR-322 | Retire the CLI, with a rebuild guide | 3.11 | backend + frontend + docs + CI | M63 | done | 209c964 ([CI 45039801909](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45039801909)) |
 
 ## Phases
 - [x] M54 Version and characterisation (FR-260, FR-261, FR-309 bump): snapshots 8dce91a, re-sorted d4d84f8 (D-0.7.0-22); freeze step in CI
@@ -137,7 +137,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
     Review: 1 Major fixed (resolver checks binding guards). d5e9659, [CI 45032877150](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45032877150)
   - Acceptance audit (2026-11-22, on 98d021e): 8 Done, 4 Partial, 0 Missing. Golden files, snapshots and api.json are byte-identical to 5e44622; no assertion weakened. Ben chose to build FR-319 and FR-314 as written (M62f). Still to do: assert the FR-321 log entry and a review cycle after the re-pin
-- [ ] M63 Retire the CLI (FR-322, D-0.7.0-45), branch `build/tevrin-0.7.0-remove-cli`; snapshot = docs/reference/retired-cli.md + commit e8c3990. Open questions resolved: Q1 keep licence (D-0.7.0-46), Q2 keep 1 MB (D-0.7.0-47), Q4 stay on JsonSchema.Net 8.0.5 (D-0.7.0-48)
+- [x] M63 Retire the CLI (FR-322, D-0.7.0-45), branch `build/tevrin-0.7.0-remove-cli`; snapshot = docs/reference/retired-cli.md + commit e8c3990. Open questions resolved: Q1 keep licence (D-0.7.0-46), Q2 keep 1 MB (D-0.7.0-47), Q4 stay on JsonSchema.Net 8.0.5 (D-0.7.0-48). 209c964, [CI 45039801909](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45039801909); review 0 Critical, 1 Major fixed (the earlier CLI requirements marked retired in §3.0)
 - [ ] M64 Release 0.7.0 (FR-309), after Ben confirms on preview
 
 ## Acceptance audit (2026-11-19)
