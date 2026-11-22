@@ -99,6 +99,9 @@ public static partial class PipelineDefinitionValidator
             if (keyValid && stage.ForAgent(binding.Key) is { Agent: { } agent } view)
             {
                 CheckPrompt(view, agent, path);
+
+                // D-0.7.0-44: the binding's own validate: and on_invalid:, checked as a stage's.
+                ValidateGuards(view, path);
             }
         }
     }

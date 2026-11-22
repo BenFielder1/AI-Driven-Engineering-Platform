@@ -112,13 +112,16 @@ public class SdlcStackAnalystStageTests
         Assert.Equal((2, 0), (harness.Data.ProjectReads, harness.Context.Reads));
     }
 
-    [Fact]
-    public async Task FR318_stack_analyst_a_profile_naming_an_option_outside_the_catalog_is_rerun_once_with_the_allowed_options()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_stack_analyst_a_profile_naming_an_option_outside_the_catalog_is_rerun_once_with_the_allowed_options(bool version3)
     {
         using var harness = Harness();
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
-        await harness.RunCallAsync(StackCall(harness, job, $"Port it. {FakeStackAnalystResponder.DjangoMarker}"), "analysis");
+        var result = await harness.RunCallAsync(StackCall(harness, job, $"Port it. {FakeStackAnalystResponder.DjangoMarker}"), "analysis");
 
         var corrective = AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey);
         var runs = harness.Store.AgentRuns;
@@ -130,12 +133,16 @@ public class SdlcStackAnalystStageTests
             ["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED", "STACK_PROFILE_CREATED"],
             harness.Data.Events.Select(e => e.Type));
         Assert.Equal((Guid?)corrective, Assert.Single(harness.Store.Artifacts).AgentRunId);
+        Assert.Equal(error.Message, result.Attempts[0].Findings); // FR-314: the check's one reason, once
     }
 
-    [Fact]
-    public async Task FR318_stack_analyst_still_invalid_after_the_rerun_fails_with_STACK_PROFILE_INVALID_and_no_draft()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_stack_analyst_still_invalid_after_the_rerun_fails_with_STACK_PROFILE_INVALID_and_no_draft(bool version3)
     {
         using var harness = Harness();
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var ex = await Assert.ThrowsAsync<JobFailedException>(() =>

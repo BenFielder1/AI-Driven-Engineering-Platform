@@ -28,7 +28,7 @@ public sealed partial class SdlcAgentExtension
         ArgumentNullException.ThrowIfNull(attempt);
         if (DefinitionChecks(attempt))
         {
-            // FR-321: the stage's validate: guard runs this check (sdlc.plan-valid); checking again would repeat each reason.
+            // FR-321, D-0.7.0-44: the stage's (or binding's) validate: guard runs this check; checking again would repeat each reason.
             return Task.FromResult<IReadOnlyList<string>>([]);
         }
 
@@ -114,14 +114,13 @@ public sealed partial class SdlcAgentExtension
     }
 
     /// <summary>
-    /// FR-321: whether the attempt's stage declares the guard that runs its job's check (the primary <c>plan_generator</c>
-    /// on a definition with <c>validate: [{ guard: sdlc.plan-valid }]</c>). Runs pinned to an earlier definition keep the
-    /// host check.
+    /// FR-321, D-0.7.0-44: whether the attempt's stage, or its binding for a secondary agent, declares the guard that runs
+    /// the agent's check (<see cref="SdlcGuardNames.OutputCheckOf"/>, e.g. <c>validate: [{ guard: sdlc.plan-valid }]</c>
+    /// on planning). Runs pinned to a definition without it (v1, v2) keep the host check.
     /// </summary>
     private static bool DefinitionChecks(AgentAttempt attempt) =>
-        !attempt.IsSecondaryAgent
-        && attempt.Agent.Key == SdlcAgents.PlanGenerator
-        && attempt.Stage.Validate.Any(v => v.Guard == SdlcGuardNames.PlanValid);
+        SdlcGuardNames.OutputCheckOf.TryGetValue(attempt.Agent.Key, out var guard)
+        && attempt.Stage.Validate.Any(v => v.Guard == guard);
 
     /// <summary>The job's reply check on the attempt's reply.</summary>
     private static Result<string> Check(AgentAttempt attempt) => CallOf(attempt).Spec.ToContent(ReplyOf(attempt.AgentRun!));

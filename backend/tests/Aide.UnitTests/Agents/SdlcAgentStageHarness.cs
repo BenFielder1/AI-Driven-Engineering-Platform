@@ -87,7 +87,30 @@ internal sealed class SdlcAgentStageHarness : IDisposable
 
     public SequenceProvider Provider { get; }
 
-    public PipelineRun Run { get; }
+    public PipelineRun Run { get; private set; }
+
+    /// <summary>
+    /// Pins <see cref="Run"/> (same id) to <paramref name="definition"/>, stored under <paramref name="hash"/> as a stored
+    /// definition with every name registered (e.g. <see cref="SdlcOutputGuardFixture.Version2"/>).
+    /// </summary>
+    public void PinTo(string hash, Tevrin.Engine.Domain.Pipelines.PipelineDefinition definition)
+    {
+        Assert.True(_provider.GetRequiredService<PipelineRegistry>().TryGet(SdlcPack.PipelineId, out var loaded));
+        _provider.GetRequiredService<PipelineDefinitionCache>().Add(hash, new StoredPipelineDefinition(loaded.PackId, definition));
+        var run = Run;
+        Store.Runs.Remove(run);
+        Run = new PipelineRun
+        {
+            Id = run.Id,
+            ProjectId = run.ProjectId,
+            PipelineId = run.PipelineId,
+            DefinitionHash = hash,
+            SubjectId = run.SubjectId,
+            CurrentStage = run.CurrentStage,
+            PackStatus = run.PackStatus,
+        };
+        Store.Runs.Add(Run);
+    }
 
     public IServiceProvider Services => _provider;
 

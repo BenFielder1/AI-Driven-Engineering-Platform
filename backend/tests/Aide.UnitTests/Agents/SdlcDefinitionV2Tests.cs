@@ -34,8 +34,9 @@ public class SdlcDefinitionV2Tests
 
         Assert.Equal([SdlcGuardNames.PlanValid], planning.Validate.Select(v => v.Guard));
         Assert.Equal(new OnInvalidPolicy(RetryWithFeedback: true, MaxAttempts: 2, Then: InvalidOutcome.Fail), planning.OnInvalid);
-        Assert.Equal(2, Definition.Version);
-        Assert.All(Definition.Stages.Where(s => s.Id != "planning"), s => Assert.Empty(s.Validate));
+        // D-0.7.0-44: version 3 declares the other output checks too (SdlcReplyCheckGuardTests); only planning has plan-valid.
+        Assert.Equal(3, Definition.Version);
+        Assert.All(Definition.Stages.Where(s => s.Id != "planning"), s => Assert.DoesNotContain(s.Validate, v => v.Guard == SdlcGuardNames.PlanValid));
     }
 
     [Fact]
@@ -127,10 +128,11 @@ public class SdlcDefinitionV2Tests
     {
         using var harness = PlanHarness([Invalid]);
         Assert.True(harness.Services.GetRequiredService<PipelineRegistry>().TryGet(SdlcPack.PipelineId, out var loaded));
-        var version1 = loaded.Definition! with
+        var version2 = SdlcOutputGuardFixture.Version2(loaded.Definition!);
+        var version1 = version2 with
         {
             Version = 1,
-            Stages = [.. loaded.Definition!.Stages.Select(s => s.Id == "planning" ? s with { Validate = [], OnInvalid = null } : s with { Agents = [] })],
+            Stages = [.. version2.Stages.Select(s => s.Id == "planning" ? s with { Validate = [], OnInvalid = null } : s with { Agents = [] })],
         };
         harness.Services.GetRequiredService<PipelineDefinitionCache>().Add(SdlcRunRepin.Version1Hash, new StoredPipelineDefinition(loaded.PackId, version1));
         var run = harness.Run;
@@ -200,14 +202,16 @@ public class SdlcDefinitionV2Tests
     }
 
     [Fact]
-    public void FR321_only_the_version_1_hash_is_re_pinned_and_never_onto_itself()
+    public void FR321_D_0_7_0_44_only_the_version_1_and_2_hashes_are_re_pinned_and_never_onto_themselves()
     {
         Assert.True(Registry.TryGet(SdlcPack.PipelineId, out var loaded));
 
         Assert.Equal("90f1f065397fe245955c62ef5057122a6fca2ae373941a90dc37b431ecf0c9e7", SdlcRunRepin.Version1Hash);
-        Assert.NotEqual(SdlcRunRepin.Version1Hash, loaded.Hash);
-        Assert.Equal([SdlcRunRepin.Version1Hash], SdlcRunRepin.From(loaded.Hash!));
-        Assert.Empty(SdlcRunRepin.From(SdlcRunRepin.Version1Hash));
+        Assert.Equal("d2f1c98b44e99bd673944f36cfdfd3abb64e072f893e3b7ea6d8366c3f689873", SdlcRunRepin.Version2Hash);
+        Assert.DoesNotContain(loaded.Hash, SdlcRunRepin.PreviousHashes);
+        Assert.Equal([SdlcRunRepin.Version1Hash, SdlcRunRepin.Version2Hash], SdlcRunRepin.From(loaded.Hash!));
+        Assert.DoesNotContain(SdlcRunRepin.Version1Hash, SdlcRunRepin.From(SdlcRunRepin.Version1Hash));
+        Assert.DoesNotContain(SdlcRunRepin.Version2Hash, SdlcRunRepin.From(SdlcRunRepin.Version2Hash));
     }
 
     private static SdlcAgentStageHarness PlanHarness(params string?[] replies)

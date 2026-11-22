@@ -28,6 +28,12 @@ public static class SdlcPipelineRegistration
         services.AddPipelineGuard<ReviewCycleReadyGuard>(SdlcGuardNames.ReviewCycleReady);
         services.AddPipelineGuard<Agents.SdlcPlanValidGuard>(SdlcGuardNames.PlanValid);
 
+        // D-0.7.0-44: the other output checks, each the attempt's own reply check.
+        foreach (var name in SdlcGuardNames.ReplyChecks)
+        {
+            services.AddPipelineGuard<Agents.SdlcReplyCheckGuard>(name);
+        }
+
         services.AddScoped<IRunSettingsProvider, SdlcRunSettingsProvider>();
         services.AddScoped<IRunStartSelector, SdlcRunStartSelector>();
         services.AddSingleton<IInvalidationHook>(SdlcInvalidationHook.Instance);

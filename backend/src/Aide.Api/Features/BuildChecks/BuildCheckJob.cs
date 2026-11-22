@@ -1,3 +1,4 @@
+using Aide.Api.Agents;
 using Aide.Api.Features.Deployments;
 using Aide.Api.Features.Execution;
 using Aide.Api.Features.Lifecycle;
@@ -19,6 +20,20 @@ using Tevrin.Pack.Sdlc;
 namespace Aide.Api.Features.BuildChecks;
 
 /// <summary>
+/// The <c>build_check</c> job (FR-255, §4.47): one poll of a build check. Its queueing, deferral and end hook
+/// (<see cref="BuildCheckJobEndedHook"/>) are unchanged; the poll itself is the stage handler
+/// <see cref="SdlcBuildCheckStageHandler"/> (FR-319, D-0.7.0-43), run through the engine when the run's definition declares
+/// it, else directly (<see cref="SdlcStageHandlerJob"/>).
+/// </summary>
+public sealed class BuildCheckJobHandler(SdlcStageHandlerJob stages, SdlcBuildCheckStageHandler handler) : IJobHandler
+{
+    public const string AdvanceReason = "Build check finished; pull request opened";
+
+    public Task HandleAsync(JobExecution job, CancellationToken cancellationToken) =>
+        stages.RunAsync(job, handler, cancellationToken);
+}
+
+/// <summary>
 /// FR-255, §4.47: one poll of a build check. It reads the same sources review reads — the version's newest preview rollout
 /// (<see cref="PreviewCollector"/>) and the PR head's checks with their required marks (<see cref="ExternalChecksCollector"/>)
 /// — and lets <see cref="BuildCheckRules.Decide"/> rule:
@@ -35,8 +50,11 @@ namespace Aide.Api.Features.BuildChecks;
 /// check is left alone. D-0.6.1-23: the Git host never ends the check early. Branch rules it refuses (403/404) mean no
 /// required check (one warning per check), and checks it can't serve (5xx, 429, network, timeout) count as not reported yet:
 /// the check keeps waiting and, at the checks timeout, goes on without them. Only unexpected errors fail the job.
+/// FR-319, D-0.7.0-43: the poll is the stage handler <c>sdlc.build-check</c> (declared in the <c>execution</c> stage's
+/// <c>handlers:</c>), which <see cref="BuildCheckJobHandler"/> runs through the engine. It logs as the job handler did
+/// (category <see cref="BuildCheckJobHandler"/>).
 /// </summary>
-public sealed partial class BuildCheckJobHandler(
+public sealed partial class SdlcBuildCheckStageHandler(
     AideDbContext db,
     BuildCheckService buildChecks,
     JobEnqueuer jobs,
@@ -45,11 +63,11 @@ public sealed partial class BuildCheckJobHandler(
     RolloutScheduler rollouts,
     LifecycleService lifecycle,
     TimeProvider time,
-    ILogger<BuildCheckJobHandler> logger) : IJobHandler
+    ILogger<BuildCheckJobHandler> logger) : SdlcJobStageHandler
 {
-    public const string AdvanceReason = "Build check finished; pull request opened";
+    public override string Name => SdlcStageHandlerNames.BuildCheck;
 
-    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    public override async Task RunJobAsync(JobExecution job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
         var payload = BuildCheckService.Payload<BuildCheckJobPayload>(job, "build check");
@@ -151,7 +169,7 @@ public sealed partial class BuildCheckJobHandler(
     /// <summary>The PR job's advance to Review (expected from execution), committing the check with the transition.</summary>
     private async Task AdvanceAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var advanced = await lifecycle.AdvanceAsync(projectId, AdvanceReason, SystemActor.Name, cancellationToken, expectedFrom: Phase.Execution);
+        var advanced = await lifecycle.AdvanceAsync(projectId, BuildCheckJobHandler.AdvanceReason, SystemActor.Name, cancellationToken, expectedFrom: Phase.Execution);
         if (advanced.IsSuccess)
         {
             return;

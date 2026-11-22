@@ -68,10 +68,10 @@ public static class PipelineDefinitionLoader
         private static readonly string[] StageKeys =
         [
             "id", "title", "status", "agent", "handler", "inputs", "output", "requires", "validate", "on_invalid", "gate",
-            "on_success", "on_reject", "loop", "enqueue_on_enter", "agents",
+            "on_success", "on_reject", "loop", "enqueue_on_enter", "agents", "handlers",
         ];
 
-        private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools"];
+        private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid"];
 
         public PipelineDefinition Definition(YamlMapping map)
         {
@@ -203,14 +203,13 @@ public static class PipelineDefinitionLoader
                 Agent = Agent(obj),
                 Agents = Bindings(obj, inputs),
                 Handler = obj.OptionalString("handler"),
+
+                // D-0.7.0-43: secondary stage handlers, as agents: binds secondary agents.
+                Handlers = obj.StringList("handlers"),
                 Inputs = inputs,
                 Output = obj.OptionalString("output"),
                 Requires = Requirements(obj, "requires"),
-                Validate = obj.List("validate", (item, itemPath) =>
-                {
-                    var v = AsObject(item, itemPath, ["guard"]);
-                    return v is null ? null : new StageValidation(v.String("guard"));
-                }).OfType<StageValidation>().ToList(),
+                Validate = Validations(obj),
                 OnInvalid = OnInvalid(obj),
                 Gate = Gate(obj),
                 OnSuccess = obj.OptionalString("on_success"),
@@ -252,8 +251,20 @@ public static class PipelineDefinitionLoader
                     obj.OptionalString("prompt"),
                     obj.Get("inputs") is null or YamlScalar { IsNull: true } ? [.. stageInputs] : obj.StringList("inputs"),
                     obj.OptionalString("output"),
-                    obj.StringList("tools"));
+                    obj.StringList("tools"))
+                {
+                    // D-0.7.0-44: the binding's own output checks.
+                    Validate = Validations(obj),
+                    OnInvalid = OnInvalid(obj),
+                };
             }).OfType<AgentBindingDefinition>().ToList();
+
+        private List<StageValidation> Validations(Obj owner) =>
+            owner.List("validate", (item, itemPath) =>
+            {
+                var v = AsObject(item, itemPath, ["guard"]);
+                return v is null ? null : new StageValidation(v.String("guard"));
+            }).OfType<StageValidation>().ToList();
 
         private List<StageRequirement> Requirements(Obj owner, string key) =>
             owner.List(key, (node, path) =>

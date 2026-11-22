@@ -97,10 +97,13 @@ public class SdlcCodeReviewStageTests
         Assert.Equal((2, 0), (harness.Data.ProjectReads, harness.Context.Reads));
     }
 
-    [Fact]
-    public async Task FR318_code_review_an_unreadable_reply_is_rerun_once_with_0_6_1s_corrective_feedback()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_code_review_an_unreadable_reply_is_rerun_once_with_0_6_1s_corrective_feedback(bool version3)
     {
         using var harness = Harness(replies: [Unreadable, null]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var outcome = await harness.RunReplyJobAsync(ReviewCall(harness, job), "review");
@@ -114,8 +117,10 @@ public class SdlcCodeReviewStageTests
         Assert.Empty(harness.Store.Artifacts);
     }
 
-    [Fact]
-    public async Task FR318_code_review_a_reply_without_the_required_plan_is_rerun_and_a_readable_second_reply_is_used()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_code_review_a_reply_without_the_required_plan_is_rerun_and_a_readable_second_reply_is_used(bool version3)
     {
         // 0.6.1: the requirement (an optimisation plan) applies to the first reply only; the corrective one only has to read.
         var noPlan = new FakeCodeReviewResponder(FakeCodeReviewScript.Default with { OptimizationStepsByCycle = [0] });
@@ -127,6 +132,7 @@ public class SdlcCodeReviewStageTests
             Agent = SdlcAgents.CodeReview,
         });
         using var harness = Harness(replies: [replyWithoutPlan]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var outcome = await harness.RunReplyJobAsync(ReviewCall(harness, job), "review");
@@ -136,10 +142,13 @@ public class SdlcCodeReviewStageTests
         Assert.Equal(ArtifactAgentSpec.JoinFeedback(null, CodeReviewOutput.CorrectiveFeedback(ReviewAssessment.MissingOptimizationPlanError())), harness.Store.AgentRuns[1].UserFeedback);
     }
 
-    [Fact]
-    public async Task FR318_code_review_still_unreadable_after_the_rerun_fails_the_run_with_its_code()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_code_review_still_unreadable_after_the_rerun_fails_the_run_with_its_code(bool version3)
     {
         using var harness = Harness(replies: [Unreadable]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunReplyJobAsync(ReviewCall(harness, job), "review"));
@@ -151,6 +160,42 @@ public class SdlcCodeReviewStageTests
         Assert.Equal(
             AideJson.Serialize(new { runId = runs[1].Id, agent = SdlcAgents.CodeReview, errorCode = error.Code, error = runs[1].Error, attempts = 1, deadLettered = false }),
             harness.Data.Events[^1].Payload);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR314_code_review_the_first_reply_must_read_and_the_reason_is_given_once(bool version3)
+    {
+        // D-0.7.0-44: on version 3 the review stage's sdlc.review-valid guard gives the reason, and the host check is skipped.
+        using var harness = Harness(replies: [Unreadable, null]);
+        SdlcOutputGuardFixture.Pin(harness, version3);
+
+        var result = await harness.RunCallAsync(ReviewCall(harness, SdlcAgentStageHarness.Job()), "review");
+
+        Assert.Equal([CodeReviewOutput.Parse(Unreadable, 5).Error!.Message, null], result.Attempts.Select(a => a.Findings));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR314_code_review_the_requirement_applies_to_the_first_reply_only(bool version3)
+    {
+        // 0.6.1's split, kept by the guard: the first reply must meet the requirement, the corrective one only has to read.
+        var noPlan = new FakeCodeReviewResponder(FakeCodeReviewScript.Default with { OptimizationStepsByCycle = [0] });
+        var replyWithoutPlan = noPlan.Respond(new LlmRequest
+        {
+            Model = "fake-1",
+            System = string.Empty,
+            Messages = [new LlmMessage(LlmRole.User, "<review_cycle>1</review_cycle>\n<code>- src/app.ts (modify)</code>")],
+            Agent = SdlcAgents.CodeReview,
+        });
+        using var harness = Harness(replies: [replyWithoutPlan]);
+        SdlcOutputGuardFixture.Pin(harness, version3);
+
+        var result = await harness.RunCallAsync(ReviewCall(harness, SdlcAgentStageHarness.Job()), "review");
+
+        Assert.Equal([ReviewAssessment.MissingOptimizationPlanError().Message, null], result.Attempts.Select(a => a.Findings));
     }
 
     [Fact]

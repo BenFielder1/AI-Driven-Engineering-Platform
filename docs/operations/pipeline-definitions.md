@@ -44,9 +44,9 @@ Projects keep `current_phase`, `status` and `checkpoint` in step with the run, w
 
 ## SDLC definition re-pin at start-up
 
-The SDLC definition moved to version 2 during 0.7.0. Version 2 adds the repo tools, plan validation as a `validate:` block, and `agents:` bindings for the code generator, build fix and repository analyst. Before the job worker and the run backfill start, the API re-pins every non-final SDLC run from the earlier 0.7.0 hash (`90f1f065…`) to version 2. Both versions behave the same; the earlier one left plan validation to host code.
+The SDLC definition moved to version 3 during 0.7.0. Version 2 added the repo tools, plan validation as a `validate:` block, and `agents:` bindings for the code generator, build fix and repository analyst. Version 3 makes every other agent output check a `validate:` guard, on the agent's stage or on its `agents:` binding. It also lists the execution stage's handlers (`handlers: [sdlc.execution, sdlc.build-check]`). Before the job worker and the run backfill start, the API re-pins every non-final SDLC run from the earlier 0.7.0 hashes (version 1 `90f1f065…` and version 2 `d2f1c98b…`) to version 3. All three versions behave the same; the earlier ones left those checks to host code.
 
-- It is one `UPDATE`, idempotent and safe on several replicas **of the same build**. It logs `N SDLC run(s) re-pinned` once, only when runs moved, and is skipped while migrations are pending.
+- It is one `UPDATE`, idempotent and safe on several replicas **of the same build**. It logs one `re-pinned N SDLC run(s)` entry, only when runs moved, and is skipped while migrations are pending.
 - Final runs and runs on any other hash are left alone. Runs still on the earlier hash (for example if the re-pin failed) keep working, because that stored definition only names guards and tools this build registers.
 - **Rollback:**
   - Rolling back to **0.6.1** is safe: 0.6.1 doesn't read pipeline runs.

@@ -310,6 +310,7 @@ stages:
     status: <status>
     agent?: { key, prompt, model?, tools?: [<pack>.<tool>], job_type? }   # job_type defaults to agent.run
     handler?: <pack>.<name>
+    handlers?: [<pack>.<name>]         # D-0.7.0-43: secondary stage handlers, run only when named; the stage's kind is unchanged
     inputs?: [<artifact key>]
     output?: <artifact key>
     requires?: [{ artifact_locked: <key> } | { no_pending_gates: { except: [<gate>] } } | { guard: <pack>.<name> }]
@@ -319,6 +320,7 @@ stages:
     on_success?: <stage> ; on_reject?: <stage>
     loop?: { to: <earlier stage>, on: <outcome>, max_iterations: <1-100> | { setting: <name> }, requires?: [...], title?: <text> }
     enqueue_on_enter?: <job_type>      # D-0.7.0-27
+    agents?: [{ key, job_type, prompt?, inputs?, output?, tools?, validate?, on_invalid? }]   # D-0.7.0-42; validate/on_invalid check the binding's output (D-0.7.0-44)
 rollback_status?: <status>          # D-0.7.0-26
 ```
 
@@ -613,7 +615,7 @@ Unchanged: dev loop, Docker Desktop Kubernetes, Railway `preview` and `productio
 | D-0.7.0-40 | Token limits (`MaxTokens`, `ContextTokens`) come from a host options hook, not from new definition fields, because they're project and admin settings (FR-312) | Claude | assumed |
 | D-0.7.0-41 | Non-final SDLC runs pinned to the earlier 0.7.0 SDLC hash are re-pinned at start-up instead of keeping both definitions runnable. The earlier definition differs only in where behaviour is declared: v2 adds the repo tools (`agent.tools`), the `agents:` bindings and plan validation as `validate:`, and v3 adds the remaining `validate:` guards and stage handlers (D-0.7.0-43/-44). The behaviour is the same (FR-321). This narrows "editing the YAML never changes a run in progress" for this one SDLC upgrade. Rolling back to an earlier 0.7.0 build after the re-pin isn't supported: that build can't parse version 2, so re-pinned runs get `DEFINITION_UNAVAILABLE` until you roll forward. 0.6.1 is unaffected. The same short window applies during a deploy overlap (documented in docs/operations/pipeline-definitions.md) | Claude | assumed |
 | D-0.7.0-42 | Agents with no stage of their own bind through an `agents:` list on an existing stage: each entry is `{ key, job_type, prompt?, inputs, output?, tools }`, and keys are unique across the pipeline. `code_generator` and `build_fix` go on `execution`, `repository_analyst` on `refinement`. Stages, transitions and the stepper are unchanged; `AgentStageRequest` names the agent (default: the stage's primary agent). It is additive to §4.49 and lands with the FR-321 hash bump | Ben (2026-11-21) | agreed |
-| D-0.7.0-43 | FR-319 is built as written: the SDLC's code-stage work (the execution step loop with commits and pushes, and the build check) runs as `IStageHandler`s named by `handler:` on the stage, and the engine dispatches them. The jobs and their queueing, the step and commit events and the run timeline stay exactly as in 0.6.1 (snapshots frozen). If that proves impossible, the build stops for Ben | Ben (2026-11-22) | agreed |
+| D-0.7.0-43 | FR-319 is built as written: the SDLC's code-stage work (the execution step loop with commits and pushes, and the build check) runs as `IStageHandler`s named by `handler:` on the stage, and the engine dispatches them. The jobs and their queueing, the step and commit events and the run timeline stay exactly as in 0.6.1 (snapshots frozen). If that proves impossible, the build stops for Ben. Shape: a `handlers: [<pack>.<name>]` list on a stage (like `agents:`, D-0.7.0-42). It never changes the stage's kind, handler names are unique across the pipeline, an unregistered entry is `DEF_UNKNOWN_HANDLER`, and the list is left out of the canonical JSON when empty. The SDLC's `execution` stage declares `handlers: [sdlc.execution, sdlc.build-check]` and stays a `manual` stage, so the definitions API data is unchanged. The engine's `StageHandlerRunner` resolves a handler by name from the pinned definition. The job handlers stay the entry points, so queueing is unchanged. Runs on a definition that doesn't declare the handler call the SDLC handler directly | Ben (2026-11-22) | agreed |
 | D-0.7.0-44 | FR-314 is built as written: every SDLC output check is a `validate:` guard in the definition, not only plan validation. That covers spec sections, stack profile, review parse and requirement, refinement parse, repository-analysis sections, and the build-fix plan. Each keeps 0.6.1's attempt count, retry wording and final code. Together with D-0.7.0-43 this is definition **version 3**, one hash bump. The start-up re-pin moves non-final runs from v1 **and** v2 to v3 | Ben (2026-11-22) | agreed |
 
 ## 11. Open questions

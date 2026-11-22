@@ -12,11 +12,16 @@ namespace Tevrin.Engine.Tests.Pipelines;
 public class AgentBindingHashTests
 {
     /// <summary>
-    /// The SDLC hash of <c>sdlc.pipeline.yaml</c> version 2 (also pinned in <c>SdlcContextProviderTests</c>). FR-321,
-    /// D-0.7.0-41: version 2 adds plan validation, the primary agents' repo tools and the <c>agents:</c> bindings, so the hash legitimately changed from
-    /// <see cref="SdlcVersion1Hash"/>; runs pinned to that one are re-pinned at start-up.
+    /// The SDLC hash of <c>sdlc.pipeline.yaml</c> version 3 (also pinned in <c>SdlcContextProviderTests</c>). FR-321,
+    /// D-0.7.0-41: version 2 added plan validation, the primary agents' repo tools and the <c>agents:</c> bindings (changing
+    /// it from <see cref="SdlcVersion1Hash"/>); D-0.7.0-43, D-0.7.0-44: version 3 adds every other output check as a
+    /// <c>validate:</c> guard and execution's <c>handlers:</c> (changing it from <see cref="SdlcVersion2Hash"/>). Runs
+    /// pinned to either earlier hash are re-pinned at start-up.
     /// </summary>
-    public const string SdlcHash = "d2f1c98b44e99bd673944f36cfdfd3abb64e072f893e3b7ea6d8366c3f689873";
+    public const string SdlcHash = "a307962131bbb754029d030315213260338a7836850facdf09e417d14f8d0623";
+
+    /// <summary>FR-321: the SDLC hash of version 2, unchanged by D-0.7.0-43/-44's engine changes (bindings and stages without the new keys hash as before).</summary>
+    public const string SdlcVersion2Hash = "d2f1c98b44e99bd673944f36cfdfd3abb64e072f893e3b7ea6d8366c3f689873";
 
     /// <summary>The 0.7.0 SDLC hash before FR-321 (version 1), unchanged by D-0.7.0-42's engine change.</summary>
     public const string SdlcVersion1Hash = "90f1f065397fe245955c62ef5057122a6fca2ae373941a90dc37b431ecf0c9e7";
@@ -30,7 +35,7 @@ public class AgentBindingHashTests
     private static string Hash(string yaml) => DefinitionHash.Compute(PipelineDefinitionLoader.Parse(yaml).Definition!);
 
     [Fact]
-    public void FR321_the_sdlc_hash_is_version_2s()
+    public void FR321_D_0_7_0_44_the_sdlc_hash_is_version_3s()
     {
         using var stream = SdlcPack.OpenDefinition();
         using var reader = new StreamReader(stream);

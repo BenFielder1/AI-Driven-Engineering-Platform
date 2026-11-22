@@ -50,6 +50,12 @@ public sealed class SdlcPack : IPipelinePack
             registry.AddContextName(name);
         }
 
+        // FR-319, D-0.7.0-43: the execution step loop and the build check.
+        foreach (var handler in SdlcStageHandlerNames.All)
+        {
+            registry.AddStageHandler(handler);
+        }
+
         registry.AddSetting(ReviewCycles);
         foreach (var jobType in SdlcJobTypes.All)
         {

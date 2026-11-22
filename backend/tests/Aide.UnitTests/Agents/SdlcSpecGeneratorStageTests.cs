@@ -76,13 +76,16 @@ public class SdlcSpecGeneratorStageTests
         Assert.Equal((Guid?)job.Id, Assert.Single(harness.Store.Artifacts).AgentRunId);
     }
 
-    [Fact]
-    public async Task FR318_spec_generator_invalid_reply_is_rerun_once_with_0_6_1s_corrective_feedback()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_spec_generator_invalid_reply_is_rerun_once_with_0_6_1s_corrective_feedback(bool version3)
     {
         using var harness = new SdlcAgentStageHarness([Invalid, null]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
-        await harness.RunAsync(job);
+        var result = await harness.RunAsync(job);
 
         var corrective = AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey);
         var runs = harness.Store.AgentRuns;
@@ -93,12 +96,16 @@ public class SdlcSpecGeneratorStageTests
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED"], harness.Data.Events.Select(e => e.Type));
         Assert.Equal((Guid?)corrective, Assert.Single(harness.Store.Artifacts).AgentRunId);
         Assert.Equal(runs.Select(r => (long)r.InputTokens + r.OutputTokens), harness.Data.TokenCommits);
+        Assert.Equal(error.Message, result.Attempts[0].Findings); // FR-314: the check's one reason, once
     }
 
-    [Fact]
-    public async Task FR318_spec_generator_still_invalid_after_the_rerun_fails_with_MISSING_SECTIONS_and_no_draft()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_spec_generator_still_invalid_after_the_rerun_fails_with_MISSING_SECTIONS_and_no_draft(bool version3)
     {
         using var harness = new SdlcAgentStageHarness([Invalid]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunAsync(job));

@@ -30,7 +30,8 @@ internal sealed class AgentStageHarness : IDisposable
         IEnumerable<IFakeToolScript>? scripts = null,
         IEnumerable<IAgentContextProvider>? contextProviders = null,
         ILlmResolver? resolver = null,
-        AgentStageExtension? extension = null)
+        AgentStageExtension? extension = null,
+        Action<IServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
         services.AddPipelineRegistry();
@@ -53,6 +54,7 @@ internal sealed class AgentStageHarness : IDisposable
         }
 
         services.AddAgentStages();
+        configure?.Invoke(services);
         _provider = services.BuildServiceProvider();
         _scope = _provider.CreateAsyncScope();
         Registry = _provider.GetRequiredService<PipelineRegistry>();

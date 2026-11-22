@@ -99,10 +99,13 @@ public class SdlcBuildFixStageTests
         Assert.Empty(harness.Store.Artifacts);
     }
 
-    [Fact]
-    public async Task FR318_FR319_build_fix_an_invalid_plan_is_rerun_once_under_its_second_run_key_with_every_reason()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR319_FR314_build_fix_an_invalid_plan_is_rerun_once_under_its_second_run_key_with_every_reason(bool version3)
     {
         using var harness = Harness(replies: [Invalid, null]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var outcome = await harness.RunReplyJobAsync(FixCall(harness, job), "execution");
@@ -116,10 +119,13 @@ public class SdlcBuildFixStageTests
         Assert.True(BuildFixPlanning.Process(outcome.Text, PlanCheck).IsSuccess);
     }
 
-    [Fact]
-    public async Task FR318_FR319_build_fix_still_invalid_returns_the_second_reply_and_no_run_fails()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR319_FR314_build_fix_still_invalid_returns_the_second_reply_and_no_run_fails(bool version3)
     {
         using var harness = Harness(replies: [Invalid]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var outcome = await harness.RunReplyJobAsync(FixCall(harness, job), "execution");
@@ -129,6 +135,21 @@ public class SdlcBuildFixStageTests
         Assert.True(BuildFixPlanning.Process(outcome.Text, PlanCheck).IsFailure);
         Assert.Equal([AgentRunStatus.Succeeded, AgentRunStatus.Succeeded], harness.Store.AgentRuns.Select(r => r.Status));
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED"], harness.Data.Events.Select(e => e.Type));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR314_build_fix_only_the_first_plan_is_checked_and_the_rerun_is_accepted_whatever_it_says(bool version3)
+    {
+        // D-0.7.0-44: on version 3 the binding's sdlc.fix-plan-valid guard applies each attempt's check: the plan rules
+        // on the first reply, none on the corrective one (0.6.1).
+        using var harness = Harness(replies: [Invalid]);
+        SdlcOutputGuardFixture.Pin(harness, version3);
+
+        var result = await harness.RunCallAsync(FixCall(harness, SdlcAgentStageHarness.Job()), "execution");
+
+        Assert.Equal([BuildFixPlanning.Process(Invalid, PlanCheck).Error!.Message, null], result.Attempts.Select(a => a.Findings));
     }
 
     [Fact]

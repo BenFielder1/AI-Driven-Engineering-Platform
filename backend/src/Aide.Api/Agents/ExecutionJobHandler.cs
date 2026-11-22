@@ -35,6 +35,37 @@ public interface IExecutionCompletionHook
 }
 
 /// <summary>
+/// The <c>execution</c> job (FR-31–FR-37, §4.9): one step attempt of the current plan. Its queueing, continuation
+/// (<see cref="ExecutionContinuationHook"/>) and end hook are unchanged; the attempt itself is the <c>execution</c> stage's
+/// handler <see cref="SdlcExecutionStageHandler"/> (FR-319, D-0.7.0-43), run through the engine when the run's definition
+/// declares it, else directly (<see cref="SdlcStageHandlerJob"/>).
+/// </summary>
+public sealed class ExecutionJobHandler(SdlcStageHandlerJob stages, SdlcExecutionStageHandler handler) : IJobHandler
+{
+    public Task HandleAsync(JobExecution job, CancellationToken cancellationToken) =>
+        stages.RunAsync(job, handler, cancellationToken);
+
+    /// <summary>The label of <see cref="ReplySpec"/>: a step's code, not an artifact type.</summary>
+    public const string StepCodeLabel = "step code";
+
+    /// <summary>
+    /// FR-318, FR-319: the Code Generator's reply is accepted as sent, as 0.6.1's runner had no check for it: the Guardian
+    /// judges it afterwards (an unreadable reply rejects the step, never the run), so there is no corrective re-run and
+    /// nothing is stored by the run. The type is only the spec's label (the run stores no artifact, so it never names a
+    /// draft): the step's code isn't an artifact. The corrective builder is unreachable, because every reply is accepted;
+    /// it throws rather than invent a re-run 0.6.1 never made.
+    /// </summary>
+    public static readonly ArtifactAgentSpec ReplySpec = new(
+        StepCodeLabel,
+        text => Result.Success(text),
+        (_, error) => throw new JobFailedException($"The code generator's reply has no corrective re-run ({error.Code}).", transient: false, error.Code))
+    {
+        StoresDraft = false,
+        LogsRejection = true,
+    };
+}
+
+/// <summary>
 /// One step attempt of the current plan (FR-31–FR-35, §4.9). Each execution job runs at most one attempt; when it
 /// succeeds, <see cref="ExecutionContinuationHook"/> queues the next job in the same transaction, unless execution is
 /// paused (FR-37) or nothing is runnable.
@@ -61,9 +92,11 @@ public interface IExecutionCompletionHook
 /// before the upgrade that still names a 0.2.0 agent key runs as its mapped specialist (<see cref="LegacyPresets.MapInPlay"/>);
 /// the step keeps the 0.2.0 key in <c>legacy_agent_key</c>, which its runs report as <c>legacyAgentKey</c>.
 /// FR-318, FR-319: the Code Generator runs on the engine runner (<see cref="SdlcAgentStageJob"/>), bound on <c>execution</c>
-/// (D-0.7.0-42); the step loop, commits, pushes and step statuses stay here.
+/// (D-0.7.0-42); the step loop, commits, pushes and step statuses stay here, as the <c>execution</c> stage's handler
+/// <c>sdlc.execution</c> (D-0.7.0-43), which <see cref="ExecutionJobHandler"/> runs through the engine. It logs as the job
+/// handler did (category <see cref="ExecutionJobHandler"/>).
 /// </summary>
-public sealed partial class ExecutionJobHandler(
+public sealed partial class SdlcExecutionStageHandler(
     AideDbContext db,
     SdlcAgentStageJob agentJob,
     AgentJobInputs inputs,
@@ -75,9 +108,11 @@ public sealed partial class ExecutionJobHandler(
     IStackCatalog catalog,
     Features.Git.CommitCredit commitCredit,
     TimeProvider time,
-    ILogger<ExecutionJobHandler> logger) : IJobHandler
+    ILogger<ExecutionJobHandler> logger) : SdlcJobStageHandler
 {
-    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    public override string Name => SdlcStageHandlerNames.Execution;
+
+    public override async Task RunJobAsync(JobExecution job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
         var payload = Payload(job);
@@ -143,7 +178,7 @@ public sealed partial class ExecutionJobHandler(
                 LegacyAgentKey = step.LegacyAgentKey,
                 Warnings = legacyWarning is null ? request.Warnings : [.. request.Warnings, AgentRunWarnings.LegacyAgentMapped],
             },
-            ReplySpec,
+            ExecutionJobHandler.ReplySpec,
             JobTriggers.StageEntered,
             cancellationToken);
         var reply = CodeGeneration.Parse(outcome.Text);
@@ -169,25 +204,6 @@ public sealed partial class ExecutionJobHandler(
         var commit = await Git(() => workingCopies.CommitStepAsync(project.Id, working.Branch, step.Id, normalised, message, cancellationToken));
         await CompleteAsync(project.Id, planId, step, steps, commit!, [.. result.Warnings], working, outcome.RunId, cancellationToken);
     }
-
-    /// <summary>The label of <see cref="ReplySpec"/>: a step's code, not an artifact type.</summary>
-    public const string StepCodeLabel = "step code";
-
-    /// <summary>
-    /// FR-318, FR-319: the Code Generator's reply is accepted as sent, as 0.6.1's runner had no check for it: the Guardian
-    /// judges it afterwards (an unreadable reply rejects the step, never the run), so there is no corrective re-run and
-    /// nothing is stored by the run. The type is only the spec's label (the run stores no artifact, so it never names a
-    /// draft): the step's code isn't an artifact. The corrective builder is unreachable, because every reply is accepted;
-    /// it throws rather than invent a re-run 0.6.1 never made.
-    /// </summary>
-    public static readonly ArtifactAgentSpec ReplySpec = new(
-        StepCodeLabel,
-        text => Result.Success(text),
-        (_, error) => throw new JobFailedException($"The code generator's reply has no corrective re-run ({error.Code}).", transient: false, error.Code))
-    {
-        StoresDraft = false,
-        LogsRejection = true,
-    };
 
     /// <summary>
     /// FR-257: the working copy's content of the produced files before the step (missing or unreadable files are absent, so

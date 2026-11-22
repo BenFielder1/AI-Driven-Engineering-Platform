@@ -77,4 +77,26 @@ public class AgentStageStoredDefinitionTests
 
         Assert.Equal(EngineErrorCodes.DefinitionUnavailable, ex.ErrorCode);
     }
+
+    [Fact]
+    public async Task D_0_7_0_44_FR277_a_stored_only_definition_whose_binding_names_an_unregistered_guard_fails_with_DEFINITION_UNAVAILABLE()
+    {
+        var drafter = new ScriptedResponder("drafter", AgentStageHarness.ValidDraft);
+        using var harness = new AgentStageHarness([drafter]);
+        PinToStored(harness, d => d with
+        {
+            Stages = [.. d.Stages.Select(s => s.Id == "check"
+                ? s with
+                {
+                    Agents = [new Domain.Pipelines.AgentBindingDefinition("auditor", "stage.run", null, s.Inputs, null, []) { Validate = [new Domain.Pipelines.StageValidation("fixture.missing-guard")] }],
+                }
+                : s)],
+        });
+
+        var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunStageAsync("draft"));
+
+        Assert.Equal((EngineErrorCodes.DefinitionUnavailable, false), (ex.ErrorCode, ex.Transient));
+        Assert.Empty(drafter.Prompts);
+        Assert.Empty(harness.Store.AgentRuns);
+    }
 }

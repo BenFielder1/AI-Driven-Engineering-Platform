@@ -59,6 +59,7 @@ public static partial class PipelineDefinitionValidator
             ValidateConcurrency();
             ValidateStages();
             ValidateAgentBindings();
+            ValidateStageHandlers();
             ValidateStart();
             ValidateReachability();
             ValidateProducers();

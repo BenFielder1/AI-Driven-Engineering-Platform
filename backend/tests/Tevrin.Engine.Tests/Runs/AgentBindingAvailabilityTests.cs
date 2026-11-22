@@ -5,7 +5,7 @@ using Tevrin.Engine.Tests.Pipelines;
 
 namespace Tevrin.Engine.Tests.Runs;
 
-/// <summary>D-0.7.0-42, FR-301, §6 <c>DEFINITION_UNAVAILABLE</c>: a secondary agent's tools must be registered too.</summary>
+/// <summary>D-0.7.0-42, D-0.7.0-44, FR-301, §6 <c>DEFINITION_UNAVAILABLE</c>: a secondary agent's tools and its own <c>validate:</c> guards must be registered too.</summary>
 public class AgentBindingAvailabilityTests
 {
     private static readonly PipelineRegistry Registry = new([new FixturePack()], [], Array.Empty<JobHandlerRegistration>());
@@ -32,5 +32,21 @@ public class AgentBindingAvailabilityTests
 
         Assert.False(PipelineDefinitionResolver.IsRunnable(Registry, definition));
         Assert.Equal(["tool:fixture.missing-tool"], PipelineDefinitionResolver.MissingNames(Registry, definition));
+    }
+
+    [Fact]
+    public void D_0_7_0_44_FR301_an_unregistered_binding_validate_guard_makes_it_unavailable()
+    {
+        var definition = WithBindingTools(FixturePack.LookupTool);
+        definition = definition with
+        {
+            Stages = [.. definition.Stages.Select(s => s with
+            {
+                Agents = [.. s.Agents.Select(b => b with { Validate = [new StageValidation("fixture.missing-guard")] })],
+            })],
+        };
+
+        Assert.False(PipelineDefinitionResolver.IsRunnable(Registry, definition));
+        Assert.Equal(["guard:fixture.missing-guard"], PipelineDefinitionResolver.MissingNames(Registry, definition));
     }
 }

@@ -281,6 +281,14 @@ public sealed record StageDefinition
     /// </summary>
     public IReadOnlyList<AgentBindingDefinition> Agents { get; init; } = [];
 
+    /// <summary>
+    /// <c>handlers:</c> (D-0.7.0-43, addition to §4.49): secondary <see cref="IStageHandler"/> names (<c>&lt;pack&gt;.&lt;name&gt;</c>)
+    /// bound to this stage, run only when a request names them (<see cref="StageHandlers.StageOf"/>), as <c>agents:</c> binds
+    /// secondary agents. They never change the stage's kind, transitions, gates, cascade or state. Handler names are unique
+    /// across the pipeline (<see cref="Handler"/> and every <c>handlers:</c> entry).
+    /// </summary>
+    public IReadOnlyList<string> Handlers { get; init; } = [];
+
     /// <summary>The stage's kind; a stage with both an agent and a handler is invalid (<see cref="DefinitionErrorCodes.StageKind"/>)
     /// and reads as an agent stage.</summary>
     public StageKind Kind => Agent is not null ? StageKind.Agent : Handler is not null ? StageKind.Code : StageKind.Manual;

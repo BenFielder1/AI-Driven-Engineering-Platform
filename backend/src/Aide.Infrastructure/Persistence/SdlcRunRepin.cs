@@ -10,8 +10,9 @@ using Tevrin.Engine.Runtime.Pipelines;
 namespace Aide.Infrastructure.Persistence;
 
 /// <summary>
-/// FR-321, D-0.7.0-41: non-final SDLC runs pinned to the earlier 0.7.0 SDLC definition (version 1, which left plan
-/// validation to host code) are re-pinned to the current one, which describes the same behaviour. Only
+/// FR-321, D-0.7.0-41, D-0.7.0-44: non-final SDLC runs pinned to an earlier 0.7.0 SDLC definition (version 1, which left
+/// plan validation to host code, or version 2, which left the other output checks and execution's handlers to it) are
+/// re-pinned to the current one (version 3), which describes the same behaviour. Only
 /// <see cref="PreviousHashes"/> are re-pinned; a run pinned to any other hash keeps it (an unknown one still gets
 /// <c>DEFINITION_UNAVAILABLE</c>), and final runs are history and keep theirs.
 /// </summary>
@@ -20,8 +21,11 @@ public static class SdlcRunRepin
     /// <summary>The hash of <c>sdlc.pipeline.yaml</c> version 1 (0.7.0 until FR-321).</summary>
     public const string Version1Hash = "90f1f065397fe245955c62ef5057122a6fca2ae373941a90dc37b431ecf0c9e7";
 
+    /// <summary>The hash of <c>sdlc.pipeline.yaml</c> version 2 (FR-321 plan validation, until D-0.7.0-43/-44).</summary>
+    public const string Version2Hash = "d2f1c98b44e99bd673944f36cfdfd3abb64e072f893e3b7ea6d8366c3f689873";
+
     /// <summary>The earlier SDLC hashes whose non-final runs move to the current definition.</summary>
-    public static IReadOnlyList<string> PreviousHashes { get; } = [Version1Hash];
+    public static IReadOnlyList<string> PreviousHashes { get; } = [Version1Hash, Version2Hash];
 
     /// <summary>The hashes to re-pin to <paramref name="currentHash"/> (never the current one itself).</summary>
     public static IReadOnlyList<string> From(string currentHash) =>
@@ -84,10 +88,12 @@ public sealed partial class SdlcRunRepinService(
             }
 
             var current = SdlcRunDefinition.Current(host);
+            var (to, from) = (current.Hash!, string.Join(", ", SdlcRunRepin.From(current.Hash!)));
             var moved = await SdlcRunRepin.RunAsync(db, current, time.GetUtcNow(), cancellationToken);
             if (moved > 0)
             {
-                LogRepinned(logger, moved, SdlcRunRepin.Version1Hash, current.Hash!);
+                // One entry for every run moved, whichever earlier version it was pinned to.
+                LogRepinned(logger, moved, from, to);
             }
         }
         catch (Exception ex) when (ex is DbUpdateException or Npgsql.NpgsqlException or InvalidOperationException)

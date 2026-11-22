@@ -87,10 +87,13 @@ public class SdlcRepositoryAnalystStageTests
         Assert.Equal((2, 0), (harness.Data.ProjectReads, harness.Context.Reads));
     }
 
-    [Fact]
-    public async Task FR318_FR319_repository_analyst_a_summary_missing_sections_is_rerun_once_with_their_names()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR319_FR314_repository_analyst_a_summary_missing_sections_is_rerun_once_with_their_names(bool version3)
     {
         using var harness = Harness([Missing, null]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var outcome = await harness.RunReplyJobAsync(AnalystCall(harness, job), "refinement");
@@ -103,10 +106,13 @@ public class SdlcRepositoryAnalystStageTests
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED"], harness.Data.Events.Select(e => e.Type));
     }
 
-    [Fact]
-    public async Task FR318_FR319_repository_analyst_still_missing_sections_fails_with_MISSING_SECTIONS()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR319_FR314_repository_analyst_still_missing_sections_fails_with_MISSING_SECTIONS(bool version3)
     {
         using var harness = Harness([Missing]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunReplyJobAsync(AnalystCall(harness, job), "refinement"));
@@ -118,6 +124,20 @@ public class SdlcRepositoryAnalystStageTests
         Assert.Equal(
             AideJson.Serialize(new { runId = runs[1].Id, agent = SdlcAgents.RepositoryAnalyst, errorCode = "MISSING_SECTIONS", error = runs[1].Error, attempts = 1, deadLettered = false }),
             harness.Data.Events[^1].Payload);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR314_repository_analyst_the_summary_check_gives_its_one_reason_once_then_accepts_the_rerun(bool version3)
+    {
+        // D-0.7.0-44: on version 3 the binding's sdlc.summary-sections guard gives the reason, and the host check is skipped.
+        using var harness = Harness([Missing, null]);
+        SdlcOutputGuardFixture.Pin(harness, version3);
+
+        var result = await harness.RunCallAsync(AnalystCall(harness, SdlcAgentStageHarness.Job()), "refinement");
+
+        Assert.Equal([StackAnalysis.Check(Missing, null).Error!.Message, null], result.Attempts.Select(a => a.Findings));
     }
 
     [Fact]

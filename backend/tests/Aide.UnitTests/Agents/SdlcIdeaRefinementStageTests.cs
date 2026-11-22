@@ -99,14 +99,17 @@ public class SdlcIdeaRefinementStageTests
         Assert.Equal((2, 0), (harness.Data.ProjectReads, harness.Context.Reads));
     }
 
-    [Fact]
-    public async Task FR318_idea_refinement_unreadable_reply_is_rerun_once_with_0_6_1s_wording()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_idea_refinement_unreadable_reply_is_rerun_once_with_0_6_1s_wording(bool version3)
     {
         using var harness = Harness([Unreadable, null]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
         var call = RefinementCall(job, harness.Data.Project.Id, feedback: "Keep it small");
 
-        await harness.RunCallAsync(call, "refinement");
+        var result = await harness.RunCallAsync(call, "refinement");
 
         var corrective = AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey);
         var runs = harness.Store.AgentRuns;
@@ -117,12 +120,16 @@ public class SdlcIdeaRefinementStageTests
         Assert.Contains("Your previous reply was rejected:", harness.Provider.Requests[1].Messages[^1].Content, StringComparison.Ordinal);
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED"], harness.Data.Events.Select(e => e.Type));
         Assert.Equal((Guid?)corrective, Assert.Single(harness.Store.Artifacts).AgentRunId);
+        Assert.Equal(error.Message, result.Attempts[0].Findings); // FR-314: the check's one reason, once
     }
 
-    [Fact]
-    public async Task FR318_idea_refinement_still_unreadable_fails_with_INVALID_OUTPUT_and_no_draft()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FR318_FR314_idea_refinement_still_unreadable_fails_with_INVALID_OUTPUT_and_no_draft(bool version3)
     {
         using var harness = Harness([Unreadable]);
+        SdlcOutputGuardFixture.Pin(harness, version3); // D-0.7.0-44: v3's guard, or v2's host check
         var job = SdlcAgentStageHarness.Job();
 
         var ex = await Assert.ThrowsAsync<JobFailedException>(() => harness.RunCallAsync(RefinementCall(job, harness.Data.Project.Id), "refinement"));

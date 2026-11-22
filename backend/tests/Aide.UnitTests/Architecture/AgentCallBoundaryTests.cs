@@ -52,6 +52,21 @@ public class AgentCallBoundaryTests
     }
 
     [Fact]
+    public void FR320_only_the_SDLC_extension_is_exempt_and_the_moved_step_loop_handlers_and_guards_are_scanned()
+    {
+        Type[] scanned =
+        [
+            typeof(SdlcExecutionStageHandler), typeof(Aide.Api.Features.BuildChecks.SdlcBuildCheckStageHandler), typeof(SdlcStageHandlerJob),
+            typeof(SdlcReplyCheckGuard), typeof(SdlcPlanValidGuard), typeof(SdlcAgentStageJob), typeof(SdlcStageLocator), typeof(ExecutionJobHandler),
+        ];
+        var types = Assemblies.SelectMany(LoadableTypes).ToHashSet();
+
+        Assert.Equal([typeof(SdlcAgentExtension)], Hooks);
+        Assert.All(scanned, t => Assert.Contains(t, types));
+        Assert.All(scanned, t => Assert.False(Allowed(t), $"{t.Name} is exempt from the scan"));
+    }
+
+    [Fact]
     public void FR320_the_check_sees_a_provider_call_in_an_async_method()
     {
         // The probe below calls a provider from an async method (a compiler-generated state machine).

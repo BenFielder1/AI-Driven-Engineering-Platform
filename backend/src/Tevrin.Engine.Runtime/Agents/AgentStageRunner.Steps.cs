@@ -177,7 +177,11 @@ public sealed partial class AgentStageRunner
             ? schemas.Validate(attempt.PackId, schema, content)
             : [];
         var reasons = new List<string>();
-        var facts = FactBag.Empty.With(new StageOutputFact(artifact?.Key ?? string.Empty, artifact?.Format ?? ArtifactFormat.Markdown, content));
+        // D-0.7.0-44: the attempt (number, the reply as sent, the host state) beside the output, for attempt-aware guards.
+        var reply = ReadOutput(attempt.AgentRun?.Output)?.Text ?? content;
+        var facts = FactBag.Empty
+            .With(new StageOutputFact(artifact?.Key ?? string.Empty, artifact?.Format ?? ArtifactFormat.Markdown, content))
+            .With(new StageAttemptFact(attempt.Request.Attempt, reply, attempt.Request.HostState));
         var (run, stage) = (attempt.Run, attempt.Stage);
         var guardContext = new GuardContext(run.Id, run.ProjectId, stage.Id, run.ApprovalMode, facts);
         foreach (var validation in stage.Validate)
