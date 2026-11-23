@@ -24,7 +24,7 @@ export const IN_PREVIEW = 'In preview'
 export const changelog: readonly ChangelogEntry[] = [
   {
     version: '0.7.0',
-    date: null,
+    date: '2026-11-23',
     title: 'Pipeline engine',
     asAide: false,
     highlights: [

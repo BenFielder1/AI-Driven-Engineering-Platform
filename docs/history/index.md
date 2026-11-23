@@ -20,5 +20,6 @@ Versions are numbered semver, `x.y.z`. The versions specified as v1 to v6 are 0.
 | [0.5.0](0.5.0.md) | Issue trackers, co-authorship, stack inference, PostgreSQL 18 | [SPEC](../0.5.0/SPEC.md), [PROGRESS](../0.5.0/PROGRESS.md) |
 | [0.6.0](0.6.0.md) | Tevrin: rename, brand, marketing site, docs site | [SPEC](../0.6.0/SPEC.md), [PROGRESS](../0.6.0/PROGRESS.md) |
 | [0.6.1](0.6.1.md) | Failure-aware review, a build check before review, finding ids and waivers, `tevrin/` branches | [SPEC](../0.6.1/SPEC.md), [PROGRESS](../0.6.1/PROGRESS.md) |
+| [0.7.0](0.7.0.md) | The pipeline engine: engine projects, YAML definitions, the SDLC as a pack, the CLI retired | [SPEC](../0.7.0/SPEC.md), [PROGRESS](../0.7.0/PROGRESS.md) |
 
-The specs of 0.1.0 to 0.6.1 are frozen. They are never edited, except to fix links.
+The specs of 0.1.0 to 0.7.0 are frozen. They are never edited, except to fix links.

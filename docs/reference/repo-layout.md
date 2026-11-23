@@ -12,11 +12,16 @@ backend/
   src/Aide.Domain/          pure business rules: state machine, gates, versioning, guardian, review scoring
   src/Aide.Infrastructure/  EF Core (Persistence, Migrations), LLM, Git hosts (GitHub, GitLab, Bitbucket), deployment
                             platforms, databases, notifications, Agents/Prompts and Agents/Stack (embedded catalog)
-  tests/                    Aide.UnitTests, Aide.IntegrationTests (Testcontainers)
+  src/Tevrin.Engine.Domain/   pure engine: definition model, validator, hash, state machine, cascade
+  src/Tevrin.Engine.Runtime/  YAML loader, registry, job queue, LLM, artifact store, gates, run log, AgentStageRunner
+  src/Tevrin.Engine.Api/      generic endpoints and hub events
+  src/Tevrin.Pack.Sdlc/       the SDLC pack: sdlc.pipeline.yaml, key constants, SdlcPack
+  tests/                    Aide.UnitTests, Tevrin.Engine.Tests, Aide.IntegrationTests (Testcontainers)
   openapi/api.json          GENERATED contract (committed)
 frontend/
   src/api/generated/        GENERATED client
   src/features/             pages, components, hooks per feature
+  src/engine/               engine UI (Pipeline tab, replay, gate inbox); renders any definition
   src/app/                  Next.js App Router routes (thin; render feature pages)
   server.ts                 custom Node server: serves the app, proxies /api
   e2e/                      Playwright
@@ -28,7 +33,7 @@ deploy/
 .railway/                   Railway infrastructure as code (railway.ts)
 .github/workflows/          ci.yml, deploy.yml, docs.yml (GitHub Pages)
 docs/                       this site: index, getting-started, guides, operations, reference, history, brand;
-                            plus the frozen docs/0.1.0 ... docs/0.6.1 specs and build logs
+                            plus the frozen docs/0.1.0 ... docs/0.7.0 specs and build logs
 scripts/ci, scripts/perf    generated-file check, E2E seed for CI, perf scripts
 docker-compose.yml          dev-loop database only
 SPEC.md, PROGRESS.md        the spec and build log of the version in development (none between versions)
