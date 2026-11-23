@@ -14,7 +14,7 @@ export const runStatuses = ['queued', 'running', 'succeeded', 'failed', 'cancell
 
 export const llmProviders = ['anthropic', 'openai', 'ollama', 'fake'] as const satisfies readonly Schemas['LlmProvider'][]
 
-/** Job types of the work queue (backend Aide.Domain/Jobs/JobTypes.cs). */
+/** Job types of the work queue (backend Tevrin.Domain/Jobs/JobTypes.cs). */
 export const jobTypes = [
   'idea_refinement',
   'spec_generation',

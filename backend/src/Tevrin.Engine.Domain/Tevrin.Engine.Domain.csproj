@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- FR-262: the engine's pure rules (job, gate, artifact and run-log rules; from M57 the definition model and state
-       machine). No EF Core, no ASP.NET Core, no Npgsql, and nothing of Aide.* or Tevrin.Pack.* (FR-263). -->
+       machine). No EF Core, no ASP.NET Core, no Npgsql, and nothing of Tevrin.{Api,Domain,Infrastructure} or Tevrin.Pack.* (FR-263). -->
   <PropertyGroup>
     <RootNamespace>Tevrin.Engine.Domain</RootNamespace>
   </PropertyGroup>

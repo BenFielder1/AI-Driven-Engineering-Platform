@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Tevrin.IntegrationTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Tevrin.Api/Tevrin.Api.csproj" />
+    <ProjectReference Include="../../src/Tevrin.Infrastructure/Tevrin.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FR-321: the SDLC definition version 1, as runs were pinned to it before the re-pin. -->
+    <None Include="Pipelines/Fixtures/*.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <!-- M55 (FR-264–FR-268): types moved from Tevrin.{Api,Domain,Infrastructure} to the engine are imported project-wide, so the frozen
+         characterisation suite (Characterisation/, FR-261) compiles unchanged. -->
+    <Using Include="Tevrin.Engine.Domain.Agents" />
+    <Using Include="Tevrin.Engine.Domain.Artifacts" />
+    <Using Include="Tevrin.Engine.Domain.Common" />
+    <Using Include="Tevrin.Engine.Domain.Entities" />
+    <Using Include="Tevrin.Engine.Domain.Gates" />
+    <Using Include="Tevrin.Engine.Domain.Jobs" />
+    <Using Include="Tevrin.Engine.Domain.Notifications" />
+    <Using Include="Tevrin.Engine.Runtime.Jobs" />
+    <Using Include="Tevrin.Engine.Runtime.Notifications" />
+    <Using Include="Tevrin.Engine.Runtime.Persistence" />
+    <Using Include="Tevrin.Engine.Runtime.Security" />
+  </ItemGroup>
+
+</Project>

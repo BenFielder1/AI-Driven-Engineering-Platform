@@ -2,7 +2,7 @@ namespace Tevrin.Pack.Sdlc;
 
 /// <summary>
 /// FR-290, §4.52: the SDLC's guard names (namespaced by the pack id, FR-278), used in <c>sdlc.pipeline.yaml</c>. Their
-/// logic is 0.6.1's entry rules in <c>Aide.Domain</c> (<c>SdlcGuards</c>), bound in the host's DI (D-0.7.0-23).
+/// logic is 0.6.1's entry rules in <c>Tevrin.Domain</c> (<c>SdlcGuards</c>), bound in the host's DI (D-0.7.0-23).
 /// </summary>
 public static class SdlcGuardNames
 {

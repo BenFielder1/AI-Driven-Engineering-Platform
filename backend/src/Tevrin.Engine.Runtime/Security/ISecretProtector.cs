@@ -4,7 +4,7 @@ namespace Tevrin.Engine.Runtime.Security;
 
 /// <summary>
 /// Encrypts secrets at rest (§8 NFR-SEC, FR-9: Git tokens, LLM keys, webhook URLs). The host implements it (Tevrin: with
-/// ASP.NET Data Protection, in Aide.Infrastructure), so the engine never references ASP.NET Core (FR-263, D-0.7.0-20).
+/// ASP.NET Data Protection, in Tevrin.Infrastructure), so the engine never references ASP.NET Core (FR-263, D-0.7.0-20).
 /// </summary>
 public interface ISecretProtector
 {

@@ -14,7 +14,7 @@ namespace Tevrin.Engine.Runtime.Persistence;
 /// <summary>
 /// D-0.7.0-12: the engine's part of the one Tevrin database. The host's DbContext applies
 /// <see cref="ApplyTevrinEngineConventions"/> in <c>ConfigureConventions</c> and <see cref="ApplyTevrinEngineModel"/> in
-/// <c>OnModelCreating</c>; migrations stay with the host (Aide.Infrastructure). The engine configures its tables, columns
+/// <c>OnModelCreating</c>; migrations stay with the host (Tevrin.Infrastructure). The engine configures its tables, columns
 /// and indexes; relationships to host tables (projects, users, gates) and host-only indexes stay in the host's
 /// configurations of the same entities.
 /// </summary>

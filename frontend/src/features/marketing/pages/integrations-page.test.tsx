@@ -13,13 +13,13 @@ afterEach(() => {
 /**
  * FR-215 / FR-222: every integration the site names is implemented. Derived by hand from the backend enums (update
  * this list when they change, never to admit something unimplemented):
- * - Git hosts: `GitProvider` (GithubPat, GithubApp, Gitlab, Bitbucket, Local) in Aide.Domain/Entities/EntityEnums.cs
- * - Issue trackers: `TrackerProvider` (Jira, Linear, Github, Gitlab) in Aide.Domain/Trackers/SourceItem.cs
+ * - Git hosts: `GitProvider` (GithubPat, GithubApp, Gitlab, Bitbucket, Local) in Tevrin.Domain/Entities/EntityEnums.cs
+ * - Issue trackers: `TrackerProvider` (Jira, Linear, Github, Gitlab) in Tevrin.Domain/Trackers/SourceItem.cs
  * - LLM providers: `LlmProvider` (Anthropic, Openai, Ollama; Fake is test-only) in EntityEnums.cs
  * - Deployment platforms: `DeploymentProvider` (Vercel, Netlify, Cloudflare, Render, Railway, GithubPages; not Fake) in
- *   Aide.Domain/Entities/Deployment.cs
+ *   Tevrin.Domain/Entities/Deployment.cs
  * - Databases: `ManagedDatabaseProvider` (Supabase, Render, Railway; External and Fake not listed) in
- *   Aide.Domain/Entities/ManagedDatabase.cs, plus PostgreSQL, Tevrin's own database (D-V5-1)
+ *   Tevrin.Domain/Entities/ManagedDatabase.cs, plus PostgreSQL, Tevrin's own database (D-V5-1)
  * - Notification channels: `NotificationChannelType` (Email, Slack, Teams, Webhook) in EntityEnums.cs, plus in-app (FR-47)
  */
 const BACKEND_SUPPORTED: Record<string, readonly string[]> = {

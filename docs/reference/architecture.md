@@ -34,13 +34,13 @@ flowchart LR
 
 ## Business rules and the contract
 
-Business rules live in `Aide.Domain`: pure, unit-tested, with no EF or ASP.NET. Endpoints stay thin. Project lifecycle changes go only through the domain state machine. Artifacts are immutable once locked. LLM calls sit behind one provider abstraction and are faked in tests.
+Business rules live in `Tevrin.Domain`: pure, unit-tested, with no EF or ASP.NET. Endpoints stay thin. Project lifecycle changes go only through the domain state machine. Artifacts are immutable once locked. LLM calls sit behind one provider abstraction and are faked in tests.
 
 The contract flows one way. The backend build writes `backend/openapi/api.json`, then `npm run gen:api` writes `frontend/src/api/generated/`. Never hand-edit either. See [API and contract](api-and-contract.md).
 
 ## Stack catalog and origin model
 
-Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. The stack catalog (`Aide.Infrastructure/Agents/Stack`: `catalog.json`, `packs/`, `agents/`, `core/`) is content-hashed, and each release version pins the composition and catalog version it was built with.
+Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. The stack catalog (`Tevrin.Infrastructure/Agents/Stack`: `catalog.json`, `packs/`, `agents/`, `core/`) is content-hashed, and each release version pins the composition and catalog version it was built with.
 
 - The Domain owns the compatibility rules. `POST /api/stack/options` and `/validate` serve the wizard, Settings and the API.
 - The origin model says how the browser reaches the backend: `same-origin`, `proxy` or `cross-origin`. The options depend on the chosen frontend, backend and hosts.

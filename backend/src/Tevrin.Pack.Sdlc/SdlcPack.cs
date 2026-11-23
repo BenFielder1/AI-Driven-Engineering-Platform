@@ -8,7 +8,7 @@ namespace Tevrin.Pack.Sdlc;
 /// the tool and context names (FR-317: <see cref="SdlcToolNames"/>, <see cref="SdlcContextNames"/>), the
 /// <see cref="ReviewCycles"/> setting, every SDLC job type (<see cref="SdlcJobTypes"/>) and the artifacts its jobs
 /// rather than its stages produce. It references only the engine (D-0.7.0-23): the guard implementations, the settings
-/// provider and the start selector are composed by the host from <c>Aide.Domain</c> rules.
+/// provider and the start selector are composed by the host from <c>Tevrin.Domain</c> rules.
 /// </summary>
 public sealed class SdlcPack : IPipelinePack
 {

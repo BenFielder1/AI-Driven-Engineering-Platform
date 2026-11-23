@@ -8,16 +8,23 @@ using Tevrin.Pack.Sdlc;
 namespace Tevrin.Engine.Tests.Architecture;
 
 /// <summary>
-/// FR-263: the engine never depends on the SDLC implementation or a pack (Pack → Engine; Aide.* → Engine and Pack;
+/// FR-263: the engine never depends on the SDLC implementation or a pack (Pack → Engine; Tevrin.{Api,Domain,Infrastructure} → Engine and Pack;
 /// Engine → nothing of ours), its domain stays pure, and its runtime stays free of ASP.NET Core. Each rule checks the
 /// compiled references (<see cref="Assembly.GetReferencedAssemblies"/>, which lists only assemblies the code uses) and the
 /// project file's ProjectReference, PackageReference and FrameworkReference items, so an unused reference fails too.
-/// The Aide.Domain rule (d) stays in Aide.UnitTests (DomainDependencyTests).
+/// The Tevrin.Domain rule (d) stays in Tevrin.UnitTests (DomainDependencyTests).
 /// </summary>
 public class EngineDependencyTests
 {
     /// <summary>Project files use Windows separators in <c>Include</c>; the tests also run on Linux.</summary>
     private const char WindowsSeparator = (char)92;
+
+    /// <summary>FR-323: the host (SDLC implementation) assemblies, named explicitly: a <c>Tevrin.</c> prefix covers the
+    /// engine too.</summary>
+    private static readonly string[] HostAssemblies = ["Tevrin.Api", "Tevrin.Domain", "Tevrin.Infrastructure"];
+
+    /// <summary>Pack assemblies share this prefix (<c>Tevrin.Pack.Sdlc</c>).</summary>
+    private const string PackPrefix = "Tevrin.Pack.";
 
     private static readonly (string Project, Assembly Assembly)[] EngineProjects =
     [
@@ -27,7 +34,7 @@ public class EngineDependencyTests
     ];
 
     [Fact]
-    public void FR263_engine_assemblies_reference_no_aide_or_pack_assembly()
+    public void FR263_engine_assemblies_reference_no_host_or_pack_assembly()
     {
         var offending = EngineProjects
             .SelectMany(p => References(p.Project, p.Assembly).Where(IsOursButNotEngine).Select(r => $"{p.Project} → {r}"))
@@ -68,11 +75,9 @@ public class EngineDependencyTests
     [Fact]
     public void D_0_7_0_23_the_sdlc_pack_references_only_the_engine_domain()
     {
-        // The pack is the bottom of the SDLC side: it references only the engine domain, and Aide.* references it.
+        // The pack is the bottom of the SDLC side: it references only the engine domain, and the host references it.
         var offending = References("Tevrin.Pack.Sdlc", typeof(SdlcPack).Assembly)
-            .Where(name => name.Equals("Aide", StringComparison.OrdinalIgnoreCase)
-                || name.StartsWith("Aide.", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("tevrin", StringComparison.Ordinal))
+            .Where(name => IsHost(name) || name.Equals("tevrin", StringComparison.Ordinal))
             .ToList();
 
         Assert.Empty(offending);
@@ -114,13 +119,19 @@ public class EngineDependencyTests
         Assert.Contains("framework:Microsoft.AspNetCore.App", ProjectItems("Tevrin.Engine.Api"));
     }
 
-    /// <summary>Ours but not the engine: <c>Aide</c>, <c>Aide.*</c>, <c>aide</c> or <c>Tevrin.*</c> outside
-    /// <c>Tevrin.Engine.*</c> (packs).</summary>
+    /// <summary>Ours but not the engine: a host assembly (<see cref="HostAssemblies"/>, or a pre-0.8.0 <c>Aide</c>/<c>Aide.*</c>
+    /// name), a pack (<see cref="PackPrefix"/>), <c>tevrin</c>, or any other <c>Tevrin.*</c> outside <c>Tevrin.Engine.*</c>.</summary>
     private static bool IsOursButNotEngine(string reference) =>
-        reference.Equals("Aide", StringComparison.OrdinalIgnoreCase)
-        || reference.StartsWith("Aide.", StringComparison.OrdinalIgnoreCase)
+        IsHost(reference)
+        || reference.StartsWith(PackPrefix, StringComparison.OrdinalIgnoreCase)
         || (reference.StartsWith("Tevrin.", StringComparison.OrdinalIgnoreCase) && !reference.StartsWith("Tevrin.Engine.", StringComparison.OrdinalIgnoreCase))
         || reference.Equals("tevrin", StringComparison.Ordinal);
+
+    /// <summary>FR-323: a host assembly by its explicit name (or its pre-0.8.0 <c>Aide</c> name).</summary>
+    private static bool IsHost(string reference) =>
+        HostAssemblies.Contains(reference, StringComparer.OrdinalIgnoreCase)
+        || reference.Equals("Aide", StringComparison.OrdinalIgnoreCase)
+        || reference.StartsWith("Aide.", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The compiled assembly references plus the project file's references (by name).</summary>
     private static IEnumerable<string> References(string project, Assembly assembly) =>

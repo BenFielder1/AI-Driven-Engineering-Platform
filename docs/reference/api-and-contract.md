@@ -12,7 +12,7 @@ nav_order: 2
 
 ```mermaid
 flowchart LR
-  B["dotnet build src/Aide.Api"] --> J["backend/openapi/api.json"]
+  B["dotnet build src/Tevrin.Api"] --> J["backend/openapi/api.json"]
   J --> G["npm run gen:api"]
   G --> C["frontend/src/api/generated/"]
 ```

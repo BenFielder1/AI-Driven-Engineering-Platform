@@ -14,7 +14,7 @@ import { invalidateAfterJoin, invalidateForEvent } from './live-invalidation'
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting' | 'offline'
 
 /**
- * FR-47, FR-92: the event types that raise a notification (mirrors `NotificationRules.ForEvent` in Aide.Domain). Other
+ * FR-47, FR-92: the event types that raise a notification (mirrors `NotificationRules.ForEvent` in Tevrin.Domain). Other
  * events never change the bell, so they don't refresh it. `CONNECTION_INVALID` raises the personal `connection_invalid`
  * notification; a project-scoped one (an LLM or Vercel connection) arrives on the project hub, a GitHub one (no project)
  * is picked up by the bell's poll.

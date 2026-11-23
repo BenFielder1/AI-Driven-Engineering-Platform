@@ -1,0 +1,177 @@
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tevrin.Api.Features.Execution;
+using Tevrin.Api.Features.Git;
+using Tevrin.Api.Logging;
+using Tevrin.Api.Pipelines;
+using Tevrin.Domain.Common;
+using Tevrin.Domain.Lifecycle;
+using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Pipelines;
+using Tevrin.Infrastructure.Persistence;
+
+namespace Tevrin.Api.Features.Lifecycle;
+
+/// <summary>Outcome of "advance to next phase": the applied transition, or the pending gate created instead.</summary>
+public sealed record AdvanceResult(PhaseTransition? Transition, ApprovalGate? Gate);
+
+/// <summary>
+/// FR-11, FR-12: "advance to next phase". The engine with the SDLC definition decides (FR-292) (entry conditions, gate per approval mode);
+/// this service loads the facts and writes the outcome in one transaction guarded by the project's <c>xmin</c>.
+/// </summary>
+public sealed partial class LifecycleService(
+    TevrinDbContext db,
+    LifecycleSnapshotLoader snapshots,
+    LifecycleWriter writer,
+    WorkingCopyPreparer workingCopies,
+    PullRequestJobs pullRequests,
+    SdlcLifecycle lifecycle,
+    TimeProvider time,
+    ILogger<LifecycleService> logger)
+{
+    /// <summary>
+    /// Advances the project to its next phase, or creates the gate its approval mode requires. With
+    /// <paramref name="expectedFrom"/> (system callers that checked the phase before slow work, e.g. the pull request job),
+    /// a project no longer in that phase is refused with <c>WRONG_PHASE</c> and nothing is applied.
+    /// </summary>
+    public async Task<Result<AdvanceResult>> AdvanceAsync(Guid projectId, string? reason, string actor, CancellationToken cancellationToken, Phase? expectedFrom = null)
+    {
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null)
+        {
+            return Result.Failure<AdvanceResult>(new DomainError(ErrorCodes.NotFound, "The project was not found."));
+        }
+
+        // FR-292: the run is the source of truth for the phase the project is in; FR-277: its pinned definition decides.
+        var pinned = await lifecycle.PinnedAsync(db, project, cancellationToken);
+        if (pinned.IsFailure)
+        {
+            LogAdvanceRefused(logger, project.Id, pinned.Error!.Code);
+            return Result.Failure<AdvanceResult>(pinned.Error!);
+        }
+
+        var run = pinned.Value;
+        var state = run.State;
+        if (expectedFrom is { } expected && state.Phase != expected)
+        {
+            LogAdvanceRefused(logger, project.Id, ErrorCodes.WrongPhase);
+            return Result.Failure<AdvanceResult>(new DomainError(
+                ErrorCodes.WrongPhase, $"The project is in {state.Phase.ToWire()}, not {expected.ToWire()}; nothing was advanced."));
+        }
+
+        bool? prepared = null;
+        if (SdlcLifecycle.Next(run) == Phase.Execution)
+        {
+            // FR-35, §4.1: prepare the working copy and project branch before execution is entered (idempotent). The
+            // outcome is the "working copy prepared" condition: a failure leaves it unmet, which the state machine reports.
+            prepared = (await workingCopies.PrepareAsync(project.Id, cancellationToken)).IsSuccess;
+        }
+
+        var snapshot = await snapshots.LoadAsync(project, cancellationToken);
+        if (prepared is { } ready)
+        {
+            snapshot = snapshot with { WorkingCopyPrepared = ready };
+        }
+
+        var cleanReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        var outcome = SdlcLifecycle.RequestAdvance(run, project, snapshot, cleanReason);
+        if (outcome.IsFailure)
+        {
+            LogAdvanceRefused(logger, project.Id, outcome.Error!.Code);
+            return Result.Failure<AdvanceResult>(outcome.Error!);
+        }
+
+        var now = time.GetUtcNow();
+        if (outcome.Value.GateRequired is { } gateType)
+        {
+            var artifactId = await GatedArtifactIdAsync(project.Id, gateType, run.Definition, cancellationToken);
+            var gate = writer.AddGate(project, gateType, artifactId, actor, now, cleanReason);
+            var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
+            if (saved.IsFailure)
+            {
+                return Result.Failure<AdvanceResult>(saved.Error!);
+            }
+
+            LogGateCreated(logger, project.Id, gateType);
+            return Result.Success(new AdvanceResult(null, gate));
+        }
+
+        var transition = outcome.Value.Transition!;
+        await writer.ApplyAsync(project, transition, actor, now, cancellationToken);
+        if (transition.From == Phase.Execution && transition.To == Phase.Review
+            && await ExecutionQueries.CurrentPlanIdAsync(db, project.Id, cancellationToken) is { } planId)
+        {
+            // FR-36: a writer may advance before the pull request job ran (or after it failed): the job opens the PR in
+            // review. When the job itself advances, it is running, so nothing more is queued.
+            await pullRequests.EnqueueAsync(project.Id, planId, PullRequestJobPayload.PhaseAdvanced, now, cancellationToken);
+        }
+        var result = await LifecyclePersistence.SaveAsync(db, cancellationToken);
+        if (result.IsFailure)
+        {
+            return Result.Failure<AdvanceResult>(result.Error!);
+        }
+
+        LogAdvanced(logger, project.Id, transition.From, transition.To, transition.Version, run.RunId, transition.Kind, run.DefinitionHash);
+        return Result.Success(new AdvanceResult(transition, null));
+    }
+
+    /// <summary>The latest locked version of the artifact a gate approves (spec or plan) in <paramref name="definition"/>
+    /// (the run's pinned one), if any.</summary>
+    internal async Task<Guid?> GatedArtifactIdAsync(Guid projectId, string type, PipelineDefinition definition, CancellationToken cancellationToken)
+    {
+        if (SdlcStages.GatedArtifact(definition, type) is not { } artifactType)
+        {
+            return null;
+        }
+
+        var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
+        return await db.Artifacts.AsNoTracking()
+            .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == artifactType && a.Status == ArtifactStatus.Locked)
+            .OrderByDescending(a => a.Version)
+            .Select(a => (Guid?)a.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} advance refused ({ErrorCode})")]
+    private static partial void LogAdvanceRefused(ILogger logger, Guid projectId, string errorCode);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} needs a {GateType} gate before advancing; gate created")]
+    private static partial void LogGateCreated(ILogger logger, Guid projectId, LoggedKey gateType);
+
+    // §8: the transition log carries the run, the generic kind and the pinned definition hash (appended to 0.6.1's text).
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} moved {FromPhase} → {ToPhase} (checkpoint {Checkpoint}); run {PipelineRunId}, kind {TransitionKind}, definition {DefinitionHash}")]
+    private static partial void LogAdvanced(
+        ILogger logger, Guid projectId, Phase fromPhase, Phase toPhase, int checkpoint, Guid? pipelineRunId, string transitionKind, string definitionHash);
+}
+
+/// <summary>Saves a lifecycle unit of work, mapping concurrency clashes to the spec's error codes.</summary>
+internal static class LifecyclePersistence
+{
+    public const string PendingGateIndex = "ux_approval_gates_project_id_type_pending";
+
+    /// <summary>
+    /// One <c>SaveChanges</c> (one transaction). A stale project/gate <c>xmin</c> → <c>CONFLICT</c>; a second pending gate
+    /// of the same type (partial unique index) → <c>GATE_PENDING</c>; any other unique clash (e.g. a second active
+    /// execution job) → <c>CONFLICT</c>.
+    /// </summary>
+    public static async Task<Result> SaveAsync(TevrinDbContext db, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Failure(new DomainError(ErrorCodes.Conflict, "The project was changed by someone else. Reload and try again."));
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg)
+        {
+            return Result.Failure(pg.ConstraintName == PendingGateIndex
+                ? new DomainError(ErrorCodes.GatePending, "A gate of this type is already pending.")
+                : new DomainError(ErrorCodes.Conflict, "The project was changed by someone else. Reload and try again."));
+        }
+    }
+}

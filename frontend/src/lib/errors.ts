@@ -20,7 +20,7 @@ function hostRateLimited(host: string, outcome?: string): string {
 
 /**
  * The ONE place that maps API `errorCode`s to user copy (CLAUDE.md rule 4). Mirrors
- * backend/src/Aide.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
+ * backend/src/Tevrin.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
  */
 export const errorMessages = {
   // Common
@@ -837,7 +837,7 @@ const gitHostNames: Readonly<Record<string, string>> = { gitlab: "GitLab", bitbu
 /**
  * FR-131, FR-134: `reason` on `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab|bitbucket` (backend GitLab/GitLabSignIn.cs,
  * Bitbucket/BitbucketSignIn.cs,
- * Aide.Domain/GitHosts/GitSignInRules.cs). `{host}` is the Git host's name.
+ * Tevrin.Domain/GitHosts/GitSignInRules.cs). `{host}` is the Git host's name.
  */
 export const gitHostFailureMessages: Readonly<Record<string, string>> = {
   access_denied: "{host} authorization was cancelled.",

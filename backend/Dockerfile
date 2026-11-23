@@ -13,27 +13,27 @@ ENV OpenApiGenerateDocuments=false \
 
 # Restore layer: only the files that affect restore, so code edits don't bust the package cache.
 COPY global.json Directory.Build.props Directory.Packages.props dotnet-tools.json ./
-COPY src/Aide.Api/Aide.Api.csproj src/Aide.Api/
-COPY src/Aide.Domain/Aide.Domain.csproj src/Aide.Domain/
-COPY src/Aide.Infrastructure/Aide.Infrastructure.csproj src/Aide.Infrastructure/
+COPY src/Tevrin.Api/Tevrin.Api.csproj src/Tevrin.Api/
+COPY src/Tevrin.Domain/Tevrin.Domain.csproj src/Tevrin.Domain/
+COPY src/Tevrin.Infrastructure/Tevrin.Infrastructure.csproj src/Tevrin.Infrastructure/
 COPY src/Tevrin.Engine.Domain/Tevrin.Engine.Domain.csproj src/Tevrin.Engine.Domain/
 COPY src/Tevrin.Engine.Runtime/Tevrin.Engine.Runtime.csproj src/Tevrin.Engine.Runtime/
 COPY src/Tevrin.Engine.Api/Tevrin.Engine.Api.csproj src/Tevrin.Engine.Api/
 COPY src/Tevrin.Pack.Sdlc/Tevrin.Pack.Sdlc.csproj src/Tevrin.Pack.Sdlc/
 RUN dotnet tool restore
 RUN RID="linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
- && dotnet restore src/Aide.Api/Aide.Api.csproj \
- && dotnet restore src/Aide.Api/Aide.Api.csproj -r "$RID"
+ && dotnet restore src/Tevrin.Api/Tevrin.Api.csproj \
+ && dotnet restore src/Tevrin.Api/Tevrin.Api.csproj -r "$RID"
 
 COPY src/ src/
 
-RUN dotnet publish src/Aide.Api/Aide.Api.csproj -c Release --no-restore -o /app/publish
+RUN dotnet publish src/Tevrin.Api/Tevrin.Api.csproj -c Release --no-restore -o /app/publish
 
 # Migration bundle for the node's architecture (uname -m in the build stage matches the local node).
 # The DbContext tolerates a missing connection string at design time (EF.IsDesignTime); the Job passes --connection.
 RUN RID="linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
  && dotnet ef migrations bundle --configuration Release --self-contained -r "$RID" \
-      --project src/Aide.Infrastructure --startup-project src/Aide.Api -o /app/efbundle
+      --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api -o /app/efbundle
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 # git: required by the Local Git provider and project working copies (/data/workspaces).

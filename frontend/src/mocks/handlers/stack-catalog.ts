@@ -2,7 +2,7 @@ import type { Schemas } from '../../api/client'
 
 /**
  * A trimmed stand-in for the shipped stack catalog (FR-113) and its compatibility engine (§4.17), for Vitest only. The
- * real rules live in Aide.Domain (StackCompatibility); this evaluates the subset the UI tests exercise, with the same
+ * real rules live in Tevrin.Domain (StackCompatibility); this evaluates the subset the UI tests exercise, with the same
  * reason texts. The UI never evaluates rules itself (D-V4-19): it only renders what these handlers answer.
  */
 
@@ -42,7 +42,7 @@ export const stackCatalog: Catalog = {
   version: STACK_CATALOG_VERSION,
   contentHash: STACK_CATALOG_HASH,
   layers: [
-    // The layer names and descriptions of backend/src/Aide.Infrastructure/Agents/Stack/catalog.json, verbatim.
+    // The layer names and descriptions of backend/src/Tevrin.Infrastructure/Agents/Stack/catalog.json, verbatim.
     { id: 'frontend', name: 'Frontend', description: 'The web UI, or None for an API-only project.' },
     {
       id: 'backend',

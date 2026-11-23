@@ -8,7 +8,7 @@ nav_order: 1
 
 ASP.NET Core reads `appsettings.json`, `appsettings.Development.json`, user-secrets (Development), then environment variables. In an environment variable, replace `:` with `__` (for example `Llm__Providers__Anthropic__ApiKey`).
 
-- **Dev loop:** non-secrets in `backend/src/Aide.Api/appsettings*.json` or environment variables; secrets with `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` (run from the repo root).
+- **Dev loop:** non-secrets in `backend/src/Tevrin.Api/appsettings*.json` or environment variables; secrets with `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Tevrin.Api` (run from the repo root).
 - **Kubernetes:** secrets and any extra key go in `deploy/k8s/overlays/local/secrets.env` (`KEY=value`, no quotes). Non-secrets are in `deploy/k8s/base/configmap.yaml` and `deploy/k8s/overlays/local/app-config-local.yaml`. The API loads both as environment variables. Re-run `deploy-local.sh` after a change.
 - **Railway (FR-112):** every variable per service and environment, and whether it is a literal, a reference, a secret or operator-set, is in [`deploy/railway/variables.md`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/deploy/railway/variables.md). Literals and references live in [`.railway/railway.ts`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/.railway/railway.ts). Secrets and optional values are set per environment in Railway (`railway variable set <NAME> --stdin ...`) and listed in `variables.ignore` in `railway.ts`, so IaC doesn't plan to delete them.
 
@@ -106,7 +106,7 @@ Server settings keep their internal `aide` names (for example `ConnectionStrings
 
 | Kind | Dev loop | Kubernetes |
 | --- | --- | --- |
-| Secrets (marked "yes") | `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Aide.Api` | `deploy/k8s/overlays/local/secrets.env`, as `Key__Sub=value` |
+| Secrets (marked "yes") | `dotnet user-secrets set "<Key>" "<value>" --project backend/src/Tevrin.Api` | `deploy/k8s/overlays/local/secrets.env`, as `Key__Sub=value` |
 | `App:PublicBaseUrl` | `appsettings.Development.json` (`http://localhost:3000`) | `app-config-local.yaml` |
 | `Deployments:*`, `Databases:Provider`, `Trackers:Provider`, `Git:Local:ImportRoot`, `Llm:DefaultProvider` for E2E | environment variables | `deploy/k8s/overlays/local-e2e/app-config-e2e.yaml` (`--e2e` only) |
 | Other non-secrets | `appsettings*.json` or environment variables | `deploy/k8s/base/configmap.yaml` |

@@ -48,6 +48,9 @@ jobs:
       - name: Characterisation snapshots unchanged since M54 (FR-261)
         working-directory: .
         run: bash scripts/ci/check-snapshots-frozen.sh
+      - name: Committed migrations changed only by the Tevrin rename (FR-324)
+        working-directory: .
+        run: bash scripts/ci/check-migrations-renamed.sh
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: backend/global.json
@@ -60,13 +63,13 @@ jobs:
       - name: EF Core model has no pending changes (every schema change is a migration)
         run: >-
           dotnet ef migrations has-pending-model-changes
-          --project src/Aide.Infrastructure --startup-project src/Aide.Api
+          --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api
           --configuration Release --no-build
       - name: Test (unit)
         # Integration tests run in the backend-integration shards below.
         timeout-minutes: 10
         run: |
-          dotnet test --project tests/Aide.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+          dotnet test --project tests/Tevrin.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
           dotnet test --project tests/Tevrin.Engine.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
       - name: Format
         run: dotnet format --verify-no-changes --no-restore
@@ -79,7 +82,7 @@ jobs:
 
   backend-integration:
     # Integration tests (WebApplicationFactory + Testcontainers) in 3 shards on separate runners. Every derived test
-    # host stays alive on the shared AideApiFactory until its run ends, so one process for the whole suite outgrows a
+    # host stays alive on the shared TevrinApiFactory until its run ends, so one process for the whole suite outgrows a
     # runner's memory. The last shard runs every namespace not named in the first two, so new namespaces are covered.
     name: Backend integration (${{ matrix.shard }})
     runs-on: ubuntu-latest
@@ -89,14 +92,14 @@ jobs:
       matrix:
         include:
           - shard: auth-connections-notifications
-            filter: -namespace Aide.IntegrationTests.Auth -namespace Aide.IntegrationTests.Connections -namespace Aide.IntegrationTests.Llm -namespace Aide.IntegrationTests.Logging -namespace Aide.IntegrationTests.Notifications -namespace Aide.IntegrationTests.Persistence
+            filter: -namespace Tevrin.IntegrationTests.Auth -namespace Tevrin.IntegrationTests.Connections -namespace Tevrin.IntegrationTests.Llm -namespace Tevrin.IntegrationTests.Logging -namespace Tevrin.IntegrationTests.Notifications -namespace Tevrin.IntegrationTests.Persistence
           - shard: agents-github-deployments
-            filter: -namespace Aide.IntegrationTests.Agents -namespace Aide.IntegrationTests.Artifacts -namespace Aide.IntegrationTests.Activity -namespace Aide.IntegrationTests.Admin -namespace Aide.IntegrationTests.GitHub -namespace Aide.IntegrationTests.Health -namespace Aide.IntegrationTests.Jobs -namespace Aide.IntegrationTests.Lifecycle -namespace Aide.IntegrationTests.Live -namespace Aide.IntegrationTests.Deployments -namespace Aide.IntegrationTests.Execution -namespace Aide.IntegrationTests.Gates -namespace Aide.IntegrationTests.Git
+            filter: -namespace Tevrin.IntegrationTests.Agents -namespace Tevrin.IntegrationTests.Artifacts -namespace Tevrin.IntegrationTests.Activity -namespace Tevrin.IntegrationTests.Admin -namespace Tevrin.IntegrationTests.GitHub -namespace Tevrin.IntegrationTests.Health -namespace Tevrin.IntegrationTests.Jobs -namespace Tevrin.IntegrationTests.Lifecycle -namespace Tevrin.IntegrationTests.Live -namespace Tevrin.IntegrationTests.Deployments -namespace Tevrin.IntegrationTests.Execution -namespace Tevrin.IntegrationTests.Gates -namespace Tevrin.IntegrationTests.Git
           # FR-260: the SDLC characterisation snapshots (full flows) run in their own shard.
           - shard: characterisation
-            filter: -namespace Aide.IntegrationTests.Characterisation
+            filter: -namespace Tevrin.IntegrationTests.Characterisation
           - shard: rest
-            filter: -nonamespace Aide.IntegrationTests.Characterisation -nonamespace Aide.IntegrationTests.Auth -nonamespace Aide.IntegrationTests.Connections -nonamespace Aide.IntegrationTests.Llm -nonamespace Aide.IntegrationTests.Logging -nonamespace Aide.IntegrationTests.Notifications -nonamespace Aide.IntegrationTests.Persistence -nonamespace Aide.IntegrationTests.Agents -nonamespace Aide.IntegrationTests.Artifacts -nonamespace Aide.IntegrationTests.Activity -nonamespace Aide.IntegrationTests.Admin -nonamespace Aide.IntegrationTests.GitHub -nonamespace Aide.IntegrationTests.Health -nonamespace Aide.IntegrationTests.Jobs -nonamespace Aide.IntegrationTests.Lifecycle -nonamespace Aide.IntegrationTests.Live -nonamespace Aide.IntegrationTests.Deployments -nonamespace Aide.IntegrationTests.Execution -nonamespace Aide.IntegrationTests.Gates -nonamespace Aide.IntegrationTests.Git
+            filter: -nonamespace Tevrin.IntegrationTests.Characterisation -nonamespace Tevrin.IntegrationTests.Auth -nonamespace Tevrin.IntegrationTests.Connections -nonamespace Tevrin.IntegrationTests.Llm -nonamespace Tevrin.IntegrationTests.Logging -nonamespace Tevrin.IntegrationTests.Notifications -nonamespace Tevrin.IntegrationTests.Persistence -nonamespace Tevrin.IntegrationTests.Agents -nonamespace Tevrin.IntegrationTests.Artifacts -nonamespace Tevrin.IntegrationTests.Activity -nonamespace Tevrin.IntegrationTests.Admin -nonamespace Tevrin.IntegrationTests.GitHub -nonamespace Tevrin.IntegrationTests.Health -nonamespace Tevrin.IntegrationTests.Jobs -nonamespace Tevrin.IntegrationTests.Lifecycle -nonamespace Tevrin.IntegrationTests.Live -nonamespace Tevrin.IntegrationTests.Deployments -nonamespace Tevrin.IntegrationTests.Execution -nonamespace Tevrin.IntegrationTests.Gates -nonamespace Tevrin.IntegrationTests.Git
     defaults:
       run:
         working-directory: backend
@@ -106,7 +109,7 @@ jobs:
         with:
           global-json-file: backend/global.json
       - run: dotnet restore
-      - run: dotnet build tests/Aide.IntegrationTests -c Release --no-restore
+      - run: dotnet build tests/Tevrin.IntegrationTests -c Release --no-restore
       # Each live test host watches its appsettings files (one inotify instance each); the runner allows 128 per user,
       # which the rest shard outgrew. Turn off config reload in test hosts and raise the limit.
       - run: sudo sysctl -w fs.inotify.max_user_instances=1024
@@ -115,7 +118,7 @@ jobs:
         env:
           DOTNET_hostBuilder__reloadConfigOnChange: "false"
         run: >-
-          dotnet tests/Aide.IntegrationTests/bin/Release/net10.0/Aide.IntegrationTests.dll
+          dotnet tests/Tevrin.IntegrationTests/bin/Release/net10.0/Tevrin.IntegrationTests.dll
           ${{ matrix.filter }} -longRunning 120 -noColor -result-trx "${{ github.workspace }}/backend/TestResults/integration-${{ matrix.shard }}.trx"
       - uses: actions/upload-artifact@v7
         if: always()
@@ -207,6 +210,8 @@ jobs:
         run: |
           bash scripts/ci/check-version.test.sh
           bash scripts/ci/check-version.sh
+      - name: Migration rename check works (FR-324)
+        run: bash scripts/ci/check-migrations-renamed.test.sh
       # Error severity only: the deploy scripts carry warning/style findings that are not bugs (lib.sh variables
       # used by the scripts that source it). Pinned image, so local runs match.
       - name: shellcheck (severity error)
@@ -358,11 +363,11 @@ jobs:
         working-directory: backend
         run: |
           dotnet tool restore
-          dotnet build src/Aide.Api -c Release
-          dotnet ef database update --project src/Aide.Infrastructure --startup-project src/Aide.Api \
+          dotnet build src/Tevrin.Api -c Release
+          dotnet ef database update --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api \
             --configuration Release --no-build
       - name: Start the API (Development + seed, E2E mode, no provider keys)
-        working-directory: backend/src/Aide.Api
+        working-directory: backend/src/Tevrin.Api
         env:
           ASPNETCORE_ENVIRONMENT: Development
           ASPNETCORE_URLS: http://localhost:5080

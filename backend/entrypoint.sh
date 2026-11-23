@@ -13,7 +13,7 @@ APP_UID="${APP_UID:-1654}"
 DATA_DIR="${AIDE_DATA_DIR:-/data}"
 
 if [ "$#" -eq 0 ] || ! command -v "$1" >/dev/null 2>&1; then
-    set -- dotnet /app/Aide.Api.dll "$@"
+    set -- dotnet /app/Tevrin.Api.dll "$@"
 fi
 
 if [ "$(id -u)" != "0" ]; then

@@ -342,7 +342,7 @@ The test step ran `dotnet test --project tests/Aide.Cli.Tests` beside the unit t
 ## How to restore
 
 1. Check out the sources: `git checkout e8c3990 -- backend/src/Aide.Cli backend/src/Aide.Cli.Alias backend/tests/Aide.Cli.Tests`.
-2. Re-add the three projects to `backend/Aide.slnx` (`src/Aide.Cli/Aide.Cli.csproj`, `src/Aide.Cli.Alias/Aide.Cli.Alias.csproj`, `tests/Aide.Cli.Tests/Aide.Cli.Tests.csproj`).
+2. Re-add the three projects to `backend/Tevrin.slnx` (`src/Aide.Cli/Aide.Cli.csproj`, `src/Aide.Cli.Alias/Aide.Cli.Alias.csproj`, `tests/Aide.Cli.Tests/Aide.Cli.Tests.csproj`).
 3. In `backend/Directory.Packages.props`, restore `<ItemGroup Label="CLI"><PackageVersion Include="System.CommandLine" Version="2.0.12" /></ItemGroup>`. Check for a newer 2.0.x first.
 4. In `backend/Directory.Build.props`, add `Or '$(MSBuildProjectName)' == 'Aide.Cli.Tests'` back to the test-project condition, so the test project gets the shared test settings. Restore the comment that names the CLI packages next to `<Version>`.
 5. Restore the CI pack and test steps in `.github/workflows/ci.yml` from `e8c3990`. Check that `scripts/ci/check-version.sh` still matches the version sources.

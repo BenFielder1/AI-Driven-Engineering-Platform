@@ -1,0 +1,492 @@
+using Microsoft.EntityFrameworkCore;
+using Tevrin.Domain.Access;
+using Tevrin.Domain.Common;
+using Tevrin.Domain.Deployments;
+using Tevrin.Domain.Entities;
+using Tevrin.Domain.Execution;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Infrastructure.Deployments;
+using Tevrin.Infrastructure.Persistence;
+using Tevrin.Pack.Sdlc;
+
+namespace Tevrin.Api.Features.Deployments;
+
+/// <summary>
+/// FR-90, FR-91, §4.15, NFR-REL2: the <c>deployment</c> job of one deployment row. One job row per deployment that defers
+/// itself between polls (a wait, never a blocking sleep or a counted attempt), so polling survives restarts:
+/// <list type="number">
+/// <item>A preview that a newer preview of the project replaced stops (<c>canceled</c>, still recorded).</item>
+/// <item>Not created yet: a release's automatic production deployment first adopts the one Vercel made for the merge
+/// commit (looking again for 30 seconds); otherwise pending env vars are pushed and the deployment is created
+/// (<c>POST /v13/deployments</c> with <c>gitSource</c>).</item>
+/// <item>Poll (<c>GET /v13/deployments/{id}</c>) every 10 seconds for 2 minutes, then every 30 seconds; after 30 minutes
+/// <c>error</c> with <c>DEPLOYMENT_TIMEOUT</c>. <c>error</c> records the build-log tail.</item>
+/// </list>
+/// Every state change writes <c>DEPLOYMENT_UPDATED</c>; a ready preview <c>DEPLOYMENT_PREVIEW_READY</c> (members notified);
+/// a failed production deployment <c>DEPLOYMENT_FAILED</c> (Owners notified; the release stands, D-V2-10). A Vercel rate
+/// limit defers to its reset without counting an attempt; Vercel unreachable is a poll without news; a rejected token marks
+/// the connection <c>invalid</c> and fails the deployment.
+/// </summary>
+public sealed partial class DeploymentJobHandler(
+    TevrinDbContext db,
+    DeploymentAccess access,
+    DeploymentEnvSync envSync,
+    TimeProvider time,
+    ILogger<DeploymentJobHandler> logger) : IJobHandler
+{
+    /// <summary>The production alias Vercel reported for a ready production deployment (its project domain), if any.</summary>
+    private string? _productionUrl;
+
+    /// <summary>The deployment this run created at the provider (cancelled if its row was stopped meanwhile).</summary>
+    private (string Id, DeploymentAuth Auth, IDeploymentProvider Provider, DeploymentTargetRef Target)? _created;
+
+    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        if (DeploymentScheduler.TryPayload(job.Payload) is not { } payload)
+        {
+            throw new JobFailedException("The deployment job payload can't be read.", transient: false, ErrorCodes.Validation);
+        }
+
+        var deployment = await db.Deployments.FirstOrDefaultAsync(d => d.Id == payload.DeploymentId && d.ProjectId == payload.ProjectId, cancellationToken);
+        if (deployment is null || DeploymentStates.IsTerminal(deployment.Status))
+        {
+            // Stopped before its create was recorded (e.g. a newer preview won the race): cancel what an earlier attempt made.
+            if (deployment is { Status: DeploymentStatus.Canceled, ProviderDeploymentId.Length: 0 })
+            {
+                await CancelOrphanAsync(deployment, cancellationToken);
+            }
+
+            LogSkipped(logger, "the deployment is gone or finished");
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        var version = await DeploymentScheduler.VersionTextAsync(db, deployment.ReleaseVersionId, cancellationToken);
+        var before = deployment.Status;
+
+        if (deployment.Environment == DeploymentEnvironment.Preview
+            && await db.Deployments.AnyAsync(
+                d => d.ProjectId == deployment.ProjectId && d.Environment == DeploymentEnvironment.Preview && d.Component == deployment.Component
+                    && d.Id != deployment.Id && d.CreatedAt > deployment.CreatedAt,
+                cancellationToken))
+        {
+            deployment.Status = DeploymentStatus.Canceled;
+            deployment.ErrorMessage = DeploymentPollRules.SupersededMessage;
+            await FinishAsync(deployment, before, version, now, cancellationToken);
+            return;
+        }
+
+        var resolved = await access.ResolveAsync(deployment.ProjectId, cancellationToken, component: deployment.Component);
+        if (resolved.IsFailure)
+        {
+            Fail(deployment, resolved.Error!.Code, resolved.Error.Message);
+            await FinishAsync(deployment, before, version, now, cancellationToken);
+            return;
+        }
+
+        var context = resolved.Value;
+        try
+        {
+            if (string.IsNullOrEmpty(deployment.ProviderDeploymentId))
+            {
+                if (await StartAsync(deployment, context, now, cancellationToken) is { } lookAgainAt)
+                {
+                    throw new JobDeferredException("Looking for the platform's own production deployment of the merge commit.", lookAgainAt);
+                }
+            }
+            else
+            {
+                Apply(deployment, await context.Provider.GetDeploymentAsync(context.Auth, context.TargetRef, deployment.ProviderDeploymentId, cancellationToken));
+            }
+
+            if (deployment.Status == DeploymentStatus.Error)
+            {
+                await RecordBuildLogAsync(deployment, context, cancellationToken);
+            }
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.RateLimited)
+        {
+            // NFR-REL2: back off until the reset without counting an attempt (nothing changed).
+            var until = JobPolicy.DeferUntil(now, ex.RetryAt ?? now + TimeSpan.FromMinutes(1));
+            throw new JobDeferredException($"{ErrorCodes.PlatformRateLimited}: {DeploymentPlatforms.DisplayName(ex.Platform)} is rate limiting deployments; the deployment waits until {until:u}.", until);
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.CredentialRejected)
+        {
+            await access.MarkInvalidAsync(context.Connection?.Id, deployment.ProjectId, SystemActor.Name, now, cancellationToken);
+            Fail(deployment, ErrorCodes.CredentialInvalid, "The platform rejected the bound connection's token. Its owner needs to add a new token and an Owner to bind it.");
+            await FinishAsync(deployment, before, version, now, cancellationToken, notifyOwners: true);
+            return;
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure == DeploymentFailure.Upstream)
+        {
+            // A failed request is a poll without news; the 30-minute ceiling still applies.
+            LogUpstream(logger, deployment.Id, ex.Status);
+        }
+        catch (DeploymentProviderException ex)
+        {
+            LogRefused(logger, deployment.Id, ex.Failure, ex.Status);
+            Fail(deployment, ErrorCodes.PlatformError, SecretRedaction.SanitizeProviderError(DeploymentSettingsService.Message(ex)));
+            if (ex.Failure == DeploymentFailure.GitNotConnected)
+            {
+                await GitAccessLostAsync(deployment, now, cancellationToken);
+            }
+        }
+
+        var decision = DeploymentPollRules.Decide(deployment.CreatedAt, now, deployment.Status, DeploymentPollRules.MinInterval(context.Provider.Kind));
+        if (decision.Kind == DeploymentPollDecisionKind.TimedOut)
+        {
+            Fail(deployment, ErrorCodes.DeploymentTimeout, DeploymentPollRules.TimeoutMessage);
+        }
+
+        await FinishAsync(deployment, before, version, now, cancellationToken);
+        if (decision.Kind == DeploymentPollDecisionKind.Wait)
+        {
+            throw new JobDeferredException($"Waiting for the deployment (next poll {decision.NextPollAt:u}).", decision.NextPollAt!.Value);
+        }
+    }
+
+    /// <summary>Adopts or creates the provider's deployment; returns when to look again for Vercel's own production deployment.</summary>
+    private async Task<DateTimeOffset?> StartAsync(Deployment deployment, DeploymentContext context, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var target = context.TargetRef;
+        var pages = context.Target.Provider == DeploymentProvider.GithubPages && deployment.Environment == DeploymentEnvironment.Production;
+        if (pages && await SyncPagesBuildAsync(deployment, context, now, cancellationToken) is { } buildChecked)
+        {
+            return buildChecked;
+        }
+
+        if (ProductionDeploymentRules.Adopts(deployment.Environment, deployment.Trigger, context.Provider.Kind))
+        {
+            if (await context.Provider.FindDeploymentForShaAsync(context.Auth, target, DeploymentEnvironment.Production, deployment.GitSha, null, null, cancellationToken) is { } adopted)
+            {
+                deployment.ProviderDeploymentId = adopted.Id;
+                Apply(deployment, adopted);
+                LogAdopted(logger, deployment.Id);
+                return null;
+            }
+
+            if (ProductionDeploymentRules.LookAgainAt(deployment.CreatedAt, now, DeploymentPollRules.MinInterval(context.Provider.Kind)) is { } again)
+            {
+                return again;
+            }
+        }
+
+        // §4.15 idempotency: an earlier attempt may have created it (its save failed, or the create timed out).
+        if (await context.Provider.FindDeploymentForShaAsync(context.Auth, target, deployment.Environment, deployment.GitSha, deployment.Id, deployment.CreatedAt, cancellationToken) is { } earlier)
+        {
+            deployment.ProviderDeploymentId = earlier.Id;
+            Apply(deployment, earlier);
+            LogAdopted(logger, deployment.Id);
+            return null;
+        }
+
+        if (!pages)
+        {
+            await envSync.PushPendingAsync(context, cancellationToken);
+        }
+
+        var created = await context.Provider.DeployAsync(
+            context.Auth, new DeployRequest(
+                deployment.Id,
+                target,
+                deployment.Environment,
+                deployment.GitRef,
+                deployment.GitSha,
+                !ProductionDeploymentRules.Adopts(deployment.Environment, deployment.Trigger, context.Provider.Kind)),
+            cancellationToken);
+        deployment.ProviderDeploymentId = created.Id;
+        _created = (created.Id, context.Auth, context.Provider, target);
+        Apply(deployment, created);
+        LogCreated(logger, deployment.Id, deployment.Environment);
+        return null;
+    }
+
+    /// <summary>
+    /// FR-145, FR-146: GitHub Pages builds on the merge push, before this job runs: the sync happens first, even when the
+    /// run is adopted, and a run that started before the newest synced variable is replaced
+    /// (<see cref="IDeploymentProvider.RefreshBuildAsync"/>), so the production build holds the values. Returns when to look
+    /// again while that happens. After the deployment ceiling Tevrin stops replacing it and the poll times it out. A refused
+    /// re-run fails the deployment with its reason rather than letting a stale build count as ready.
+    /// </summary>
+    private async Task<DateTimeOffset?> SyncPagesBuildAsync(Deployment deployment, DeploymentContext context, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await envSync.PushPendingAsync(context, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var syncedAt = (await db.DeploymentEnvVars.AsNoTracking()
+                .Where(v => v.ProjectId == deployment.ProjectId && v.Public && v.SyncedAt != null)
+                .ToListAsync(cancellationToken))
+            .Where(v => DeploymentEnvSync.AppliesTo(v, deployment.Component))
+            .Max(v => v.SyncedAt);
+        if (syncedAt is not { } newest || DeploymentPollRules.IsTimedOut(deployment.CreatedAt, now))
+        {
+            return null;
+        }
+
+        var refreshed = await context.Provider.RefreshBuildAsync(context.Auth, context.TargetRef, deployment.GitSha, newest, cancellationToken);
+        if (refreshed == BuildRefresh.UpToDate)
+        {
+            return null;
+        }
+
+        LogBuildRefreshed(logger, deployment.Id, refreshed);
+        return now + DeploymentPollRules.FastInterval;
+    }
+
+    private void Apply(Deployment deployment, ProviderDeployment observed)
+    {
+        // §4.20: a provider may replace the deployment (Netlify re-triggers a branch build of the wrong commit once).
+        if (deployment.ProviderDeploymentId.Length > 0 && !string.IsNullOrEmpty(observed.Id) && observed.Id != deployment.ProviderDeploymentId)
+        {
+            deployment.ProviderDeploymentId = observed.Id;
+        }
+
+        deployment.Url = observed.Url ?? deployment.Url;
+        deployment.InspectorUrl = observed.InspectorUrl ?? deployment.InspectorUrl;
+        var status = observed.Status;
+        if (DeploymentStates.CanTransition(deployment.Status, status))
+        {
+            deployment.Status = status;
+        }
+
+        if (deployment.Status == DeploymentStatus.Error)
+        {
+            // FR-154: a backend whose pre-deploy (the platform-run ORM migration) failed records a migration failure.
+            deployment.ErrorCode ??= deployment.Component == DeploymentComponent.Backend && RolloutRules.IsPreDeployFailure(observed.ErrorMessage)
+                ? ErrorCodes.MigrationFailed
+                : ErrorCodes.PlatformError;
+            deployment.ErrorMessage ??= observed.ErrorMessage ?? "The platform build failed.";
+        }
+
+        if (deployment.Status == DeploymentStatus.Ready && observed.Alias is { } alias && deployment.Environment == DeploymentEnvironment.Production)
+        {
+            _productionUrl = alias;
+        }
+    }
+
+    private async Task RecordBuildLogAsync(Deployment deployment, DeploymentContext context, CancellationToken cancellationToken)
+    {
+        if (deployment.BuildLogTail is not null || string.IsNullOrEmpty(deployment.ProviderDeploymentId))
+        {
+            return;
+        }
+
+        try
+        {
+            if (await context.Provider.GetBuildLogTailAsync(context.Auth, context.TargetRef, deployment.ProviderDeploymentId, cancellationToken) is { } log)
+            {
+                // NFR-SEC2: the tail is shown to members and is review evidence for the LLM, so the whole log is masked first
+                // (env values from 4 characters with their encoded forms, the token, anything secret-shaped; lines kept)
+                // and only then cut to the tail, so nothing straddling the cut survives.
+                var masked = BuildLogMasking.MaskEnvValues(log, await EnvValuesAsync(deployment.ProjectId, cancellationToken));
+                deployment.BuildLogTail = Deployment.TailOf(SecretScanner.Redact(SecretRedaction.Redact(masked, context.Auth.Token)));
+            }
+        }
+        catch (DeploymentProviderException ex) when (ex.Failure is not (DeploymentFailure.CredentialRejected or DeploymentFailure.RateLimited))
+        {
+            // A rate limit (Render: 30 log reads a minute per user) propagates instead: the poll is deferred without saving,
+            // so the failed state and its log tail are read again after the wait rather than recorded without the log.
+            LogNoBuildLog(logger, deployment.Id, ex.Failure);
+        }
+    }
+
+    /// <summary>The project's env values (decrypted only to mask them in the build log).</summary>
+    private async Task<IReadOnlyList<string>> EnvValuesAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var encrypted = await db.DeploymentEnvVars.AsNoTracking().Where(v => v.ProjectId == projectId && v.Source == DeploymentEnvSource.User).Select(v => v.ValueEncrypted).ToListAsync(cancellationToken);
+        return [.. encrypted.Select(e => access.Values.TryUnprotect(e, out var value) ? value : null).OfType<string>()];
+    }
+
+    private static void Fail(Deployment deployment, string errorCode, string message)
+    {
+        deployment.Status = DeploymentStatus.Error;
+        deployment.ErrorCode = errorCode;
+        deployment.ErrorMessage = message;
+    }
+
+    /// <summary>FR-155: the platform lost Git access, seen by a deployment: a ready target needs attention until a verify passes (once, as it leaves ready).</summary>
+    private async Task GitAccessLostAsync(Deployment deployment, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var target = await db.DeploymentTargets.FirstOrDefaultAsync(t => t.ProjectId == deployment.ProjectId && t.Component == deployment.Component, cancellationToken);
+        if (target is { Status: DeploymentTargetStatus.Ready })
+        {
+            target.Status = DeploymentTargetStatus.Attention;
+            target.StatusReason = ReadinessRules.GitAccess;
+            target.UpdatedAt = now;
+            DeploymentTargetEvents.Failed(db, target, DeploymentTargetFailureReasons.GitAccessLost, ErrorCodes.PlatformGitNotConnected, SystemActor.Name, now);
+        }
+    }
+
+    /// <summary>Records the row's change with its events and saves; a concurrent change retries the job.</summary>
+    private async Task FinishAsync(Deployment deployment, DeploymentStatus before, string? version, DateTimeOffset now, CancellationToken cancellationToken, bool notifyOwners = false)
+    {
+        deployment.UpdatedAt = now;
+        if (deployment.Status != before)
+        {
+            DeploymentEvents.Updated(db, deployment, version, SystemActor.Name, now);
+            if (deployment.Status == DeploymentStatus.Ready)
+            {
+                deployment.ReadyAt = now;
+                if (deployment.Environment == DeploymentEnvironment.Preview)
+                {
+                    DeploymentEvents.PreviewReady(db, deployment, version, SystemActor.Name, now);
+                }
+                else if (deployment.Trigger != DeploymentTrigger.Promote
+                    && await db.DeploymentTargets.FirstOrDefaultAsync(
+                        t => t.ProjectId == deployment.ProjectId && t.Component == deployment.Component, cancellationToken) is { } settings)
+                {
+                    // §4.20: the stable production URL (the provider's alias) wins; a known URL is never wiped by a null.
+                    settings.ProductionUrl = DeploymentTargetRules.ProductionUrlAfterReady(_productionUrl, deployment.Url, settings.ProductionUrl);
+                    settings.UpdatedAt = now;
+                }
+            }
+            else if (deployment.Status == DeploymentStatus.Error && (notifyOwners || deployment.Environment == DeploymentEnvironment.Production))
+            {
+                DeploymentEvents.Failed(db, deployment, version, SystemActor.Name, now);
+            }
+
+            // FR-154, FR-155: a platform-run ORM migration failed: Owners are told it is the migration, in any environment.
+            if (deployment.Status == DeploymentStatus.Error && deployment.ErrorCode == ErrorCodes.MigrationFailed)
+            {
+                db.AddEvent(
+                    EventTypes.MigrationRunFailed,
+                    deployment.ProjectId,
+                    new { runId = (Guid?)null, deploymentId = deployment.Id, environment = deployment.Environment.ToWire(), releaseId = deployment.ReleaseId, gitSha = deployment.GitSha, errorCode = deployment.ErrorCode },
+                    SystemActor.Name,
+                    now);
+            }
+
+            LogState(logger, deployment.Id, deployment.Environment, deployment.Status);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            // E.g. a newer preview cancelled this one meanwhile. A deployment this run created is cancelled when its row was
+            // stopped (no AIDE row will poll it); otherwise the retry finds it by its meta id and adopts it.
+            if (_created is { } created
+                && await db.Deployments.AsNoTracking().Where(d => d.Id == deployment.Id).Select(d => (DeploymentStatus?)d.Status).FirstOrDefaultAsync(cancellationToken) is var current
+                && (current is null || DeploymentStates.IsTerminal(current.Value)))
+            {
+                await CancelQuietlyAsync(created.Provider, created.Auth, created.Target, created.Id, cancellationToken);
+            }
+
+            throw new JobFailedException($"Recording the deployment collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
+        }
+    }
+
+    /// <summary>A stopped row whose create may have happened anyway: find it by the Tevrin id and cancel it.</summary>
+    private async Task CancelOrphanAsync(Deployment deployment, CancellationToken cancellationToken)
+    {
+        var resolved = await access.ResolveAsync(deployment.ProjectId, cancellationToken, component: deployment.Component);
+        if (resolved.IsFailure)
+        {
+            return;
+        }
+
+        var context = resolved.Value;
+        try
+        {
+            if (await context.Provider.FindDeploymentForShaAsync(context.Auth, context.TargetRef, deployment.Environment, deployment.GitSha, deployment.Id, deployment.CreatedAt, cancellationToken) is { } orphan)
+            {
+                await CancelQuietlyAsync(context.Provider, context.Auth, context.TargetRef, orphan.Id, cancellationToken);
+            }
+        }
+        catch (DeploymentProviderException ex)
+        {
+            LogCancelFailed(logger, deployment.Id, ex.Failure);
+        }
+    }
+
+    private async Task CancelQuietlyAsync(IDeploymentProvider provider, DeploymentAuth auth, DeploymentTargetRef target, string providerDeploymentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await provider.CancelAsync(auth, target, providerDeploymentId, cancellationToken);
+            LogOrphanCancelled(logger, providerDeploymentId);
+        }
+        catch (DeploymentProviderException ex)
+        {
+            LogCancelFailed(logger, Guid.Empty, ex.Failure);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId}: the Pages build started before its variables were synced ({Refresh})")]
+    private static partial void LogBuildRefreshed(ILogger logger, Guid deploymentId, BuildRefresh refresh);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cancelled provider deployment {ProviderDeploymentId}: no Tevrin deployment polls it")]
+    private static partial void LogOrphanCancelled(ILogger logger, string providerDeploymentId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Deployment {DeploymentId}: cancelling an unrecorded provider deployment failed ({Failure})")]
+    private static partial void LogCancelFailed(ILogger logger, Guid deploymentId, DeploymentFailure failure);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deployment job did nothing: {Reason}")]
+    private static partial void LogSkipped(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId} ({Target}) created at the provider")]
+    private static partial void LogCreated(ILogger logger, Guid deploymentId, DeploymentEnvironment target);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId} adopted the platform's production deployment of the merge commit")]
+    private static partial void LogAdopted(ILogger logger, Guid deploymentId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deployment {DeploymentId} ({Target}) is {Status}")]
+    private static partial void LogState(ILogger logger, Guid deploymentId, DeploymentEnvironment target, DeploymentStatus status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Deployment {DeploymentId}: the platform failed with HTTP {Status}; polling again later")]
+    private static partial void LogUpstream(ILogger logger, Guid deploymentId, int? status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Deployment {DeploymentId}: the platform refused it ({Failure}, HTTP {Status})")]
+    private static partial void LogRefused(ILogger logger, Guid deploymentId, DeploymentFailure failure, int? status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Deployment {DeploymentId}: the build log couldn't be read ({Failure})")]
+    private static partial void LogNoBuildLog(ILogger logger, Guid deploymentId, DeploymentFailure failure);
+}
+
+/// <summary>
+/// A deployment job that ended without succeeding (retries used up) fails its deployment with the job's last (token-free)
+/// error, so it doesn't stay <c>building</c>; a production deployment notifies Owners.
+/// </summary>
+public sealed class DeploymentJobEndedHook(TimeProvider time) : IJobEndedHook
+{
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
+    {
+        var db = engineDb.AsTevrin();
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(job);
+        if (job.JobType != SdlcJobTypes.Deployment || job.ProjectId is not { } projectId)
+        {
+            return;
+        }
+
+        var payload = await db.Jobs.AsNoTracking().Where(j => j.Id == job.JobId).Select(j => j.Payload).FirstOrDefaultAsync(cancellationToken);
+        if (payload is null || DeploymentScheduler.TryPayload(payload) is not { } parsed)
+        {
+            return;
+        }
+
+        var deployment = await db.Deployments.FirstOrDefaultAsync(d => d.Id == parsed.DeploymentId && d.ProjectId == projectId, cancellationToken);
+        if (deployment is null || DeploymentStates.IsTerminal(deployment.Status))
+        {
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        deployment.Status = DeploymentStatus.Error;
+        deployment.ErrorCode = ErrorCodes.PlatformError;
+        deployment.ErrorMessage = string.IsNullOrWhiteSpace(job.Error) ? "The deployment job failed." : SecretRedaction.SanitizeProviderError(job.Error);
+        deployment.UpdatedAt = now;
+        var version = await DeploymentScheduler.VersionTextAsync(db, deployment.ReleaseVersionId, cancellationToken);
+        DeploymentEvents.Updated(db, deployment, version, SystemActor.Name, now);
+        if (deployment.Environment == DeploymentEnvironment.Production)
+        {
+            DeploymentEvents.Failed(db, deployment, version, SystemActor.Name, now);
+        }
+    }
+}

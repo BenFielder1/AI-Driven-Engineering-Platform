@@ -182,7 +182,7 @@ When a guard or the artifact schema rejects an agent's output, the stage reruns 
 
 ## The SDLC as the first pack
 
-`sdlc.pipeline.yaml` holds the lifecycle: Analysis (a start stage only), Refinement, Specification, Planning, Execution, Review and Release. Its entry gates, statuses and the review loop equal the 0.6.1 rules, and `SdlcLifecycleTransitionTests` keeps a unit test for every allowed and forbidden transition. The characterisation snapshots under `backend/tests/Aide.IntegrationTests/Characterisation/Snapshots/` record the whole flow, and CI fails if any changes (`scripts/ci/check-snapshots-frozen.sh`).
+`sdlc.pipeline.yaml` holds the lifecycle: Analysis (a start stage only), Refinement, Specification, Planning, Execution, Review and Release. Its entry gates, statuses and the review loop equal the 0.6.1 rules, and `SdlcLifecycleTransitionTests` keeps a unit test for every allowed and forbidden transition. The characterisation snapshots under `backend/tests/Tevrin.IntegrationTests/Characterisation/Snapshots/` record the whole flow, and CI fails if any changes (`scripts/ci/check-snapshots-frozen.sh`).
 
 In 0.7.0 the SDLC runs on the engine runner. All eight SDLC agents run as agent stages, or as agents bound to a stage (`agents:`), through the same `AgentStageRunner` that new packs use. The SDLC adds its own hooks, context providers and tools (`SdlcAgentExtension`), so the prompts, run records, events, retries and error codes stay the same as in 0.6.1. Golden prompt tests pin the prompts. 0.6.1's separate SDLC runner has been removed. A project that predates pipeline runs gets its run when an agent first needs one.
 

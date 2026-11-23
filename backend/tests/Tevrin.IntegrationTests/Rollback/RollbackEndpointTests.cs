@@ -1,0 +1,227 @@
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tevrin.Api.Features.Rollback;
+using Tevrin.Api.Features.Versions;
+using Tevrin.Domain.Common;
+using Tevrin.Domain.Entities;
+using Tevrin.Domain.Execution;
+using Tevrin.Domain.Lifecycle;
+using Tevrin.IntegrationTests.Support;
+using Tevrin.Pack.Sdlc;
+
+namespace Tevrin.IntegrationTests.Rollback;
+
+/// <summary>FR-44, FR-45, FR-63, §4.8, §4.10: <c>POST /rollback</c>, the rollback history and the checkpoint picker.</summary>
+[Collection(ApiTestGroup.Name)]
+public sealed class RollbackEndpointTests(TevrinApiFactory factory)
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>The FR-44 example: a project at version 7 in review whose version 4 was planning.</summary>
+    private sealed record Seeded(
+        ProjectFixture Fixture,
+        Artifact Plan4,
+        IReadOnlyList<Artifact> Later,
+        IReadOnlyList<ExecutionStep> PlanSteps,
+        IReadOnlyList<ExecutionStep> OptimisationSteps,
+        ApprovalGate Gate,
+        Job QueuedJob) : IDisposable
+    {
+        public Guid Id => Fixture.Project.Id;
+
+        public void Dispose() => Fixture.Dispose();
+    }
+
+    private async Task<Seeded> SeedVersion7InReviewAsync()
+    {
+        var fixture = await ProjectApi.FixtureAsync(factory);
+        var id = fixture.Project.Id;
+        var t0 = DateTimeOffset.UtcNow.AddHours(-1);
+        await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 7, ApprovalMode.Advisory, reviewCycle: 2);
+        (Phase From, Phase To, int Version)[] history =
+        [
+            (Phase.Refinement, Phase.Specification, 2),
+            (Phase.Specification, Phase.Planning, 3),
+            (Phase.Planning, Phase.Planning, 4),
+            (Phase.Planning, Phase.Execution, 5),
+            (Phase.Execution, Phase.Review, 6),
+            (Phase.Review, Phase.Execution, 6),
+            (Phase.Execution, Phase.Review, 7),
+        ];
+        for (var i = 0; i < history.Length; i++)
+        {
+            await LifecycleSeed.AddTransitionAsync(factory, id, history[i].From, history[i].To, history[i].Version, t0.AddMinutes(i));
+        }
+
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ProjectRequest, projectVersionAtCreation: 1);
+        await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, projectVersionAtCreation: 2);
+        var plan4 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.ImplementationPlan, projectVersionAtCreation: 4);
+        var spec5 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.TechnicalSpecification, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 5);
+        var optimisation6 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, projectVersionAtCreation: 6);
+        var optimisation7 = await LifecycleSeed.AddArtifactAsync(factory, id, SdlcArtifacts.OptimizationPlan, ArtifactStatus.Draft, version: 2, projectVersionAtCreation: 7);
+        var planSteps = await LifecycleSeed.AddStepsAsync(factory, id, plan4.Id, 2, StepStatus.Completed);
+        var optimisationSteps = await LifecycleSeed.AddStepsAsync(factory, id, optimisation6.Id, 2, StepStatus.Completed);
+        var gate = await LifecycleSeed.AddGateAsync(factory, id, EngineGates.Escalation);
+        var job = await ProjectApi.WithDbAsync(factory, async db =>
+        {
+            var queued = new Job { ProjectId = id, Type = SdlcJobTypes.Review, Payload = "{}", RunAfter = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow };
+            db.Jobs.Add(queued);
+            await db.SaveChangesAsync(Ct);
+            return queued;
+        });
+        return new Seeded(fixture, plan4, [spec5, optimisation6, optimisation7], planSteps, optimisationSteps, gate, job);
+    }
+
+    [Fact]
+    public async Task FR44_Version7_in_review_rolled_back_to_version4_restores_planning_invalidates_v5_to_v7_and_records_them()
+    {
+        using var seeded = await SeedVersion7InReviewAsync();
+        var id = seeded.Id;
+        var owner = seeded.Fixture.Owner;
+
+        var rollback = await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(owner.Client, id, 4, "  Wrong direction  "));
+
+        Assert.Equal((7, 4, Phase.Planning, "Wrong direction"), (rollback.FromCheckpoint, rollback.ToCheckpoint, rollback.RestoredPhase, rollback.Reason));
+        Assert.Equal(seeded.Later.Select(a => a.Id).Order(), rollback.InvalidatedArtifactIds.Order());
+        Assert.Equal(seeded.OptimisationSteps.Select(s => s.Id).Order(), rollback.ResetStepIds.Order());
+        Assert.Empty(rollback.RequeuedStepIds);
+        Assert.Equal([seeded.Gate.Id], rollback.CancelledGateIds);
+        Assert.Equal([seeded.QueuedJob.Id], rollback.CancelledJobIds);
+        Assert.Equal((owner.User!.Id, owner.User.Name, false), (rollback.CreatedBy.Id, rollback.CreatedBy.Name, rollback.CreatedBy.IsSystem));
+
+        // Everything was written together.
+        var project = await LifecycleSeed.ProjectAsync(factory, id);
+        Assert.Equal((Phase.Planning, ProjectStatus.RolledBack, 4, 0), (project.CurrentPhase, project.Status, project.Checkpoint, project.ReviewCycle));
+        Assert.NotNull(project.LastRollbackAt);
+        await ProjectApi.WithDbAsync(factory, async db =>
+        {
+            var artifacts = await db.Artifacts.AsNoTracking().Where(a => a.ProjectId == id).ToListAsync(Ct);
+            Assert.All(artifacts.Where(a => a.CheckpointAtCreation > 4), a => Assert.Equal(ArtifactStatus.Invalidated, a.Status));
+            Assert.All(artifacts.Where(a => a.CheckpointAtCreation <= 4), a => Assert.Equal(ArtifactStatus.Locked, a.Status));
+            var steps = await db.ExecutionSteps.AsNoTracking().Where(s => s.ProjectId == id).ToListAsync(Ct);
+            Assert.All(steps.Where(s => s.PlanArtifactId == seeded.Plan4.Id), s => Assert.Equal(StepStatus.Completed, s.Status));
+            Assert.All(steps.Where(s => s.PlanArtifactId != seeded.Plan4.Id), s => Assert.Equal(StepStatus.Invalidated, s.Status));
+            Assert.Equal(GateStatus.Cancelled, (await db.ApprovalGates.AsNoTracking().SingleAsync(g => g.Id == seeded.Gate.Id, Ct)).Status);
+            Assert.Equal(JobStatus.Cancelled, (await db.Jobs.AsNoTracking().SingleAsync(j => j.Id == seeded.QueuedJob.Id, Ct)).Status);
+            var record = await db.RollbackEvents.AsNoTracking().SingleAsync(r => r.ProjectId == id, Ct);
+            Assert.Equal((rollback.Id, owner.User.Id.ToString()), (record.Id, record.TriggeredBy));
+        });
+        var transition = (await LifecycleSeed.TransitionsAsync(factory, id)).Last();
+        Assert.Equal((Phase.Review, Phase.Planning, 4, "Wrong direction"), (transition.FromPhase, transition.ToPhase, transition.Checkpoint, transition.Reason));
+        var completed = LifecycleSeed.Payload(Assert.Single(await LifecycleSeed.EventsAsync(factory, id, EventTypes.RollbackCompleted)).Payload);
+        Assert.Equal(rollback.Id.ToString(), completed.GetProperty("rollbackId").GetString());
+
+        // History and the checkpoint picker (D-V2-11: GET /checkpoints replaces 0.1.0's GET /versions).
+        var history = await ProjectApi.ReadAsync<List<RollbackDto>>(await seeded.Fixture.Viewer.Client.GetAsync(new Uri($"{seeded.Fixture.Path}/rollbacks", UriKind.Relative), Ct));
+        var listed = Assert.Single(history);
+        Assert.Equal((rollback.Id, rollback.ToCheckpoint, rollback.RestoredPhase, rollback.CreatedBy), (listed.Id, listed.ToCheckpoint, listed.RestoredPhase, listed.CreatedBy));
+        Assert.Equal(rollback.InvalidatedArtifactIds.Order(), listed.InvalidatedArtifactIds.Order());
+        Assert.Equal(rollback.CancelledJobIds, listed.CancelledJobIds);
+        var versions = await VersionsAsync(seeded.Fixture.Viewer.Client, id);
+        Assert.Equal(
+            [(4, Phase.Planning, false, (CheckpointBlock?)CheckpointBlock.CurrentCheckpoint), (3, Phase.Planning, true, null), (2, Phase.Specification, true, null), (1, Phase.Refinement, true, null)],
+            versions.Select(v => (v.Checkpoint, v.Phase, v.RollbackAllowed, v.RollbackBlockedReason)));
+    }
+
+    [Fact]
+    public async Task FR44_amended_by_D_V2_11_Checkpoints_list_every_recorded_checkpoint_with_whether_it_is_a_target()
+    {
+        using var seeded = await SeedVersion7InReviewAsync();
+
+        var versions = await VersionsAsync(seeded.Fixture.Viewer.Client, seeded.Id);
+
+        Assert.Equal([7, 6, 5, 4, 3, 2, 1], versions.Select(v => v.Checkpoint));
+        Assert.Equal((Phase.Review, false, (CheckpointBlock?)CheckpointBlock.CurrentCheckpoint), (versions[0].Phase, versions[0].RollbackAllowed, versions[0].RollbackBlockedReason));
+        Assert.Equal((Phase.Execution, true), (versions[1].Phase, versions[1].RollbackAllowed)); // the latest transition at 6 (a review cycle)
+        Assert.Equal(Phase.Planning, versions[3].Phase);
+        await Problems.AssertAsync(
+            await seeded.Fixture.Outsider.Client.GetAsync(new Uri($"{seeded.Fixture.Path}/checkpoints", UriKind.Relative), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+        await Problems.AssertAsync(
+            await seeded.Fixture.Viewer.Client.GetAsync(new Uri($"{seeded.Fixture.Path}/checkpoints?releaseVersionId={Guid.NewGuid()}", UriKind.Relative), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+        await Problems.AssertAsync(
+            await seeded.Fixture.Outsider.Client.GetAsync(new Uri($"{seeded.Fixture.Path}/rollbacks", UriKind.Relative), Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+    }
+
+    [Fact]
+    public async Task FR45_A_second_rollback_within_a_minute_is_RATE_LIMITED_with_Retry_After()
+    {
+        using var seeded = await SeedVersion7InReviewAsync();
+        var client = seeded.Fixture.Owner.Client;
+        Assert.Equal(HttpStatusCode.OK, (await RollbackAsync(client, seeded.Id, 5)).StatusCode);
+
+        var second = await RollbackAsync(client, seeded.Id, 4);
+
+        await Problems.AssertAsync(second, HttpStatusCode.TooManyRequests, ErrorCodes.RateLimited);
+        var retryAfter = int.Parse(Assert.Single(second.Headers.GetValues("Retry-After")), System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(retryAfter, 1, 60);
+        Assert.Equal(5, (await LifecycleSeed.ProjectAsync(factory, seeded.Id)).Checkpoint);
+        Assert.Single(await ProjectApi.WithDbAsync(factory, db => db.RollbackEvents.AsNoTracking().Where(r => r.ProjectId == seeded.Id).ToListAsync(Ct)));
+    }
+
+    [Fact]
+    public async Task FR45_A_rollback_while_a_step_is_in_progress_is_ROLLBACK_BLOCKED_and_writes_nothing()
+    {
+        using var seeded = await SeedVersion7InReviewAsync();
+        await ProjectApi.WithDbAsync(factory, db => db.ExecutionSteps.Where(s => s.Id == seeded.OptimisationSteps[0].Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StepStatus.InProgress), Ct));
+
+        var blocked = await Problems.AssertAsync(await RollbackAsync(seeded.Fixture.Owner.Client, seeded.Id, 4), HttpStatusCode.Conflict, ErrorCodes.RollbackBlocked);
+        Assert.Equal(["reason: step_in_progress"], blocked.GetProperty("details").EnumerateArray().Select(d => d.GetString()));
+
+        var project = await LifecycleSeed.ProjectAsync(factory, seeded.Id);
+        Assert.Equal((Phase.Review, 7, (DateTimeOffset?)null), (project.CurrentPhase, project.Checkpoint, project.LastRollbackAt));
+        Assert.Equal(GateStatus.Pending, Assert.Single(await LifecycleSeed.GatesAsync(factory, seeded.Id)).Status);
+        Assert.Empty(await LifecycleSeed.EventsAsync(factory, seeded.Id, EventTypes.RollbackCompleted));
+        Assert.Empty(await LifecycleSeed.EventsAsync(factory, seeded.Id, EventTypes.ArtifactInvalidated));
+    }
+
+    [Fact]
+    public async Task FR44_amended_by_FR63_Rollback_checks_the_target_the_reason_and_the_role()
+    {
+        using var seeded = await SeedVersion7InReviewAsync();
+        var fixture = seeded.Fixture;
+        await LifecycleSeed.AddTransitionAsync(factory, seeded.Id, Phase.Review, Phase.Release, 7, DateTimeOffset.UtcNow.AddMinutes(-1));
+
+        // 0.1.0 let a released project roll back; since 0.2.0 a released version is closed (D-V2-3).
+        await LifecycleSeed.SetProjectAsync(factory, seeded.Id, Phase.Release, 8, ApprovalMode.Advisory, ProjectStatus.Released);
+        var closed = await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, seeded.Id, 6), HttpStatusCode.Conflict, ErrorCodes.RollbackBlocked);
+        Assert.Equal(["reason: version_released"], closed.GetProperty("details").EnumerateArray().Select(d => d.GetString()));
+
+        // Releasing (not yet released) at checkpoint 8: the 0.1.0 target checks apply.
+        await LifecycleSeed.SetProjectAsync(factory, seeded.Id, Phase.Release, 8, ApprovalMode.Advisory, ProjectStatus.Releasing);
+        await Problems.AssertAsync(await RollbackAsync(fixture.Contributor.Client, seeded.Id, 4), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
+        await Problems.AssertAsync(await RollbackAsync(fixture.Outsider.Client, seeded.Id, 4), HttpStatusCode.NotFound, ErrorCodes.NotFound);
+        await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, seeded.Id, 4, "   "), HttpStatusCode.BadRequest, ErrorCodes.Validation);
+        await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, seeded.Id, 4, new string('x', 501)), HttpStatusCode.BadRequest, ErrorCodes.Validation);
+        await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, seeded.Id, 0), HttpStatusCode.BadRequest, ErrorCodes.Validation);
+        await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, seeded.Id, 8), HttpStatusCode.BadRequest, ErrorCodes.InvalidTargetVersion);
+        await Problems.AssertAsync(await RollbackAsync(fixture.Owner.Client, seeded.Id, 7), HttpStatusCode.BadRequest, ErrorCodes.InvalidTargetVersion); // release phase
+
+        Assert.Equal(Phase.Execution, (await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(fixture.Owner.Client, seeded.Id, 6))).RestoredPhase);
+    }
+
+    [Fact]
+    public async Task FR45_restored_phase_is_required_in_the_database_since_the_0_2_0_versions_migration()
+    {
+        // 0.2.0 SPEC §5 migration notes: the 0.1.0 deploy-window exception (nullable restored_phase) is closed by the
+        // ReleaseVersions migration, which backfills the column and sets it NOT NULL.
+        using var seeded = await SeedVersion7InReviewAsync();
+        var rollback = await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(seeded.Fixture.Owner.Client, seeded.Id, 4));
+
+        var refused = await Assert.ThrowsAsync<PostgresException>(() => ProjectApi.WithDbAsync(
+            factory, db => db.Database.ExecuteSqlAsync($"UPDATE rollback_events SET restored_phase = NULL WHERE id = {rollback.Id}", Ct)));
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, refused.SqlState);
+
+        var listed = await ProjectApi.ReadAsync<List<RollbackDto>>(
+            await seeded.Fixture.Viewer.Client.GetAsync(new Uri($"/api/projects/{seeded.Id}/rollbacks", UriKind.Relative), Ct));
+        Assert.Equal((rollback.Id, Phase.Planning), (Assert.Single(listed).Id, listed[0].RestoredPhase));
+    }
+
+    private static Task<HttpResponseMessage> RollbackAsync(HttpClient client, Guid id, int targetCheckpoint, string reason = "Back to an earlier version") =>
+        client.PostAsJsonAsync($"/api/projects/{id}/rollback", new { targetCheckpoint, reason }, Ct);
+
+    private static async Task<List<CheckpointDto>> VersionsAsync(HttpClient client, Guid id) =>
+        await ProjectApi.ReadAsync<List<CheckpointDto>>(await client.GetAsync(new Uri($"/api/projects/{id}/checkpoints", UriKind.Relative), Ct));
+}

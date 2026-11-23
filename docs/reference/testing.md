@@ -27,7 +27,7 @@ The `flows` specs (`versions`, `import`, `preset`) need E2E settings. On Kuberne
 ## Regenerate generated files
 
 ```bash
-cd backend && dotnet build src/Aide.Api      # writes backend/openapi/api.json
+cd backend && dotnet build src/Tevrin.Api      # writes backend/openapi/api.json
 cd frontend && npm run gen:api               # writes src/api/generated/
 ```
 
