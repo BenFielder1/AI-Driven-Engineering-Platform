@@ -23,6 +23,20 @@ export const IN_PREVIEW = 'In preview'
 
 export const changelog: readonly ChangelogEntry[] = [
   {
+    version: '0.8.0',
+    date: null,
+    title: 'Coaching pack and engine features',
+    asAide: false,
+    highlights: [
+      'The last internal traces of the old product name are gone. Existing sign-ins, API tokens and data keep working.',
+      'The engine can start and move pipelines itself, on demand, on a schedule or from a signed webhook.',
+      'Impulse coaching, the second pipeline pack, turns a training log into a checked weekly plan and a message from the coach.',
+      'Pipelines can run stages in parallel, fan out to several agents, route work back, cap revisions and offer variants to choose from.',
+      'Validator agents, a feedback store, outcome scoring, follow-ups, map-reduce, conversations and approvals for risky tools and external actions.',
+    ],
+    specHref: docsUrl('history/0.8.0/'),
+  },
+  {
     version: '0.7.0',
     date: '2026-11-23',
     title: 'Pipeline engine',

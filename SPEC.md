@@ -1,11 +1,11 @@
 # Tevrin — Specification (0.8.0)
 
-2026-11-22 · Ben Fielder · **0.8.0**, built on 0.7.0. Kept in `docs/0.8.0/` until 0.7.0 is released, then moved to the root `SPEC.md` (CLAUDE.md "Version workflow"). Earlier versions: [`docs/0.1.0/SPEC.md`](../0.1.0/SPEC.md) … [`docs/0.7.0/SPEC.md`](../0.7.0/SPEC.md); until 0.7.0 is released, its spec is the root `SPEC.md`. Stack: [`STACK.md`](../../STACK.md). Sources:
+2026-11-22 · Ben Fielder · **0.8.0**, built on 0.7.0. Earlier versions: [`docs/0.1.0/SPEC.md`](docs/0.1.0/SPEC.md) … [`docs/0.7.0/SPEC.md`](docs/0.7.0/SPEC.md). Stack: [`STACK.md`](STACK.md). Sources:
 - Ben's 0.8.0 brief (2026-11-22):
   - the Impulse coaching pack;
   - the engine features for the other candidate packs;
   - renaming the remaining `Aide` names to Tevrin.
-- The research notes in [`docs/0.7.0/tevrin-engine-extraction.md`](../0.7.0/tevrin-engine-extraction.md): step 6 and "What could be built on the engine afterwards".
+- The research notes in [`docs/0.7.0/tevrin-engine-extraction.md`](docs/0.7.0/tevrin-engine-extraction.md): step 6 and "What could be built on the engine afterwards".
 - The session discussion of where a second pack's code goes.
 - The interview answers in §10.
 
