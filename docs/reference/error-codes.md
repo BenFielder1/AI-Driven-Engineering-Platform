@@ -20,6 +20,7 @@ API errors are RFC 9457 problem details with an `errorCode` extension. The backe
 | `ANTIFORGERY` | 403 | A browser mutation without a valid antiforgery token |
 | `RATE_LIMITED` | 429 | Too many register or login attempts. Wait for `Retry-After` |
 | `UPSTREAM_ERROR` | 502 | An external service failed or was unreachable |
+| `DEFINITION_UNAVAILABLE` | 409 | The run's pinned pipeline definition names guards, handlers or tools this build doesn't register |
 
 ## Families
 
@@ -43,3 +44,4 @@ The retired command-line tool mapped some of these to exit codes: see [Retired C
 | 0.1.0 to 0.5.0 | Section 6, API, in [0.1.0](../0.1.0/SPEC.md), [0.2.0](../0.2.0/SPEC.md), [0.3.0](../0.3.0/SPEC.md), [0.4.0](../0.4.0/SPEC.md) and [0.5.0](../0.5.0/SPEC.md) |
 | 0.6.0 | No new codes. Copy that names the product now says Tevrin |
 | 0.6.1 | No new codes. An out-of-range `maxBuildFixAttempts` is `VALIDATION`. `BUILD_ERRORS_SUPPRESSED` is a Guardian violation on a build-fix step, not an API error ([0.6.1](../0.6.1/SPEC.md)) |
+| 0.7.0 | New code `DEFINITION_UNAVAILABLE` (409). Every other error keeps its code and status ([0.7.0](../0.7.0/SPEC.md)) |
