@@ -90,7 +90,9 @@ jobs:
           # "Latest green main" everywhere: the newest successful CI run on main from a push or a manual CI run in this
           # repository (never a fork PR whose branch is also called main). $repo is a jq variable, not a shell one.
           # shellcheck disable=SC2016
-          newest='[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .head_repository.full_name == $repo)] | first | .head_sha // ""'
+          # The runs API's status filter lags for days on recent runs (#59 and #60 were never deployed), so list runs
+          # unfiltered and keep the successful ones here.
+          newest='[.workflow_runs[] | select(.conclusion == "success" and (.event == "push" or .event == "workflow_dispatch") and .head_repository.full_name == $repo)] | first | .head_sha // ""'
           tag=""
           if [ "$EVENT" = release ]; then
             # FR-231: a published release deploys its tag's commit to production.
@@ -124,7 +126,7 @@ jobs:
             sha="$RUN_SHA"
             # CI runs can finish out of order. Deploy only the newest green main commit, so a late finish for an older
             # commit never rolls preview back.
-            latest="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
+            latest="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&per_page=30" \
               | jq -r --arg repo "$REPO" "$newest")"
             if [ -n "$latest" ] && [ "$latest" != "$sha" ] \
               && [ "$(gh api "repos/$REPO/compare/$sha...$latest" --jq .status)" = ahead ]; then
@@ -139,7 +141,7 @@ jobs:
             sha="$(printf '%s' "$INPUT_SHA" | tr -d '[:space:]')"
             if [ -z "$sha" ]; then
               # The same "latest green main" filter as the workflow_run check.
-              sha="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" \
+              sha="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&per_page=30" \
                 | jq -r --arg repo "$REPO" "$newest")"
               [ -n "$sha" ] || { echo "::error::no successful CI run on main found"; exit 1; }
               echo "Defaulted to the latest main commit with a green CI run: $sha"
@@ -157,8 +159,8 @@ jobs:
           esac
 
           # CI ("CI" = .github/workflows/ci.yml) must have succeeded for exactly this commit.
-          green="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&status=success&per_page=1" \
-            --jq '.total_count')"
+          green="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
           if [ "${green:-0}" -lt 1 ]; then
             echo "::error::CI has no successful run for $sha. Deploy only commits with green CI."
             exit 1
