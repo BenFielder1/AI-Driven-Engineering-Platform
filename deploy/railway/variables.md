@@ -25,15 +25,15 @@ of every API key are in the [README configuration reference](../../README.md#con
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | literal | `true` | yes | FR-105 |
 | `ForwardedHeaders__ForwardLimit` | literal | `2` | yes | Browser → Railway edge → web → api. The rate limits see the client IP the edge appended |
 | `DataProtection__KeysPath` | literal | `/data/keys` | yes | On the `api-data` volume. **Back it up** (see README) |
-| `DataProtection__ApplicationName` | literal | `aide` | yes | Never change it: the key ring is bound to it |
+| `DataProtection__ApplicationName` | literal | `aide` | yes | Never change it: the key ring is bound to it. Kept as `aide` through the 0.8.0 rename (D-0.8.0-16) |
 | `Auth__Cookie__SecurePolicy` | literal | `Always` | yes | §8 security |
 | `Seed__Enabled` | literal | `false` | yes | FR-108. No seed admin on Railway: register the first Admin yourself |
 | `Telemetry__ConsoleExporter` | literal | `false` | yes | JSON logs only |
-| `ConnectionStrings__Aide` | reference | `Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}` | yes | D-V3-9. Private network. Used by the app and by the pre-deploy migration bundle |
+| `ConnectionStrings__Tevrin` | reference | `Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}` | yes | D-V3-9. Private network. Used by the app and by the pre-deploy migration bundle. Named `ConnectionStrings__Aide` before 0.8.0; the app still reads the old name (FR-325), so set the new one before removing the old (docs/operations/rename-to-tevrin.md) |
 | `App__PublicBaseUrl` | operator-set (ignored in IaC) | `https://www.tevrin.dev` (production), `https://aide.benfielder.com` (preview) | yes | D-V6-27. The environment's custom domain, with no trailing slash. Links in emails and notifications, OAuth callbacks and the GitHub App manifest use it. Validated at start-up, so set it before the first deploy |
-| `Llm__Providers__Ollama__Enabled` | literal | `false` | yes | FR-157. Ollama has no reachable endpoint on Railway (the default `host.docker.internal:11434` doesn't resolve, and AIDE doesn't host an Ollama service), so it is turned off and hidden from every provider list |
+| `Llm__Providers__Ollama__Enabled` | literal | `false` | yes | FR-157. Ollama has no reachable endpoint on Railway (the default `host.docker.internal:11434` doesn't resolve, and Tevrin doesn't host an Ollama service), so it is turned off and hidden from every provider list |
 | `Llm__Providers__Fake__Enabled` | literal | `false` | yes | FR-157. The Fake LLM never serves real users. Projects still bound to Fake from before 0.4.0 fail their next run with `LLM_PROVIDER_UNAVAILABLE` |
-| `GitLab__AllowPrivateNetworks` | literal | `false` | yes | SPEC §8 SSRF guard. On Railway private addresses (10/8, 172.16/12, 192.168/16, fc00::/7, `*.railway.internal`) are AIDE's own services, so GitLab hosts resolving there are refused. Backend default `true` (Docker Desktop, dev loop) |
+| `GitLab__AllowPrivateNetworks` | literal | `false` | yes | SPEC §8 SSRF guard. On Railway private addresses (10/8, 172.16/12, 192.168/16, fc00::/7, `*.railway.internal`) are Tevrin's own services, so GitLab hosts resolving there are refused. Backend default `true` (Docker Desktop, dev loop) |
 | `Approvals__SigningKey` | **secret** | 64 random characters | yes | One-click approval links (FR-48). Different per environment. Ignored in IaC (`railway.ts`). Under 32 characters means no approval links |
 | `Llm__AllowSystemKeys` | operator-set (ignored in IaC) | `true` | no | Only if system LLM keys should be used (FR-79). Default `false` |
 | `Llm__Providers__Anthropic__ApiKey` | **secret** (ignored in IaC) | | no | System key, used only with `Llm__AllowSystemKeys=true` |
@@ -87,7 +87,7 @@ show no changes and no destroys. While a listed name is unset, the plan prints
 ## `postgres` (Railway Postgres 18)
 
 Railway manages these (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `DATABASE_URL`, `DATABASE_PUBLIC_URL`,
-`POSTGRES_*`). Don't edit them. The API only uses the five `PG*` values, through `ConnectionStrings__Aide`.
+`POSTGRES_*`). Don't edit them. The API only uses the five `PG*` values, through `ConnectionStrings__Tevrin`.
 `DATABASE_PUBLIC_URL` exists only if a TCP proxy is enabled. Keep it disabled.
 
 ## GitHub Actions (deploy workflow, FR-110)

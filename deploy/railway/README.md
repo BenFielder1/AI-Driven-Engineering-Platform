@@ -1,6 +1,6 @@
 # Tevrin on Railway (FR-107 to FR-112)
 
-One Railway project, `aide`, with two environments: `preview` and `production`. Each environment has:
+One Railway project, `tevrin` (named `aide` before 0.8.0, FR-327; see [the rename runbook](../../docs/operations/rename-to-tevrin.md)), with two environments: `preview` and `production`. Each environment has:
 
 - **`web`:** the Next.js server from `frontend/Dockerfile`, with healthcheck `/healthz` and a public custom domain
   (D-V6-27): **`https://www.tevrin.dev`** in `production`, **`https://aide.benfielder.com`** in `preview` (which also keeps
@@ -52,7 +52,7 @@ Run these from the repo root. In each environment, finish all the steps before i
 ### 1. Project and environments (FR-108)
 
 ```bash
-railway init --name aide            # creates the project (or create it in the dashboard), links this folder
+railway init --name tevrin           # creates the project (or create it in the dashboard), links this folder
 railway environment new preview     # empty environment; don't --duplicate production (that would copy its variables)
 railway environment link production # Railway creates `production` with every new project
 ```
@@ -169,7 +169,7 @@ deploy/scripts/smoke-remote.sh https://<web-domain>
 
 `railway up --ci` streams the build log and exits once the image is built. It doesn't wait for the pre-deploy
 migration or the healthcheck, so wait for `SUCCESS` (or `FAILED`/`CRASHED`) before the next step. Deploy `api` first. Its pre-deploy command runs the migration bundle
-(`/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'`). The shell is needed because Railway runs
+(`/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Tevrin"'`). The shell is needed because Railway runs
 Dockerfile commands in exec form, which doesn't expand variables.
 
 Check that the build log shows the `backend` (or `frontend`) Dockerfile. If Railway can't find a Dockerfile, the upload
@@ -326,7 +326,7 @@ Each rollback is a deployment, so run `deploy/scripts/smoke-remote.sh` afterward
 | Symptom | Check |
 | --- | --- |
 | `railway config plan` says "requires Railway CLI 5.42.1 or newer" on Windows | `railway/iac` can't execute the npm shim. Set `$env:_` to `railway.exe` in PowerShell (step 2) |
-| `api` deploy fails in pre-deploy | Deploy logs show the bundle error. `ConnectionStrings__Aide` should resolve: postgres running, and `PG*` references spelt with the service name `postgres` |
+| `api` deploy fails in pre-deploy | Deploy logs show the bundle error. `ConnectionStrings__Tevrin` should resolve: postgres running, and `PG*` references spelt with the service name `postgres` |
 | `api` healthcheck fails (503) | DB unreachable, or migrations pending. `railway logs --service api` |
 | `api` exits at start with an `App:PublicBaseUrl` validation error | `App__PublicBaseUrl` isn't set in this environment, or isn't an absolute `http(s)://` URL (step 3). It must be `https://` and the environment's custom domain: an `http://` value starts but breaks OAuth callbacks and links |
 | `/api/...` returns 502 `UPSTREAM_ERROR` | `web` can't reach `api.railway.internal:8080`: `api` down, or `BACKEND_URL` wrong. Kestrel listens on IPv4 and IPv6, so legacy IPv6-only private networks work |

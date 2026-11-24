@@ -6,7 +6,7 @@ kind: Service
 metadata:
   name: web
   labels:
-    aide.deploy/stage: app
+    tevrin.deploy/stage: app
 spec:
   type: LoadBalancer
   selector:
@@ -21,7 +21,7 @@ kind: Deployment
 metadata:
   name: web
   labels:
-    aide.deploy/stage: app
+    tevrin.deploy/stage: app
 spec:
   replicas: 1
   selector:
@@ -43,7 +43,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web
-          image: aide-web
+          image: tevrin-web
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

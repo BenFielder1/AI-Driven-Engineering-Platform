@@ -1,5 +1,5 @@
 /**
- * AIDE on Railway (SPEC FR-107, FR-108, FR-109; STACK.md "Deploy"). One file for the whole project and both
+ * Tevrin on Railway (SPEC FR-107, FR-108, FR-109; STACK.md "Deploy"). One file for the whole project and both
  * environments (`preview`, `production`): `railway config plan` / `railway config apply` evaluate it against the
  * environment the CLI is linked to (or the one the project token is scoped to). Field names follow the `railway`
  * package's IaC types (`railway/iac`, 3.16.0) and https://docs.railway.com/infrastructure-as-code/reference.
@@ -37,6 +37,10 @@ const operatorSetApiVariables = [
   // preview. Set per environment because the custom domains differ and IaC is one definition for both. It replaces the
   // reference https://${{web.RAILWAY_PUBLIC_DOMAIN}}, which depended on a generated domain (production has none).
   'App__PublicBaseUrl',
+  // FR-327 (0.8.x only): the pre-0.8.0 connection string name, which a 0.7.0 deployment reads. Listed so that
+  // `railway config apply` never deletes it while an environment still runs 0.7.0; Ben removes it by hand once 0.8.0
+  // runs there (docs/operations/rename-to-tevrin.md), and 0.9.0 drops it from this list.
+  'ConnectionStrings__Aide',
   // Required secret: one-click approval links (FR-48), 64 random characters, different per environment.
   'Approvals__SigningKey',
   // Optional: system LLM keys (FR-79). No Ollama base URL: Ollama is disabled on Railway (FR-157, env below).
@@ -119,7 +123,7 @@ export default defineRailway(() => {
     build: { builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile' },
     // FR-109: migrations before the new container starts; a failure stops the deploy and the old one keeps serving.
     // Railway runs Dockerfile commands in exec form (no variable expansion), so a shell expands the variable.
-    preDeploy: `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Aide"'`,
+    preDeploy: `/bin/sh -c 'exec /app/efbundle --connection "$ConnectionStrings__Tevrin"'`,
     healthcheck: '/api/health/ready',
     replicas: 1,
     // preDeployTimeoutSeconds: a hung migration fails the deploy after 10 minutes instead of blocking it.
@@ -138,12 +142,13 @@ export default defineRailway(() => {
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: 'true',
       ForwardedHeaders__ForwardLimit: '2',
       DataProtection__KeysPath: '/data/keys',
+      // Kept as 'aide' (D-0.8.0-16): the Data Protection key ring is bound to it; changing it loses stored secrets.
       DataProtection__ApplicationName: 'aide',
       Auth__Cookie__SecurePolicy: 'Always',
       Seed__Enabled: 'false',
       Telemetry__ConsoleExporter: 'false',
-      // D-V3-9: one Npgsql connection string for the app and the migration bundle, over the private network.
-      ConnectionStrings__Aide:
+      // D-V3-9, FR-325: one Npgsql connection string for the app and the migration bundle, over the private network.
+      ConnectionStrings__Tevrin:
         'Host=${{postgres.PGHOST}};Port=${{postgres.PGPORT}};Database=${{postgres.PGDATABASE}};' +
         'Username=${{postgres.PGUSER}};Password=${{postgres.PGPASSWORD}}',
       // FR-157: only Anthropic and OpenAI on Railway. Ollama has no reachable default here (host.docker.internal
@@ -151,7 +156,7 @@ export default defineRailway(() => {
       // (appsettings) to be enabled.
       Llm__Providers__Ollama__Enabled: 'false',
       Llm__Providers__Fake__Enabled: 'false',
-      // SPEC §8: on Railway, private addresses (10/8, *.railway.internal, ...) are AIDE's own services, so GitLab hosts
+      // SPEC §8: on Railway, private addresses (10/8, *.railway.internal, ...) are Tevrin's own services, so GitLab hosts
       // there are refused (SSRF). The backend default (true) suits Docker Desktop and the dev loop.
       GitLab__AllowPrivateNetworks: 'false',
     },
@@ -175,7 +180,7 @@ export default defineRailway(() => {
   })
 
   // `variables` isn't in the railway 3.16 types yet; project() passes unknown fields through to the CLI engine.
-  return project('aide', {
+  return project('tevrin', {
     resources: [db, apiData, api, web],
     variables: { managed: true, ignore: operatorSetApiVariables },
   } as Parameters<typeof project>[1])

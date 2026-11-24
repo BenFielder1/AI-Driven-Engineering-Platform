@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Seed the "existing" Git repository for the Local import E2E (SPEC §8 Testing, FR-73) on the aide-data volume:
+# Seed the "existing" Git repository for the Local import E2E (SPEC §8 Testing, FR-73) on the tevrin-data volume:
 #   /data/import/existing-app — README.md, package.json, 3 commits, annotated tags v0.1.0 and v0.2.0.
 # Runs inside the api pod (git is in the image) via kubectl exec. Idempotent: an existing, complete repo is left
 # untouched; never deletes anything outside an incomplete seed directory. Context docker-desktop only.
@@ -7,7 +7,7 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-IMPORT_ROOT="${AIDE_IMPORT_ROOT:-/data/import}"
+IMPORT_ROOT="${TEVRIN_IMPORT_ROOT:-${AIDE_IMPORT_ROOT:-/data/import}}"  # AIDE_IMPORT_ROOT: pre-0.8.0 name, still read
 REPO="$IMPORT_ROOT/existing-app"
 
 require_context
@@ -26,8 +26,8 @@ case "$repo" in "$root"/*) ;; *) echo "refusing: $repo is not under $root" >&2; 
 rm -rf -- "$repo"          # incomplete earlier attempt only (the complete case exited above)
 mkdir -p "$repo"
 cd "$repo"
-export GIT_AUTHOR_NAME="AIDE E2E Seed" GIT_AUTHOR_EMAIL="seed@aide.local" \
-       GIT_COMMITTER_NAME="AIDE E2E Seed" GIT_COMMITTER_EMAIL="seed@aide.local"
+export GIT_AUTHOR_NAME="Tevrin E2E Seed" GIT_AUTHOR_EMAIL="seed@tevrin.local" \
+       GIT_COMMITTER_NAME="Tevrin E2E Seed" GIT_COMMITTER_EMAIL="seed@tevrin.local"
 commit() { # $1 = date, $2 = message
   GIT_AUTHOR_DATE="$1" GIT_COMMITTER_DATE="$1" git commit -q -m "$2"
 }
@@ -39,7 +39,7 @@ git init -q -b main .
 cat > README.md <<'MD'
 # Existing App
 
-A small "existing" project used by the AIDE import E2E (seeded by deploy/scripts/seed-e2e-repo.sh).
+A small "existing" project used by the Tevrin import E2E (seeded by deploy/scripts/seed-e2e-repo.sh).
 MD
 cat > package.json <<'JSON'
 {

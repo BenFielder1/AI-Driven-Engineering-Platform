@@ -31,9 +31,9 @@ START="$(date +%s)"
 DEADLINE=$(( START + TIMEOUT ))
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/aide-smoke-remote.XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/tevrin-smoke-remote.XXXXXX")"
 chmod 700 "$WORK"
-cleanup() { [[ -n "${WORK:-}" && -d "$WORK" && "$WORK" == *aide-smoke-remote.* ]] && rm -rf -- "$WORK"; }
+cleanup() { [[ -n "${WORK:-}" && -d "$WORK" && "$WORK" == *tevrin-smoke-remote.* ]] && rm -rf -- "$WORK"; }
 trap cleanup EXIT
 JAR="$WORK/cookies"
 FAILED=()

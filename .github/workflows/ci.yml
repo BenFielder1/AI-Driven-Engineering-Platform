@@ -273,7 +273,7 @@ jobs:
           file: ${{ matrix.context }}/Dockerfile
           push: false
           load: true
-          tags: aide-${{ matrix.image }}:ci
+          tags: tevrin-${{ matrix.image }}:ci
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
       # FR-103: the standalone Next server on PORT 8080 with a read-only root FS and only /tmp writable (as on
@@ -281,8 +281,8 @@ jobs:
       - name: Smoke the web container (read-only root FS, /healthz, CSP nonce, 502 without the API)
         if: matrix.image == 'web'
         run: |
-          docker run -d --name aide-web --read-only --tmpfs /tmp \
-            -e PORT=8080 -e BACKEND_URL=http://127.0.0.1:9 -p 8080:8080 aide-web:ci
+          docker run -d --name tevrin-web --read-only --tmpfs /tmp \
+            -e PORT=8080 -e BACKEND_URL=http://127.0.0.1:9 -p 8080:8080 tevrin-web:ci
           for _ in $(seq 1 30); do
             if [ "$(curl -fsS http://localhost:8080/healthz 2>/dev/null || true)" = "ok" ]; then ready=1; break; fi
             sleep 1
@@ -301,15 +301,15 @@ jobs:
       - name: Smoke the api container (entrypoint, setpriv drop, efbundle as non-root)
         if: matrix.image == 'api'
         run: |
-          docker run --rm --entrypoint sh aide-api:ci -c 'command -v setpriv && test -x /app/entrypoint.sh'
-          ids="$(docker run --rm aide-api:ci sh -c 'echo "$(id -u) $(stat -c %u /data/keys) $(stat -c %u /data/workspaces)"')"
+          docker run --rm --entrypoint sh tevrin-api:ci -c 'command -v setpriv && test -x /app/entrypoint.sh'
+          ids="$(docker run --rm tevrin-api:ci sh -c 'echo "$(id -u) $(stat -c %u /data/keys) $(stat -c %u /data/workspaces)"')"
           [ "$ids" = "1654 1654 1654" ] \
             || { echo "::error::expected uid 1654 and /data/keys, /data/workspaces owned by 1654; got '$ids'"; exit 1; }
-          docker run --rm --user 1654 --read-only --tmpfs /tmp:exec,size=512m aide-api:ci /app/efbundle --help > /dev/null
+          docker run --rm --user 1654 --read-only --tmpfs /tmp:exec,size=512m tevrin-api:ci /app/efbundle --help > /dev/null
           echo "api container smoke passed"
       - name: Container logs
         if: failure() && matrix.image == 'web'
-        run: docker logs aide-web || true
+        run: docker logs tevrin-web || true
 
   # NFR-TEST / NFR-TEST2 / NFR-A11Y2: Playwright against the API on 5080 + the production Next.js server on 3000
   # (`npm run build && npm start` = node server.ts, started by playwright.config.ts's webServer because BASE_URL is unset
@@ -332,19 +332,19 @@ jobs:
       db:
         image: postgres:18
         env:
-          POSTGRES_USER: aide
-          POSTGRES_DB: aide
+          POSTGRES_USER: tevrin
+          POSTGRES_DB: tevrin
           # Throwaway CI-only database: trust auth, so there is no password anywhere.
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U aide -d aide"
+          --health-cmd "pg_isready -U tevrin -d tevrin"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
     env:
-      ConnectionStrings__Tevrin: Host=localhost;Port=5432;Database=aide;Username=aide
+      ConnectionStrings__Tevrin: Host=localhost;Port=5432;Database=tevrin;Username=tevrin
       # The committed contract is checked by the backend job; don't rewrite it here.
       OpenApiGenerateDocuments: "false"
       # frontend/e2e/import.spec.ts types this absolute path into the wizard (same as on Kubernetes).
@@ -378,7 +378,7 @@ jobs:
           ASPNETCORE_URLS: http://localhost:5080
           App__PublicBaseUrl: http://localhost:3000
           Telemetry__ConsoleExporter: "false"
-          Workspaces__Root: ${{ runner.temp }}/aide-workspaces
+          Workspaces__Root: ${{ runner.temp }}/tevrin-workspaces
           # Never call a real provider: Fake by default and no provider keys at all.
           Llm__DefaultProvider: fake
           Llm__Providers__Anthropic__ApiKey: ""

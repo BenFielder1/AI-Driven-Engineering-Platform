@@ -13,8 +13,8 @@ set -euo pipefail
 BASE_URL="${BASE_URL:-http://localhost:${APP_PORT:-8080}}"
 TIMEOUT="${SMOKE_TIMEOUT:-60}"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/aide-smoke.XXXXXX")"
-cleanup() { [[ -n "${WORK:-}" && -d "$WORK" && "$WORK" == *aide-smoke.* ]] && rm -rf -- "$WORK"; }
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/tevrin-smoke.XXXXXX")"
+cleanup() { [[ -n "${WORK:-}" && -d "$WORK" && "$WORK" == *tevrin-smoke.* ]] && rm -rf -- "$WORK"; }
 trap cleanup EXIT
 
 # check NAME PATH STATUS_REGEX [BODY_REGEX] [HEADER_REGEX...]
@@ -67,7 +67,7 @@ check "Dynamic route" "/projects/00000000-0000-0000-0000-000000000000" '200' '<h
 check "API readiness (via proxy)" "/api/health/ready" '200' '"status"' || fail=1
 
 if [[ $fail -ne 0 ]]; then
-  echo "Smoke test FAILED. Try: kubectl --context docker-desktop -n aide get pods,svc; ... logs deploy/web; ... logs deploy/api" >&2
+  echo "Smoke test FAILED. Try: kubectl --context docker-desktop -n tevrin get pods,svc; ... logs deploy/web; ... logs deploy/api" >&2
   exit 1
 fi
 echo "Smoke test passed: $BASE_URL"

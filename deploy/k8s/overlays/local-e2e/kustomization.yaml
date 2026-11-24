@@ -20,4 +20,4 @@ patches:
       - op: add
         path: /spec/template/metadata/annotations
         value:
-          aide.deploy/mode: e2e
+          tevrin.deploy/mode: e2e

@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: api
   labels:
-    aide.deploy/stage: app
+    tevrin.deploy/stage: app
 spec:
   type: ClusterIP
   selector:
@@ -19,7 +19,7 @@ kind: Deployment
 metadata:
   name: api
   labels:
-    aide.deploy/stage: app
+    tevrin.deploy/stage: app
 spec:
   replicas: 1
   # RWO data volume + single worker: stop the old pod before starting the new one.
@@ -42,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: aide-api
+          image: tevrin-api
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -81,7 +81,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: aide-data
+            claimName: tevrin-data
         - name: tmp
           # Repo snapshots for agent tools (FR-71) live here; cap it so they can't fill the node disk.
           emptyDir: { sizeLimit: 6Gi }

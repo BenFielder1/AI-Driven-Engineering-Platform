@@ -1,7 +1,7 @@
 {
-  "name": "aide-railway-iac",
+  "name": "tevrin-railway-iac",
   "private": true,
-  "description": "Railway Infrastructure as Code for AIDE (FR-107). Evaluated by `railway config plan|apply` (CLI 5.42.1+).",
+  "description": "Railway Infrastructure as Code for Tevrin (FR-107, FR-327). Evaluated by `railway config plan|apply` (CLI 5.42.1+).",
   "type": "module",
   "engines": {
     "node": ">=24"

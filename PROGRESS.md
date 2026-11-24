@@ -19,9 +19,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-323 | Projects, namespaces and `Aide*` types renamed to Tevrin; architecture tests list host assemblies | 3.1 | backend | M65 | todo | — |
 | FR-324 | Migrations change only by mechanical substitutions (CI check); EF drift empty | 3.1 | backend + data + CI | M65 | todo | — |
 | FR-325 | Config/env/auth scheme/telemetry renamed, old names read with a warning | 3.1, 4.77 | backend + deploy | M65 | todo | — |
-| FR-326 | Wire and stored identifiers, read both (tokens, cookie, plan block, merge strategy, others) | 3.1, 4.77 | backend + frontend + data | M65 | todo | — |
+| FR-326 | Wire and stored identifiers, read both (tokens, cookie, plan block, merge strategy, others) | 3.1, 4.77 | backend + frontend + data | M65 | done | 4865d26, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480) |
 | FR-327 | Images, k8s, Railway IaC, smoke scripts renamed; rename runbook | 3.1 | deploy + docs | M65 | todo | — |
-| FR-328 | One snapshot re-baseline with a mapped-equality CI check; freeze base moves | 3.1 | backend + CI | M65 | todo | — |
+| FR-328 | One snapshot re-baseline with a mapped-equality CI check; freeze base moves | 3.1 | backend + CI | M65 | done | 4865d26 + 62c5ce1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480) |
 | FR-329 | Leftover-name scan test with `scripts/ci/aide-allowlist.txt`; docs updated | 3.1 | backend + docs + CI | M65 | todo | — |
 | FR-330 | `RunControl.Engine`/`Host` per pipeline; SDLC is `Host` | 3.2 | backend | M66 | todo | — |
 | FR-331 | Start a run endpoint (inputs, one-active rule) | 3.2 | backend + data | M66 | todo | — |
@@ -67,9 +67,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] a. Version bump + PROGRESS ([CI 45272691359](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45272691359))
   - [x] b. Projects, namespaces and types (mechanical) + migration-check script (FR-323, FR-324) ([CI 45278720358](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45278720358))
   - [x] c. Config and telemetry fallbacks (FR-325) ([CI 45312651121](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45312651121))
-  - [ ] d. Wire and stored identifiers, read both; contract + client (FR-326)
+  - [x] d. Wire and stored identifiers, read both; contract + client (FR-326) ([CI 45365150480](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480), with f)
   - [ ] e. Images, k8s, IaC, smoke scripts, runbook (FR-327)
-  - [ ] f. Snapshot re-baseline + mapped-equality check (FR-328); then a commit that sets `rebaseline=<f's SHA>` in `check-snapshots-frozen.sh` (pushed with it)
+  - [x] f. Snapshot re-baseline + mapped-equality check (FR-328): re-baseline 4865d26 (snapshots from scratch-branch CI run 45361838017), freeze pinned in 62c5ce1 ([CI 45365150480](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480))
   - [ ] g. Leftover-name scan + allowlist, CLAUDE.md/STACK.md/README/docs (FR-329)
 - [ ] M66 Run control and triggers — FR-330–FR-337
 - [ ] M67 Coach pack — FR-338–FR-342, FR-352
@@ -95,8 +95,14 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   The system actor (`aide-system`), the plan block and stack-profile fence tags, and the fake failure markers are read both ways now and written as `tevrin` in the FR-328 commit — Claude — SPEC updated: no
 - 2026-11-24 — The `aide_merges` migration rewrites only `projects.merge_strategy` (and the column default); stored event and job payloads keep the old value, since events are the audit trail and every reader accepts both — Claude — SPEC updated: no
 
+- 2026-11-24 — D-0.8.0-17: the generic workload, service and job names (`api`, `web`, `db`, `db-migrate`; Railway `api`, `web`, `postgres`) stay; FR-327 renames the namespace, images, data PVC, labels, Railway project, variables and database — Claude (M65e review) — SPEC updated: yes (FR-327 row and acceptance, §10)
+- 2026-11-24 — The dev loop (`docker-compose.yml`, `.env.example`) keeps its `aide` project, volume, database and user, so an existing dev database keeps working ("Unchanged: dev loop", §11); FR-329 allowlists them. `.railway/railway.ts` ignores `ConnectionStrings__Aide` for 0.8.x so `railway config apply` never removes the variable a 0.7.0 deployment reads — Claude — SPEC updated: no
+
 ## Known issues
 - Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.
 
 ## Manual checks (Ben)
-- (filled in as milestones land; see SPEC §12 M73)
+- FR-327: run `docs/operations/rename-to-tevrin.md` steps 1–3 on preview **before the 0.8.0 build PR merges** (otherwise the preview deploy's drift check fails until they're done), and on production before publishing 0.8.0; step 4 after 0.8.0 runs there.
+- FR-327 local: free localhost:8080 from the old `aide` namespace, update `secrets.env` to `ConnectionStrings__Tevrin` / `Database=tevrin;Username=tevrin`, then `deploy-local.sh` and the smoke test (runbook §7).
+- Delete the scratch branch `build/tevrin-0.8.0-snapshots` (used only to produce the FR-328 snapshots, CI run 45361838017) when convenient.
+- (more as milestones land; see SPEC §12 M73)

@@ -1,4 +1,4 @@
-# FR-110 / D-V3-7: deploys AIDE to Railway with the Railway CLI, then runs the FR-111 smoke test against the web URL.
+# FR-110 / D-V3-7: deploys Tevrin to Railway with the Railway CLI, then runs the FR-111 smoke test against the web URL.
 #   preview     automatically after the "CI" workflow succeeds on a push to main (the exact commit CI tested), or by
 #               manual dispatch with environment=preview.
 #   production  FR-231: when a GitHub release is published for a tag x.y.z (FR-230), the tagged commit. Also by manual
@@ -247,7 +247,7 @@ jobs:
         if: steps.configured.outputs.ok == 'true'
         env:
           # IaC needs a workspace token (project tokens get "Unauthorized"). RAILWAY_TOKEN is deliberately not set here,
-          # so the CLI uses this token, scoped to the aide project and this environment.
+          # so the CLI uses this token, scoped to the tevrin project and this environment.
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RAILWAY_PROJECT_ID: 2b44afd5-e80c-407f-838f-1f07a354b6e1
         run: |
@@ -468,7 +468,7 @@ jobs:
       - name: Railway config has no drift (railway config plan)
         env:
           # IaC needs a workspace token (project tokens get "Unauthorized"). RAILWAY_TOKEN is deliberately not set here,
-          # so the CLI uses this token, scoped to the aide project and this environment.
+          # so the CLI uses this token, scoped to the tevrin project and this environment.
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RAILWAY_PROJECT_ID: 2b44afd5-e80c-407f-838f-1f07a354b6e1
         run: |
