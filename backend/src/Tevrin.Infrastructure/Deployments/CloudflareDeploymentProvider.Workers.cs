@@ -112,7 +112,7 @@ public sealed partial class CloudflareDeploymentProvider
         }
 
         using var json = await SendAsync(auth, HttpMethod.Get, $"accounts/{Account(auth)}/builds/workers/{Uri.EscapeDataString(tag)}/builds", null, cancellationToken);
-        // §4.20: a manual or redeploy row (an AIDE id) adopts only a build made after it, never an earlier build of the commit.
+        // §4.20: a manual or redeploy row (a Tevrin id) adopts only a build made after it, never an earlier build of the commit.
         var after = tevrinDeploymentId is null ? null : createdAfter;
         var match = Items(Result(json)).FirstOrDefault(b =>
             string.Equals(Text(Property(b, "build_trigger_metadata"), "commit_hash"), sha, StringComparison.OrdinalIgnoreCase)

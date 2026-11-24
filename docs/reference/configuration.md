@@ -14,15 +14,15 @@ ASP.NET Core reads `appsettings.json`, `appsettings.Development.json`, user-secr
 
 Values are never shown here. "Secret" means: never commit it, set it only through user-secrets, `secrets.env` or Railway variables.
 
-Server settings keep their internal `aide` names (for example `ConnectionStrings__Aide`). The retired command-line tool had its own variables: see [Retired CLI](retired-cli.md).
+Server settings use Tevrin names since 0.8.0 (for example `ConnectionStrings__Tevrin`); the old `aide` names are still read until 0.9.0. The retired command-line tool had its own variables: see [Retired CLI](retired-cli.md).
 
 ## Settings
 
 | Key (env var form) | Purpose | Default | Secret |
 | --- | --- | --- | --- |
-| `ConnectionStrings:Aide` (`ConnectionStrings__Aide`) | PostgreSQL connection | none (required) | yes |
+| `ConnectionStrings:Tevrin` (`ConnectionStrings__Tevrin`; `ConnectionStrings:Aide` still read) | PostgreSQL connection | none (required) | yes |
 | `POSTGRES_PASSWORD` | Password for the Postgres container (first init only) | none | yes |
-| `POSTGRES_DB`, `POSTGRES_USER` | Compose / StatefulSet database name and user | `aide` | no |
+| `POSTGRES_DB`, `POSTGRES_USER` | Compose / StatefulSet database name and user | `aide` in the dev loop (kept), `tevrin` on Kubernetes and Railway | no |
 | `DataProtection:ApplicationName` | Data Protection app name (keep stable) | `aide` | no |
 | `DataProtection:KeysPath` | Key ring directory | `/data/keys` in a container, else `%LOCALAPPDATA%/aide/keys` | no |
 | `Workspaces:Root` | Git working copies and local repos | `/data/workspaces` in a container, else `%LOCALAPPDATA%/aide/workspaces` | no |

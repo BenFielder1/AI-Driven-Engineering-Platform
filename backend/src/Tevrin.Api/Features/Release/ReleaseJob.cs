@@ -110,7 +110,7 @@ public sealed partial class ReleaseJobHandler(
         }
 
         // §4.21: Supabase BaaS production migrations run before the code reaches the default branch (platforms deploy it on
-        // merge), once merge readiness passes: immediately before AIDE merges, or as the release enters awaiting_merge
+        // merge), once merge readiness passes: immediately before Tevrin merges, or as the release enters awaiting_merge
         // (manual). A failure blocks the merge, and the merge is pinned to the commit they ran on.
         var migrated = await MigrateProductionAsync(project, release.Id, working.Branch, cancellationToken);
         if (migrated.Failed)
@@ -121,7 +121,7 @@ public sealed partial class ReleaseJobHandler(
         // FR-65: the manual strategy never merges; the release then waits for the merge on GitHub (or in the Local repository).
         var merge = MergeReadinessRules.TevrinMerges(project.MergeStrategy);
 
-        // §4.21: when readiness hasn't passed, the migrations didn't run, so AIDE never calls an unpinned merge: a conflict
+        // §4.21: when readiness hasn't passed, the migrations didn't run, so Tevrin never calls an unpinned merge: a conflict
         // fails the release as FR-43 does (MERGE_CONFLICT with the files); a PR that isn't open is released without merging
         // (merged elsewhere: tagged; closed: PR_CLOSED), as the providers do for those states; anything else (a review, checks)
         // awaits the merge as a refused merge does (FR-65), and the merge poll migrates once readiness passes.
@@ -173,7 +173,7 @@ public sealed partial class ReleaseJobHandler(
             case ReleaseOutcomeKind.AwaitingMerge:
                 var awaitingReasons = await AwaitingReasonsAsync(project, outcome, cancellationToken);
 
-                // §4.21: readiness blocked AIDE's merge and has changed since (or can't be read now): the attempt still says why it waits.
+                // §4.21: readiness blocked Tevrin's merge and has changed since (or can't be read now): the attempt still says why it waits.
                 await completion.AwaitMergeAsync(release.Id, project.MergeStrategy, awaitingReasons.Count == 0 ? migrated.Reasons : awaitingReasons, cancellationToken);
                 return;
             case ReleaseOutcomeKind.Conflict:
@@ -435,7 +435,7 @@ public sealed partial class ReleaseJobHandler(
             reasons.Add(new Git.MergeReadinessReasonDto(outcome.RefusedReason ?? MergeReadinessReasonCode.BranchProtected, outcome.Reason ?? "The Git host refused the merge."));
         }
 
-        // FR-138: AIDE couldn't take the merge request out of draft: say so (readiness ignores the draft until AIDE marked it ready).
+        // FR-138: Tevrin couldn't take the merge request out of draft: say so (readiness ignores the draft until Tevrin marked it ready).
         if (outcome.StillDraft && reasons.All(r => r.Code != MergeReadinessReasonCode.Draft))
         {
             reasons.Add(new Git.MergeReadinessReasonDto(MergeReadinessReasonCode.Draft, "Tevrin couldn't mark the merge request ready; it is still a draft."));

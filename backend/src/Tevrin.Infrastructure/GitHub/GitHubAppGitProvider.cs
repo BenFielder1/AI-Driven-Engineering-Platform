@@ -47,7 +47,7 @@ internal sealed partial class GitHubAppGitProvider(
                 return GitTestResult.Failed($"The Tevrin GitHub App can't access {repo.Owner}/{repo.Name}. Add the repository to the App's installation.");
             }
 
-            // An installation token's own permissions say whether AIDE may push (Contents: write).
+            // An installation token's own permissions say whether Tevrin may push (Contents: write).
             var writable = minted.Token.Permissions.TryGetValue("contents", out var contents) && contents == "write";
             using var branch = await api.GetOrNullAsync(
                 $"repos/{Uri.EscapeDataString(repo.Owner)}/{Uri.EscapeDataString(repo.Name)}/branches/{Uri.EscapeDataString(settings.DefaultBranch)}",

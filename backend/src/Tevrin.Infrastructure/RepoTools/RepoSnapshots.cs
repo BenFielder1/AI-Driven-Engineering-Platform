@@ -81,7 +81,7 @@ public interface IRepoSnapshotProvider
 }
 
 /// <summary>
-/// <see cref="IRepoSnapshotProvider"/> under <c>{temp}/aide-snapshots/{instance}/</c>. A commit snapshot is
+/// <see cref="IRepoSnapshotProvider"/> under <c>{temp}/tevrin-snapshots/{instance}/</c>. A commit snapshot is
 /// <c>git archive</c> of the commit, extracted entry by entry: regular files and directories only (links and anything else
 /// are skipped), every path checked with the §4.6 rules, <c>.aide/</c> and nested <c>.git</c> left out, and a size cap.
 /// At most <see cref="MaxCached"/> commit snapshots are kept; the least recently used one not in use is deleted first, and

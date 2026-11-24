@@ -31,7 +31,7 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
   - Pages are client components (SPEC D-V3-2), and routing goes through `src/lib/navigation.ts`.
   - The web server is `frontend/server.ts`, a custom Node server run with Node 24 type stripping. It serves Next, proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL` read at runtime, sets the CSP nonce and security headers, and writes redacted JSON request logs.
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 18 via Npgsql (SPEC D-V5-1) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
-- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; stay on 8.x, SPEC D-0.7.0-48). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*` (architecture test).
+- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; stay on 8.x, SPEC D-0.7.0-48). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references the product projects (`Tevrin.Api`/`Domain`/`Infrastructure`) or `Tevrin.Pack.*` (architecture test).
 - **Background work**: hosted services in `Tevrin.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` (after green CI on `main`) and `production` (when a GitHub release `x.y.z` is published, or by dispatch), deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
@@ -96,8 +96,8 @@ docs/                       Jekyll + just-the-docs site (index.md, _config.yml, 
 ## Commands
 
 ```bash
-# Dev loop (one-off setup: cp .env.example .env, pick a password, then
-#   cd backend && dotnet tool restore && dotnet user-secrets set ConnectionStrings:Aide "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<from .env>" --project src/Tevrin.Api)
+# Dev loop (one-off setup: cp .env.example .env, pick a password, then the command below; the dev-loop database and user stay `aide`)
+#   cd backend && dotnet tool restore && dotnet user-secrets set ConnectionStrings:Tevrin "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<from .env>" --project src/Tevrin.Api
 docker compose up -d db                                   # dev database (PostgreSQL 18, values from .env)
 dotnet run --project backend/src/Tevrin.Api                 # http://localhost:5080
 npm --prefix frontend run dev                             # http://localhost:3000 (proxies /api + WebSockets → BACKEND_URL, default 5080)

@@ -305,7 +305,7 @@ public sealed partial class MergePollJobHandler(
             CoAuthorLine = await commitCredit.ForReleaseAsync(release, cancellationToken),
             Notes = await publisher.HostNotesAsync(release, working.Provider.Kind, working.Connection.RepoUrl, cancellationToken),
 
-            // FR-140: an attempt whose merge AIDE submitted (and that waited past the release job's ceiling) merged by AIDE.
+            // FR-140: an attempt whose merge Tevrin submitted (and that waited past the release job's ceiling) merged by Tevrin.
             RecordedMergeCommitSha = release.MergeCommitSha,
             MergeSubmitted = release.MergeSubmittedAt is not null,
         };
@@ -317,7 +317,7 @@ public sealed partial class MergePollJobHandler(
                 // §4.21: a merge of a head the production migrations didn't run on is on record, with the release.
                 var unmigrated = await gate.UnmigratedMergeAsync(release, outcome.MergedHead, working.Branch, cancellationToken);
 
-                // FR-140: a merge AIDE submitted (a Bitbucket merge task past the release job's ceiling) isn't an external one.
+                // FR-140: a merge Tevrin submitted (a Bitbucket merge task past the release job's ceiling) isn't an external one.
                 await completion.SucceedAsync(release.Id, outcome, url, mergedExternally: release.MergeSubmittedAt is null || outcome.MergedExternally, cancellationToken, unmigrated);
                 return;
             case ReleaseOutcomeKind.AwaitingMerge:

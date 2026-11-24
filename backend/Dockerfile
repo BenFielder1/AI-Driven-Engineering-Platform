@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# AIDE API image: ASP.NET Core app + self-contained EF Core migration bundle (/app/efbundle).
+# Tevrin API image: ASP.NET Core app + self-contained EF Core migration bundle (/app/efbundle).
 # Build context: backend/   (docker build -f backend/Dockerfile backend)
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

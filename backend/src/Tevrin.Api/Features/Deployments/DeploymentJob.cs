@@ -370,7 +370,7 @@ public sealed partial class DeploymentJobHandler(
         catch (DbUpdateException ex)
         {
             // E.g. a newer preview cancelled this one meanwhile. A deployment this run created is cancelled when its row was
-            // stopped (no AIDE row will poll it); otherwise the retry finds it by its meta id and adopts it.
+            // stopped (no Tevrin row will poll it); otherwise the retry finds it by its meta id and adopts it.
             if (_created is { } created
                 && await db.Deployments.AsNoTracking().Where(d => d.Id == deployment.Id).Select(d => (DeploymentStatus?)d.Status).FirstOrDefaultAsync(cancellationToken) is var current
                 && (current is null || DeploymentStates.IsTerminal(current.Value)))

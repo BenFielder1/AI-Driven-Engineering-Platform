@@ -327,7 +327,7 @@ public sealed partial class BitbucketConnectionService(
     /// <c>GET /pullrequests/{account uuid}</c>; <c>read:workspace</c> <c>GET /user/workspaces</c>.</item>
     /// <item>Workspace level (each workspace in turn until a scope is settled): <c>read:project</c>
     /// <c>GET /workspaces/{ws}/projects</c>; <c>read:repository</c> <c>GET /repositories/{ws}</c>; <c>write:repository</c>
-    /// <c>POST /repositories/{ws}/aide-scope-check!</c> with an invalid body (an invalid slug and an unknown <c>scm</c>, so it
+    /// <c>POST /repositories/{ws}/tevrin-scope-check!</c> with an invalid body (an invalid slug and an unknown <c>scm</c>, so it
     /// can't create anything: a 400 means the scope is there).</item>
     /// <item>Repository level, on a repository the user administers (else one they can write to): <c>read:pipeline</c>
     /// <c>GET …/pipelines</c>, <c>admin:repository</c> <c>GET …/branch-restrictions</c>, <c>write:pullrequest</c>

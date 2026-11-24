@@ -462,7 +462,7 @@ public static class DeploymentEndpoints
             return ApiProblems.Validation(new Dictionary<string, string[]> { ["key"] = [$"Tevrin derives {key}; it changes with the deployment targets."] });
         }
 
-        // FR-88, FR-145: deleting in AIDE deletes on every target; if a platform can't, nothing is deleted (all or nothing).
+        // FR-88, FR-145: deleting in Tevrin deletes on every target; if a platform can't, nothing is deleted (all or nothing).
         foreach (var component in new[] { DeploymentComponent.Frontend, DeploymentComponent.Backend })
         {
             var ids = EnvSyncRules.AllIds(DeploymentEnvSync.ScopedIds(variable.VercelEnvIds, component));

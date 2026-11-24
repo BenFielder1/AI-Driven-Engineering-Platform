@@ -139,7 +139,7 @@ public sealed partial class RailwayDeploymentProvider
                 continue;
             }
 
-            // Railway can't tag a deployment with the AIDE row: a retry adopts only one created after the row; the release
+            // Railway can't tag a deployment with the Tevrin row: a retry adopts only one created after the row; the release
             // adopts Railway's own deployment of the merge commit (FR-149), never a skipped or removed one.
             var created = Json.Time(node, "createdAt");
             var state = RailwayRules.StateOf(Text(node, "status"));

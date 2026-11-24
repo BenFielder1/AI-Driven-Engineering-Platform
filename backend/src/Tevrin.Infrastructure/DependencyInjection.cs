@@ -174,7 +174,7 @@ public static class DependencyInjection
         services.AddScoped<IGitProvider>(sp => sp.GetRequiredService<GitHubGitProvider>());
         services.AddScoped<IGitProvider, LocalGitProvider>();
 
-        // The AIDE GitHub App (FR-80–FR-83, §4.14): configuration (GitHub:App:*) or the manifest-registered row, the REST
+        // The Tevrin GitHub App (FR-80–FR-83, §4.14): configuration (GitHub:App:*) or the manifest-registered row, the REST
         // API on the fixed GitHub hosts, installation tokens (in-memory cache ≤ 55 min) and the github_app provider.
         services.AddOptions<GitHubAppOptions>()
             .BindConfiguration(GitHubAppOptions.SectionName)

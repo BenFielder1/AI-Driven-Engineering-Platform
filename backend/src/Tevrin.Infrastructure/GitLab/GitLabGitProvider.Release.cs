@@ -318,7 +318,7 @@ internal sealed partial class GitLabGitProvider
 
             mergeSha = merged;
 
-            // A retry after AIDE's own merge (e.g. the tag limit, a crash) finds it recorded on the attempt.
+            // A retry after Tevrin's own merge (e.g. the tag limit, a crash) finds it recorded on the attempt.
             mergedExternally = !string.Equals(request.RecordedMergeCommitSha, merged, StringComparison.Ordinal);
         }
         else
@@ -371,7 +371,7 @@ internal sealed partial class GitLabGitProvider
                 return conflicted;
             }
 
-            // The merge is pinned to the head AIDE fetched (and reviewed): a different MR head means the branch moved.
+            // The merge is pinned to the head Tevrin fetched (and reviewed): a different MR head means the branch moved.
             if (!string.Equals(mr.Sha, head, StringComparison.Ordinal))
             {
                 return ReleaseOutcome.Failed(

@@ -143,7 +143,7 @@ builder.Services.AddTevrinDataProtection(builder.Configuration);
 builder.AddTevrinAuth();
 builder.Services.AddScoped<ProjectCreator>();
 
-// The AIDE GitHub App (FR-80–FR-83, FR-86): connections, the repo picker, project repositories and the manifest flow.
+// The Tevrin GitHub App (FR-80–FR-83, FR-86): connections, the repo picker, project repositories and the manifest flow.
 builder.Services.AddScoped<GitHubConnections>();
 builder.Services.AddScoped<GitHubRepoService>();
 builder.Services.AddSingleton<GitHubManifestStates>();

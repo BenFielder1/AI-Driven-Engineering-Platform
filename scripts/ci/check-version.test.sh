@@ -15,8 +15,8 @@ fixture() {
   mkdir -p "$dir/backend" "$dir/frontend/src/features/marketing/content"
   printf '<Project>\n  <PropertyGroup>\n    <Version>%s</Version>\n  </PropertyGroup>\n</Project>\n' "$1" \
     > "$dir/backend/Directory.Build.props"
-  printf '{\n  "name": "aide-frontend",\n  "version": "%s",\n  "private": true\n}\n' "$2" > "$dir/frontend/package.json"
-  printf '{\n  "name": "aide-frontend",\n  "version": "%s",\n  "packages": {\n    "": {\n      "name": "aide-frontend",\n      "version": "%s",\n      "dependencies": {}\n    }\n  }\n}\n' \
+  printf '{\n  "name": "tevrin-frontend",\n  "version": "%s",\n  "private": true\n}\n' "$2" > "$dir/frontend/package.json"
+  printf '{\n  "name": "tevrin-frontend",\n  "version": "%s",\n  "packages": {\n    "": {\n      "name": "tevrin-frontend",\n      "version": "%s",\n      "dependencies": {}\n    }\n  }\n}\n' \
     "$3" "$4" > "$dir/frontend/package-lock.json"
   # The interface's `version: string` / `date: string | null` come first, as in the real file, and must not match.
   printf "export interface ChangelogEntry {\n  version: string\n  date: string | null\n}\n\nexport const changelog = [\n  {\n    version: '%s',\n    date: %s,\n  },\n  {\n    version: '0.1.0',\n    date: '2026-10-10',\n  },\n]\n" \

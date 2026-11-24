@@ -4,7 +4,7 @@ namespace Tevrin.Domain.Entities;
 /// FR-152, §4.21, §5: a project's database for one environment (table <c>managed_databases</c>, unique per
 /// (project, environment)): a Supabase project, a Render or Railway Postgres, an External connection string, or the Fake.
 /// <see cref="ConnectionEncrypted"/> is Data Protection ciphertext of the connection JSON (URIs, keys, pooler config) and
-/// <see cref="DbPasswordEncrypted"/> of the AIDE-generated password; neither is ever returned or logged. Concurrently
+/// <see cref="DbPasswordEncrypted"/> of the Tevrin-generated password; neither is ever returned or logged. Concurrently
 /// edited (provision poll, Owner actions), so <see cref="RowVersion"/> maps <c>xmin</c>.
 /// </summary>
 public sealed class ManagedDatabase

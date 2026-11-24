@@ -216,7 +216,7 @@ public sealed partial class MergeReadinessService(
             return Result.Success(Dto(closed.Verdict!, project.MergeStrategy, [], null, null, now));
         }
 
-        // FR-138: once a release attempt of this version awaited its merge, AIDE has marked the draft ready: a draft blocks again.
+        // FR-138: once a release attempt of this version awaited its merge, Tevrin has marked the draft ready: a draft blocks again.
         var markedReady = await db.Releases.AsNoTracking().AnyAsync(r => r.ReleaseVersionId == version.Id && r.AwaitingMergeSince != null, cancellationToken);
         var readiness = await host.Provider.GetMergeReadinessAsync(host.Connection, number, project.MergeStrategy, cancellationToken, markedReady);
         if (readiness.IsFailure)

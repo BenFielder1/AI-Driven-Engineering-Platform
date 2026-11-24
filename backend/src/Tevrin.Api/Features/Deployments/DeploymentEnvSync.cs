@@ -40,7 +40,7 @@ public sealed partial class DeploymentEnvSync(TevrinDbContext db, DeploymentAcce
                 continue;
             }
 
-            // FR-145, §8: whatever saved it, a public variable that looks secret never leaves AIDE; one sent earlier is removed.
+            // FR-145, §8: whatever saved it, a public variable that looks secret never leaves Tevrin; one sent earlier is removed.
             if (v.Public && values.Values.Any(value => EnvInventoryRules.LooksSecret(v.Key, value)))
             {
                 deletes.AddRange(ScopedIds(v.VercelEnvIds, component).Values);

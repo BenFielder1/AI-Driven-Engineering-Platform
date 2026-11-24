@@ -217,6 +217,10 @@ jobs:
         run: bash scripts/ci/check-migrations-renamed.test.sh
       - name: Snapshot re-baseline check works (FR-328)
         run: bash scripts/ci/check-snapshots-rebaseline.test.sh
+      - name: No leftover aide names (FR-329)
+        run: |
+          python3 scripts/ci/check-aide-names.py --self-test
+          python3 scripts/ci/check-aide-names.py
       # Error severity only: the deploy scripts carry warning/style findings that are not bugs (lib.sh variables
       # used by the scripts that source it). Pinned image, so local runs match.
       - name: shellcheck (severity error)

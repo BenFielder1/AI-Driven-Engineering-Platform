@@ -117,7 +117,7 @@ public sealed partial class RenderDeploymentProvider
                 continue;
             }
 
-            // Render can't tag a deploy with the AIDE row: a retry adopts only an API deploy created after the row; the
+            // Render can't tag a deploy with the Tevrin row: a retry adopts only an API deploy created after the row; the
             // release adopts Render's own deploy of the merge commit (FR-149), never a canceled one.
             var created = Json.Time(deploy, "createdAt");
             var trigger = Text(deploy, "trigger");

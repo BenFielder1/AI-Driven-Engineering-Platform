@@ -141,7 +141,7 @@ public sealed partial class DatabaseProvisioningJobHandler(
             await EnsureSeparateAsync(row, connection, linked, cancellationToken);
         }
 
-        // §4.21: AIDE generates the password of what it creates, and resets a linked Supabase project's it doesn't hold.
+        // §4.21: Tevrin generates the password of what it creates, and resets a linked Supabase project's it doesn't hold.
         var needsPassword = payload.Mode == DatabaseSetupMode.Create
             ? row.Provider is ManagedDatabaseProvider.Supabase or ManagedDatabaseProvider.Railway
             : payload.Mode == DatabaseSetupMode.Link

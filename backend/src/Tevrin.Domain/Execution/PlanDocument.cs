@@ -12,7 +12,7 @@ namespace Tevrin.Domain.Execution;
 
 /// <summary>
 /// FR-29, D6: the stored form of a plan artifact (<c>implementation_plan</c>, <c>optimization_plan</c>). The Markdown
-/// content is rendered from the structured plan and ends with one fenced <c>```aide-plan</c> block holding the plan as
+/// content is rendered from the structured plan and ends with one fenced <c>```tevrin-plan</c> block holding the plan as
 /// JSON. That block is the source of truth: execution steps (FR-30) are created from it, a human-edited draft (FR-18)
 /// is validated from it and re-rendered, and the readable part above it is never parsed.
 /// <para>
@@ -63,7 +63,7 @@ public static partial class PlanDocument
     }
 
     /// <summary>
-    /// A stored or edited plan document (FR-18, FR-30): the JSON of its single <c>```aide-plan</c> block, validated.
+    /// A stored or edited plan document (FR-18, FR-30): the JSON of its single <c>```tevrin-plan</c> block, validated.
     /// No block, more than one, or an invalid plan is <c>INVALID_PLAN</c>.
     /// </summary>
     public static Result<IReadOnlyList<PlanStep>> ParseMarkdown(string markdown, int? maxFilesPerStep, PlanAgents? agents = null)
@@ -80,7 +80,7 @@ public static partial class PlanDocument
 
     /// <summary>
     /// <see cref="Render"/>, then proof that the stored document reads back (<see cref="ParseMarkdown"/>) to exactly these
-    /// steps. A plan whose text could forge or break the <c>```aide-plan</c> block is refused here with
+    /// steps. A plan whose text could forge or break the <c>```tevrin-plan</c> block is refused here with
     /// <c>INVALID_PLAN</c> instead of becoming a draft that can never be approved.
     /// </summary>
     public static Result<string> RenderChecked(string type, IReadOnlyList<PlanStep> steps, int? maxFilesPerStep, PlanAgents? agents = null)
@@ -105,7 +105,7 @@ public static partial class PlanDocument
     }
 
     /// <summary>
-    /// Renders the plan as Markdown: a readable step list followed by the <c>```aide-plan</c> block. Step text is free
+    /// Renders the plan as Markdown: a readable step list followed by the <c>```tevrin-plan</c> block. Step text is free
     /// text, so runs of three or more backticks or tildes in it are backslash-escaped (<see cref="Neutralise"/>): it can
     /// never open, close or forge a fenced block. Declared paths can't hold backticks or line breaks (<see cref="PathRules"/>).
     /// </summary>

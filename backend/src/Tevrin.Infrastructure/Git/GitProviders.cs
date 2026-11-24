@@ -597,7 +597,7 @@ internal sealed partial class GitHubGitProvider(
         }
 
         // 405: not mergeable (conflicts, or branch protection: required reviews/checks); 409: the head moved since it was
-        // fetched (retry); 403/422: AIDE may not merge (permission, merge method) — FR-65 awaits a merge on GitHub.
+        // fetched (retry); 403/422: Tevrin may not merge (permission, merge method) — FR-65 awaits a merge on GitHub.
         return response.StatusCode switch
         {
             HttpStatusCode.MethodNotAllowed => new MergeAttempt(null, true, ReleaseOutcome.Failed(ErrorCodes.GitError, reason, transient: false)),

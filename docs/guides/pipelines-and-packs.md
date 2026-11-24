@@ -16,10 +16,10 @@ Since 0.7.0 Tevrin runs on a reusable **pipeline engine**. The engine owns the s
 | Engine runtime | `Tevrin.Engine.Runtime` | YAML loader, registry, job queue, LLM providers, artifact store, gates, notifications, run log, agent stage runner |
 | Engine API | `Tevrin.Engine.Api` | The generic read endpoints, gate decisions and the SignalR events |
 | SDLC pack | `Tevrin.Pack.Sdlc` | `sdlc.pipeline.yaml`, key constants, guard names, `SdlcPack` |
-| Host | `Aide.*` | Composes the pack: guard implementations, settings, start selector, project permissions |
+| Host | `Tevrin.Api`, `Tevrin.Domain`, `Tevrin.Infrastructure`` | Composes the pack: guard implementations, settings, start selector, project permissions |
 | Engine UI | `frontend/src/engine/` | Pipeline views that render any definition |
 
-**The dependency rule:** no `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*`, and a pack references only the engine. An architecture test in `Tevrin.Engine.Tests` fails the build if that changes. A second test fails if an engine source file contains an SDLC key. The frontend has the same rule: an ESLint rule stops `src/engine/` importing `src/features/` or `src/app/`.
+**The dependency rule:** no `Tevrin.Engine.*` assembly references the host projects (`Tevrin.Api`, `Domain`, `Infrastructure`) or `Tevrin.Pack.*`, and a pack references only the engine. An architecture test in `Tevrin.Engine.Tests` fails the build if that changes. A second test fails if an engine source file contains an SDLC key. The frontend has the same rule: an ESLint rule stops `src/engine/` importing `src/features/` or `src/app/`.
 
 ## A definition
 

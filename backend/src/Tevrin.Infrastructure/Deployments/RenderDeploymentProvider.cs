@@ -71,7 +71,7 @@ public sealed partial class RenderDeploymentProvider(PlatformHttp http, RenderLo
                 auth, target, RenderRules.ServiceSpec(target.Component, target.BuildConfig, target.RootDirectory, name, false, request.Plan, request.Region, target.Repo.DefaultBranch), cancellationToken);
         }
 
-        // FR-147: the persistent preview service, deployed only by AIDE (auto-deploy off).
+        // FR-147: the persistent preview service, deployed only by Tevrin (auto-deploy off).
         var preview = await FindOrCreateAsync(
             auth,
             target,

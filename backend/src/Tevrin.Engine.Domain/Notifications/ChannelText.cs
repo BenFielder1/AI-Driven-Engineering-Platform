@@ -5,7 +5,7 @@ namespace Tevrin.Engine.Domain.Notifications;
 /// </summary>
 public static class ChannelText
 {
-    /// <summary>The product name people see (§4.29: identifiers such as cookies and headers keep <c>aide</c>).</summary>
+    /// <summary>The product name people see (§4.29).</summary>
     public const string ProductName = "Tevrin";
 
     /// <summary>The label of the link back to the app in every channel.</summary>

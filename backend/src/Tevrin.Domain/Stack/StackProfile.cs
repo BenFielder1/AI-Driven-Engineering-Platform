@@ -126,7 +126,7 @@ public sealed record StackProfileStructureEntry(string Path, string Role, string
 /// <summary>A question for the user about a layer (<c>frontend</c>, <c>backend</c>, <c>data</c>, <c>vcs</c> or <c>hosts</c>).</summary>
 public sealed record StackProfileQuestion(string Layer, string Text);
 
-/// <summary>§4.27: the structured profile in the <c>aide-stack-profile</c> block.</summary>
+/// <summary>§4.27: the structured profile in the <c>tevrin-stack-profile</c> block.</summary>
 public sealed record StackProfileDocument
 {
     public int SchemaVersion { get; init; } = StackProfile.SchemaVersion;
@@ -171,7 +171,7 @@ public sealed record StackProfileApproval(StackComposition? Composition, bool Ge
 
 /// <summary>
 /// FR-180–FR-184, §4.27: the pure rules of the <c>stack_profile</c> artifact. Markdown: a narrative, then one fenced block tagged
-/// <c>aide-stack-profile</c> holding the JSON document. <see cref="Parse"/> and <see cref="Render"/> round-trip it; a form
+/// <c>tevrin-stack-profile</c> holding the JSON document. <see cref="Parse"/> and <see cref="Render"/> round-trip it; a form
 /// edit re-renders the block. <see cref="Validate"/> checks catalog options and FR-119 paths; <see cref="Reconcile"/> applies
 /// the agent-versus-detector rule; <see cref="Approve"/> decides approval like <c>PUT /stack</c>.
 /// </summary>
@@ -260,7 +260,7 @@ public static class StackProfile
 
     /// <summary>
     /// The narrative and document of a <c>stack_profile</c>'s Markdown. <c>VALIDATION</c> (details <c>"field: message"</c>)
-    /// when there isn't exactly one <c>aide-stack-profile</c> block, or its JSON isn't a profile.
+    /// when there isn't exactly one <c>tevrin-stack-profile</c> block, or its JSON isn't a profile.
     /// </summary>
     public static Result<ParsedStackProfile> Parse(string markdown)
     {

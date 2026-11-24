@@ -5,7 +5,7 @@ namespace Tevrin.Infrastructure.Git;
 
 /// <summary>
 /// Where Git working copies live (§5, §9): <c>Workspaces:Root</c> if set; otherwise <c>/data/workspaces</c> in a
-/// container (the <c>aide-data</c> volume), or <c>%LOCALAPPDATA%/aide/workspaces</c> for the dev loop.
+/// container (the <c>tevrin-data</c> volume), or <c>%LOCALAPPDATA%/aide/workspaces</c> for the dev loop.
 /// A project's working copy is <c>{root}/{projectId}</c>.
 /// </summary>
 public interface IWorkspaceStore

@@ -384,7 +384,7 @@ public sealed record GateSummaryDto(Guid Id, [WireEnum(typeof(SdlcGates))] strin
 /// <c>releaseVersionId</c> (the version in development, else the latest released; §4.10). <c>checkpoint</c> was
 /// <c>projectVersion</c> (D-V2-11). <c>suggestedNextVersion</c> prefills "Start new version" (FR-60: the next minor of the
 /// released version). <c>latestDeployment</c> is the project's newest deployment of any target (FR-90, FR-91; <c>null</c>:
-/// none), for the overview and <c>aide status</c>. <c>productionUrls</c> (FR-151) is the production URL of each component
+/// none), for the overview. <c>productionUrls</c> (FR-151) is the production URL of each component
 /// with a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now.
 /// </summary>
 public sealed record ProjectStateDto(

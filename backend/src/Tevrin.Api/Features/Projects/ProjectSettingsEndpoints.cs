@@ -190,7 +190,7 @@ public static partial class ProjectSettingsEndpoints
             return ApiProblems.Validation(validation.Error!);
         }
 
-        // FR-136: re-bind to the caller's own connection, after AIDE checks it has developer (GitLab) or write (Bitbucket)
+        // FR-136: re-bind to the caller's own connection, after Tevrin checks it has developer (GitLab) or write (Bitbucket)
         // access to the repository.
         (Guid ConnectionId, Guid OwnerUserId)? rebound = null;
         if (request.ConnectionId is { } connectionId)

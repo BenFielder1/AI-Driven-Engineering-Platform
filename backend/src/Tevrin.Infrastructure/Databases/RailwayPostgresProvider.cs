@@ -90,7 +90,7 @@ public sealed class RailwayPostgresProvider(PlatformHttp http) : IDatabaseProvid
             hasVolume = await HasVolumeAsync(auth, projectId, serviceId, environmentId, cancellationToken);
             if (hasVolume == false && request.Environment == DeploymentEnvironment.Preview)
             {
-                // FR-195: aide-preview's fresh copy of the Postgres AIDE created (Create mode) has no data yet, so it starts on
+                // FR-195: aide-preview's fresh copy of the Postgres Tevrin created (Create mode) has no data yet, so it starts on
                 // 18. Production adoption never changes the image (the service may be the Owner's), and an instance with a
                 // volume is never touched: its image stays what its data was made with.
                 await QueryAsync(

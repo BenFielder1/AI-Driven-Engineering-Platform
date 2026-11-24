@@ -187,7 +187,7 @@ public sealed class SpecGenerationJobHandler(
 /// FR-29 (with the FR-13/FR-17/FR-20 re-runs): generates the implementation plan from the current approved project request
 /// and specification. The reply is structured JSON, read and validated by the plan rules (<see cref="PlanValidator"/>, with
 /// the project's max files per step, and no protected paths: a generated plan may not declare them, §4.6); the draft is the
-/// plan rendered by <see cref="PlanDocument.RenderChecked"/> (Markdown plus the canonical <c>```aide-plan</c> block, proven
+/// plan rendered by <see cref="PlanDocument.RenderChecked"/> (Markdown plus the canonical <c>```tevrin-plan</c> block, proven
 /// to read back to the same steps). An invalid plan is re-run once with every reason as feedback; still invalid → the run
 /// fails with <c>INVALID_PLAN</c> and no draft is created. Steps carry <c>agent</c> and <c>covers</c> (FR-76); an
 /// iteration plan that leaves a <c>[new]</c>/<c>[changed]</c> requirement uncovered is a warning, shown with the plan

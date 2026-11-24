@@ -91,7 +91,7 @@ public sealed record StackProfileViewDto(
     StackProfileDocumentDto? Document,
     IReadOnlyList<string> Errors);
 
-/// <summary>§4.27: the structured profile, as in the <c>aide-stack-profile</c> block (the editor posts it back inside that block).</summary>
+/// <summary>§4.27: the structured profile, as in the <c>tevrin-stack-profile</c> block (the editor posts it back inside that block).</summary>
 public sealed record StackProfileDocumentDto(
     int SchemaVersion,
     string? BaseCommitSha,

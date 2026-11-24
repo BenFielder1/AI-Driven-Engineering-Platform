@@ -25607,7 +25607,7 @@
             }
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once Tevrin has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:\nnone), for the overview and `aide status`. `productionUrls` (FR-151) is the production URL of each component\nwith a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once Tevrin has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:\nnone), for the overview. `productionUrls` (FR-151) is the production URL of each component\nwith a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now."
       },
       "ProjectStatus": {
         "enum": [
@@ -28794,7 +28794,7 @@
             }
           }
         },
-        "description": "§4.27: the structured profile, as in the `aide-stack-profile` block (the editor posts it back inside that block)."
+        "description": "§4.27: the structured profile, as in the `tevrin-stack-profile` block (the editor posts it back inside that block)."
       },
       "StackProfileEvidenceDto": {
         "required": [

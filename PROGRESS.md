@@ -20,7 +20,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-324 | Migrations change only by mechanical substitutions (CI check); EF drift empty | 3.1 | backend + data + CI | M65 | todo | — |
 | FR-325 | Config/env/auth scheme/telemetry renamed, old names read with a warning | 3.1, 4.77 | backend + deploy | M65 | todo | — |
 | FR-326 | Wire and stored identifiers, read both (tokens, cookie, plan block, merge strategy, others) | 3.1, 4.77 | backend + frontend + data | M65 | done | 4865d26, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480) |
-| FR-327 | Images, k8s, Railway IaC, smoke scripts renamed; rename runbook | 3.1 | deploy + docs | M65 | todo | — |
+| FR-327 | Images, k8s, Railway IaC, smoke scripts renamed; rename runbook | 3.1 | deploy + docs | M65 | done | 3f04ef7, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45371572456) |
 | FR-328 | One snapshot re-baseline with a mapped-equality CI check; freeze base moves | 3.1 | backend + CI | M65 | done | 4865d26 + 62c5ce1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480) |
 | FR-329 | Leftover-name scan test with `scripts/ci/aide-allowlist.txt`; docs updated | 3.1 | backend + docs + CI | M65 | todo | — |
 | FR-330 | `RunControl.Engine`/`Host` per pipeline; SDLC is `Host` | 3.2 | backend | M66 | todo | — |
@@ -68,7 +68,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] b. Projects, namespaces and types (mechanical) + migration-check script (FR-323, FR-324) ([CI 45278720358](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45278720358))
   - [x] c. Config and telemetry fallbacks (FR-325) ([CI 45312651121](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45312651121))
   - [x] d. Wire and stored identifiers, read both; contract + client (FR-326) ([CI 45365150480](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480), with f)
-  - [ ] e. Images, k8s, IaC, smoke scripts, runbook (FR-327)
+  - [x] e. Images, k8s, IaC, smoke scripts, runbook (FR-327) ([CI 45371572456](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45371572456))
   - [x] f. Snapshot re-baseline + mapped-equality check (FR-328): re-baseline 4865d26 (snapshots from scratch-branch CI run 45361838017), freeze pinned in 62c5ce1 ([CI 45365150480](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480))
   - [ ] g. Leftover-name scan + allowlist, CLAUDE.md/STACK.md/README/docs (FR-329)
 - [ ] M66 Run control and triggers — FR-330–FR-337
@@ -97,6 +97,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 - 2026-11-24 — D-0.8.0-17: the generic workload, service and job names (`api`, `web`, `db`, `db-migrate`; Railway `api`, `web`, `postgres`) stay; FR-327 renames the namespace, images, data PVC, labels, Railway project, variables and database — Claude (M65e review) — SPEC updated: yes (FR-327 row and acceptance, §10)
 - 2026-11-24 — The dev loop (`docker-compose.yml`, `.env.example`) keeps its `aide` project, volume, database and user, so an existing dev database keeps working ("Unchanged: dev loop", §11); FR-329 allowlists them. `.railway/railway.ts` ignores `ConnectionStrings__Aide` for 0.8.x so `railway config apply` never removes the variable a 0.7.0 deployment reads — Claude — SPEC updated: no
+
+- 2026-11-24 — FR-329's allowlist allows any `aide` name under the test folders (backend tests, e2e, Vitest files, mocks) with removal 0.9.0, rather than one entry per name: tests exercise the old names still read, the FR-197–FR-201 product-name rules and pre-rename fixtures. Outside tests, every entry names its tokens and files. The scanner is `scripts/ci/check-aide-names.py` (Python for per-entry path and token regexes) — Claude — SPEC updated: no
 
 ## Known issues
 - Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.

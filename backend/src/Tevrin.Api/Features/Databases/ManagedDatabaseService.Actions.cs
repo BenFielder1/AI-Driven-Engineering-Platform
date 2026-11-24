@@ -134,7 +134,7 @@ public sealed partial class ManagedDatabaseService
         var keepsResource = row.Provider == provider && row.ResourceId is not null && mode == DatabaseSetupMode.Link && linkId == row.ResourceId;
         if (!keepsResource)
         {
-            // A different database: AIDE no longer holds its password or its connection details.
+            // A different database: Tevrin no longer holds its password or its connection details.
             row.ResourceId = null;
             secrets.SetPassword(row, null);
         }

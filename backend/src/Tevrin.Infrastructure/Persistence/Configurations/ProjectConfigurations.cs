@@ -187,7 +187,7 @@ internal sealed class GitHubConnectionConfiguration : IEntityTypeConfiguration<G
         builder.Property(c => c.RowVersion).IsXminRowVersion();
         builder.HasOne<AppUser>().WithOne().HasForeignKey<GitHubConnection>(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
 
-        // One AIDE user per GitHub account.
+        // One Tevrin user per GitHub account.
         builder.HasIndex(c => c.GithubUserId).IsUnique();
     }
 }

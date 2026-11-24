@@ -12,7 +12,7 @@ public static class DataProtectionSetup
     public const string KeysPathKey = "DataProtection:KeysPath";
     public const string DefaultApplicationName = "aide";
 
-    /// <summary>Default key directory inside containers (the <c>aide-data</c> volume is mounted at <c>/data</c>).</summary>
+    /// <summary>Default key directory inside containers (the <c>tevrin-data</c> volume is mounted at <c>/data</c>).</summary>
     public const string ContainerKeysPath = "/data/keys";
 
     public static IServiceCollection AddTevrinDataProtection(this IServiceCollection services, IConfiguration configuration)

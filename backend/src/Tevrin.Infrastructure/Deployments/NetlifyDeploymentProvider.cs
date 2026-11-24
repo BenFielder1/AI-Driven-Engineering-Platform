@@ -18,7 +18,7 @@ namespace Tevrin.Infrastructure.Deployments;
 /// can't add it stops setup before anything is made on Netlify.</item>
 /// <item>Link: <c>GET /sites/{id}</c> (linked to this repository, or to none). Both then set branch control:
 /// <c>allowed_branches: [production branch]</c> and Deploy Previews off (<c>skip_prs</c>).</item>
-/// <item>Preview: <c>POST /sites/{id}/builds?branch=&amp;title=aide:&lt;id&gt;</c>; the deploy must be of the PR head
+/// <item>Preview: <c>POST /sites/{id}/builds?branch=&amp;title=tevrin:&lt;id&gt;</c>; the deploy must be of the PR head
 /// (<c>commit_ref</c>), else it is re-triggered once. Production: adopt <c>GET /sites/{id}/deploys?production=true</c>
 /// with <c>commit_ref</c> = the merge SHA, else <c>POST /builds</c> on the production branch.</item>
 /// <item>Rollback: <c>POST /sites/{id}/deploys/{deploy_id}/restore</c>. Logs: <c>error_message</c> + <c>admin_url</c>.</item>

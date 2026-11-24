@@ -6548,7 +6548,7 @@ export interface components {
          *     `releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was
          *     `projectVersion` (D-V2-11). `suggestedNextVersion` prefills "Start new version" (FR-60: the next minor of the
          *     released version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:
-         *     none), for the overview and `aide status`. `productionUrls` (FR-151) is the production URL of each component
+         *     none), for the overview. `productionUrls` (FR-151) is the production URL of each component
          *     with a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now.
          */
         ProjectStateDto: {
@@ -7565,7 +7565,7 @@ export interface components {
         };
         /** @enum {unknown} */
         StackProfileConfidence: "high" | "medium" | "low" | null;
-        /** @description §4.27: the structured profile, as in the `aide-stack-profile` block (the editor posts it back inside that block). */
+        /** @description §4.27: the structured profile, as in the `tevrin-stack-profile` block (the editor posts it back inside that block). */
         StackProfileDocumentDto: {
             /** Format: int32 */
             schemaVersion: number;

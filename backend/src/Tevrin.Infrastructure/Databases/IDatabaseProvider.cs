@@ -35,7 +35,7 @@ public sealed record DatabaseHostContext(string? RenderServiceId, string? Railwa
 
 /// <summary>
 /// FR-152: create or link a database for one environment. <see cref="Name"/> is the resource name to create (Render
-/// preview: <c>&lt;name&gt;-preview</c>); <see cref="Password"/> the AIDE-generated database password (Supabase create, and
+/// preview: <c>&lt;name&gt;-preview</c>); <see cref="Password"/> the Tevrin-generated database password (Supabase create, and
 /// the reset when linking a project whose password Tevrin doesn't hold; Railway).
 /// </summary>
 public sealed record DatabaseSetupRequest(

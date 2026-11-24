@@ -212,7 +212,7 @@ public sealed partial class DeploymentTargetService
         var recomputed = await inventory.RecomputeDerivedAsync(projectId, await inventory.FactsAsync(projectId, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
-        // The remaining targets drop what AIDE no longer derives (the cleared target's resource is left as it is).
+        // The remaining targets drop what Tevrin no longer derives (the cleared target's resource is left as it is).
         await envSync.DeleteOnTargetsAsync(projectId, recomputed.Removed, cancellationToken);
         var pending = recomputed.Changed.ToList();
         if (pending.Count > 0)

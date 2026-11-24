@@ -281,7 +281,7 @@ internal sealed partial class BitbucketGitProvider
 
             mergeSha = merged;
 
-            // A retry after AIDE's own merge (e.g. the tag call failed, a crash, a merge task still pending) finds it recorded
+            // A retry after Tevrin's own merge (e.g. the tag call failed, a crash, a merge task still pending) finds it recorded
             // on the attempt, or at least the attempt's submitted merge.
             mergedExternally = !request.MergeSubmitted && !BitbucketProjectRules.SameCommit(request.RecordedMergeCommitSha, merged);
         }
@@ -338,7 +338,7 @@ internal sealed partial class BitbucketGitProvider
                     transient: true);
             }
 
-            // The merge is of the head AIDE fetched (and reviewed): a different pull request head means the branch moved.
+            // The merge is of the head Tevrin fetched (and reviewed): a different pull request head means the branch moved.
             if (pr.SourceCommit is { } prHead && !BitbucketProjectRules.SameCommit(prHead, head))
             {
                 return ReleaseOutcome.Failed(

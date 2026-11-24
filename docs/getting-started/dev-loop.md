@@ -15,7 +15,7 @@ cp .env.example .env                 # pick your own POSTGRES_PASSWORD (git-igno
 docker compose up -d db              # PostgreSQL 18 on 127.0.0.1:5432
 cd backend
 dotnet tool restore
-dotnet user-secrets set "ConnectionStrings:Aide" "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<POSTGRES_PASSWORD from .env>" --project src/Tevrin.Api
+dotnet user-secrets set "ConnectionStrings:Tevrin" "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<POSTGRES_PASSWORD from .env>" --project src/Tevrin.Api
 dotnet ef database update --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api
 cd ../frontend && npm ci
 ```

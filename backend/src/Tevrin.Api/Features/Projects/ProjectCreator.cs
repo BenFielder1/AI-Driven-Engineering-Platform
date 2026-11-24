@@ -592,7 +592,7 @@ public sealed partial class ProjectCreator(
         var versions = new List<ReleaseVersion>();
         if (start.ReleasedVersion is { } released)
         {
-            // FR-73: the baseline AIDE never developed: its tag and commit, no artifacts.
+            // FR-73: the baseline Tevrin never developed: its tag and commit, no artifacts.
             versions.Add(new ReleaseVersion
             {
                 ProjectId = project.Id,

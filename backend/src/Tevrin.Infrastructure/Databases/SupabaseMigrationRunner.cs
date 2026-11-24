@@ -88,7 +88,7 @@ public sealed partial class SupabaseMigrationRunner(IWorkingCopies workingCopies
             }
             else if (plan.HasUnreadable)
             {
-                // A file AIDE can't read is never applied, recorded, or taken as changed or missing: the run stops first.
+                // A file Tevrin can't read is never applied, recorded, or taken as changed or missing: the run stops first.
                 LogUnreadable(logger, request.ProjectId, plan.Unreadable.Count);
                 result = Failed([], ErrorCodes.MigrationFailed, MigrationPlanning.DescribeUnreadable(plan.Unreadable), [], [], null);
             }

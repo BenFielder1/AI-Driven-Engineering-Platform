@@ -6,6 +6,8 @@ nav_order: 3
 
 # Upgrade local data from PostgreSQL 17 to 18
 
+This is the 0.5.0 upgrade. It uses the names from before 0.8.0 (namespace, user and database `aide`), which is what a cluster still holding 17 data has. To move that data into the 0.8.0 `tevrin` namespace afterwards, see [Rename to Tevrin](rename-to-tevrin.md).
+
 PostgreSQL 18 can't open a 17 data directory, and the `postgres:18` image keeps its data at a new path (`/var/lib/postgresql/18/docker`). So the upgrade is a dump from 17 and a restore into 18. Neither procedure deletes your 17 data, and you only need one if you have local data worth keeping.
 
 Run these in Git Bash or WSL, not PowerShell, whose `>` and `<` can change the dump's encoding. The commands assume the default user `aide`. The dump holds all your data and the role's password hash, so keep it outside the repo and never commit it.
