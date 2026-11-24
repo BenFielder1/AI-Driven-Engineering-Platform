@@ -29,8 +29,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-333 | Cancel, roll back, retry endpoints | 3.2 | backend | M66 | done | 63c8601, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128) |
 | FR-334 | Runs without a subject | 3.2 | backend + data | M66 | done | 7a4f6da + 50ccb98, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913) |
 | FR-335 | Submit an input; `waiting_on_input` | 3.2 | backend + data | M66 | done | 63c8601, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128) |
-| FR-336 | Schedule trigger (cron, timezone, skip when active) | 3.2, 4.71 | backend + data | M66 | todo | — |
-| FR-337 | Webhook trigger (signature, replay, rotation, deliveries) | 3.2, 4.72 | backend + data | M66 | todo | — |
+| FR-336 | Schedule trigger (cron, timezone, skip when active) | 3.2, 4.71 | backend + data | M66 | done | c9b6a15 + 88a87d0, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300) |
+| FR-337 | Webhook trigger (signature, replay, rotation, deliveries) | 3.2, 4.72 | backend + data | M66 | done | c9b6a15 + 88a87d0, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300) |
 | FR-338 | `Tevrin.Pack.Coach` project + architecture tests + test project | 3.3 | backend | M67 | todo | — |
 | FR-339 | `impulse-coach` pipeline definition | 3.3 | backend | M67 | todo | — |
 | FR-340 | `velocity.load-rules` guard (R1–R5) | 3.3, 4.63 | backend | M67 | todo | — |
@@ -71,10 +71,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] e. Images, k8s, IaC, smoke scripts, runbook (FR-327) ([CI 45371572456](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45371572456))
   - [x] f. Snapshot re-baseline + mapped-equality check (FR-328): re-baseline 4865d26 (snapshots from scratch-branch CI run 45361838017), freeze pinned in 62c5ce1 ([CI 45365150480](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480))
   - [x] g. Leftover-name scan + allowlist, CLAUDE.md/STACK.md/README/docs (FR-329) ([CI 45374604868](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45374604868))
-- [ ] M66 Run control and triggers — FR-330–FR-337
+- [x] M66 Run control and triggers — FR-330–FR-337
   - [x] a. Run control, definition fields, `waiting_on_input`, runs without a subject, trigger tables, error codes (FR-330, FR-334) — 7a4f6da + fix 50ccb98 ([CI 45394797913](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913))
   - [x] b. `stage.run` driver; start, cancel, rollback, retry and input endpoints; engine gate decisions; `fixture-linear` (FR-331–FR-333, FR-335) — 63c8601 ([CI 45412232128](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128))
-  - [ ] c. Schedules and webhooks (FR-336, FR-337)
+  - [x] c. Schedules and webhooks (FR-336, FR-337) — c9b6a15 + test fix 88a87d0 ([CI 45452701300](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300))
 - [ ] M67 Coach pack — FR-338–FR-342, FR-352
 - [ ] M68 Flow constructs — FR-343–FR-349
 - [ ] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
@@ -113,4 +113,5 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - FR-327: run `docs/operations/rename-to-tevrin.md` steps 1–3 on preview **before the 0.8.0 build PR merges** (otherwise the preview deploy's drift check fails until they're done), and on production before publishing 0.8.0; step 4 after 0.8.0 runs there.
 - FR-327 local: free localhost:8080 from the old `aide` namespace, update `secrets.env` to `ConnectionStrings__Tevrin` / `Database=tevrin;Username=tevrin`, then `deploy-local.sh` and the smoke test (runbook §7).
 - Delete the scratch branch `build/tevrin-0.8.0-snapshots` (used only to produce the FR-328 snapshots, CI run 45361838017) when convenient.
+- M66: the API image now installs `tzdata` (schedules use IANA zones); confirm a schedule in a non-UTC zone fires at the right local time on the Docker Desktop deploy.
 - (more as milestones land; see SPEC §12 M73)
