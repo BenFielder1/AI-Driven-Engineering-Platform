@@ -281,6 +281,8 @@ app.MapNotificationEndpoints();
 app.MapApprovalEndpoints();
 app.MapPipelineEndpoints();
 app.MapPipelineRunEndpoints();
+// FR-337: signed by the caller, no session: exempt from the cookie antiforgery check (only this route).
+app.MapPipelineHookEndpoint().SkipAntiforgery().RequireRateLimiting(AuthConstants.WebhookRateLimit);
 app.MapLiveEndpoints();
 
 await app.RunAsync();

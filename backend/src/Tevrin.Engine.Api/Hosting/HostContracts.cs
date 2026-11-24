@@ -106,6 +106,12 @@ public enum RunControlAction
 
     /// <summary>Roll a run back (Owner).</summary>
     Rollback = 4,
+
+    /// <summary>FR-336, FR-337: list a project's schedules and webhooks (Viewer).</summary>
+    ViewTriggers = 5,
+
+    /// <summary>FR-336, FR-337: create, change, rotate and delete schedules and webhooks (Owner).</summary>
+    ManageTriggers = 6,
 }
 
 /// <summary>

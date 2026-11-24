@@ -90,7 +90,9 @@ internal sealed class ProjectGateDecisionService(
 
 /// <summary>
 /// FR-331, FR-333, FR-335: run control uses the project's permissions: start, retry and inputs need
-/// <see cref="ProjectAction.RunAgents"/> (Contributor), cancel and rollback <see cref="ProjectAction.Rollback"/> (Owner).
+/// <see cref="ProjectAction.RunAgents"/> (Contributor), cancel and rollback <see cref="ProjectAction.Rollback"/> (Owner);
+/// FR-336, FR-337: listing triggers needs <see cref="ProjectAction.View"/> (Viewer), managing them
+/// <see cref="ProjectAction.ChangeSettings"/> (Owner).
 /// </summary>
 internal sealed class ProjectRunControlAccess(IProjectAccess access, ICurrentUser currentUser, TevrinDbContext db) : IRunControlAccess
 {
@@ -98,13 +100,27 @@ internal sealed class ProjectRunControlAccess(IProjectAccess access, ICurrentUse
 
     public async Task<DomainError?> CheckAsync(Guid projectId, RunControlAction action, CancellationToken cancellationToken)
     {
-        var projectAction = action is RunControlAction.Cancel or RunControlAction.Rollback ? ProjectAction.Rollback : ProjectAction.RunAgents;
+        var projectAction = action switch
+        {
+            RunControlAction.Cancel or RunControlAction.Rollback => ProjectAction.Rollback,
+            RunControlAction.ViewTriggers => ProjectAction.View,
+            RunControlAction.ManageTriggers => ProjectAction.ChangeSettings,
+            _ => ProjectAction.RunAgents,
+        };
         var grant = await access.CheckAsync(projectId, projectAction, cancellationToken);
         return grant.IsFailure ? grant.Error : null;
     }
 
     public async Task<Tevrin.Engine.Domain.Gates.ApprovalMode> ProjectApprovalModeAsync(Guid projectId, CancellationToken cancellationToken) =>
         await db.Projects.AsNoTracking().Where(p => p.Id == projectId).Select(p => p.ApprovalMode).FirstAsync(cancellationToken);
+}
+
+/// <summary>FR-336, FR-337: a triggered run's approval mode is its project's.</summary>
+internal sealed class ProjectApprovalModes(TevrinDbContext db) : Tevrin.Engine.Runtime.Triggers.IProjectApprovalModes
+{
+    public async Task<Tevrin.Engine.Domain.Gates.ApprovalMode?> FindAsync(Guid projectId, CancellationToken cancellationToken) =>
+        await db.Projects.AsNoTracking().Where(p => p.Id == projectId)
+            .Select(p => (Tevrin.Engine.Domain.Gates.ApprovalMode?)p.ApprovalMode).FirstOrDefaultAsync(cancellationToken);
 }
 
 /// <summary>FR-300: the run's <c>state_transitions</c> (stage ids are the SDLC phases' wire values).</summary>
@@ -157,6 +173,7 @@ public static class PipelineApiHosting
         services.AddScoped<IRunAccessPolicy, ProjectRunAccessPolicy>();
         services.AddScoped<IGateDecisionService, ProjectGateDecisionService>();
         services.AddScoped<IRunControlAccess, ProjectRunControlAccess>();
+        services.AddScoped<Tevrin.Engine.Runtime.Triggers.IProjectApprovalModes, ProjectApprovalModes>();
         services.AddEngineRunDriver(); // FR-331–FR-335: the run driver (stage.run) and run control
         services.AddScoped<IPipelineTransitionSource, StateTransitionSource>();
         services.AddSingleton<IEngineProblems, EngineProblems>();

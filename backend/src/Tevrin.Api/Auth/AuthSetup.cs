@@ -161,6 +161,8 @@ public static partial class AuthSetup
             PerIpPerMinute(context, o => o.LoginPerMinute, AuthConstants.LoginRateLimit));
         options.AddPolicy(AuthConstants.RegisterRateLimit, context =>
             PerIpPerMinute(context, o => o.RegisterPerMinute, AuthConstants.RegisterRateLimit));
+        options.AddPolicy(AuthConstants.WebhookRateLimit, context =>
+            PerIpPerMinute(context, o => o.WebhookPerMinute, AuthConstants.WebhookRateLimit));
         options.OnRejected = async (context, _) =>
         {
             var http = context.HttpContext;

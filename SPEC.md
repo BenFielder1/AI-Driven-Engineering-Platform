@@ -371,6 +371,8 @@ Example: completed 2026-12-01 18:00Z with `[1d, 5d, 20d]` → due 2026-12-02 18:
 - **Format:** cron has 5 fields (minute, hour, day of month, month, day of week) and is evaluated in the schedule's IANA timezone.
 - **DST:** a time that doesn't exist (spring forward) fires at the next valid minute. A time that occurs twice (fall back) fires once, at the first.
 - **Catch-up:** missed fires after downtime fire once, then resume.
+- **Record:** every fire writes one `SCHEDULE_FIRED` event (`scheduleId`, `pipelineId`, `dueAt`, `outcome`: `started`, `skipped`, `submitted` or `failed`, `runId`, `errorCode`). A schedule whose pipeline declares `on_active: submit` and has a value for its `trigger.input` submits it to the active run instead of skipping.
+- **Firing:** the background sweeper claims each due schedule with a guarded update of `next_fire_at` and queues `trigger.fire` in the same transaction, so a fire runs once across instances. A schedule whose timezone the host can't resolve is paused.
 
 Example: `0 6 * * 1` in Europe/London fires every Monday at 06:00 local, which is 06:00Z in winter and 05:00Z in summer.
 
@@ -379,6 +381,8 @@ Example: `0 6 * * 1` in Europe/London fires every Monday at 06:00 local, which i
 - **Header:** `X-Tevrin-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>`.
 - **Delivery id:** a separate `X-Tevrin-Delivery: <uuid>` header.
 - **Checks:** `|now − t| ≤ 300 s`, a constant-time compare, and both the current and the previous secret are accepted (24 h rotation overlap). A delivery id already seen in the last 24 h is a replay.
+
+- **Limits:** the raw body is at most 256 KB (413, `VALIDATION`). An unknown, deleted or malformed webhook id gets the same 401 as a bad signature. A missing or invalid `X-Tevrin-Delivery` is 400 `VALIDATION`. The delivery is claimed only after the signature verifies.
 
 Example: secret `whsec_test`, t = 1764590400, body `{"a":1}` → v1 = HMAC-SHA256("whsec_test", `1764590400.{"a":1}`). The test vector is computed once and committed in the tests.
 

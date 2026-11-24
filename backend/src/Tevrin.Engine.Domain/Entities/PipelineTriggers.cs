@@ -94,6 +94,8 @@ public static class WebhookDeliveryStatuses
     /// <summary>Refused: the body failed its schema, or a run was active and the trigger says <c>skip</c>.</summary>
     public const string Rejected = "rejected";
 
+    /// <summary>Received and being handled (the claim, before one of the outcomes above).</summary>
+    public const string Received = "received";
 }
 
 /// <summary>FR-337, §4.72, §5: pure rules for webhook deliveries.</summary>

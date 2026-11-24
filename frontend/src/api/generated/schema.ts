@@ -2540,6 +2540,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hooks/pipelines/{webhookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-337, §4.72: a signed webhook call (X-Tevrin-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>, X-Tevrin-Delivery: <uuid>). Starts a run with the JSON body as the trigger's input, or submits it to the active run (on_active: submit). 401 WEBHOOK_SIGNATURE_INVALID (also for an unknown webhook); 409 WEBHOOK_REPLAY or RUN_ALREADY_ACTIVE; 400 INPUT_INVALID or VALIDATION (delivery id); 413 VALIDATION (body over 256 KB). */
+        post: operations["ReceivePipelineWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/notifications": {
         parameters: {
             query?: never;
@@ -2928,6 +2945,94 @@ export interface paths {
         /** FR-335: add a version of an input artifact; a run waiting on input continues (Contributor). 400 INPUT_INVALID (details: the failing paths), 403 FORBIDDEN, 404 NOT_FOUND for an unknown input, 409 RUN_NOT_ACTIVE or RUN_CONTROLLED_BY_HOST. */
         post: operations["SubmitPipelineRunInput"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipeline-schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-336: the project's pipeline schedules (Viewer). */
+        get: operations["ListPipelineSchedules"];
+        put?: never;
+        /** FR-336: schedule a pipeline that declares trigger kind schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone), VALIDATION or INPUT_INVALID; 403 FORBIDDEN; 404 NOT_FOUND (pipeline); 409 TRIGGER_NOT_SUPPORTED or RUN_CONTROLLED_BY_HOST. */
+        post: operations["CreatePipelineSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipeline-schedules/{scheduleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-336: delete a schedule (Owner). 403 FORBIDDEN; 404 NOT_FOUND. */
+        delete: operations["DeletePipelineSchedule"];
+        options?: never;
+        head?: never;
+        /** FR-336: pause, resume or change a schedule (Owner). 400 SCHEDULE_INVALID, VALIDATION or INPUT_INVALID; 403 FORBIDDEN; 404 NOT_FOUND. */
+        patch: operations["UpdatePipelineSchedule"];
+        trace?: never;
+    };
+    "/api/projects/{id}/pipeline-webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-337: the project's pipeline webhooks, without their secrets (Viewer). */
+        get: operations["ListPipelineWebhooks"];
+        put?: never;
+        /** FR-337: create a webhook for a pipeline that declares trigger kind webhook (Owner); the secret is shown only in this response. 400 VALIDATION; 403 FORBIDDEN; 404 NOT_FOUND (pipeline); 409 TRIGGER_NOT_SUPPORTED or RUN_CONTROLLED_BY_HOST. */
+        post: operations["CreatePipelineWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipeline-webhooks/{webhookId}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-337: a new secret, shown only in this response; the old one stays valid for 24 hours (Owner). 403 FORBIDDEN; 404 NOT_FOUND; 409 CONFLICT. */
+        post: operations["RotatePipelineWebhookSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipeline-webhooks/{webhookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-337: delete a webhook (Owner). 403 FORBIDDEN; 404 NOT_FOUND. */
+        delete: operations["DeletePipelineWebhook"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4140,6 +4245,20 @@ export interface components {
             /** @description The resource name; defaults to the project's name (Render preview: `&lt;name&gt;-preview`). */
             name?: null | string;
         };
+        /** @description FR-336: schedule a pipeline that declares `trigger: { kind: schedule }`. */
+        CreatePipelineScheduleRequest: {
+            pipelineId?: string;
+            /** @description Five fields: minute hour day-of-month month day-of-week. */
+            cron?: string;
+            /** @description An IANA timezone, e.g. `Europe/London`. */
+            timezone?: string;
+            /** @description Input artifacts each fire starts its run with, by key. */
+            inputs?: null | Record<string, never>;
+        };
+        /** @description FR-337: create a webhook for a pipeline that declares `trigger: { kind: webhook, input }`. */
+        CreatePipelineWebhookRequest: {
+            pipelineId?: string;
+        };
         /**
          * @description Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it
          *     is for (`accountId`: a team, account, workspace or organisation id the token reaches; required for a Railway
@@ -4320,6 +4439,13 @@ export interface components {
             token: string;
             /** Format: date-time */
             expiresAt: null | string;
+        };
+        /** @description FR-337: a new webhook with its secret, shown only now. */
+        CreatedPipelineWebhookDto: {
+            /** Format: uuid */
+            id: string;
+            url: string;
+            secret: string;
         };
         /**
          * @description FR-152: the `database_provisioning` job of a database card: `state` (`queued`, `running`,
@@ -6131,6 +6257,20 @@ export interface components {
             /** Format: int32 */
             agentRuns: number;
         };
+        /** @description FR-336: a project schedule (cron evaluated in string PipelineScheduleDto.Timezone, §4.71). */
+        PipelineScheduleDto: {
+            /** Format: uuid */
+            id: string;
+            pipelineId: string;
+            cron: string;
+            timezone: string;
+            inputs: components["schemas"]["JsonElement"];
+            paused: boolean;
+            /** Format: date-time */
+            nextFireAt: string;
+            /** Format: date-time */
+            lastFireAt: null | string;
+        };
         /**
          * @description A stage of a definition. `kind` is `agent`, `code` or `manual`; `transitions` lists
          *                 where it can go next.
@@ -6285,6 +6425,24 @@ export interface components {
         PipelineTimelinePageDto: {
             items: components["schemas"]["PipelineTimelineItemDto"][];
             next: null | string;
+        };
+        /** @description FR-337: the run a webhook call started or submitted to. */
+        PipelineWebhookAcceptedDto: {
+            /** Format: uuid */
+            runId: string;
+        };
+        /** @description FR-337: a project webhook (never its secret). */
+        PipelineWebhookDto: {
+            /** Format: uuid */
+            id: string;
+            pipelineId: string;
+            url: string;
+            /** Format: date-time */
+            previousSecretExpiresAt: null | string;
+        };
+        /** @description FR-337: a rotated webhook's new secret, shown only now (the old one stays valid for 24 hours). */
+        PipelineWebhookSecretDto: {
+            secret: string;
         };
         /**
          * @description The state of one execution run (FR-57): the steps of one plan version. `pending` (no step started),
@@ -8043,6 +8201,13 @@ export interface components {
         /** @description Replaces the project's notification channels (FR-47). */
         UpdateNotificationSettingsRequest: {
             channels: components["schemas"]["NotificationChannelInput"][];
+        };
+        /** @description FR-336: pause or resume a schedule, or change its cron, timezone or inputs (omitted fields keep their value). */
+        UpdatePipelineScheduleRequest: {
+            paused?: null | boolean;
+            cron?: null | string;
+            timezone?: null | string;
+            inputs?: null | Record<string, never>;
         };
         /**
          * @description Rename a platform connection (FR-142). FR-165: on Jira and Linear, set the expiry (`clearExpiresAt` removes it) and, on Jira, the
@@ -18192,6 +18357,68 @@ export interface operations {
             };
         };
     };
+    ReceivePipelineWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                webhookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JsonElement"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineWebhookAcceptedDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Payload Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListMyNotifications: {
         parameters: {
             query?: {
@@ -19420,6 +19647,446 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelineSchedules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineScheduleDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreatePipelineSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["CreatePipelineScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineScheduleDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeletePipelineSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                scheduleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdatePipelineSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                scheduleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["UpdatePipelineScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineScheduleDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelineWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineWebhookDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreatePipelineWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["CreatePipelineWebhookRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedPipelineWebhookDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    RotatePipelineWebhookSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                webhookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineWebhookSecretDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeletePipelineWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                webhookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -10,6 +10,7 @@ using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Triggers;
 using Tevrin.Infrastructure.Persistence;
 using Tevrin.Pack.Sdlc;
 
@@ -105,6 +106,7 @@ public sealed partial class GateTimerService(TevrinDbContext db, JobEnqueuer job
 /// deliveries (FR-49), every <see cref="NotificationOptions.GateSweepInterval"/> it runs the gate timers (FR-15), and every
 /// <see cref="NotificationOptions.DatabaseExpirySweepInterval"/> it queues the database expiry sweep job (FR-155), and every
 /// <see cref="NotificationOptions.ConnectionExpirySweepInterval"/> it warns of Jira and Linear tokens about to expire (FR-165).
+/// Every pass it also queues due pipeline schedule fires (FR-336), and hourly it deletes expired webhook deliveries (FR-337).
 /// Tests turn the loop off (<c>Notifications:SweepEnabled=false</c>) and call the steps directly.
 /// </summary>
 public sealed partial class NotificationSweeper(
@@ -113,6 +115,9 @@ public sealed partial class NotificationSweeper(
     TimeProvider time,
     ILogger<NotificationSweeper> logger) : BackgroundService
 {
+    /// <summary>How often expired webhook deliveries are deleted (FR-337).</summary>
+    public static readonly TimeSpan WebhookDeliveryPruneInterval = TimeSpan.FromHours(1);
+
     private readonly NotificationOptions _options = options.Value;
 
     /// <summary>One retry pass over due deliveries; returns how many were attempted.</summary>
@@ -128,6 +133,20 @@ public sealed partial class NotificationSweeper(
     {
         await using var scope = scopes.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<GateTimerService>().RunAsync(cancellationToken);
+    }
+
+    /// <summary>FR-336, §4.71: claims due pipeline schedules and queues their <c>trigger.fire</c> jobs; returns how many.</summary>
+    public async Task<int> QueueDueScheduleFiresAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<PipelineSchedules>().QueueDueFiresAsync(cancellationToken);
+    }
+
+    /// <summary>FR-337, §5: deletes webhook deliveries past their 30-day retention; returns how many.</summary>
+    public async Task<int> PruneWebhookDeliveriesAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<PipelineWebhooks>().PruneDeliveriesAsync(cancellationToken);
     }
 
     /// <summary>FR-165: one tracker connection expiry pass; returns how many connections' owners were warned.</summary>
@@ -166,12 +185,20 @@ public sealed partial class NotificationSweeper(
         DateTimeOffset? lastGateSweep = null;
         DateTimeOffset? lastDatabaseSweep = null;
         DateTimeOffset? lastConnectionSweep = null;
+        DateTimeOffset? lastDeliveryPrune = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await RetryDueDeliveriesAsync(stoppingToken);
+                await QueueDueScheduleFiresAsync(stoppingToken);
                 var now = time.GetUtcNow();
+                if (lastDeliveryPrune is null || now - lastDeliveryPrune >= WebhookDeliveryPruneInterval)
+                {
+                    await PruneWebhookDeliveriesAsync(stoppingToken);
+                    lastDeliveryPrune = now;
+                }
+
                 if (lastGateSweep is null || now - lastGateSweep >= _options.GateSweepInterval)
                 {
                     await RunGateTimersAsync(stoppingToken);

@@ -10,7 +10,7 @@ public static class EngineRunServiceCollectionExtensions
 {
     /// <summary>
     /// The run driver (<see cref="EngineRunDriver"/>, the handler of <c>stage.run</c>), <see cref="PipelineRunStarter"/> and
-    /// <see cref="EngineRunControl"/> (scoped). Needs the job queue, agent stages and stage handlers.
+    /// <see cref="EngineRunControl"/> (scoped), and the triggers (schedules with the <c>trigger.fire</c> handler, webhooks). Needs the job queue, agent stages and stage handlers.
     /// </summary>
     public static IServiceCollection AddEngineRunDriver(this IServiceCollection services)
     {
@@ -18,6 +18,11 @@ public static class EngineRunServiceCollectionExtensions
         services.TryAddScoped<PipelineRunStarter>();
         services.TryAddScoped<EngineRunControl>();
         services.AddJobHandler<StageRunJobHandler>(EngineJobTypes.StageRun);
+
+        // FR-336, FR-337: schedule and webhook triggers (the host registers Triggers.IProjectApprovalModes).
+        services.TryAddScoped<Triggers.PipelineSchedules>();
+        services.TryAddScoped<Triggers.PipelineWebhooks>();
+        services.AddJobHandler<Triggers.TriggerFireJobHandler>(EngineJobTypes.TriggerFire);
         return services;
     }
 }

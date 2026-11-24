@@ -21,7 +21,7 @@
     <!-- FR-321: the SDLC definition version 1, as runs were pinned to it before the re-pin. -->
     <None Include="Pipelines/Fixtures/*.yaml" CopyToOutputDirectory="PreserveNewest" />
     <!-- FR-331, FR-332: the engine-controlled fixture-linear pipeline, shared with the engine tests. -->
-    <None Include="../Tevrin.Engine.Tests/Fixtures/fixture-linear.pipeline.yaml;../Tevrin.Engine.Tests/Fixtures/brief.schema.json" Link="Pipelines/Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Tevrin.Engine.Tests/Fixtures/fixture-linear.pipeline.yaml;../Tevrin.Engine.Tests/Fixtures/brief.schema.json;../Tevrin.Engine.Tests/Fixtures/fixture-scheduled.pipeline.yaml;../Tevrin.Engine.Tests/Fixtures/fixture-webhook.pipeline.yaml;../Tevrin.Engine.Tests/Fixtures/payload.schema.json" Link="Pipelines/Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

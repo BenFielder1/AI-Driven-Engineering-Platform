@@ -39,8 +39,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 # git: required by the Local Git provider and project working copies (/data/workspaces).
 # setpriv (util-linux): the entrypoint drops from root to $APP_UID with it (FR-106). Installed only if the base image
 # lacks it (some distros ship it as its own package); the final check fails the build if it is still missing.
+# tzdata: IANA time zones for pipeline schedules (FR-336, §4.71), which TimeZoneInfo reads from /usr/share/zoneinfo.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git \
+ && apt-get install -y --no-install-recommends git tzdata \
  && (command -v setpriv >/dev/null \
      || apt-get install -y --no-install-recommends setpriv \
      || apt-get install -y --no-install-recommends util-linux) \

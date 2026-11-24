@@ -36,4 +36,10 @@ public static class EngineErrorCodes
     public const string RunNotActive = "RUN_NOT_ACTIVE";
     public const string InputInvalid = "INPUT_INVALID";
     public const string GateNotPending = "GATE_NOT_PENDING";
+
+    // FR-336, FR-337 (0.8.0): schedule and webhook triggers (the host's values).
+    public const string ScheduleInvalid = "SCHEDULE_INVALID";
+    public const string TriggerNotSupported = "TRIGGER_NOT_SUPPORTED";
+    public const string WebhookSignatureInvalid = "WEBHOOK_SIGNATURE_INVALID";
+    public const string WebhookReplay = "WEBHOOK_REPLAY";
 }

@@ -33,6 +33,7 @@ Server settings use Tevrin names since 0.8.0 (for example `ConnectionStrings__Te
 | `Auth:Cookie:SecurePolicy` | Auth cookie `Always`, `SameAsRequest` or `None` | `SameAsRequest` | no |
 | `Auth:RateLimits:LoginPerMinute` | Login attempts per IP per minute | `5` | no |
 | `Auth:RateLimits:RegisterPerMinute` | Registrations per IP per minute | `5` | no |
+| `Auth:RateLimits:WebhookPerMinute` | Pipeline webhook calls (`POST /api/hooks/pipelines/{id}`) per IP per minute | `120` | no |
 | `Live:AllowedOrigins` (`Live__AllowedOrigins__0`, ...) | Extra browser origins allowed on the SignalR hub | empty | no |
 | `Jobs:Enabled` | Run the background job worker | `true` | no |
 | `Jobs:PollInterval` | Idle poll interval | `00:00:02` | no |

@@ -24,11 +24,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-328 | One snapshot re-baseline with a mapped-equality CI check; freeze base moves | 3.1 | backend + CI | M65 | done | 4865d26 + 62c5ce1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480) |
 | FR-329 | Leftover-name scan test with `scripts/ci/aide-allowlist.txt`; docs updated | 3.1 | backend + docs + CI | M65 | done | 49b6412, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45374604868) |
 | FR-330 | `RunControl.Engine`/`Host` per pipeline; SDLC is `Host` | 3.2 | backend | M66 | done | 7a4f6da, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913) |
-| FR-331 | Start a run endpoint (inputs, one-active rule) | 3.2 | backend + data | M66 | todo | — |
-| FR-332 | Run driver `stage.run` (idempotent) | 3.2, 4.62 | backend | M66 | todo | — |
-| FR-333 | Cancel, roll back, retry endpoints | 3.2 | backend | M66 | todo | — |
+| FR-331 | Start a run endpoint (inputs, one-active rule) | 3.2 | backend + data | M66 | done | 63c8601, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128) |
+| FR-332 | Run driver `stage.run` (idempotent) | 3.2, 4.62 | backend | M66 | done | 63c8601, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128) |
+| FR-333 | Cancel, roll back, retry endpoints | 3.2 | backend | M66 | done | 63c8601, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128) |
 | FR-334 | Runs without a subject | 3.2 | backend + data | M66 | done | 7a4f6da + 50ccb98, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913) |
-| FR-335 | Submit an input; `waiting_on_input` | 3.2 | backend + data | M66 | todo | — |
+| FR-335 | Submit an input; `waiting_on_input` | 3.2 | backend + data | M66 | done | 63c8601, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128) |
 | FR-336 | Schedule trigger (cron, timezone, skip when active) | 3.2, 4.71 | backend + data | M66 | todo | — |
 | FR-337 | Webhook trigger (signature, replay, rotation, deliveries) | 3.2, 4.72 | backend + data | M66 | todo | — |
 | FR-338 | `Tevrin.Pack.Coach` project + architecture tests + test project | 3.3 | backend | M67 | todo | — |
@@ -73,7 +73,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] g. Leftover-name scan + allowlist, CLAUDE.md/STACK.md/README/docs (FR-329) ([CI 45374604868](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45374604868))
 - [ ] M66 Run control and triggers — FR-330–FR-337
   - [x] a. Run control, definition fields, `waiting_on_input`, runs without a subject, trigger tables, error codes (FR-330, FR-334) — 7a4f6da + fix 50ccb98 ([CI 45394797913](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913))
-  - [ ] b. `stage.run` driver; start, cancel, rollback, retry and input endpoints; engine gate decisions; `fixture-linear` (FR-331–FR-333, FR-335)
+  - [x] b. `stage.run` driver; start, cancel, rollback, retry and input endpoints; engine gate decisions; `fixture-linear` (FR-331–FR-333, FR-335) — 63c8601 ([CI 45412232128](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128))
   - [ ] c. Schedules and webhooks (FR-336, FR-337)
 - [ ] M67 Coach pack — FR-338–FR-342, FR-352
 - [ ] M68 Flow constructs — FR-343–FR-349

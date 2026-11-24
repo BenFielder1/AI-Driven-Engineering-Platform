@@ -27,6 +27,10 @@ public sealed class TevrinAuthOptions
         /// <summary>Registrations per minute per client IP.</summary>
         [Range(1, 100_000)]
         public int RegisterPerMinute { get; set; } = 5;
+
+        /// <summary>FR-337: pipeline webhook calls per minute per client IP (the anonymous hook route).</summary>
+        [Range(1, 100_000)]
+        public int WebhookPerMinute { get; set; } = 120;
     }
 }
 
@@ -74,4 +78,7 @@ public static class AuthConstants
     public const string LoginRateLimit = "login";
 
     public const string RegisterRateLimit = "register";
+
+    /// <summary>FR-337: the anonymous pipeline webhook route.</summary>
+    public const string WebhookRateLimit = "pipeline-webhook";
 }
