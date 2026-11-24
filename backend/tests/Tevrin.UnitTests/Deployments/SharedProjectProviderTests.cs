@@ -158,7 +158,7 @@ public class SharedProjectProviderTests
     private static readonly (string, string)[] PostgresRoutes =
     [
         ("environments { edges", """{"data":{"project":{"id":"p3","environments":{"edges":[{"node":{"id":"e-prod","name":"production"}}]}}}}"""),
-        ("environmentCreate", """{"data":{"environmentCreate":{"id":"e-prev","name":"aide-preview"}}}"""),
+        ("environmentCreate", """{"data":{"environmentCreate":{"id":"e-prev","name":"tevrin-preview"}}}"""),
         ("volumes", """{"data":{"project":{"volumes":{"edges":[]}}}}"""),
         ("volumeCreate", """{"data":{"volumeCreate":{"id":"v1"}}}"""),
         ("variableCollectionUpsert", """{"data":{"variableCollectionUpsert":true}}"""),

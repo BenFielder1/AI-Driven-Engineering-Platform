@@ -21,7 +21,7 @@ public sealed class AntiforgeryAndRateLimitTests(TevrinApiFactory factory)
         var cookies = response.Headers.GetValues("Set-Cookie").ToList();
         var xsrf = cookies.Single(c => c.StartsWith("XSRF-TOKEN=", StringComparison.Ordinal));
         Assert.DoesNotContain("httponly", xsrf, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(cookies, c => c.StartsWith("aide.af=", StringComparison.Ordinal) && c.Contains("httponly", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(cookies, c => c.StartsWith("tevrin.af=", StringComparison.Ordinal) && c.Contains("httponly", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

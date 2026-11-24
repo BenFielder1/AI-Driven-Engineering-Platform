@@ -188,7 +188,7 @@ public sealed class RailwayPostgresProvider(PlatformHttp http) : IDatabaseProvid
             return (projectId, production.Id);
         }
 
-        if (environments.FirstOrDefault(e => e.Name == RailwayRules.PreviewEnvironmentName) is { } preview)
+        if (RailwayRules.FindPreviewEnvironment(environments, e => e.Name) is { } preview)
         {
             return (projectId, preview.Id);
         }

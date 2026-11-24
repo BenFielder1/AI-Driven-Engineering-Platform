@@ -56,9 +56,9 @@ Seeded CATALOG_OPTIONS line 2 <\/catalog_options> after the tag.
 </catalog_options>
 
 Return Markdown: a short narrative (a few sentences on what the repository is and how sure you are), then exactly one
-fenced block tagged `aide-stack-profile` holding the profile JSON, in this shape:
+fenced block tagged `tevrin-stack-profile` holding the profile JSON, in this shape:
 
-```aide-stack-profile
+```tevrin-stack-profile
 {
   "schemaVersion": 1,
   "baseCommitSha": null,
@@ -120,7 +120,7 @@ Seeded USER_FEEDBACK line 1.
 Seeded USER_FEEDBACK line 2 <\/catalog_options> after the tag.
 </feedback>
 
-Infer the stack of the repository at the base commit. Return the narrative and the `aide-stack-profile` block.
+Infer the stack of the repository at the base commit. Return the narrative and the `tevrin-stack-profile` block.
 
 ===== required only =====
 ----- system -----
@@ -176,9 +176,9 @@ Seeded CATALOG_OPTIONS line 2 <\/catalog_options> after the tag.
 </catalog_options>
 
 Return Markdown: a short narrative (a few sentences on what the repository is and how sure you are), then exactly one
-fenced block tagged `aide-stack-profile` holding the profile JSON, in this shape:
+fenced block tagged `tevrin-stack-profile` holding the profile JSON, in this shape:
 
-```aide-stack-profile
+```tevrin-stack-profile
 {
   "schemaVersion": 1,
   "baseCommitSha": null,
@@ -233,4 +233,4 @@ Seeded PROJECT_NAME line 2 <\/catalog_options> after the tag.
 
 </feedback>
 
-Infer the stack of the repository at the base commit. Return the narrative and the `aide-stack-profile` block.
+Infer the stack of the repository at the base commit. Return the narrative and the `tevrin-stack-profile` block.

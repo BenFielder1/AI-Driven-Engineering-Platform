@@ -82,7 +82,7 @@ public static class NotificationHttp
             {
                 client.Timeout = sp.GetRequiredService<IOptions<NotificationChannelOptions>>().Value.RequestTimeout;
                 client.MaxResponseContentBufferSize = MaxResponseBytes;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             })
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {
@@ -289,7 +289,8 @@ public sealed class TeamsChannelSender(IHttpClientFactory clients, ISecretProtec
 
 /// <summary>
 /// FR-47 generic webhook: a JSON body signed with the channel secret (<see cref="WebhookSignature"/>), with
-/// <c>X-AIDE-Timestamp</c>, <c>X-AIDE-Delivery</c> / <c>Idempotency-Key</c> (stable across retries) and <c>X-AIDE-Event</c>.
+/// <c>X-Tevrin-Timestamp</c>, <c>X-Tevrin-Delivery</c> / <c>Idempotency-Key</c> (stable across retries) and <c>X-Tevrin-Event</c>,
+/// each also sent under its pre-0.8.0 <c>X-AIDE-*</c> name (FR-326).
 /// </summary>
 public sealed class WebhookChannelSender(IHttpClientFactory clients, ISecretProtector secrets) : HttpChannelSender(clients, secrets)
 {
@@ -332,11 +333,18 @@ public sealed class WebhookChannelSender(IHttpClientFactory clients, ISecretProt
             body,
             headers =>
             {
+                var signature = WebhookSignature.Compute(secret, body);
                 headers.Add(WebhookSignature.TimestampHeaderName, timestamp);
                 headers.Add(WebhookSignature.DeliveryHeaderName, message.DeliveryId.ToString("D"));
                 headers.Add(WebhookSignature.IdempotencyHeaderName, message.DeliveryId.ToString("D"));
                 headers.Add(WebhookSignature.EventHeaderName, message.Type);
-                headers.Add(WebhookSignature.HeaderName, WebhookSignature.Compute(secret, body));
+                headers.Add(WebhookSignature.HeaderName, signature);
+
+                // FR-326 (§4.77): the pre-0.8.0 X-AIDE-* names too, same values, until 0.9.0.
+                headers.Add(WebhookSignature.LegacyTimestampHeaderName, timestamp);
+                headers.Add(WebhookSignature.LegacyDeliveryHeaderName, message.DeliveryId.ToString("D"));
+                headers.Add(WebhookSignature.LegacyEventHeaderName, message.Type);
+                headers.Add(WebhookSignature.LegacyHeaderName, signature);
             },
             cancellationToken);
     }

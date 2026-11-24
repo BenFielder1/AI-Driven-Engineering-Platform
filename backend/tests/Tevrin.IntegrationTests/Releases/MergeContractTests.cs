@@ -38,7 +38,7 @@ public sealed class MergeContractTests(TevrinApiFactory factory)
         var bare = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(
             fixture.Owner.Client, $"{fixture.Path}/settings/git", new { tagPrefix = "" }));
 
-        Assert.Equal((MergeStrategy.AideMerges, "v"), (defaults.Git.MergeStrategy, defaults.Git.TagPrefix));
+        Assert.Equal((MergeStrategy.TevrinMerges, "v"), (defaults.Git.MergeStrategy, defaults.Git.TagPrefix));
         Assert.Equal((MergeStrategy.Manual, "release/"), (patched.MergeStrategy, patched.TagPrefix));
         Assert.Equal((MergeStrategy.Manual, ""), (bare.MergeStrategy, bare.TagPrefix));
         await ProjectApi.WithDbAsync(factory, async db =>
@@ -101,7 +101,7 @@ public sealed class MergeContractTests(TevrinApiFactory factory)
 
         await LifecycleSeed.SetProjectAsync(factory, id, Phase.Review, 5, ApprovalMode.Advisory);
         var review = await ProjectApi.ReadAsync<MergeReadinessDto>(await GetAsync(fixture.Viewer.Client, path));
-        Assert.Equal((true, true, MergeStrategy.AideMerges), (review.CanMerge, review.WillAutoMerge, review.MergeStrategy));
+        Assert.Equal((true, true, MergeStrategy.TevrinMerges), (review.CanMerge, review.WillAutoMerge, review.MergeStrategy));
         Assert.Empty(review.Reasons);
         Assert.Empty(review.Checks);
 
@@ -137,12 +137,12 @@ public sealed class MergeContractTests(TevrinApiFactory factory)
         var state = await ProjectApi.ReadAsync<ProjectStateDto>(await GetAsync(fixture.Viewer.Client, $"{fixture.Path}/state"));
         var reasons = new[] { new MergeReadinessReasonDto(MergeReadinessReasonCode.ReviewRequired, "1 approving review is required.") };
 
-        Assert.Equal((ReleaseStatus.AwaitingMerge, PrUrl, (string?)null, MergeStrategy.AideMerges), (latest.Status, latest.PullRequestUrl, latest.GithubReleaseUrl, latest.MergeStrategy));
+        Assert.Equal((ReleaseStatus.AwaitingMerge, PrUrl, (string?)null, MergeStrategy.TevrinMerges), (latest.Status, latest.PullRequestUrl, latest.GithubReleaseUrl, latest.MergeStrategy));
         Assert.Equal(since, latest.AwaitingMergeSince);
         Assert.Equal(reasons, latest.MergeReasons);
         Assert.Equal(ProjectStatus.AwaitingMerge, state.Status);
         var summary = state.LatestRelease!;
-        Assert.Equal((ReleaseStatus.AwaitingMerge, PrUrl, since, MergeStrategy.AideMerges), (summary.Status, summary.PullRequestUrl, summary.AwaitingMergeSince, summary.MergeStrategy));
+        Assert.Equal((ReleaseStatus.AwaitingMerge, PrUrl, since, MergeStrategy.TevrinMerges), (summary.Status, summary.PullRequestUrl, summary.AwaitingMergeSince, summary.MergeStrategy));
         Assert.Equal(reasons, summary.MergeReasons);
     }
 

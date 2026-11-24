@@ -30,7 +30,7 @@ public sealed class ApiTokenTests(TevrinApiFactory factory)
         var created = await response.Content.ReadFromJsonAsync<CreatedApiTokenDto>(ApiSession.Json, Ct);
         Assert.NotNull(created);
         Assert.Equal("laptop", created.Name);
-        Assert.Matches("^aide_pat_[A-Za-z0-9_-]{43}$", created.Token);
+        Assert.Matches("^tevrin_pat_[A-Za-z0-9_-]{43}$", created.Token); // FR-326: 0.8.0 tokens
         Assert.Equal(expiresAt.ToUnixTimeMilliseconds(), created.ExpiresAt?.ToUnixTimeMilliseconds());
 
         var stored = await WithDbAsync(db => db.ApiTokens.AsNoTracking().SingleAsync(t => t.Id == created.Id, Ct));
@@ -142,6 +142,7 @@ public sealed class ApiTokenTests(TevrinApiFactory factory)
 
     [Theory]
     [InlineData("aide_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [InlineData("tevrin_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
     [InlineData("not-a-token")]
     [InlineData("")]
     public async Task FR4_Unknown_or_malformed_token_returns_401(string token)
@@ -152,6 +153,30 @@ public sealed class ApiTokenTests(TevrinApiFactory factory)
         var response = await cli.GetAsync(new Uri("/api/auth/me", UriKind.Relative), Ct);
 
         await Problems.AssertAsync(response, HttpStatusCode.Unauthorized, "UNAUTHENTICATED");
+    }
+
+    [Fact]
+    public async Task FR326_A_pre_0_8_0_aide_pat_token_still_authenticates()
+    {
+        // §4.77: a token created on 0.7.0 is aide_pat_ + 43 base64url characters, stored as the hash of the whole value.
+        using var owner = await ApiSession.RegisterAsync(factory);
+        var plain = ApiTokenRules.LegacyPrefix + Base64Url(RandomNumberGenerator.GetBytes(ApiTokenRules.SecretBytes));
+        await WithDbAsync(async db =>
+        {
+            db.ApiTokens.Add(new ApiToken
+            {
+                UserId = owner.User!.Id,
+                Name = "from-0.7.0",
+                TokenHash = ApiTokenRules.Hash(plain),
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-10),
+            });
+            return await db.SaveChangesAsync(Ct);
+        });
+        using var cli = ApiSession.BearerClient(factory, plain);
+
+        var response = await cli.GetAsync(new Uri("/api/auth/me", UriKind.Relative), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -314,6 +339,8 @@ public sealed class ApiTokenTests(TevrinApiFactory factory)
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<CreatedApiTokenDto>(ApiSession.Json, Ct))!;
     }
+
+    private static string Base64Url(byte[] bytes) => System.Buffers.Text.Base64Url.EncodeToString(bytes);
 
     private async Task<T> WithDbAsync<T>(Func<TevrinDbContext, Task<T>> action)
     {

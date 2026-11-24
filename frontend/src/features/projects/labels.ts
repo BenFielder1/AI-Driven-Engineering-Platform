@@ -601,7 +601,7 @@ export const stepAttemptOutcomeLabels: Record<Schemas['StepAttemptOutcome'], str
 
 /** FR-65, FR-140: the project's merge strategy, as Settings → Git and the Release page name it (`{…}`: see withGitHost). */
 const mergeStrategyCopy: Record<Schemas['MergeStrategy'], { label: string; description: string }> = {
-  aide_merges: {
+  tevrin_merges: {
     label: 'Tevrin merges the {pr}',
     description:
       'When the release is approved, Tevrin merges the {pr}. If {host} refuses (required reviews or checks, branch protection), the release waits for a merge on {host}.',
@@ -611,7 +611,7 @@ const mergeStrategyCopy: Record<Schemas['MergeStrategy'], { label: string; descr
     description:
       'Tevrin never merges. It marks the {pr} ready for review and waits; once someone merges it on {host}, Tevrin tags the merge commit and creates the {release}.',
   },
-  // FR-140: Bitbucket only (its `merge_strategy`); `aide_merges` sends `merge_commit`.
+  // FR-140: Bitbucket only (its `merge_strategy`); `tevrin_merges` sends `merge_commit`.
   fast_forward: {
     label: 'Tevrin merges (fast-forward)',
     description:
@@ -626,7 +626,7 @@ const mergeStrategyCopy: Record<Schemas['MergeStrategy'], { label: string; descr
 
 /** FR-65, FR-140: the merge strategies a project on this Git host can use (`fast_forward` and `squash` on Bitbucket only). */
 export function mergeStrategiesFor(provider: Schemas['GitProvider'] | null | undefined): readonly Schemas['MergeStrategy'][] {
-  return provider === 'bitbucket' ? ['aide_merges', 'fast_forward', 'squash', 'manual'] : ['aide_merges', 'manual']
+  return provider === 'bitbucket' ? ['tevrin_merges', 'fast_forward', 'squash', 'manual'] : ['tevrin_merges', 'manual']
 }
 
 /** The merge strategy's label, naming the project's Git host (default GitHub). */

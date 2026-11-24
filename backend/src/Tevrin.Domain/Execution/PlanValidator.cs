@@ -252,16 +252,16 @@ public static class PlanValidator
                         : StackPathRules.GeneratedPlanRefusal(stack, agent, path, existsOnBase)
                     : allowProtectedPaths || !PathRules.IsProtected(path)
                         ? null
-                        : $"declares the protected path '{path}'; a generated plan may not create or modify protected paths (.git/, .aide/, CI workflows, lockfiles, .env files).";
+                        : $"declares the protected path '{path}'; a generated plan may not create or modify protected paths (.git/, .tevrin/, .aide/, CI workflows, lockfiles, .env files).";
                 if (refusal is not null)
                 {
                     reasons.Add($"Step {step.Number} {refusal}");
                     continue;
                 }
 
-                if (PathRules.IsAgentForbidden(path))
+                if (PathRules.RulesDirectoryOf(path) is { } rulesDirectory)
                 {
-                    reasons.Add($"Step {step.Number} declares '{path}' under .aide/, which only humans edit; agents never write it.");
+                    reasons.Add($"Step {step.Number} declares '{path}' under {rulesDirectory}, which only humans edit; agents never write it.");
                     continue;
                 }
 

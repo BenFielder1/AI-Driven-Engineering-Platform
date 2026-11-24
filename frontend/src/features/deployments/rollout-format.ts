@@ -88,6 +88,8 @@ function isPreDeployFailure(step: RolloutStep): boolean {
   return (
     step.errorCode === 'MIGRATION_FAILED' ||
     /pre_deploy_failed|pre-deploy/i.test(message) ||
+    message.includes('.tevrin-fake/fail-migration') ||
+    // FR-326: the pre-0.8.0 marker, still written by the backend until FR-328.
     message.includes('.aide-fake/fail-migration')
   )
 }

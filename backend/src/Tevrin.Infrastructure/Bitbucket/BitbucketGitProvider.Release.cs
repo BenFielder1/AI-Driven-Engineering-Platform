@@ -25,7 +25,7 @@ internal sealed partial class BitbucketGitProvider
     /// <summary>
     /// FR-138, §4.19: the single mergeability call (<c>GET …/pullrequests/{id}/mergeability/checks</c>), mapped by
     /// <see cref="MergeabilityChecks.Map"/>: ready means no check has <c>blocking: true</c>. The draft Tevrin opened it as
-    /// doesn't count until Tevrin marked it ready (<see cref="MergeabilityChecks.IgnoringAideDraft"/>). A 404 is
+    /// doesn't count until Tevrin marked it ready (<see cref="MergeabilityChecks.IgnoringTevrinDraft"/>). A 404 is
     /// <c>pr_not_open</c>. An answer Tevrin can't use is <c>UPSTREAM_ERROR</c>.
     /// </summary>
     public async Task<Result<HostMergeReadiness>> GetMergeReadinessAsync(
@@ -49,7 +49,7 @@ internal sealed partial class BitbucketGitProvider
             return Result.Success(MergeabilityChecks.Map([], strategy, pullRequestOpen: false));
         }
 
-        var readiness = MergeabilityChecks.Map(MergeabilityChecks.IgnoringAideDraft(checks, markedReady), strategy);
+        var readiness = MergeabilityChecks.Map(MergeabilityChecks.IgnoringTevrinDraft(checks, markedReady), strategy);
         var blocking = checks.Count(c => c.Blocking);
         LogReadiness(logger, settings.ProjectId, number, blocking, readiness.Verdict!.CanMerge);
         return Result.Success(readiness);

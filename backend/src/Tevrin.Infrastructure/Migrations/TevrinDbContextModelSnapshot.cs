@@ -1606,7 +1606,7 @@ namespace Tevrin.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
-                        .HasDefaultValue("aide_merges")
+                        .HasDefaultValue("tevrin_merges")
                         .HasColumnName("merge_strategy");
 
                     b.Property<string>("Name")

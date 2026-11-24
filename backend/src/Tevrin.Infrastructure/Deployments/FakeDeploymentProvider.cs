@@ -91,7 +91,7 @@ public sealed class FakeDeploymentProvider(DeploymentProvider platform, IWorking
         IReadOnlyList<string>? paths = null;
         try
         {
-            paths = await workingCopies.ListPathsAtCommitAsync(request.Target.AideProjectId, request.GitSha, MaxListedPaths, cancellationToken);
+            paths = await workingCopies.ListPathsAtCommitAsync(request.Target.TevrinProjectId, request.GitSha, MaxListedPaths, cancellationToken);
         }
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
         {
@@ -114,8 +114,8 @@ public sealed class FakeDeploymentProvider(DeploymentProvider platform, IWorking
         var (outcome, sha8) = Parse(deploymentId);
         var state = FakeDeploymentRules.StateAfter(poll, outcome != "ok");
         var message = state != DeploymentStatus.Error ? null
-            : outcome == "mig" ? "The Fake pre-deploy migration failed: the commit contains .aide-fake/fail-migration."
-            : "The Fake build failed: the commit contains .aide-fake/fail-build.";
+            : outcome == "mig" ? $"The Fake pre-deploy migration failed: the commit contains {FakeDeploymentRules.FailMigrationMarker}."
+            : $"The Fake build failed: the commit contains {FakeDeploymentRules.FailBuildMarker}.";
         return Task.FromResult(new ProviderDeployment(
             deploymentId, FakeDeploymentRules.Url(sha8, target.Component, platform), Inspector(deploymentId), state.ToWire().ToUpperInvariant(), message));
     }
@@ -129,7 +129,7 @@ public sealed class FakeDeploymentProvider(DeploymentProvider platform, IWorking
         });
 
     public Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken) =>
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken) =>
         Task.FromResult<ProviderDeployment?>(null);
 
     public Task CancelAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken) => Task.CompletedTask;

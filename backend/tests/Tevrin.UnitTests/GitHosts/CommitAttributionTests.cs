@@ -204,7 +204,7 @@ public sealed class CommitAttributionTests
 
         Assert.Equal("[Tevrin][Phase:execution][Step:3] Add the projects endpoint", message.Subject);
         Assert.Equal(
-            $"Files:\n- backend/src/Api/Projects.cs\n\nAIDE-Step-Id: {stepId:D}\nCo-authored-by: Ana Lee <42+ana@users.noreply.github.com>",
+            $"Files:\n- backend/src/Api/Projects.cs\n\nTevrin-Step-Id: {stepId:D}\nCo-authored-by: Ana Lee <42+ana@users.noreply.github.com>",
             message.Body);
     }
 
@@ -214,7 +214,7 @@ public sealed class CommitAttributionTests
         var stepId = Guid.Parse("0192aaaa-0000-7000-8000-000000000001");
 
         Assert.Equal(CodeGeneration.CommitMessage(3, "T", ["a.txt"], stepId), CodeGeneration.CommitMessage(3, "T", ["a.txt"], stepId, null));
-        Assert.Equal($"Files:\n- a.txt\n\nAIDE-Step-Id: {stepId:D}", CodeGeneration.CommitMessage(3, "T", ["a.txt"], stepId).Body);
+        Assert.Equal($"Files:\n- a.txt\n\nTevrin-Step-Id: {stepId:D}", CodeGeneration.CommitMessage(3, "T", ["a.txt"], stepId).Body);
     }
 
     [Fact]

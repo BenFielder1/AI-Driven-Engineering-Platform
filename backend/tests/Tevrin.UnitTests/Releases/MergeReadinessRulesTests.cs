@@ -30,8 +30,8 @@ public class MergeReadinessRulesTests
     }
 
     [Theory]
-    [InlineData(MergeStrategy.AideMerges, true, true)]
-    [InlineData(MergeStrategy.AideMerges, false, false)]
+    [InlineData(MergeStrategy.TevrinMerges, true, true)]
+    [InlineData(MergeStrategy.TevrinMerges, false, false)]
     [InlineData(MergeStrategy.Manual, true, false)]
     [InlineData(MergeStrategy.Manual, false, false)]
     public void FR65_AIDE_merges_automatically_only_under_aide_merges_when_the_PR_can_merge(MergeStrategy strategy, bool canMerge, bool expected) =>

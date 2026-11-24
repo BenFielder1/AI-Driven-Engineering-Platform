@@ -45,12 +45,15 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v7
-      - name: Characterisation snapshots unchanged since M54 (FR-261)
+      - name: Characterisation snapshots and golden prompts frozen (FR-261, FR-328)
         working-directory: .
         run: bash scripts/ci/check-snapshots-frozen.sh
       - name: Committed migrations changed only by the Tevrin rename (FR-324)
         working-directory: .
         run: bash scripts/ci/check-migrations-renamed.sh
+      - name: Snapshots and golden prompts changed only by the Tevrin rename (FR-328)
+        working-directory: .
+        run: bash scripts/ci/check-snapshots-rebaseline.sh
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: backend/global.json
@@ -212,6 +215,8 @@ jobs:
           bash scripts/ci/check-version.sh
       - name: Migration rename check works (FR-324)
         run: bash scripts/ci/check-migrations-renamed.test.sh
+      - name: Snapshot re-baseline check works (FR-328)
+        run: bash scripts/ci/check-snapshots-rebaseline.test.sh
       # Error severity only: the deploy scripts carry warning/style findings that are not bugs (lib.sh variables
       # used by the scripts that source it). Pinned image, so local runs match.
       - name: shellcheck (severity error)

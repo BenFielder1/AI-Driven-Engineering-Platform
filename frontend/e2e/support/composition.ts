@@ -209,7 +209,8 @@ export async function waitForGateOrEscalation(context: BrowserContext, projectId
   }
 }
 
-const PLAN_BLOCK = /^```aide-plan[ \t]*\n([\s\S]*?)\n```[ \t]*$/m
+// FR-326: both the tevrin-plan and the legacy aide-plan fence are read; a rewrite keeps the matched tag.
+const PLAN_BLOCK = /^```((?:tevrin|aide)-plan)[ \t]*\n([\s\S]*?)\n```[ \t]*$/m
 
 interface PlanStep {
   number: number
@@ -217,19 +218,19 @@ interface PlanStep {
   files: { path: string; action: string }[]
 }
 
-/** FR-124: the specialist of each step of the latest implementation plan's aide-plan block, in step order. */
+/** FR-124: the specialist of each step of the latest implementation plan's plan block, in step order. */
 export async function planAgents(context: BrowserContext, projectId: string): Promise<string[]> {
   const plan = await apiJson<{ content: string }>(context, 'GET', `/api/projects/${projectId}/artifacts/implementation_plan/latest`)
   const match = PLAN_BLOCK.exec(plan.content)
-  expect(match, 'the plan has an aide-plan block').not.toBeNull()
-  const doc = JSON.parse(match?.[1] ?? '{}') as { steps?: PlanStep[] } | PlanStep[]
+  expect(match, 'the plan has a plan block').not.toBeNull()
+  const doc = JSON.parse(match?.[2] ?? '{}') as { steps?: PlanStep[] } | PlanStep[]
   return (Array.isArray(doc) ? doc : (doc.steps ?? [])).map((s) => s.agent)
 }
 
 /**
  * §4.15 failure path: an Owner edit of the plan draft (FR-18, POST …/artifacts/implementation_plan with baseVersion) that
  * makes the last step also create `.aide-fake/fail-build`, so the Fake provider fails the preview build. Only the
- * aide-plan block is changed; the server re-renders the document from it. Returns the new draft's id.
+ * plan block is changed; the server re-renders the document from it. Returns the new draft's id.
  */
 export async function addFailBuildMarkerToPlan(context: BrowserContext, projectId: string): Promise<string> {
   const plan = await apiJson<{ id: string; version: number; content: string; status: string }>(
@@ -239,12 +240,13 @@ export async function addFailBuildMarkerToPlan(context: BrowserContext, projectI
   )
   expect(plan.status).toBe('draft')
   const match = PLAN_BLOCK.exec(plan.content)
-  expect(match, 'the plan has an aide-plan block').not.toBeNull()
-  const doc = JSON.parse(match?.[1] ?? '{}') as { steps?: PlanStep[] } | PlanStep[]
+  expect(match, 'the plan has a plan block').not.toBeNull()
+  const doc = JSON.parse(match?.[2] ?? '{}') as { steps?: PlanStep[] } | PlanStep[]
   const steps = Array.isArray(doc) ? doc : (doc.steps ?? [])
   expect(steps.length).toBeGreaterThan(0)
   steps[steps.length - 1]?.files.push({ path: '.aide-fake/fail-build', action: 'create' })
-  const content = plan.content.replace(PLAN_BLOCK, () => `\`\`\`aide-plan\n${JSON.stringify(doc, null, 2)}\n\`\`\``)
+  const tag = match?.[1] ?? 'aide-plan'
+  const content = plan.content.replace(PLAN_BLOCK, () => `\`\`\`${tag}\n${JSON.stringify(doc, null, 2)}\n\`\`\``)
   const edited = await apiJson<{ id: string; status: string; content: string }>(
     context,
     'POST',

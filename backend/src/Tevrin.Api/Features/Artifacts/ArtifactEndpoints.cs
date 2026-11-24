@@ -82,7 +82,7 @@ public static class ArtifactEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable aide-stack-profile block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason)."),
+                (StatusCodes.Status400BadRequest, "VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable tevrin-stack-profile (or aide-stack-profile) block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: Viewers can't create drafts."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project."),
                 (StatusCodes.Status409Conflict, "WRONG_PHASE: the type can't be edited in the current phase; CONFLICT: baseVersion is no longer the latest version (details: latestVersion), or a concurrent save."));
@@ -110,7 +110,7 @@ public static class ArtifactEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithResponseDescriptions(
-                (StatusCodes.Status400BadRequest, "VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183)."),
+                (StatusCodes.Status400BadRequest, "VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose tevrin-plan (or aide-plan) block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183)."),
                 (StatusCodes.Status403Forbidden, "FORBIDDEN: only Owners approve artifacts."),
                 (StatusCodes.Status404NotFound, "NOT_FOUND: the project or artifact."),
                 (StatusCodes.Status409Conflict, "ARTIFACT_NOT_DRAFT (rejected, superseded, invalidated or corrupted, or created after the version the project was rolled back to), ARTIFACT_LOCKED or CONFLICT. STACK_PROFILE_INCOMPLETE: a stack_profile with unresolved layers (details: the layers); WRONG_PHASE: a stack_profile outside analysis."));

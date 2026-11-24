@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { THEME_STORAGE_KEY, useTheme } from './theme'
+import { LEGACY_THEME_STORAGE_KEY, THEME_STORAGE_KEY, useTheme } from './theme'
 import { themeInitScript } from './theme-init'
 
 /** A controllable `prefers-color-scheme: dark` media query (the OS setting). */
@@ -94,6 +94,18 @@ describe('FR-204: the theme init script (before first paint)', () => {
     runInitScript()
     expect(html()).toHaveClass('dark')
     expect(html()).not.toHaveClass('light')
+  })
+
+  it('FR-326 init_legacy_key: a theme saved under aide.theme is applied when tevrin.theme is missing; the new key wins', () => {
+    os = fakeOsScheme('light')
+    localStorage.setItem(LEGACY_THEME_STORAGE_KEY, 'dark')
+    runInitScript()
+    expect(html()).toHaveClass('dark')
+
+    resetHtml()
+    localStorage.setItem(THEME_STORAGE_KEY, 'light')
+    runInitScript()
+    expect(html()).toHaveClass('light')
   })
 
   it('FR204_stored_system: a stored `system` and an unknown value both follow the OS', () => {
@@ -199,7 +211,7 @@ describe('FR-204: the useTheme hook', () => {
     expect(html()).toHaveClass('dark')
   })
 
-  it('FR204_hook_set: setPreference stores the choice in aide.theme (light | dark | system) and applies it', () => {
+  it('FR204_hook_set: setPreference stores the choice in tevrin.theme (light | dark | system) and applies it', () => {
     os = fakeOsScheme('light')
     render(<Probe />)
     act(() => {
@@ -215,6 +227,20 @@ describe('FR-204: the useTheme hook', () => {
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('system')
     expect(screen.getByTestId('theme')).toHaveTextContent('system/light')
     expect(html()).toHaveClass('light')
+  })
+
+  it('FR-326 hook_legacy_key: a theme saved under aide.theme is read, and saving a choice moves it to tevrin.theme', () => {
+    os = fakeOsScheme('light')
+    localStorage.setItem(LEGACY_THEME_STORAGE_KEY, 'dark')
+    render(<Probe />)
+    expect(screen.getByTestId('theme')).toHaveTextContent('dark/dark')
+
+    act(() => {
+      screen.getByRole('button', { name: 'System' }).click()
+    })
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('system')
+    expect(localStorage.getItem(LEGACY_THEME_STORAGE_KEY)).toBeNull()
+    expect(screen.getByTestId('theme')).toHaveTextContent('system/light')
   })
 
   it('FR204_hook_unsubscribes: the OS listener is removed when the last consumer unmounts', () => {

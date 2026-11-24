@@ -17,7 +17,7 @@ namespace Tevrin.UnitTests.Agents;
 /// FR-318, FR-314 (FR-29, FR-243): <c>plan_generator</c> on the engine runner records what 0.6.1's
 /// <c>AgentRunner</c> and <c>ArtifactAgentJob</c> recorded for <see cref="PlanGenerationJobHandler"/>'s
 /// request: the prompt, the run and events with 0.6.1's payload literals, the draft rendered by
-/// <see cref="PlanDocument.RenderChecked"/> (with the <c>aide-plan</c> block and the added deploy-file steps), the one
+/// <see cref="PlanDocument.RenderChecked"/> (with the <c>tevrin-plan</c> block and the added deploy-file steps), the one
 /// corrective re-run with <c>PREVIOUS_PLAN</c> and 0.6.1's wording, <c>INVALID_PLAN</c>, and redelivery.
 /// </summary>
 public class SdlcPlanGeneratorStageTests
@@ -74,7 +74,7 @@ public class SdlcPlanGeneratorStageTests
     }
 
     [Fact]
-    public async Task FR318_FR314_plan_generator_success_stores_0_6_1s_rendered_plan_with_its_aide_plan_block()
+    public async Task FR318_FR314_plan_generator_success_stores_0_6_1s_rendered_plan_with_its_plan_block()
     {
         using var harness = Harness([null]);
         var job = SdlcAgentStageHarness.Job();
@@ -91,7 +91,7 @@ public class SdlcPlanGeneratorStageTests
         var draft = Assert.Single(harness.Store.Artifacts);
         var expected = ToContent(SdlcAgentRuns.ReadOutput(run.Output)!.Text, null).Value;
         Assert.Equal((SdlcArtifacts.ImplementationPlan, (Guid?)job.Id, expected), (draft.Type, draft.AgentRunId, draft.Content));
-        Assert.Contains("```aide-plan", draft.Content, StringComparison.Ordinal);
+        Assert.Contains("```tevrin-plan", draft.Content, StringComparison.Ordinal);
         Assert.Equal(4, PlanDocument.ParseMarkdown(draft.Content, MaxFiles).Value.Count);
         Assert.Equal(["RUN_STARTED", "RUN_COMPLETED", "ARTIFACT_CREATED"], harness.Data.Events.Select(e => e.Type));
         Assert.Equal(

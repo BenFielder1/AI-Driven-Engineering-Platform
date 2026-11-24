@@ -66,7 +66,7 @@ public sealed class MergeFlowTests(TevrinApiFactory factory)
         // The merge was refused: awaiting merge (attempt, version, project), with the readiness reasons, nothing tagged.
         Assert.Equal(1, github.Api.Count(HttpMethod.Put, Pull + "/merge"));
         var awaiting = await LatestAsync(fixture.Viewer.Client, id);
-        Assert.Equal((ReleaseStatus.AwaitingMerge, PrUrl, (DateTimeOffset?)null, MergeStrategy.AideMerges), (awaiting.Status, awaiting.PullRequestUrl, awaiting.CompletedAt, awaiting.MergeStrategy));
+        Assert.Equal((ReleaseStatus.AwaitingMerge, PrUrl, (DateTimeOffset?)null, MergeStrategy.TevrinMerges), (awaiting.Status, awaiting.PullRequestUrl, awaiting.CompletedAt, awaiting.MergeStrategy));
         Assert.Equal([MergeReadinessReasonCode.ReviewRequired], awaiting.MergeReasons!.Select(r => r.Code));
         Assert.NotNull(awaiting.AwaitingMergeSince);
         var project = await LifecycleSeed.ProjectAsync(app, id);

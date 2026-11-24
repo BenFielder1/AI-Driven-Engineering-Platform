@@ -46,9 +46,12 @@ public static class CodeGeneration
 {
     /// <summary>
     /// The trailer that keys a commit to its step (D17): a redelivered job finds the step's commit by it and never commits
-    /// twice.
+    /// twice. FR-326 (§4.77): written as <c>Tevrin-Step-Id</c> from 0.8.0.
     /// </summary>
-    public const string StepTrailer = "AIDE-Step-Id";
+    public const string StepTrailer = "Tevrin-Step-Id";
+
+    /// <summary>FR-326: the pre-0.8.0 trailer, still matched when finding a step's commit (commits keep their messages).</summary>
+    public const string LegacyStepTrailer = "AIDE-Step-Id";
 
     /// <summary>A declared file larger than this (UTF-8 bytes) isn't included in the prompt.</summary>
     public const int MaxExistingFileBytes = 100_000;
@@ -228,19 +231,20 @@ public static class CodeGeneration
 
     /// <summary>
     /// The project rules given to the Code Generator (FR-31): the project's limits and protected paths, followed by the
-    /// repository's own rules file (<c>.aide/rules.md</c>, which agents can never write: the Guardian rejects any output under <c>.aide/</c>).
+    /// repository's own rules file (<c>.tevrin/rules.md</c>, else the pre-0.8.0 <c>.aide/rules.md</c>, FR-326; agents can never
+    /// write either: the Guardian rejects any output under <c>.tevrin/</c> or <c>.aide/</c>).
     /// </summary>
     public static string ProjectRules(int maxFilesPerStep, string? repositoryRules)
     {
         var sb = new StringBuilder();
         sb.Append("- Touch at most ").Append(maxFilesPerStep.ToString(CultureInfo.InvariantCulture)).Append(" files in this step.\n");
         sb.Append("- Write only the files declared for this step, at their exact paths.\n");
-        sb.Append("- Never write anything under .git/ or .aide/.\n");
+        sb.Append("- Never write anything under .git/, .tevrin/ or .aide/.\n");
         sb.Append("- Never write other protected paths (CI workflows, lockfiles, .env files) unless this step declares them.\n");
         sb.Append("- Never write secrets (API keys, tokens, passwords, private keys).");
         if (!string.IsNullOrWhiteSpace(repositoryRules))
         {
-            sb.Append("\n\nRepository rules (.aide/rules.md):\n").Append(ContentHash.NormaliseLineEndings(repositoryRules).Trim());
+            sb.Append("\n\nRepository rules (.tevrin/rules.md, or .aide/rules.md before 0.8.0):\n").Append(ContentHash.NormaliseLineEndings(repositoryRules).Trim());
         }
 
         return sb.ToString();
@@ -280,6 +284,9 @@ public static class CodeGeneration
 
     /// <summary>The trailer line that keys a commit to <paramref name="stepId"/>.</summary>
     public static string StepTrailerLine(Guid stepId) => $"{StepTrailer}: {stepId:D}";
+
+    /// <summary>FR-326: every trailer line that keys a commit to <paramref name="stepId"/>, the current one first.</summary>
+    public static IReadOnlyList<string> StepTrailerLines(Guid stepId) => [StepTrailerLine(stepId), $"{LegacyStepTrailer}: {stepId:D}"];
 
     /// <summary>
     /// FR-34: the file manifest of an accepted step — each file's normalised path, its declared action (a file the step

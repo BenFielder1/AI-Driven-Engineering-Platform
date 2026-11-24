@@ -188,7 +188,7 @@ public sealed class ForwardedHeadersTests(TevrinApiFactory factory)
     }
 
     private static string AntiforgeryCookie(HttpResponseMessage response) =>
-        response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("aide.af=", StringComparison.Ordinal));
+        response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("tevrin.af=", StringComparison.Ordinal));
 
     /// <summary>What <c>ASPNETCORE_FORWARDEDHEADERS_ENABLED=true</c> adds: the middleware, first in the pipeline.</summary>
     private sealed class ForwardedHeadersSwitch : IStartupFilter

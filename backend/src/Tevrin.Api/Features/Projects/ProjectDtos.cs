@@ -434,7 +434,7 @@ public sealed record UpdateMemberRoleRequest
 /// For <c>github_app</c>, <c>installationId</c>, <c>repoId</c> and <c>repoFullName</c> identify the repo (else
 /// <c>null</c>). <c>appInstalledOnRepo</c> says whether the Tevrin GitHub App can access a <c>github_pat</c> project's repo
 /// (<c>null</c>: not checked, no App, or not a PAT project); <c>canSwitchToApp</c> is true when it can and the caller is an
-/// Owner ("Switch to GitHub App"). <c>mergeStrategy</c> (FR-65: <c>aide_merges</c>, the default, or <c>manual</c>) and
+/// Owner ("Switch to GitHub App"). <c>mergeStrategy</c> (FR-65: <c>tevrin_merges</c>, the default, or <c>manual</c>) and
 /// <c>tagPrefix</c> (§4.10, FR-64: default <c>v</c>, so tags read <c>v1.2.0</c>) are the project's release settings.
 /// </summary>
 public sealed record GitSettingsDto(
@@ -591,11 +591,12 @@ public sealed record UpdateGitSettingsRequest
     /// </summary>
     public Guid? ConnectionId { get; init; }
 
-    /// <summary>FR-65: <c>aide_merges</c> (Tevrin merges the PR on release) or <c>manual</c> (Tevrin never merges; the release
+    /// <summary>FR-65: <c>tevrin_merges</c> (Tevrin merges the PR on release) or <c>manual</c> (Tevrin never merges; the release
     /// marks the PR ready for review and waits for the merge on the Git host). FR-140, Bitbucket projects only (else 400
     /// <c>VALIDATION</c>): <c>fast_forward</c> or <c>squash</c>, Tevrin merging with that Bitbucket merge strategy
-    /// (<c>aide_merges</c> merges with <c>merge_commit</c>); a project that leaves Bitbucket goes back to <c>aide_merges</c>.
-    /// Applies to the next release attempt.</summary>
+    /// (<c>tevrin_merges</c> merges with <c>merge_commit</c>); a project that leaves Bitbucket goes back to <c>tevrin_merges</c>.
+    /// Applies to the next release attempt. FR-326 (D-0.8.0-10): <c>aide_merges</c>, the 0.7.0 name, is still accepted
+    /// as <c>tevrin_merges</c> until 0.9.0.</summary>
     public MergeStrategy? MergeStrategy { get; init; }
 
     /// <summary>§4.10, FR-64: the tag prefix (<c>^[A-Za-z0-9._/-]{0,20}$</c>, not starting with <c>.</c>, <c>/</c> or

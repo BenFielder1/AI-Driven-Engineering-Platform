@@ -21,7 +21,7 @@ public sealed class SmtpOptions
 
     public string? Password { get; set; }
 
-    public string From { get; set; } = "aide@aide.local";
+    public string From { get; set; } = "tevrin@tevrin.local";
 
     public bool EnableSsl { get; set; } = true;
 

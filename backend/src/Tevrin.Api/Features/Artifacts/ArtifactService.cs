@@ -66,7 +66,7 @@ public sealed partial class ArtifactService(
             return Result.Failure<Artifact>(allowed.Error!);
         }
 
-        // FR-18, FR-29: an edited plan is validated from its aide-plan block like a generated one, and stored re-rendered
+        // FR-18, FR-29: an edited plan is validated from its plan block like a generated one, and stored re-rendered
         // from it, so the readable step list always matches the steps that will run. An Owner's edit may declare protected
         // paths (§4.6); the re-rendered document must read back to the same steps before it is stored. FR-124: with a composition,
         // its specialists and plan rules apply as to a generated plan.
@@ -323,7 +323,7 @@ public sealed partial class ArtifactService(
             return Result.Failure<Artifact>(current.Error!);
         }
 
-        // FR-30: a plan's execution steps are created from its aide-plan block when it is locked (once per plan version),
+        // FR-30: a plan's execution steps are created from its plan block when it is locked (once per plan version),
         // checked against the project's current files-per-step limit.
         var steps = await db.ExecutionSteps.Where(s => s.ProjectId == projectId && s.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
         IReadOnlyList<PlanStep> planSteps = [];

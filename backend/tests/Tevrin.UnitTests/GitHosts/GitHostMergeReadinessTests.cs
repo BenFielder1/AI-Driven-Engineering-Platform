@@ -23,7 +23,7 @@ public class GitHostMergeReadinessTests
     [Fact]
     public void FR138_GitLab_not_approved_is_review_required()
     {
-        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = "not_approved", Approved = false }, MergeStrategy.AideMerges);
+        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = "not_approved", Approved = false }, MergeStrategy.TevrinMerges);
 
         Assert.False(readiness.RePoll);
         Assert.False(readiness.Verdict!.CanMerge);
@@ -33,7 +33,7 @@ public class GitHostMergeReadinessTests
     [Fact]
     public void FR138_GitLab_mergeable_can_merge_and_auto_merges_with_aide_merges()
     {
-        var readiness = GitLabMergeReadiness.Map(Mergeable, MergeStrategy.AideMerges);
+        var readiness = GitLabMergeReadiness.Map(Mergeable, MergeStrategy.TevrinMerges);
 
         Assert.True(readiness.Verdict!.CanMerge);
         Assert.True(readiness.Verdict.WillAutoMerge);
@@ -57,7 +57,7 @@ public class GitHostMergeReadinessTests
     [InlineData("approvals_syncing")]
     public void S4_19_GitLab_transient_merge_statuses_re_poll(string status)
     {
-        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = status }, MergeStrategy.AideMerges);
+        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = status }, MergeStrategy.TevrinMerges);
 
         Assert.True(readiness.RePoll);
         Assert.Null(readiness.Verdict);
@@ -77,7 +77,7 @@ public class GitHostMergeReadinessTests
     [InlineData("not_open", MergeReadinessReasonCode.PrNotOpen)]
     public void FR138_GitLab_detailed_merge_status_maps_to_a_0_2_0_reason(string status, MergeReadinessReasonCode expected)
     {
-        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = status }, MergeStrategy.AideMerges);
+        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = status }, MergeStrategy.TevrinMerges);
 
         Assert.False(readiness.Verdict!.CanMerge);
         Assert.Equal([expected], Codes(readiness));
@@ -98,7 +98,7 @@ public class GitHostMergeReadinessTests
             UserAccessLevel = GitLabMergeReadiness.DeveloperAccess,
         };
 
-        var readiness = GitLabMergeReadiness.Map(facts, MergeStrategy.AideMerges);
+        var readiness = GitLabMergeReadiness.Map(facts, MergeStrategy.TevrinMerges);
 
         Assert.Equal(
             [
@@ -114,14 +114,14 @@ public class GitHostMergeReadinessTests
     {
         var running = Mergeable with { HeadPipelineStatus = "running" };
 
-        Assert.Equal([MergeReadinessReasonCode.ChecksPending], Codes(GitLabMergeReadiness.Map(running, MergeStrategy.AideMerges)));
-        Assert.True(GitLabMergeReadiness.Map(running with { PipelinesMustSucceed = false }, MergeStrategy.AideMerges).Verdict!.CanMerge);
+        Assert.Equal([MergeReadinessReasonCode.ChecksPending], Codes(GitLabMergeReadiness.Map(running, MergeStrategy.TevrinMerges)));
+        Assert.True(GitLabMergeReadiness.Map(running with { PipelinesMustSucceed = false }, MergeStrategy.TevrinMerges).Verdict!.CanMerge);
     }
 
     [Fact]
     public void FR138_GitLab_ci_must_pass_without_a_pipeline_is_pending()
     {
-        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = "ci_must_pass", HeadPipelineStatus = null }, MergeStrategy.AideMerges);
+        var readiness = GitLabMergeReadiness.Map(Mergeable with { DetailedMergeStatus = "ci_must_pass", HeadPipelineStatus = null }, MergeStrategy.TevrinMerges);
 
         Assert.Equal([MergeReadinessReasonCode.ChecksPending], Codes(readiness));
     }
@@ -145,7 +145,7 @@ public class GitHostMergeReadinessTests
             new("standard_merge_check", "require_approvals_to_merge", "PASSED", Required: true, Blocking: false),
         ];
 
-        var readiness = MergeabilityChecks.Map(checks, MergeStrategy.AideMerges);
+        var readiness = MergeabilityChecks.Map(checks, MergeStrategy.TevrinMerges);
 
         Assert.False(readiness.Verdict!.CanMerge);
         Assert.Equal([MergeReadinessReasonCode.ChecksFailing], Codes(readiness));
@@ -161,7 +161,7 @@ public class GitHostMergeReadinessTests
             new("standard_merge_check", "require_approvals_to_merge", "FAILED", Required: false, Blocking: false),
         ];
 
-        var readiness = MergeabilityChecks.Map(checks, MergeStrategy.AideMerges);
+        var readiness = MergeabilityChecks.Map(checks, MergeStrategy.TevrinMerges);
 
         Assert.True(readiness.Verdict!.CanMerge);
         Assert.True(readiness.Verdict.WillAutoMerge);
@@ -180,7 +180,7 @@ public class GitHostMergeReadinessTests
     [InlineData("require_all_dependencies_merged", "FAILED", MergeReadinessReasonCode.BranchProtected)]
     public void FR138_Bitbucket_blocking_checks_map_to_0_2_0_reasons(string key, string status, MergeReadinessReasonCode expected)
     {
-        var readiness = MergeabilityChecks.Map([new("standard_merge_check", key, status, true, true)], MergeStrategy.AideMerges);
+        var readiness = MergeabilityChecks.Map([new("standard_merge_check", key, status, true, true)], MergeStrategy.TevrinMerges);
 
         Assert.Equal([expected], Codes(readiness));
     }
@@ -188,14 +188,14 @@ public class GitHostMergeReadinessTests
     [Fact]
     public void FR138_Bitbucket_draft_and_closed_pull_requests()
     {
-        Assert.Equal([MergeReadinessReasonCode.Draft], Codes(MergeabilityChecks.Map([], MergeStrategy.AideMerges, draft: true)));
+        Assert.Equal([MergeReadinessReasonCode.Draft], Codes(MergeabilityChecks.Map([], MergeStrategy.TevrinMerges, draft: true)));
         Assert.Equal(
             [MergeReadinessReasonCode.PrNotOpen, MergeReadinessReasonCode.ManualStrategy],
             Codes(MergeabilityChecks.Map([], MergeStrategy.Manual, pullRequestOpen: false)));
     }
 
     [Theory]
-    [InlineData(MergeStrategy.AideMerges)]
+    [InlineData(MergeStrategy.TevrinMerges)]
     [InlineData(MergeStrategy.Manual)]
     public void FR138_GitLab_still_checking_after_the_re_polls_is_not_mergeable_with_checks_pending(MergeStrategy strategy)
     {
@@ -212,23 +212,23 @@ public class GitHostMergeReadinessTests
     {
         var draft = Mergeable with { DetailedMergeStatus = "draft_status", Draft = true };
 
-        Assert.Equal([MergeReadinessReasonCode.Draft], Codes(GitLabMergeReadiness.Map(draft, MergeStrategy.AideMerges)));
-        var ignored = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringAideDraft(draft), MergeStrategy.AideMerges);
+        Assert.Equal([MergeReadinessReasonCode.Draft], Codes(GitLabMergeReadiness.Map(draft, MergeStrategy.TevrinMerges)));
+        var ignored = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringTevrinDraft(draft), MergeStrategy.TevrinMerges);
         Assert.True(ignored.Verdict!.CanMerge);
         Assert.Equal(
             [MergeReadinessReasonCode.ReviewRequired],
-            Codes(GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringAideDraft(draft with { Approved = false }), MergeStrategy.AideMerges)));
-        Assert.Equal("not_approved", GitLabMergeReadiness.IgnoringAideDraft(Mergeable with { DetailedMergeStatus = "not_approved" }).DetailedMergeStatus);
+            Codes(GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringTevrinDraft(draft with { Approved = false }), MergeStrategy.TevrinMerges)));
+        Assert.Equal("not_approved", GitLabMergeReadiness.IgnoringTevrinDraft(Mergeable with { DetailedMergeStatus = "not_approved" }).DetailedMergeStatus);
     }
 
     [Theory]
     [InlineData(MergeStrategy.Manual)]
-    [InlineData(MergeStrategy.AideMerges)]
+    [InlineData(MergeStrategy.TevrinMerges)]
     public void FR138_Once_AIDE_marked_the_MR_ready_a_draft_blocks_again(MergeStrategy strategy)
     {
         var draft = Mergeable with { DetailedMergeStatus = "draft_status", Draft = true };
 
-        var readiness = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringAideDraft(draft, markedReady: true), strategy);
+        var readiness = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringTevrinDraft(draft, markedReady: true), strategy);
 
         Assert.False(readiness.Verdict!.CanMerge);
         Assert.Contains(MergeReadinessReasonCode.Draft, Codes(readiness));

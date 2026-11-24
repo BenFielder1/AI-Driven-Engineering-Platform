@@ -286,9 +286,10 @@ public static partial class StackCatalogLoader
         }
 
         var version = Required(raw.Version, "version", 50);
-        if (version.Length > 0 && (!PackVersion().IsMatch(version) || (source.Version.Length > 0 && !version.StartsWith(source.Version + "+aide.", StringComparison.Ordinal))))
+        // FR-326 (§4.77): the build metadata is +tevrin.<n>; the pre-0.8.0 +aide.<n> is still read.
+        if (version.Length > 0 && (!PackVersion().IsMatch(version) || (source.Version.Length > 0 && !HasPackBuildMetadata(version, source.Version))))
         {
-            reasons.Add($"version '{version}' must be '<source.version>+aide.<n>'.");
+            reasons.Add($"version '{version}' must be '<source.version>+tevrin.<n>' (or the pre-0.8.0 '<source.version>+aide.<n>').");
         }
 
         var chips = Strings(raw.Chips, "chips", reasons);
@@ -1397,7 +1398,17 @@ public static partial class StackCatalogLoader
     [GeneratedRegex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$", RegexOptions.CultureInvariant)]
     private static partial Regex SemVer();
 
-    [GeneratedRegex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?\+aide\.\d+$", RegexOptions.CultureInvariant)]
+    /// <summary>FR-326: the build-metadata tags a pack version may carry: <c>tevrin</c>, or <c>aide</c> before 0.8.0.</summary>
+    public static readonly IReadOnlyList<string> PackVersionTags = ["tevrin", "aide"];
+
+    /// <summary>FR-326: whether <paramref name="version"/> is <paramref name="sourceVersion"/> plus <c>+tevrin.</c> or <c>+aide.</c>.</summary>
+    public static bool HasPackBuildMetadata(string version, string sourceVersion) =>
+        PackVersionTags.Any(tag => version.StartsWith($"{sourceVersion}+{tag}.", StringComparison.Ordinal));
+
+    /// <summary>FR-326: a pack version, <c>&lt;semver&gt;+tevrin.&lt;n&gt;</c> or the pre-0.8.0 <c>&lt;semver&gt;+aide.&lt;n&gt;</c>.</summary>
+    public static bool IsPackVersion(string version) => PackVersion().IsMatch(version);
+
+    [GeneratedRegex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?\+(?:tevrin|aide)\.\d+$", RegexOptions.CultureInvariant)]
     private static partial Regex PackVersion();
 
     [GeneratedRegex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]

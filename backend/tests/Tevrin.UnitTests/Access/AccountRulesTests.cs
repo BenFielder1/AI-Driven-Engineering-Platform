@@ -42,8 +42,8 @@ public class AccountRulesTests
 
         var token = ApiTokenRules.Format(secret);
 
-        Assert.StartsWith("aide_pat_", token, StringComparison.Ordinal);
-        Assert.Equal(9 + 43, token.Length);
+        Assert.StartsWith("tevrin_pat_", token, StringComparison.Ordinal);
+        Assert.Equal(11 + 43, token.Length);
         Assert.DoesNotContain('=', token);
         Assert.DoesNotContain('+', token);
         Assert.DoesNotContain('/', token);
@@ -58,17 +58,21 @@ public class AccountRulesTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("aide_pat_")]
+    [InlineData("tevrin_pat_")]
     [InlineData("aide_pat_tooshort")]
+    [InlineData("tevrin_pat_tooshort")]
+    [InlineData("tevrin_aide_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
     [InlineData("ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
     [InlineData("aide_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")]
     [InlineData("aide_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+")]
+    [InlineData("tevrin_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")]
     public void FR4_Malformed_tokens_are_rejected_before_lookup(string? token) =>
         Assert.False(ApiTokenRules.IsWellFormed(token));
 
     [Fact]
     public void FR4_Only_the_SHA256_hex_hash_is_stored()
     {
-        const string token = "aide_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        const string token = "tevrin_pat_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
         var hash = ApiTokenRules.Hash(token);
 
@@ -119,7 +123,7 @@ public class AccountRulesTests
     }
 
     [Fact]
-    public void S2_System_actor_is_aide_system() => Assert.Equal("aide-system", SystemActor.Name);
+    public void S2_FR326_System_actor_is_tevrin_system() => Assert.Equal("tevrin-system", SystemActor.Name);
 
     [Fact]
     public void S2_Current_user_actor_is_the_user_id_or_the_system_actor()
@@ -127,7 +131,7 @@ public class AccountRulesTests
         var id = Guid.CreateVersion7();
 
         Assert.Equal(id.ToString(), ((ICurrentUser)new FakeCurrentUser(id, false)).Actor);
-        Assert.Equal("aide-system", ((ICurrentUser)new FakeCurrentUser(null, true)).Actor);
+        Assert.Equal("tevrin-system", ((ICurrentUser)new FakeCurrentUser(null, true)).Actor);
         Assert.False(((ICurrentUser)new FakeCurrentUser(null, false)).IsAuthenticated);
         Assert.Throws<InvalidOperationException>(() => ((ICurrentUser)new FakeCurrentUser(null, false)).RequiredUserId);
     }

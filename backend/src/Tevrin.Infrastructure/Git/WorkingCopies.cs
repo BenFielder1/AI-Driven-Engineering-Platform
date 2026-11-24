@@ -186,7 +186,7 @@ public interface IWorkingCopies
     /// <summary>FR-31: the current content of <paramref name="paths"/> in the working copy.</summary>
     Task<IReadOnlyList<WorkingFileContent>> ReadAsync(Guid projectId, IEnumerable<string> paths, CancellationToken cancellationToken);
 
-    /// <summary>The repository's rules file (<c>.aide/rules.md</c>), or <c>null</c>.</summary>
+    /// <summary>The repository's rules file (<c>.tevrin/rules.md</c>, else the pre-0.8.0 <c>.aide/rules.md</c>; FR-326), or <c>null</c>.</summary>
     Task<string?> ReadRulesAsync(Guid projectId, CancellationToken cancellationToken);
 
     /// <summary>D17: the commit on <paramref name="branch"/> that carries the step's trailer, or <c>null</c>.</summary>
@@ -253,7 +253,11 @@ public interface IWorkingCopies
 
 internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli git, ILogger<WorkingCopies> logger) : IWorkingCopies
 {
-    public const string RulesPath = ".aide/rules.md";
+    /// <summary>FR-326 (§4.77): the repository's rules file from 0.8.0, read first.</summary>
+    public const string RulesPath = ".tevrin/rules.md";
+
+    /// <summary>FR-326: the pre-0.8.0 rules file, read when the repository has no <see cref="RulesPath"/>.</summary>
+    public const string LegacyRulesPath = ".aide/rules.md";
     public const string InitialCommitMessage = "Initial commit";
 
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> Locks = new();
@@ -704,8 +708,16 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
     public async Task<string?> ReadRulesAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var file = await ReadOneAsync(PathFor(projectId), RulesPath, cancellationToken, allowProtected: true);
-        return file.State == WorkingFileState.Present ? file.Content : null;
+        foreach (var path in new[] { RulesPath, LegacyRulesPath })
+        {
+            var file = await ReadOneAsync(PathFor(projectId), path, cancellationToken, allowProtected: true);
+            if (file.State == WorkingFileState.Present)
+            {
+                return file.Content;
+            }
+        }
+
+        return null;
     }
 
     public Task<StepCommitResult?> FindStepCommitAsync(Guid projectId, string branch, Guid stepId, CancellationToken cancellationToken)
@@ -1067,7 +1079,8 @@ internal sealed partial class WorkingCopies(IWorkspaceStore workspaces, IGitCli 
 
         var log = await RunAsync(
             root,
-            ["log", $"refs/heads/{branch}", "--fixed-strings", $"--grep={Domain.Execution.CodeGeneration.StepTrailerLine(stepId)}", "--format=%H", "--"],
+            // FR-326: either trailer (several --grep patterns match any); a pre-0.8.0 commit carries AIDE-Step-Id.
+            ["log", $"refs/heads/{branch}", "--fixed-strings", .. Domain.Execution.CodeGeneration.StepTrailerLines(stepId).Select(line => $"--grep={line}"), "--format=%H", "--"],
             cancellationToken);
         var sha = log.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
         if (sha is null)

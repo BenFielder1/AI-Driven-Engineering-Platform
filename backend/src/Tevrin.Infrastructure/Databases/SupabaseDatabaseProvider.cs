@@ -26,7 +26,7 @@ public sealed class SupabaseDatabaseProvider(PlatformHttp http) : IDatabaseProvi
     private const ManagedDatabaseProvider Supabase = ManagedDatabaseProvider.Supabase;
 
     /// <summary>The name of the keys Tevrin creates when a project has no publishable or secret key.</summary>
-    public const string KeyName = "aide";
+    public const string KeyName = "tevrin";
 
     public ManagedDatabaseProvider Kind => Supabase;
 

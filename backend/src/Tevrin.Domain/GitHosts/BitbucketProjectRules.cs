@@ -169,7 +169,7 @@ public static partial class BitbucketProjectRules
 
     /// <summary>
     /// FR-140, §4.19: Bitbucket's <c>merge_strategy</c> for the project's merge strategy: <c>squash</c> and
-    /// <c>fast_forward</c> as chosen; <c>aide_merges</c> (and <c>manual</c>, which never merges) <c>merge_commit</c>.
+    /// <c>fast_forward</c> as chosen; <c>tevrin_merges</c> (and <c>manual</c>, which never merges) <c>merge_commit</c>.
     /// </summary>
     public static string MergeStrategyParameter(MergeStrategy strategy) => strategy switch
     {
@@ -192,7 +192,7 @@ public static partial class BitbucketProjectRules
 
         return Result.Failure(new DomainError(ErrorCodes.Validation, "The Git settings are invalid.")
         {
-            Details = [$"mergeStrategy: {strategy.ToWire()} is only available for Bitbucket projects; use aide_merges or manual."],
+            Details = [$"mergeStrategy: {strategy.ToWire()} is only available for Bitbucket projects; use tevrin_merges or manual."],
         });
     }
 

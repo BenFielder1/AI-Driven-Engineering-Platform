@@ -64,7 +64,7 @@ public sealed class GitHubOAuthHandler(IOptionsMonitor<OAuthOptions> options, IL
     protected override async Task<OAuthTokenResponse> ExchangeCodeAsync(OAuthCodeExchangeContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (!context.Properties.Items.TryGetValue(GitHubAuth.AppClientItem, out var clientId) || clientId is null)
+        if (!GitHubAuth.TryGetItem(context.Properties, GitHubAuth.AppClientItem, out var clientId) || clientId is null)
         {
             return await base.ExchangeCodeAsync(context);
         }

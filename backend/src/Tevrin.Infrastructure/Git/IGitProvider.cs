@@ -266,7 +266,7 @@ public sealed record ReleaseRequest(
     public string TagMessageFor(string tag) => Domain.GitHosts.CommitTrailers.Append(Domain.Releases.ReleaseRules.TagMessage(ProjectName, tag, Version), CoAuthorLine);
 
     /// <summary>
-    /// FR-65: whether Tevrin may merge (<c>aide_merges</c>). <c>false</c> (<c>manual</c>, and the merge poll): never merge —
+    /// FR-65: whether Tevrin may merge (<c>tevrin_merges</c>). <c>false</c> (<c>manual</c>, and the merge poll): never merge —
     /// a PR (or Local branch) already merged by someone else is tagged on its merge commit and released; one not merged yet
     /// is <see cref="ReleaseOutcomeKind.AwaitingMerge"/> (GitHub: a draft PR is marked ready for review first).
     /// </summary>
@@ -283,7 +283,7 @@ public sealed record ReleaseRequest(
     /// FR-140: the project's merge strategy, for a host whose merge call takes the method (Bitbucket <c>merge_strategy</c>:
     /// <c>merge_commit</c>, <c>squash</c>, <c>fast_forward</c>).
     /// </summary>
-    public MergeStrategy Strategy { get; init; } = MergeStrategy.AideMerges;
+    public MergeStrategy Strategy { get; init; } = MergeStrategy.TevrinMerges;
 
     /// <summary>
     /// FR-65, FR-140: the merge commit already recorded on the attempt (Tevrin's own merge, before a retry); a merged PR/MR

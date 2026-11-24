@@ -94,10 +94,10 @@ public sealed partial class RenderDeploymentProvider
     }
 
     public async Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
-        if (aideDeploymentId is null && environment != DeploymentEnvironment.Production)
+        if (tevrinDeploymentId is null && environment != DeploymentEnvironment.Production)
         {
             return null;
         }
@@ -122,7 +122,7 @@ public sealed partial class RenderDeploymentProvider
             var created = Json.Time(deploy, "createdAt");
             var trigger = Text(deploy, "trigger");
             var state = RenderRules.StateOf(Text(deploy, "status"));
-            var matches = aideDeploymentId is not null
+            var matches = tevrinDeploymentId is not null
                 ? trigger is "api" or "deploy_hook" && (createdAfter is null || created is null || created >= createdAfter)
                 : state != DeploymentStatus.Canceled;
             if (matches)

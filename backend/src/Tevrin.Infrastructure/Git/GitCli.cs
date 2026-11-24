@@ -57,7 +57,7 @@ public interface IGitCli
 internal sealed class GitCli : IGitCli
 {
     public const string AuthorName = "Tevrin";
-    public const string AuthorEmail = "aide@aide.local";
+    public const string AuthorEmail = "tevrin@tevrin.local";
 
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(120);

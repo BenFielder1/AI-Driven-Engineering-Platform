@@ -124,17 +124,24 @@ public sealed partial class Fr198To201RenameTests
     // ---------- FR-201: identifiers users already hold keep their names ----------
 
     [Fact]
-    public void FR201_API_tokens_keep_the_aide_pat_prefix()
+    public void FR201_API_tokens_issued_with_the_aide_pat_prefix_stay_valid()
     {
-        Assert.Equal("aide_pat_", ApiTokenRules.Prefix);
-        Assert.StartsWith("aide_pat_", ApiTokenRules.Format(new byte[32]), StringComparison.Ordinal);
+        // FR-326 (§4.77) moves new tokens to tevrin_pat_; the aide_pat_ tokens users hold keep working until 0.9.0.
+        Assert.Equal("aide_pat_", ApiTokenRules.LegacyPrefix);
+        Assert.True(ApiTokenRules.IsWellFormed("aide_pat_" + new string('A', 43)));
     }
 
     [Fact]
-    public void FR201_Webhook_deliveries_keep_the_X_AIDE_headers() =>
+    public void FR326_Webhook_deliveries_send_the_X_Tevrin_headers_and_still_the_X_AIDE_ones()
+    {
+        // FR-201 kept the X-AIDE-* headers; FR-326 (§4.77) adds X-Tevrin-* and sends both through 0.8.x.
+        Assert.Equal(
+            ["X-Tevrin-Signature", "X-Tevrin-Timestamp", "X-Tevrin-Delivery", "X-Tevrin-Event"],
+            [WebhookSignature.HeaderName, WebhookSignature.TimestampHeaderName, WebhookSignature.DeliveryHeaderName, WebhookSignature.EventHeaderName]);
         Assert.Equal(
             ["X-AIDE-Signature", "X-AIDE-Timestamp", "X-AIDE-Delivery", "X-AIDE-Event"],
-            [WebhookSignature.HeaderName, WebhookSignature.TimestampHeaderName, WebhookSignature.DeliveryHeaderName, WebhookSignature.EventHeaderName]);
+            [WebhookSignature.LegacyHeaderName, WebhookSignature.LegacyTimestampHeaderName, WebhookSignature.LegacyDeliveryHeaderName, WebhookSignature.LegacyEventHeaderName]);
+    }
 
     [Fact]
     public void FR201_Stored_formats_branches_and_paths_keep_their_aide_names()
@@ -142,11 +149,18 @@ public sealed partial class Fr198To201RenameTests
         // FR-232 (D-0.6.1-2) withdraws the aide/ prefix for new branches only: recorded aide/ branches are kept (§4.35).
         Assert.Equal("tevrin/todo-api/v1.2.0", ReleaseVersionRules.BranchName("todo-api", Guid.NewGuid(), SemVer.Parse("1.2.0")));
         Assert.Equal("aide/todo-api/v1.2.0", BranchNaming.Choose("aide/todo-api/v1.2.0", true, null, "todo-api", Guid.NewGuid(), SemVer.Parse("1.2.0")));
-        Assert.Equal(".aide/", PathRules.AideDirectory);
-        Assert.Equal("aide-plan", PlanDocument.BlockLanguage);
-        Assert.Equal("aide-stack-profile", StackProfile.FenceTag);
-        Assert.Equal("aide_merges", MergeStrategy.AideMerges.ToWire());
-        Assert.Equal("AIDE-Step-Id", CodeGeneration.StepTrailer);
+        // FR-326 (§4.77): agents may write neither rules folder; plan blocks and profile fences are read under both tags.
+        Assert.Equal([".tevrin/", ".aide/"], PathRules.RulesDirectories);
+        Assert.True(PathRules.IsAgentForbidden(".aide/rules.md"));
+        Assert.True(PathRules.IsAgentForbidden(".tevrin/rules.md"));
+        Assert.Equal("aide-plan", PlanDocument.LegacyBlockLanguage);
+        Assert.Equal("aide-stack-profile", StackProfile.LegacyFenceTag);
+        Assert.Contains("aide-stack-profile", StackProfile.FenceTags);
+        // FR-326, D-0.8.0-10: the merge strategy is written as tevrin_merges; aide_merges is still read until 0.9.0.
+        Assert.Equal(MergeStrategy.TevrinMerges, EnumStrings.Parse<MergeStrategy>("aide_merges"));
+        // FR-326: commits carry the Tevrin-Step-Id trailer and still the AIDE-Step-Id one.
+        Assert.Equal("Tevrin-Step-Id", CodeGeneration.StepTrailer);
+        Assert.Equal("AIDE-Step-Id", CodeGeneration.LegacyStepTrailer);
         Assert.Equal("AIDE_RUN_MIGRATIONS", DerivedEnvRules.RunMigrations);
     }
 

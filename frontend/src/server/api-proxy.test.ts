@@ -223,7 +223,7 @@ describe('FR-98 api proxy (http)', () => {
         headers: {
           'content-type': 'application/json',
           cookie: 'aide.auth=abc; XSRF-TOKEN=x1',
-          authorization: 'Bearer aide_pat_1',
+          authorization: 'Bearer tevrin_pat_1',
           'x-xsrf-token': 'x1',
           'x-forwarded-for': '203.0.113.9',
         },
@@ -234,7 +234,7 @@ describe('FR-98 api proxy (http)', () => {
     expect(got).toMatchObject({ method: 'PUT', url: '/api/projects/1?x=1&y=%2F', body: '{"name":"A"}' })
     expect(got?.headers).toMatchObject({
       cookie: 'aide.auth=abc; XSRF-TOKEN=x1',
-      authorization: 'Bearer aide_pat_1',
+      authorization: 'Bearer tevrin_pat_1',
       'x-xsrf-token': 'x1',
       'x-forwarded-for': '203.0.113.9, 127.0.0.1',
       'x-forwarded-proto': 'http',

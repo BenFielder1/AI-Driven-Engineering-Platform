@@ -292,10 +292,10 @@ public sealed class GitHubPagesDeploymentProvider(GitHubApi api) : IDeploymentPr
     }
 
     public async Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
-        if (environment != DeploymentEnvironment.Production || aideDeploymentId is not null)
+        if (environment != DeploymentEnvironment.Production || tevrinDeploymentId is not null)
         {
             return null;
         }

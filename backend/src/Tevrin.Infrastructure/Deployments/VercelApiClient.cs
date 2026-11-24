@@ -52,7 +52,10 @@ public sealed class VercelApiClient(IHttpClientFactory clients, VercelEnvWriteLi
     public const string HttpClientName = "vercel";
 
     /// <summary>The deployment <c>meta</c> key carrying the Tevrin row id (idempotency key).</summary>
-    public const string AideDeploymentIdMeta = "aideDeploymentId";
+    public const string TevrinDeploymentIdMeta = "tevrinDeploymentId";
+
+    /// <summary>FR-326 (§4.77): the <c>meta</c> key deployments made before 0.8.0 carry; still matched when finding one.</summary>
+    public const string LegacyDeploymentIdMeta = "aideDeploymentId";
 
     /// <summary>§8: the only Vercel host Tevrin talks to.</summary>
     public const string ApiBaseUrl = "https://api.vercel.com/";
@@ -259,7 +262,7 @@ public sealed class VercelApiClient(IHttpClientFactory clients, VercelEnvWriteLi
             ["name"] = request.VercelProjectName,
             ["project"] = request.VercelProjectId,
             ["gitSource"] = gitSource,
-            ["meta"] = new Dictionary<string, string> { [AideDeploymentIdMeta] = request.AideDeploymentId.ToString("D") },
+            ["meta"] = new Dictionary<string, string> { [TevrinDeploymentIdMeta] = request.TevrinDeploymentId.ToString("D") },
         };
         if (request.Target == DeploymentEnvironment.Production)
         {
@@ -302,8 +305,8 @@ public sealed class VercelApiClient(IHttpClientFactory clients, VercelEnvWriteLi
         return log.Length <= IVercelClient.MaxBuildLogLength ? log : log[^IVercelClient.MaxBuildLogLength..];
     }
 
-    public async Task<ProviderDeployment?> FindByAideIdAsync(
-        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid aideDeploymentId, CancellationToken cancellationToken)
+    public async Task<ProviderDeployment?> FindByTevrinIdAsync(
+        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid tevrinDeploymentId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(auth);
         try
@@ -319,10 +322,10 @@ public sealed class VercelApiClient(IHttpClientFactory clients, VercelEnvWriteLi
                 return null;
             }
 
-            var key = aideDeploymentId.ToString("D");
+            var key = tevrinDeploymentId.ToString("D");
             foreach (var item in list.EnumerateArray())
             {
-                var meta = item.TryGetProperty("meta", out var m) ? Text(m, AideDeploymentIdMeta) : null;
+                var meta = item.TryGetProperty("meta", out var m) ? MetaDeploymentId(m) : null;
                 var state = Text(item, "readyState") ?? Text(item, "state");
                 if (string.Equals(meta, key, StringComparison.OrdinalIgnoreCase) && DeploymentStates.FromReadyState(state) != DeploymentStatus.Canceled
                     && (Text(item, "uid") ?? Text(item, "id")) is { } id)
@@ -558,6 +561,12 @@ public sealed class VercelApiClient(IHttpClientFactory clients, VercelEnvWriteLi
         var cleaned = new string(text.Where(ch => !char.IsControl(ch)).ToArray()).Trim();
         return cleaned.Length > MaxMessageLength ? cleaned[..MaxMessageLength] : cleaned;
     }
+
+    /// <summary>
+    /// FR-326: the Tevrin row id in a deployment's <c>meta</c>, under <see cref="TevrinDeploymentIdMeta"/> or, for a deployment
+    /// made before 0.8.0, <see cref="LegacyDeploymentIdMeta"/>.
+    /// </summary>
+    public static string? MetaDeploymentId(JsonElement meta) => Text(meta, TevrinDeploymentIdMeta) ?? Text(meta, LegacyDeploymentIdMeta);
 
     private static string? Text(JsonElement element, string property) =>
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

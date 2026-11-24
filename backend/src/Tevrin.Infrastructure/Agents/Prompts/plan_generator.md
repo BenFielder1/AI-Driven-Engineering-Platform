@@ -14,7 +14,7 @@ Planning rules (the guardian enforces them; violating them rejects the plan or t
 - A file is created by exactly one step. A later step may `modify` it and must then depend (directly or indirectly) on
   the step that created it.
 - Paths are relative to the repository root, use forward slashes, and never start with `/`, `./` or contain `..`.
-- Never declare protected paths: `.git/`, `.aide/`, CI workflow files (`.github/workflows/`), lockfiles
+- Never declare protected paths: `.git/`, `.tevrin/`, CI workflow files (`.github/workflows/`), lockfiles
   (`package-lock.json`, `yarn.lock`, …) or environment files (`.env*`). With a stack composition, the exceptions it lists
   apply.
 - Order the work: project skeleton and configuration, data model, core domain logic, API, UI, then hardening and docs.

@@ -47,7 +47,7 @@ public sealed class ReleaseVersionMigrationTests(TevrinApiFactory factory)
 
         var project = await db.Projects.AsNoTracking().SingleAsync(p => p.Id == Released, Ct);
         Assert.Equal((8, "0.1.0", (string?)null, version.Id), (project.Checkpoint, project.ReleasedVersion, project.DevelopmentVersion, project.CurrentReleaseVersionId));
-        Assert.Equal((MergeStrategy.AideMerges, "v"), (project.MergeStrategy, project.TagPrefix));
+        Assert.Equal((MergeStrategy.TevrinMerges, "v"), (project.MergeStrategy, project.TagPrefix));
 
         // Every 0.1.0 row of the project belongs to 0.1.0; checkpoints keep the 0.1.0 project version numbers.
         Assert.All(await db.Artifacts.AsNoTracking().Where(a => a.ProjectId == Released).ToListAsync(Ct), a => Assert.Equal(version.Id, a.ReleaseVersionId));

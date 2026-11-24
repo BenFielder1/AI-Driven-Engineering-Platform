@@ -183,7 +183,7 @@ public sealed partial class CloudflareDeploymentProvider(PlatformHttp http) : ID
             auth,
             HttpMethod.Post,
             $"accounts/{account}/builds/tokens",
-            new { build_token_name = $"aide-{name}", build_token_secret = auth.Token, cloudflare_token_id = tokenId },
+            new { build_token_name = $"tevrin-{name}", build_token_secret = auth.Token, cloudflare_token_id = tokenId },
             cancellationToken);
         return Text(Result(created), "build_token_uuid")
             ?? throw new DeploymentProviderException(DeploymentFailure.Upstream, null, "Cloudflare created the build token but returned no id.", platform: Cloudflare);

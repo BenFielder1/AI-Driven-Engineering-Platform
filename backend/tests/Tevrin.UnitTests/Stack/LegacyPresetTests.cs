@@ -244,7 +244,7 @@ public sealed class LegacyPresetTests
         var plan = PlanValidator.Validate([Step(1, "generalist", ".github/workflows/ci.yml")], 20, allowProtectedPaths: false, PlanAgents.None);
 
         Assert.Equal(
-            "Step 1 declares the protected path '.github/workflows/ci.yml'; a generated plan may not create or modify protected paths (.git/, .aide/, CI workflows, lockfiles, .env files).",
+            "Step 1 declares the protected path '.github/workflows/ci.yml'; a generated plan may not create or modify protected paths (.git/, .tevrin/, .aide/, CI workflows, lockfiles, .env files).",
             Assert.Single(plan.Error!.Details));
     }
 

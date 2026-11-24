@@ -60,7 +60,7 @@ public sealed partial class BitbucketRepoInitializer(IGitCli git, IOptionsMonito
             token,
             new GitTransportOverride(current.GitBaseUrlOverride, current.AllowInsecureGitBaseUrl));
 
-        var folder = Path.Combine(Path.GetTempPath(), "aide-repo-init", Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(Path.GetTempPath(), "tevrin-repo-init", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {

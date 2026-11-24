@@ -7,11 +7,15 @@ using Tevrin.Engine.Domain.Common;
 
 namespace Tevrin.Domain.Access;
 
-/// <summary>FR-4: personal API tokens. The plain token is <c>aide_pat_</c> + base64url(32 random bytes), shown once;
-/// only its SHA-256 hash (lowercase hex) is stored.</summary>
+/// <summary>FR-4: personal API tokens. The plain token is <c>tevrin_pat_</c> + base64url(32 random bytes), shown once;
+/// only its SHA-256 hash (lowercase hex) of the whole token is stored. FR-326 (§4.77): tokens created before 0.8.0 carry
+/// <see cref="LegacyPrefix"/> and still authenticate until 0.9.0 (the stored hash covers the prefix, so nothing is rewritten).</summary>
 public static class ApiTokenRules
 {
-    public const string Prefix = "aide_pat_";
+    public const string Prefix = "tevrin_pat_";
+
+    /// <summary>FR-326: the pre-0.8.0 prefix, accepted until 0.9.0 and never written.</summary>
+    public const string LegacyPrefix = "aide_pat_";
 
     /// <summary>Random bytes in a token.</summary>
     public const int SecretBytes = 32;
@@ -38,12 +42,14 @@ public static class ApiTokenRules
         return Prefix + Base64Url.EncodeToString(secret);
     }
 
-    /// <summary>Cheap shape check before any database lookup.</summary>
+    /// <summary>Cheap shape check before any database lookup: either prefix (FR-326), then 43 base64url characters.</summary>
     public static bool IsWellFormed(string? token) =>
-        token is not null
-        && token.Length == Prefix.Length + EncodedSecretLength
-        && token.StartsWith(Prefix, StringComparison.Ordinal)
-        && !token.AsSpan(Prefix.Length).ContainsAnyExcept(Base64UrlAlphabet);
+        token is not null && (HasShape(token, Prefix) || HasShape(token, LegacyPrefix));
+
+    private static bool HasShape(string token, string prefix) =>
+        token.Length == prefix.Length + EncodedSecretLength
+        && token.StartsWith(prefix, StringComparison.Ordinal)
+        && !token.AsSpan(prefix.Length).ContainsAnyExcept(Base64UrlAlphabet);
 
     /// <summary>The stored form: SHA-256 of the UTF-8 token, lowercase hex (64 characters).</summary>
     public static string Hash(string token)

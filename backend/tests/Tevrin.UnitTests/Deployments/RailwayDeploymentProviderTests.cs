@@ -60,7 +60,7 @@ public class RailwayDeploymentProviderTests
             ("serviceCreate", """{"data":{"serviceCreate":{"id":"s1","name":"todo-api"}}}"""),
             ("serviceInstanceUpdate", """{"data":{"serviceInstanceUpdate":true}}"""),
             ("variableCollectionUpsert", """{"data":{"variableCollectionUpsert":true}}"""),
-            ("environmentCreate", """{"data":{"environmentCreate":{"id":"e-prev","name":"aide-preview"}}}"""),
+            ("environmentCreate", """{"data":{"environmentCreate":{"id":"e-prev","name":"tevrin-preview"}}}"""),
             ("domains(", """{"data":{"domains":{"serviceDomains":[]}}}"""),
             ("serviceDomainCreate", """{"data":{"serviceDomainCreate":{"id":"d1","domain":"todo-api.up.railway.app"}}}"""));
 
@@ -81,7 +81,7 @@ public class RailwayDeploymentProviderTests
         Assert.Contains("\"watchPatterns\":[\"/backend/**\"]", instance, StringComparison.Ordinal);
         Assert.Contains("\"preDeployCommand\":[\"./efbundle\"]", instance, StringComparison.Ordinal);
         var preview = Assert.Single(Bodies(stub, "environmentCreate"));
-        Assert.Contains("\"name\":\"aide-preview\",\"sourceEnvironmentId\":\"e-prod\",\"skipInitialDeploys\":true", preview, StringComparison.Ordinal);
+        Assert.Contains("\"name\":\"tevrin-preview\",\"sourceEnvironmentId\":\"e-prod\",\"skipInitialDeploys\":true", preview, StringComparison.Ordinal);
         Assert.Contains("\"PORT\":\"8080\"", Assert.Single(Bodies(stub, "variableCollectionUpsert")), StringComparison.Ordinal);
         Assert.Equal(2, Bodies(stub, "serviceDomainCreate").Count());
     }

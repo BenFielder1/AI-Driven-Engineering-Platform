@@ -27,22 +27,41 @@ public static class ApprovalTokens
     /// <summary>A signing key needs at least this many characters; a shorter one is treated as missing (no links).</summary>
     public const int MinimumKeyLength = 32;
 
-    private const string Purpose = "aide-approval-link/v1:";
+    /// <summary>FR-326 (§4.77): the MAC purpose new links are signed with.</summary>
+    public const string Purpose = "tevrin-approval-link/v1:";
+
+    /// <summary>
+    /// FR-326: the pre-0.8.0 MAC purpose. Links created before the upgrade keep it (their stored hash is of its nonce), so
+    /// it is still verified, and re-derived for their URLs, until 0.9.0 (links expire after 72 hours anyway).
+    /// </summary>
+    public const string LegacyPurpose = "aide-approval-link/v1:";
+
     private const int NonceLength = 32;
 
     public static bool IsUsableKey(string? key) => key is not null && key.Trim().Length >= MinimumKeyLength;
 
-    public static byte[] Nonce(string signingKey, Guid linkId)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(signingKey);
-        return HMACSHA256.HashData(Encoding.UTF8.GetBytes(signingKey), Encoding.UTF8.GetBytes(Purpose + linkId.ToString("N")));
-    }
+    public static byte[] Nonce(string signingKey, Guid linkId) => Mac(signingKey, Purpose, linkId);
+
+    /// <summary>FR-326: the nonce a link created before 0.8.0 was given (<see cref="LegacyPurpose"/>).</summary>
+    public static byte[] LegacyNonce(string signingKey, Guid linkId) => Mac(signingKey, LegacyPurpose, linkId);
 
     /// <summary>What <c>approval_links.nonce_hash</c> stores: lowercase hex SHA-256 of the nonce.</summary>
     public static string NonceHash(ReadOnlySpan<byte> nonce) => Convert.ToHexStringLower(SHA256.HashData(nonce));
 
     public static string Create(string signingKey, Guid linkId) =>
         $"{linkId:N}.{Base64Url.EncodeToString(Nonce(signingKey, linkId))}";
+
+    /// <summary>
+    /// FR-326: the token of a stored link: signed with <see cref="LegacyPurpose"/> when <paramref name="storedHash"/> is the
+    /// hash of the pre-0.8.0 nonce (a link created before the upgrade), else with <see cref="Purpose"/>.
+    /// </summary>
+    public static string Create(string signingKey, Guid linkId, string storedHash)
+    {
+        ArgumentNullException.ThrowIfNull(storedHash);
+        var legacy = LegacyNonce(signingKey, linkId);
+        var nonce = string.Equals(NonceHash(legacy), storedHash, StringComparison.Ordinal) ? legacy : Nonce(signingKey, linkId);
+        return $"{linkId:N}.{Base64Url.EncodeToString(nonce)}";
+    }
 
     /// <summary>Splits a token; <c>false</c> for anything malformed.</summary>
     public static bool TryParse(string? token, out Guid linkId, out byte[] nonce)
@@ -74,11 +93,19 @@ public static class ApprovalTokens
     public static bool Verify(string signingKey, Guid linkId, ReadOnlySpan<byte> nonce, string storedHash)
     {
         ArgumentNullException.ThrowIfNull(storedHash);
-        var macMatches = CryptographicOperations.FixedTimeEquals(Nonce(signingKey, linkId), nonce);
+        // FR-326: either purpose's MAC (both compared, constant time); the stored hash still has to match.
+        var macMatches = CryptographicOperations.FixedTimeEquals(Nonce(signingKey, linkId), nonce)
+            | CryptographicOperations.FixedTimeEquals(LegacyNonce(signingKey, linkId), nonce);
         var hashMatches = CryptographicOperations.FixedTimeEquals(
             Encoding.ASCII.GetBytes(NonceHash(nonce)),
             Encoding.ASCII.GetBytes(storedHash));
         return macMatches & hashMatches;
+    }
+
+    private static byte[] Mac(string signingKey, string purpose, Guid linkId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(signingKey);
+        return HMACSHA256.HashData(Encoding.UTF8.GetBytes(signingKey), Encoding.UTF8.GetBytes(purpose + linkId.ToString("N")));
     }
 
     /// <summary>A used link stays used (FR-48 "already used") even after it would have expired.</summary>

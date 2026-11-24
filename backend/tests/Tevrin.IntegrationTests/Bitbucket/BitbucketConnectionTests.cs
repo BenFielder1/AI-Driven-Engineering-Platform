@@ -38,8 +38,8 @@ public sealed class BitbucketConnectionTests(TevrinApiFactory factory)
         Assert.Equal(["write:pullrequest:bitbucket"], problem.GetProperty("details").EnumerateArray().Select(e => e.GetString()));
         Assert.False(await ProjectApi.WithDbAsync(app, db => db.GitConnections.AnyAsync(c => c.UserId == user.User!.Id, Ct)));
         // The write probes are deliberately invalid, so nothing can be created.
-        Assert.Contains(bitbucket.Requests, r => r.Method == "POST" && r.Path.Contains("aide-scope-check", StringComparison.Ordinal)
-            && r.Body.Contains("\"scm\":\"aide-scope-check\"", StringComparison.Ordinal));
+        Assert.Contains(bitbucket.Requests, r => r.Method == "POST" && r.Path.Contains("tevrin-scope-check", StringComparison.Ordinal)
+            && r.Body.Contains("\"scm\":\"tevrin-scope-check\"", StringComparison.Ordinal));
         Assert.All(bitbucket.Requests.Where(r => r.Method == "POST" && r.Path.EndsWith("/pullrequests", StringComparison.Ordinal)), r => Assert.Equal("{}", r.Body));
     }
 

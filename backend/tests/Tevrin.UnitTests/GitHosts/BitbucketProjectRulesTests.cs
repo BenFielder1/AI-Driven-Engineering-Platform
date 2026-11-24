@@ -64,7 +64,7 @@ public class BitbucketProjectRulesTests
     // ---------- FR-140: merge strategy ----------
 
     [Theory]
-    [InlineData(MergeStrategy.AideMerges, "merge_commit")]
+    [InlineData(MergeStrategy.TevrinMerges, "merge_commit")]
     [InlineData(MergeStrategy.Squash, "squash")]
     [InlineData(MergeStrategy.FastForward, "fast_forward")]
     [InlineData(MergeStrategy.Manual, "merge_commit")]
@@ -77,7 +77,7 @@ public class BitbucketProjectRulesTests
     [InlineData(GitProvider.Gitlab, MergeStrategy.FastForward, false)]
     [InlineData(GitProvider.GithubApp, MergeStrategy.Squash, false)]
     [InlineData(GitProvider.Local, MergeStrategy.Manual, true)]
-    [InlineData(GitProvider.Gitlab, MergeStrategy.AideMerges, true)]
+    [InlineData(GitProvider.Gitlab, MergeStrategy.TevrinMerges, true)]
     public void FR140_fast_forward_and_squash_are_Bitbucket_only(GitProvider provider, MergeStrategy strategy, bool allowed)
     {
         var result = BitbucketProjectRules.ValidateMergeStrategy(provider, strategy);
@@ -94,7 +94,7 @@ public class BitbucketProjectRulesTests
         Assert.True(MergeReadinessRules.WillAutoMerge(MergeStrategy.FastForward, true));
         Assert.True(MergeReadinessRules.WillAutoMerge(MergeStrategy.Squash, true));
         Assert.False(MergeReadinessRules.WillAutoMerge(MergeStrategy.Manual, true));
-        Assert.False(MergeReadinessRules.WillAutoMerge(MergeStrategy.AideMerges, false));
+        Assert.False(MergeReadinessRules.WillAutoMerge(MergeStrategy.TevrinMerges, false));
     }
 
     // ---------- FR-138: mergeability → reasons ----------
@@ -102,7 +102,7 @@ public class BitbucketProjectRulesTests
     [Fact]
     public void FR138_Given_a_blocking_failed_require_passing_builds_check_then_checks_failing()
     {
-        var readiness = MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", "require_passing_builds_to_merge", "FAILED", true, true)], MergeStrategy.AideMerges);
+        var readiness = MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", "require_passing_builds_to_merge", "FAILED", true, true)], MergeStrategy.TevrinMerges);
         Assert.False(readiness.Verdict!.CanMerge);
         Assert.Equal([MergeReadinessReasonCode.ChecksFailing], readiness.Verdict.Reasons.Select(r => r.Code));
     }
@@ -118,14 +118,14 @@ public class BitbucketProjectRulesTests
     [InlineData("fast_forward_rebase_needed", "FAILED", MergeReadinessReasonCode.RebaseRequired)]
     [InlineData("something_new", "FAILED", MergeReadinessReasonCode.BranchProtected)]
     public void FR138_Blocking_checks_map_to_the_0_2_0_reason_codes(string key, string status, MergeReadinessReasonCode expected) =>
-        Assert.Equal(expected, Assert.Single(MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", key, status, true, true)], MergeStrategy.AideMerges).Verdict!.Reasons).Code);
+        Assert.Equal(expected, Assert.Single(MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", key, status, true, true)], MergeStrategy.TevrinMerges).Verdict!.Reasons).Code);
 
     [Fact]
     public void FR138_Ready_means_no_blocking_check()
     {
         var readiness = MergeabilityChecks.Map(
             [new MergeabilityCheck("standard_merge_check", "require_approvals_to_merge", "FAILED", false, false), new MergeabilityCheck("standard_merge_check", "require_passing_builds_to_merge", "PASSED", true, false)],
-            MergeStrategy.AideMerges);
+            MergeStrategy.TevrinMerges);
         Assert.Equal((true, true), (readiness.Verdict!.CanMerge, readiness.Verdict.WillAutoMerge));
         Assert.Empty(readiness.Verdict.Reasons);
     }
@@ -134,10 +134,10 @@ public class BitbucketProjectRulesTests
     public void FR138_AIDEs_own_draft_is_ignored_until_AIDE_marked_it_ready()
     {
         MergeabilityCheck[] checks = [new("standard_merge_check", "pull_request_draft", "FAILED", true, true)];
-        Assert.True(MergeabilityChecks.Map(MergeabilityChecks.IgnoringAideDraft(checks), MergeStrategy.AideMerges).Verdict!.CanMerge);
+        Assert.True(MergeabilityChecks.Map(MergeabilityChecks.IgnoringTevrinDraft(checks), MergeStrategy.TevrinMerges).Verdict!.CanMerge);
         Assert.Equal(
             MergeReadinessReasonCode.Draft,
-            Assert.Single(MergeabilityChecks.Map(MergeabilityChecks.IgnoringAideDraft(checks, markedReady: true), MergeStrategy.AideMerges).Verdict!.Reasons).Code);
+            Assert.Single(MergeabilityChecks.Map(MergeabilityChecks.IgnoringTevrinDraft(checks, markedReady: true), MergeStrategy.TevrinMerges).Verdict!.Reasons).Code);
     }
 
     [Fact]

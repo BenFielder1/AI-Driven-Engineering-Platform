@@ -176,7 +176,7 @@ public static class GitLabMergeReadiness
     /// (which hides the other merge checks; the approvals endpoint, conflicts, discussions and the head pipeline still say
     /// what blocks). Once Tevrin marked it ready, a draft (made again by someone, or never cleared) blocks: facts unchanged.
     /// </summary>
-    public static GitLabMergeFacts IgnoringAideDraft(GitLabMergeFacts facts, bool markedReady = false)
+    public static GitLabMergeFacts IgnoringTevrinDraft(GitLabMergeFacts facts, bool markedReady = false)
     {
         ArgumentNullException.ThrowIfNull(facts);
         if (markedReady)
@@ -317,7 +317,7 @@ public static class MergeabilityChecks
     /// (<paramref name="markedReady"/> false) a draft check doesn't block Tevrin (as for GitLab and 0.2.0's GitHub drafts). Once
     /// Tevrin marked it ready, a draft (made again by someone) blocks: the checks are unchanged.
     /// </summary>
-    public static IReadOnlyList<MergeabilityCheck> IgnoringAideDraft(IEnumerable<MergeabilityCheck> checks, bool markedReady = false)
+    public static IReadOnlyList<MergeabilityCheck> IgnoringTevrinDraft(IEnumerable<MergeabilityCheck> checks, bool markedReady = false)
     {
         ArgumentNullException.ThrowIfNull(checks);
         return markedReady ? [.. checks] : [.. checks.Where(c => !Has(c, "draft"))];

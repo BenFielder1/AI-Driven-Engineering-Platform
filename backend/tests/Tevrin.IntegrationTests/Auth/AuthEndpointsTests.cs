@@ -194,7 +194,7 @@ public sealed class AuthEndpointsTests(TevrinApiFactory factory)
         var response = await session.Client.PostAsJsonAsync(
             "/api/auth/register", new { email = ApiSession.NewEmail(), name = "Cookie", password = TevrinApiFactory.Password }, Ct);
 
-        var cookie = response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("aide.auth=", StringComparison.Ordinal));
+        var cookie = response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("tevrin.auth=", StringComparison.Ordinal));
         Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=lax", cookie, StringComparison.OrdinalIgnoreCase);

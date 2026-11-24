@@ -105,7 +105,7 @@ describe('Merge strategy per host (FR-140)', () => {
 
     const group = await screen.findByRole('group', { name: 'Merge strategy' })
     expect(within(group).getAllByRole('radio').map((r) => r.getAttribute('value'))).toEqual([
-      'aide_merges',
+      'tevrin_merges',
       'fast_forward',
       'squash',
       'manual',
@@ -128,10 +128,10 @@ describe('Merge strategy per host (FR-140)', () => {
     await openSettings('git', project)
 
     const group = await screen.findByRole('group', { name: 'Merge strategy' })
-    expect(within(group).getAllByRole('radio').map((r) => r.getAttribute('value'))).toEqual(['aide_merges', 'manual'])
+    expect(within(group).getAllByRole('radio').map((r) => r.getAttribute('value'))).toEqual(['tevrin_merges', 'manual'])
     expect(screen.queryByText('Tevrin merges (squash)')).not.toBeInTheDocument()
 
-    expect(mergeStrategiesFor('gitlab')).toEqual(['aide_merges', 'manual'])
+    expect(mergeStrategiesFor('gitlab')).toEqual(['tevrin_merges', 'manual'])
     expect(mergeStrategyLabel('fast_forward', gitHostTerms('bitbucket'))).toBe('Tevrin merges (fast-forward)')
   })
 })

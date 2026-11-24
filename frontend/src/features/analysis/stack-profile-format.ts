@@ -20,8 +20,16 @@ export type EditableLayer = (typeof editableLayers)[number]
 export const hostChoices = ['frontendHost', 'backendHost', 'databaseHost'] as const
 export type HostChoice = (typeof hostChoices)[number]
 
-/** The fence tag of the profile block (backend `StackProfile.FenceTag`). */
-export const STACK_PROFILE_FENCE = 'aide-stack-profile'
+/** FR-326 (§4.77): the fence tag profiles are written with from 0.8.0. */
+export const TEVRIN_STACK_PROFILE_FENCE = 'tevrin-stack-profile'
+
+/** FR-326: the pre-0.8.0 fence tag. Stored profiles keep it, so it is always read. */
+export const LEGACY_STACK_PROFILE_FENCE = 'aide-stack-profile'
+
+/** The fence tag the profile block is written with (backend `StackProfile.FenceTag`). Both tags are read. */
+export const STACK_PROFILE_FENCE = TEVRIN_STACK_PROFILE_FENCE
+
+const readFences: readonly string[] = [TEVRIN_STACK_PROFILE_FENCE, LEGACY_STACK_PROFILE_FENCE]
 
 export const isProfileLayer = (value: string): value is ProfileLayer => (profileLayers as readonly string[]).includes(value)
 
@@ -86,7 +94,7 @@ export const hasUnsupported = (doc: StackProfileDocument) => profileLayers.some(
 
 /**
  * §4.27, FR-183: the Markdown of a profile the editor saves: the narrative (trimmed; left out when blank), a blank line,
- * then the fenced `aide-stack-profile` block holding the document's JSON. `parseStackProfile` gives the same back.
+ * then the fenced `tevrin-stack-profile` block (the written tag, `STACK_PROFILE_FENCE`) holding the document's JSON. `parseStackProfile` gives the same back.
  */
 export function renderStackProfile(narrative: string | null | undefined, doc: StackProfileDocument): string {
   const text = (narrative ?? '').replace(/\r\n?/g, '\n').trim()
@@ -96,12 +104,12 @@ export function renderStackProfile(narrative: string | null | undefined, doc: St
 
 const isOpeningFence = (line: string) => {
   const t = line.trim()
-  return t.startsWith('```') && t.slice(3).trim() === STACK_PROFILE_FENCE
+  return t.startsWith('```') && readFences.includes(t.slice(3).trim())
 }
 
 /**
  * The narrative and document of a `stack_profile`'s Markdown, or `null` when there isn't exactly one closed
- * `aide-stack-profile` block holding a JSON object. Shape checks are the server's (it validates every save).
+ * profile block (`tevrin-stack-profile` or `aide-stack-profile`, FR-326) holding a JSON object. Shape checks are the server's (it validates every save).
  */
 export function parseStackProfile(markdown: string): { narrative: string; document: StackProfileDocument } | null {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n')

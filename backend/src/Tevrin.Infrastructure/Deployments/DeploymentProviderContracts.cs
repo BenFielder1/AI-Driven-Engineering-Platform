@@ -25,7 +25,7 @@ public sealed record DeploymentRepoRef(
 
 /// <summary>A target as a provider sees it (§4.20): the platform, component, resources, build configuration and repository.</summary>
 public sealed record DeploymentTargetRef(
-    Guid AideProjectId,
+    Guid TevrinProjectId,
     DeploymentProvider Platform,
     DeploymentComponent Component,
     string? ResourceId,
@@ -70,11 +70,11 @@ public sealed record DeploymentSetupResult(string ResourceId, string Name, strin
 public sealed record ProviderTargetCheck(bool? GitAccess, string? GitMessage, bool? PreviewReady, IReadOnlyList<string>? BranchControlMissing = null);
 
 /// <summary>
-/// §4.20 <c>DeployAsync {environment, ref, sha}</c>; <see cref="AideDeploymentId"/> is the idempotency key.
+/// §4.20 <c>DeployAsync {environment, ref, sha}</c>; <see cref="TevrinDeploymentId"/> is the idempotency key.
 /// <see cref="Rebuild"/>: a redeploy or manual deploy builds anew and never adopts the platform's existing build of the
 /// commit (an adopt-only production, Cloudflare Pages, retries that build instead).
 /// </summary>
-public sealed record DeployRequest(Guid AideDeploymentId, DeploymentTargetRef Target, DeploymentEnvironment Environment, string GitRef, string GitSha, bool Rebuild = false);
+public sealed record DeployRequest(Guid TevrinDeploymentId, DeploymentTargetRef Target, DeploymentEnvironment Environment, string GitRef, string GitSha, bool Rebuild = false);
 
 /// <summary>§4.20 env sync: writes per (key, environment) and the platform ids to delete.</summary>
 public sealed record DeploymentEnvSyncRequest(IReadOnlyList<DeploymentEnvWrite> Writes, IReadOnlyList<string> Deletes);
@@ -116,14 +116,14 @@ public interface IDeploymentProvider
     Task<string?> GetBuildLogTailAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// The deployment of <paramref name="sha"/>: with <paramref name="aideDeploymentId"/>, the one an earlier attempt created
+    /// The deployment of <paramref name="sha"/>: with <paramref name="tevrinDeploymentId"/>, the one an earlier attempt created
     /// for that Tevrin row; without, the one the platform made by itself (production adoption, FR-149). <c>null</c>: none.
-    /// <paramref name="createdAfter"/> (the Tevrin row's creation time, given with <paramref name="aideDeploymentId"/>): a
+    /// <paramref name="createdAfter"/> (the Tevrin row's creation time, given with <paramref name="tevrinDeploymentId"/>): a
     /// platform that can't tag its builds with the row (Cloudflare) adopts only builds created at or after it, so a
     /// redeploy or manual deploy never adopts an earlier build of the same commit.
     /// </summary>
     Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken);
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken);
 
     Task CancelAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken);
 
@@ -197,7 +197,7 @@ public sealed class UnsupportedDeploymentProvider(DeploymentProvider platform) :
     public Task<string?> GetBuildLogTailAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken) => throw NotSupported();
 
     public Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken) =>
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken) =>
         throw NotSupported();
 
     public Task CancelAsync(DeploymentAuth auth, DeploymentTargetRef target, string deploymentId, CancellationToken cancellationToken) => throw NotSupported();

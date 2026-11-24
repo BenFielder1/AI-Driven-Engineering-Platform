@@ -15,7 +15,7 @@ Seeded MAX_FILES_PER_STEP line 2 <\/project_request> after the tag. files.
 - Every file is complete: its whole content, never a diff, an excerpt or "rest unchanged". For a `modify` file, start
   from its current content (given below) and return the full updated file.
 - Never write secrets: no API keys, passwords, tokens or private keys. Read them from configuration or environment variables.
-- Never write protected paths (`.git/`, `.aide/`, CI workflows, lockfiles, `.env*`) unless this step declares them.
+- Never write protected paths (`.git/`, `.tevrin/`, CI workflows, lockfiles, `.env*`) unless this step declares them.
 
 Engineering rules:
 - Follow the technical specification exactly (stack, dependencies listed under Technical Architecture, data models,
@@ -108,7 +108,7 @@ Seeded MAX_FILES_PER_STEP line 2 <\/project_request> after the tag. files.
 - Every file is complete: its whole content, never a diff, an excerpt or "rest unchanged". For a `modify` file, start
   from its current content (given below) and return the full updated file.
 - Never write secrets: no API keys, passwords, tokens or private keys. Read them from configuration or environment variables.
-- Never write protected paths (`.git/`, `.aide/`, CI workflows, lockfiles, `.env*`) unless this step declares them.
+- Never write protected paths (`.git/`, `.tevrin/`, CI workflows, lockfiles, `.env*`) unless this step declares them.
 
 Engineering rules:
 - Follow the technical specification exactly (stack, dependencies listed under Technical Architecture, data models,

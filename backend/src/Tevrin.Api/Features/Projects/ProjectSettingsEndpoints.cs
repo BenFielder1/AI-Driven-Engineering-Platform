@@ -45,7 +45,7 @@ public static partial class ProjectSettingsEndpoints
 
         group.MapPatch("/git", UpdateGitSettings)
             .WithName("UpdateGitSettings")
-            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.")
+            .WithSummary("Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: tevrin_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to tevrin_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.")
             .Produces<GitSettingsDto>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -232,10 +232,10 @@ public static partial class ProjectSettingsEndpoints
             changes.Add("mergeStrategy");
         }
 
-        // FR-140: fast_forward and squash are Bitbucket's; a project leaving Bitbucket goes back to aide_merges.
+        // FR-140: fast_forward and squash are Bitbucket's; a project leaving Bitbucket goes back to tevrin_merges.
         if (provider != GitProvider.Bitbucket && project.MergeStrategy is MergeStrategy.FastForward or MergeStrategy.Squash)
         {
-            project.MergeStrategy = MergeStrategy.AideMerges;
+            project.MergeStrategy = MergeStrategy.TevrinMerges;
             if (!changes.Contains("mergeStrategy"))
             {
                 changes.Add("mergeStrategy");
@@ -628,7 +628,7 @@ public static partial class ProjectSettingsEndpoints
         var dto = ProjectMapping.ToDto(
             settings,
             await CurrentBranchAsync(db, settings.ProjectId, cancellationToken),
-            tracked?.MergeStrategy ?? release?.MergeStrategy ?? MergeStrategy.AideMerges,
+            tracked?.MergeStrategy ?? release?.MergeStrategy ?? MergeStrategy.TevrinMerges,
             tracked?.TagPrefix ?? release?.TagPrefix ?? ReleaseVersion.DefaultTagPrefix,
             appInstalledOnRepo,
             canSwitchToApp);

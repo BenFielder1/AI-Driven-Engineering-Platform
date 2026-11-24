@@ -364,6 +364,26 @@ public sealed class CommitCreditTests(TevrinApiFactory factory)
     }
 
     [Fact]
+    public async Task FR326_A_step_commit_made_before_0_8_0_with_the_AIDE_Step_Id_trailer_is_still_found()
+    {
+        var workingCopies = factory.Services.GetRequiredService<IWorkingCopies>();
+        var id = Guid.CreateVersion7();
+        var step = Guid.CreateVersion7();
+        await workingCopies.InitAsync(id, "main", Ct);
+        await workingCopies.CheckoutBranchAsync(id, "main", Branch, Ct);
+        var legacy = new StepCommitMessage("Step 3: Credit", $"Files:\n- a.txt\n\n{CodeGeneration.LegacyStepTrailer}: {step:D}");
+
+        var first = await workingCopies.CommitStepAsync(id, Branch, step, [new ProducedFile("a.txt", "a")], legacy, Ct);
+        var found = await workingCopies.FindStepCommitAsync(id, Branch, step, Ct);
+        var again = await workingCopies.CommitStepAsync(
+            id, Branch, step, [new ProducedFile("a.txt", "b")], CodeGeneration.CommitMessage(3, "Credit", ["a.txt"], step), Ct);
+
+        Assert.Equal(first.Sha, found?.Sha);
+        Assert.True(again.AlreadyCommitted);
+        Assert.Equal(first.Sha, again.Sha);
+    }
+
+    [Fact]
     public async Task FR174_A_redelivered_step_whose_commit_has_no_trailer_makes_no_second_commit()
     {
         var workingCopies = factory.Services.GetRequiredService<IWorkingCopies>();

@@ -19,25 +19,29 @@ public sealed class Fr201CompatibilityTests(TevrinApiFactory factory)
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public void FR201_Cookie_names_keep_the_aide_prefix()
+    public void FR201_The_aide_cookie_names_users_hold_are_still_read()
     {
+        // FR-326 (§4.77) renames the cookies to tevrin.*; the aide.* names are read (and moved) until 0.9.0.
         Assert.Equal(
             ["aide.auth", "aide.external", "aide.af", "XSRF-TOKEN"],
-            [AuthConstants.AuthCookieName, AuthConstants.ExternalCookieName, AuthConstants.AntiforgeryCookieName, AuthConstants.XsrfCookieName]);
+            [AuthConstants.LegacyAuthCookieName, AuthConstants.LegacyExternalCookieName, AuthConstants.LegacyAntiforgeryCookieName, AuthConstants.XsrfCookieName]);
         Assert.Equal(
             ["aide.bitbucket.oauth", "aide.bitbucket.link", "aide.gitlab.oauth", "aide.gitlab.link"],
-            [BitbucketOAuthStates.CookieName, BitbucketPendingLinks.CookieName, GitLabOAuthStates.CookieName, GitLabPendingLinks.CookieName]);
+            [BitbucketOAuthStates.LegacyCookieName, BitbucketPendingLinks.LegacyCookieName, GitLabOAuthStates.LegacyCookieName, GitLabPendingLinks.LegacyCookieName]);
+        Assert.All(LegacyCookies.Renames, r => Assert.StartsWith("aide.", r.Legacy, StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task FR201_Signing_in_still_issues_the_aide_auth_cookie()
+    public async Task FR326_Signing_in_issues_the_tevrin_auth_cookie()
     {
         using var session = new ApiSession(factory);
 
         var response = await session.Client.PostAsJsonAsync(
-            "/api/auth/register", new { email = ApiSession.NewEmail(), name = "Before 0.6.0", password = TevrinApiFactory.Password }, Ct);
+            "/api/auth/register", new { email = ApiSession.NewEmail(), name = "On 0.8.0", password = TevrinApiFactory.Password }, Ct);
 
-        Assert.Contains(response.Headers.GetValues("Set-Cookie"), c => c.StartsWith("aide.auth=", StringComparison.Ordinal));
+        var setCookies = response.Headers.GetValues("Set-Cookie").ToList();
+        Assert.Contains(setCookies, c => c.StartsWith("tevrin.auth=", StringComparison.Ordinal));
+        Assert.DoesNotContain(setCookies, c => c.StartsWith("aide.auth=", StringComparison.Ordinal));
     }
 
     [Fact]

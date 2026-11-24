@@ -160,7 +160,7 @@ describe('Git host copy helpers (FR-140)', () => {
   })
 
   it('FR140_merge_strategy_copy_names_the_host', () => {
-    expect(mergeStrategyLabel('aide_merges', gitHostTerms('github_pat'))).toBe('Tevrin merges the pull request')
+    expect(mergeStrategyLabel('tevrin_merges', gitHostTerms('github_pat'))).toBe('Tevrin merges the pull request')
     expect(mergeStrategyLabel('manual', gitHostTerms('gitlab'))).toBe('Merge manually on GitLab — Tevrin waits and tags the merge')
     expect(mergeStrategyDescription('manual', gitHostTerms('gitlab'))).toMatch(/merges it on GitLab, Tevrin tags the merge commit and creates the GitLab Release\.$/)
   })

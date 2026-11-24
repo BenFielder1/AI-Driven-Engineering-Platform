@@ -10,7 +10,7 @@ public sealed class BranchControlRulesTests
 {
     private static IReadOnlyList<string> TevrinOnly => BranchControlRules.RequiredPrefixes(usesLegacyBranch: false);
 
-    private static IReadOnlyList<string> WithAide => BranchControlRules.RequiredPrefixes(usesLegacyBranch: true);
+    private static IReadOnlyList<string> WithLegacy => BranchControlRules.RequiredPrefixes(usesLegacyBranch: true);
 
     private static string Vercel(string rules) => $"{{ \"git\": {{ \"deploymentEnabled\": {{ {rules} }} }} }}";
 
@@ -37,7 +37,7 @@ public sealed class BranchControlRulesTests
 
     [Fact]
     public void FR233_Example3_An_aide_branch_with_both_false_passes() =>
-        Assert.Empty(BranchControlRules.VercelMissing(Vercel("\"aide/**\": false, \"tevrin/**\": false"), WithAide));
+        Assert.Empty(BranchControlRules.VercelMissing(Vercel("\"aide/**\": false, \"tevrin/**\": false"), WithLegacy));
 
     [Fact]
     public void FR233_Example4_A_true_rule_matching_the_prefix_fails() =>
@@ -45,7 +45,7 @@ public sealed class BranchControlRulesTests
 
     [Fact]
     public void FR233_An_aide_branch_with_only_tevrin_false_fails_naming_aide() =>
-        Assert.Equal(["aide/**"], BranchControlRules.VercelMissing(Vercel("\"tevrin/**\": false"), WithAide));
+        Assert.Equal(["aide/**"], BranchControlRules.VercelMissing(Vercel("\"tevrin/**\": false"), WithLegacy));
 
     [Theory]
     [InlineData("\"**\": true")]
@@ -67,7 +67,7 @@ public sealed class BranchControlRulesTests
     [InlineData("[]")]
     [InlineData("{ \"git\": { \"deploymentEnabled\": false } }")]
     public void FR233_Unreadable_or_wrong_shaped_config_blocks_nothing(string content) =>
-        Assert.Equal(["tevrin/**", "aide/**"], BranchControlRules.VercelMissing(content, WithAide));
+        Assert.Equal(["tevrin/**", "aide/**"], BranchControlRules.VercelMissing(content, WithLegacy));
 
     // ---------- FR-233: readiness names the patterns ----------
 
@@ -94,8 +94,8 @@ public sealed class BranchControlRulesTests
     {
         Assert.Equal("{ \"tevrin/**\": false, \"aide/**\": false }", BranchControlRules.VercelSuggestion());
         Assert.Equal("case \"$BRANCH\" in tevrin/*|aide/*) exit 0 ;; *) exit 1 ;; esac", BranchControlRules.NetlifyIgnoreCommand());
-        Assert.Empty(BranchControlRules.VercelMissing(Vercel(BranchControlRules.VercelSuggestion().Trim('{', '}', ' ')), WithAide));
-        Assert.Empty(BranchControlRules.NetlifyMissing($"[build]\n  ignore = '{BranchControlRules.NetlifyIgnoreCommand()}'\n", WithAide));
+        Assert.Empty(BranchControlRules.VercelMissing(Vercel(BranchControlRules.VercelSuggestion().Trim('{', '}', ' ')), WithLegacy));
+        Assert.Empty(BranchControlRules.NetlifyMissing($"[build]\n  ignore = '{BranchControlRules.NetlifyIgnoreCommand()}'\n", WithLegacy));
     }
 
     [Fact]
@@ -106,8 +106,8 @@ public sealed class BranchControlRulesTests
 
         Assert.NotNull(vercel);
         Assert.NotNull(netlify);
-        Assert.Empty(BranchControlRules.VercelMissing(vercel, WithAide));
-        Assert.Empty(BranchControlRules.NetlifyMissing(netlify, WithAide));
+        Assert.Empty(BranchControlRules.VercelMissing(vercel, WithLegacy));
+        Assert.Empty(BranchControlRules.NetlifyMissing(netlify, WithLegacy));
     }
 
     [Fact]

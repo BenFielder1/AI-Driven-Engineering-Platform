@@ -53,9 +53,9 @@ Catalog options (platform data):
 </catalog_options>
 
 Return Markdown: a short narrative (a few sentences on what the repository is and how sure you are), then exactly one
-fenced block tagged `aide-stack-profile` holding the profile JSON, in this shape:
+fenced block tagged `tevrin-stack-profile` holding the profile JSON, in this shape:
 
-```aide-stack-profile
+```tevrin-stack-profile
 {
   "schemaVersion": 1,
   "baseCommitSha": null,
@@ -109,4 +109,4 @@ Nothing after the block.
 {{USER_FEEDBACK?}}
 </feedback>
 
-Infer the stack of the repository at the base commit. Return the narrative and the `aide-stack-profile` block.
+Infer the stack of the repository at the base commit. Return the narrative and the `tevrin-stack-profile` block.

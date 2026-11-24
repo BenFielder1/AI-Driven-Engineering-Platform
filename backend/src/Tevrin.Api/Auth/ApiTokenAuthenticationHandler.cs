@@ -12,7 +12,7 @@ using Tevrin.Infrastructure.Persistence;
 namespace Tevrin.Api.Auth;
 
 /// <summary>
-/// FR-4: <c>Authorization: Bearer aide_pat_…</c>. A usable token authenticates as its owner and records its use
+/// FR-4: <c>Authorization: Bearer tevrin_pat_…</c> (or a pre-0.8.0 <c>aide_pat_…</c> token, FR-326). A usable token authenticates as its owner and records its use
 /// (at most once a minute); revoked, expired or unknown tokens fail with 401. The token itself is never logged.
 /// </summary>
 public sealed partial class ApiTokenAuthenticationHandler(

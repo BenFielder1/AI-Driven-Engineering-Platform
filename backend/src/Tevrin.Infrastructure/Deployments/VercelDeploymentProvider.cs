@@ -93,8 +93,8 @@ public sealed class VercelDeploymentProvider(VercelApiClient client) : IDeployme
         return client.CreateDeploymentAsync(
             auth,
             new CreateDeployment(
-                request.AideDeploymentId,
-                target.AideProjectId,
+                request.TevrinDeploymentId,
+                target.TevrinProjectId,
                 target.ResourceId!,
                 target.Name ?? target.ResourceId!,
                 request.Environment,
@@ -115,11 +115,11 @@ public sealed class VercelDeploymentProvider(VercelApiClient client) : IDeployme
         client.GetBuildLogAsync(auth, deploymentId, cancellationToken);
 
     public Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
-        return aideDeploymentId is { } id
-            ? client.FindByAideIdAsync(auth, target.ResourceId!, sha, environment, id, cancellationToken)
+        return tevrinDeploymentId is { } id
+            ? client.FindByTevrinIdAsync(auth, target.ResourceId!, sha, environment, id, cancellationToken)
             : client.FindProductionDeploymentAsync(auth, target.ResourceId!, sha, cancellationToken);
     }
 

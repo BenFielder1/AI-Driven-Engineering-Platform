@@ -147,11 +147,11 @@ public static class RolloutRules
 
     /// <summary>
     /// FR-154: whether a failed deployment failed in its pre-deploy (the platform-run ORM migration): Render's
-    /// <c>pre_deploy_failed</c>, the Fake's <c>.aide-fake/fail-migration</c>, or any message naming the pre-deploy step.
+    /// <c>pre_deploy_failed</c>, the Fake's <c>.tevrin-fake/fail-migration</c> or <c>.aide-fake/fail-migration</c> (FR-326), or any message naming the pre-deploy step.
     /// </summary>
     public static bool IsPreDeployFailure(string? errorMessage) =>
         errorMessage is { Length: > 0 } message
         && (message.Contains(RenderRules.PreDeployFailed, StringComparison.OrdinalIgnoreCase)
             || message.Contains("pre-deploy", StringComparison.OrdinalIgnoreCase)
-            || message.Contains(FakeDeploymentRules.FailMigrationMarker, StringComparison.Ordinal));
+            || FakeDeploymentRules.NamesFailMigrationMarker(message));
 }

@@ -906,7 +906,7 @@ internal sealed partial class LocalGitProvider(IWorkspaceStore workspaces, IGitC
         try
         {
             Directory.CreateDirectory(root);
-            var probe = Path.Combine(root, $".aide-write-test-{Guid.NewGuid():N}");
+            var probe = Path.Combine(root, $".tevrin-write-test-{Guid.NewGuid():N}");
             await File.WriteAllTextAsync(probe, "ok", cancellationToken);
             File.Delete(probe);
         }

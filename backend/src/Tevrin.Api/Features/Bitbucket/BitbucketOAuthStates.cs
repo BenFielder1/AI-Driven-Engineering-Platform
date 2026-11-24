@@ -16,7 +16,10 @@ public sealed class BitbucketOAuthStates(IDataProtectionProvider dataProtection,
     : GitOAuthStateStore<BitbucketOAuthFlow>(dataProtection, time, Purpose)
 {
     /// <summary>The browser-binding cookie (path <c>/api/auth/bitbucket</c>).</summary>
-    public const string CookieName = "aide.bitbucket.oauth";
+    public const string CookieName = "tevrin.bitbucket.oauth";
+
+    /// <summary>FR-326: the pre-0.8.0 name, read for a flow in flight across the upgrade (until 0.9.0).</summary>
+    public const string LegacyCookieName = "aide.bitbucket.oauth";
 
     private const string Purpose = "Aide.Bitbucket.OAuthState.v1";
 
@@ -42,7 +45,10 @@ public sealed record BitbucketPendingLink(
 public sealed class BitbucketPendingLinks(IDataProtectionProvider dataProtection, TimeProvider time)
     : GitPendingLinkStore<BitbucketPendingLink>(dataProtection, time, Purpose)
 {
-    public const string CookieName = "aide.bitbucket.link";
+    public const string CookieName = "tevrin.bitbucket.link";
+
+    /// <summary>FR-326: the pre-0.8.0 name, read for a flow in flight across the upgrade (until 0.9.0).</summary>
+    public const string LegacyCookieName = "aide.bitbucket.link";
 
     private const string Purpose = "Aide.Bitbucket.PendingLink.v1";
 

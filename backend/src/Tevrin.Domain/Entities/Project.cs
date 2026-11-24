@@ -32,7 +32,7 @@ public sealed class Project
     public string? DevelopmentVersion { get; set; }
 
     /// <summary>FR-65 release merge strategy.</summary>
-    public MergeStrategy MergeStrategy { get; set; } = MergeStrategy.AideMerges;
+    public MergeStrategy MergeStrategy { get; set; } = MergeStrategy.TevrinMerges;
 
     /// <summary>Tag prefix for release tags (§4.10, default <c>v</c>).</summary>
     public string TagPrefix { get; set; } = ReleaseVersion.DefaultTagPrefix;

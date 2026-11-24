@@ -102,7 +102,7 @@ public class ManagedDatabaseRulesTests
         Assert.Equal("todo-db-preview", ManagedDatabaseRules.RenderPreviewName("todo-db-preview"));
         Assert.Equal("my-todo-app", ManagedDatabaseRules.ResourceName("My Todo App!", DeploymentEnvironment.Production));
         Assert.Equal("my-todo-app-preview", ManagedDatabaseRules.ResourceName("My Todo App!", DeploymentEnvironment.Preview));
-        Assert.Equal("aide-db", ManagedDatabaseRules.ResourceName("???", DeploymentEnvironment.Production));
+        Assert.Equal("tevrin-db", ManagedDatabaseRules.ResourceName("???", DeploymentEnvironment.Production));
         Assert.Equal("my_todo_app", ManagedDatabaseRules.RenderDatabaseName("my-todo-app"));
     }
 

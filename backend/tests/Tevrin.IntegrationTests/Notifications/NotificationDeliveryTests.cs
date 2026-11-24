@@ -260,7 +260,7 @@ public sealed class NotificationDeliveryTests(TevrinApiFactory factory)
         var app = Test.Factory;
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
-        var url = $"https://hooks.example.com/aide/{Guid.NewGuid():N}";
+        var url = $"https://hooks.example.com/tevrin/{Guid.NewGuid():N}";
         const string secret = "webhook-signing-secret";
         await NotificationScenario.ConfigureChannelsAsync(fixture.Owner.Client, id, new { type = "webhook", target = url, secret, events = NotificationScenario.Ev("budget_exceeded") });
         await ProjectApi.WithDbAsync(app, async db =>
@@ -288,12 +288,43 @@ public sealed class NotificationDeliveryTests(TevrinApiFactory factory)
     }
 
     [Fact]
+    public async Task FR326_Webhook_deliveries_send_the_X_Tevrin_headers_and_the_old_X_AIDE_headers_with_the_same_values()
+    {
+        var app = Test.Factory;
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var id = fixture.Project.Id;
+        var url = $"https://hooks.example.com/tevrin/{Guid.NewGuid():N}";
+        const string secret = "webhook-signing-secret";
+        await NotificationScenario.ConfigureChannelsAsync(fixture.Owner.Client, id, new { type = "webhook", target = url, secret, events = NotificationScenario.Ev("budget_exceeded") });
+        await ProjectApi.WithDbAsync(app, async db =>
+        {
+            db.AddEvent(EventTypes.BudgetExceeded, id, new { agent = "code_generator", tokenBudget = 10, tokensUsed = 12 }, SystemActor.Name, DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync(Ct);
+        });
+
+        await NotificationJobs.RunQueuedAsync(app, id);
+
+        var request = Assert.Single(Test.Http.To(url));
+        Assert.Equal("X-Tevrin-Signature", WebhookSignature.HeaderName);
+        Assert.Equal(4, WebhookSignature.LegacyHeaders.Count);
+        foreach (var (name, legacyName) in WebhookSignature.LegacyHeaders)
+        {
+            Assert.StartsWith("X-Tevrin-", name, StringComparison.Ordinal);
+            Assert.StartsWith("X-AIDE-", legacyName, StringComparison.Ordinal);
+            Assert.False(string.IsNullOrEmpty(request.Headers[name]));
+            Assert.Equal(request.Headers[name], request.Headers[legacyName]);
+        }
+
+        Assert.True(WebhookSignature.Verify(secret, request.Body, request.Headers[WebhookSignature.LegacyHeaderName]));
+    }
+
+    [Fact]
     public async Task NFR_SEC_A_webhook_without_a_usable_signing_secret_fails_and_is_never_sent_unsigned()
     {
         var app = Test.Factory;
         using var fixture = await ProjectApi.FixtureAsync(app);
         var id = fixture.Project.Id;
-        var url = $"https://hooks.example.com/aide/{Guid.NewGuid():N}";
+        var url = $"https://hooks.example.com/tevrin/{Guid.NewGuid():N}";
         await NotificationScenario.ConfigureChannelsAsync(fixture.Owner.Client, id, new { type = "webhook", target = url, secret = "webhook-signing-secret", events = NotificationScenario.Ev("run_failed") });
         // A stored channel whose key is gone (e.g. written before keys were required); settings no longer accept one.
         await ProjectApi.WithDbAsync(app, async db =>

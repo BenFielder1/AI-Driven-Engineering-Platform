@@ -110,10 +110,10 @@ public sealed partial class RailwayDeploymentProvider
     }
 
     public async Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
-        if (aideDeploymentId is null && environment != DeploymentEnvironment.Production)
+        if (tevrinDeploymentId is null && environment != DeploymentEnvironment.Production)
         {
             return null;
         }
@@ -143,7 +143,7 @@ public sealed partial class RailwayDeploymentProvider
             // adopts Railway's own deployment of the merge commit (FR-149), never a skipped or removed one.
             var created = Json.Time(node, "createdAt");
             var state = RailwayRules.StateOf(Text(node, "status"));
-            var matches = aideDeploymentId is not null
+            var matches = tevrinDeploymentId is not null
                 ? createdAfter is null || created is null || created >= createdAfter
                 : state != DeploymentStatus.Canceled;
             if (matches)
@@ -188,7 +188,7 @@ public sealed partial class RailwayDeploymentProvider
             ? resource.ProductionEnvironmentId ?? await ProductionEnvironmentAsync(auth, resource.ProjectId, cancellationToken)
             : target.PreviewResourceId
                 ?? throw new DeploymentProviderException(
-                    DeploymentFailure.Rejected, 400, "The Railway aide-preview environment is missing; set the target up again in Settings → Deployment.", platform: DeploymentProvider.Railway);
+                    DeploymentFailure.Rejected, 400, "The Railway preview environment is missing; set the target up again in Settings → Deployment.", platform: DeploymentProvider.Railway);
 
     private async Task<string> ProductionEnvironmentAsync(DeploymentAuth auth, string projectId, CancellationToken cancellationToken)
     {
