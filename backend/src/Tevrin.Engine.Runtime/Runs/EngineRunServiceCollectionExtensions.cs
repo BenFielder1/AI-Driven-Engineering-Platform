@@ -1,0 +1,23 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+
+namespace Tevrin.Engine.Runtime.Runs;
+
+/// <summary>FR-331–FR-335: DI registration of the run driver and run control.</summary>
+public static class EngineRunServiceCollectionExtensions
+{
+    /// <summary>
+    /// The run driver (<see cref="EngineRunDriver"/>, the handler of <c>stage.run</c>), <see cref="PipelineRunStarter"/> and
+    /// <see cref="EngineRunControl"/> (scoped). Needs the job queue, agent stages and stage handlers.
+    /// </summary>
+    public static IServiceCollection AddEngineRunDriver(this IServiceCollection services)
+    {
+        services.TryAddScoped<EngineRunDriver>();
+        services.TryAddScoped<PipelineRunStarter>();
+        services.TryAddScoped<EngineRunControl>();
+        services.AddJobHandler<StageRunJobHandler>(EngineJobTypes.StageRun);
+        return services;
+    }
+}

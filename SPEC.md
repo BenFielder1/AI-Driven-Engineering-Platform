@@ -280,7 +280,9 @@ New validator codes: `DEF_BRANCH_INPUT`, `DEF_ROUTE_TARGET`, `DEF_TOOL_TIER`, `D
 1. Stop if the run is final, or if this execution is already finished (idempotent).
 2. Evaluate the stage's `requires`. A missing input → `waiting_on_input`, stop. Unmet guards → the stage fails with their reasons.
 3. Check the gate. If an entry gate is needed and not approved → `waiting_on_gate`, stop.
-4. Run the stage by kind. Agent → `AgentStageRunner` (validate, retry, then `then:`); handler → `StageHandlerRunner`; manual → stop; construct → §4.64–§4.69.
+4. Run the stage by kind. Agent → `AgentStageRunner` (validate, retry, then `then:`); handler → `StageHandlerRunner`; manual → stop, except a manual stage whose only work is its gate, which passes once the gate is approved (as `approve` in `fixture-linear`); construct → §4.64–§4.69.
+
+Engine runs write no `state_transitions` rows (that table is the SDLC's phase history); their history is the stage executions, agent runs, gates and artifacts, which the timeline shows. A failed `stage.run` job leaves the run active, so `retry` can re-queue the stage. Retry is refused (409 `CONFLICT`) while the run has a pending gate. Approving an engine escalation gate re-queues the driver, which runs the stage again as a new agent run from attempt 1; rejecting it fails the run.
 5. Apply the veto, then the transition: route, loop or `next`, checked against `limits.revisions`.
 6. Queue `stage.run` for the next stage, or mark the run `completed` and queue its follow-ups.
 

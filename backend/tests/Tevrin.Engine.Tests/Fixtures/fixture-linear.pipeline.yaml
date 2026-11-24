@@ -1,0 +1,48 @@
+# Fixture pipeline (M66, FR-331/FR-332, §4.62): an engine-controlled run of agent draft → agent check → gate approve →
+# handler publish. draft requires the input brief (FR-335), so a run started without it waits on input.
+pipeline: fixture-linear
+version: 1
+title: Fixture linear
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [draft]
+
+artifacts:
+  brief:  { title: Brief, format: json, schema: brief.schema.json, approval: auto_lock, cascade: downstream, input: true }
+  draft:  { title: Draft, format: markdown, approval: auto_lock, cascade: downstream }
+  review: { title: Review, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  drafting:   { generic: active }
+  checking:   { generic: active }
+  approving:  { generic: active }
+  publishing: { generic: active }
+  published:  { generic: completed }
+
+stages:
+  - id: draft
+    title: Draft
+    status: drafting
+    agent: { key: drafter, prompt: linear.draft }
+    inputs: [brief]
+    output: draft
+    requires:
+      - { input: brief }
+
+  - id: check
+    title: Check
+    status: checking
+    agent: { key: checker, prompt: linear.check }
+    inputs: [draft]
+    output: review
+
+  - id: approve
+    title: Approve
+    status: approving
+    gate: { type: publish_approval, modes: [strict, advisory] }
+
+  - id: publish
+    title: Publish
+    status: publishing
+    handler: fixture-linear.publish

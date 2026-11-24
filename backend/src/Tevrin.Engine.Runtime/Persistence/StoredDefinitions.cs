@@ -24,8 +24,21 @@ public static class StoredDefinitions
     public static Task StoreAsync(DbContext db, LoadedPipelineDefinition definition, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
+        return StoreAsync(db.Database, definition, now, cancellationToken);
+    }
+
+    /// <summary>As <see cref="StoreAsync(DbContext, LoadedPipelineDefinition, DateTimeOffset, CancellationToken)"/>, through
+    /// the engine's view of the host's context (FR-331: a run started by the engine).</summary>
+    public static Task StoreForEngineAsync(IEngineDbContext db, LoadedPipelineDefinition definition, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return StoreAsync(db.Database, definition, now, cancellationToken);
+    }
+
+    private static Task<int> StoreAsync(Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade database, LoadedPipelineDefinition definition, DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var record = ToRecord(definition, now);
-        return db.Database.ExecuteSqlAsync(
+        return database.ExecuteSqlAsync(
             $"""
             INSERT INTO pipeline_definitions (hash, pipeline_id, version, pack_id, canonical_json, created_at)
             VALUES ({record.Hash}, {record.PipelineId}, {record.Version}, {record.PackId}, CAST({record.CanonicalJson} AS jsonb), {record.CreatedAt})

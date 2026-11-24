@@ -29,4 +29,11 @@ public static class EngineErrorCodes
     public const string Forbidden = "FORBIDDEN";
     public const string Unauthenticated = "UNAUTHENTICATED";
     public const string DefinitionUnavailable = "DEFINITION_UNAVAILABLE";
+
+    // FR-330–FR-335 (0.8.0): run control (the host's values).
+    public const string RunControlledByHost = "RUN_CONTROLLED_BY_HOST";
+    public const string RunAlreadyActive = "RUN_ALREADY_ACTIVE";
+    public const string RunNotActive = "RUN_NOT_ACTIVE";
+    public const string InputInvalid = "INPUT_INVALID";
+    public const string GateNotPending = "GATE_NOT_PENDING";
 }

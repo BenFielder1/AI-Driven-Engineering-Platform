@@ -7,6 +7,7 @@ using Tevrin.Engine.Api.Hosting;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Engine.Runtime.Runs;
 
 namespace Tevrin.Engine.Api;
 
@@ -16,25 +17,35 @@ public static partial class PipelineRunEndpoints
 
     private static Task<Results<Ok<PipelineGateDto>, ProblemHttpResult>> ApproveGate(
         Guid runId, Guid gateId, DecidePipelineGateRequest? request, HttpContext httpContext, PipelineRunReader reader,
-        IEngineDbContext db, IGateDecisionService decisions, IEngineProblems problems, ILoggerFactory loggers, CancellationToken cancellationToken) =>
+        IEngineDbContext db, IGateDecisionService decisions, EngineRunControl control, IRunControlAccess runAccess,
+        IEngineProblems problems, ILoggerFactory loggers, CancellationToken cancellationToken) =>
         DecideAsync(
             runId, gateId, request, httpContext, reader, db, decisions, problems, loggers,
-            (projectId, decision) => decisions.ApproveAsync(projectId, gateId, decision, cancellationToken),
+            async (run, decision) => control.IsHostControlled(run)
+                ? await decisions.ApproveAsync(run.ProjectId, gateId, decision, cancellationToken)
+                : await control.ApproveGateAsync(
+                    (await control.FindAsync(run.Id, cancellationToken))!, gateId, new EngineGateDecision(runAccess.UserId, decision.Comment), cancellationToken),
             cancellationToken);
 
     private static Task<Results<Ok<PipelineGateDto>, ProblemHttpResult>> RejectGate(
         Guid runId, Guid gateId, DecidePipelineGateRequest? request, HttpContext httpContext, PipelineRunReader reader,
-        IEngineDbContext db, IGateDecisionService decisions, IEngineProblems problems, ILoggerFactory loggers, CancellationToken cancellationToken) =>
+        IEngineDbContext db, IGateDecisionService decisions, EngineRunControl control, IRunControlAccess runAccess,
+        IEngineProblems problems, ILoggerFactory loggers, CancellationToken cancellationToken) =>
         DecideAsync(
             runId, gateId, request, httpContext, reader, db, decisions, problems, loggers,
-            (projectId, decision) => decisions.RejectAsync(projectId, gateId, decision, cancellationToken),
+            async (run, decision) => control.IsHostControlled(run)
+                ? await decisions.RejectAsync(run.ProjectId, gateId, decision, cancellationToken)
+                : await control.RejectGateAsync(
+                    (await control.FindAsync(run.Id, cancellationToken))!, gateId, new EngineGateDecision(runAccess.UserId, decision.Comment), cancellationToken),
             cancellationToken);
 
     /// <summary>
     /// FR-301: the request must be valid (400), the run exist and the caller be allowed to decide on its project (404/403,
     /// the project endpoint's rule and order), the gate belong to the run (404) and the run's pinned definition be
     /// runnable (409 DEFINITION_UNAVAILABLE); then the host's gate service decides, with its own rules, errors,
-    /// follow-ups and audit.
+    /// follow-ups and audit. FR-332: a gate of an engine-controlled run is decided by the engine
+    /// (<see cref="EngineRunControl"/>): approval re-queues the run driver, rejection follows the stage's <c>on_reject</c>
+    /// or fails the run. Approval-link emails, reminders and the Home count stay with the host's (SDLC) gates in 0.8.0.
     /// </summary>
     private static async Task<Results<Ok<PipelineGateDto>, ProblemHttpResult>> DecideAsync(
         Guid runId,
@@ -46,7 +57,7 @@ public static partial class PipelineRunEndpoints
         IGateDecisionService decisions,
         IEngineProblems problems,
         ILoggerFactory loggers,
-        Func<Guid, PipelineGateDecision, Task<Result<ApprovalGate>>> decide,
+        Func<PipelineRun, PipelineGateDecision, Task<Result<ApprovalGate>>> decide,
         CancellationToken cancellationToken)
     {
         // The project gate route's order: the request (400), then the decide permission (404 for a project the caller
@@ -89,7 +100,7 @@ public static partial class PipelineRunEndpoints
                 "This run uses a pipeline definition this version of Tevrin can't run."));
         }
 
-        var decided = await decide(run.ProjectId, new PipelineGateDecision(request.Comment, request.Decision, request.TargetCheckpoint));
+        var decided = await decide(run, new PipelineGateDecision(request.Comment, request.Decision, request.TargetCheckpoint));
         if (decided.IsFailure)
         {
             if (decided.Error!.RetryAfter is { } wait)

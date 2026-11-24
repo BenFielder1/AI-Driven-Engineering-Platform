@@ -52,12 +52,12 @@ public interface IAgentStageStore
 /// </summary>
 public static class AgentStageScope
 {
-    /// <summary>The release version id the run's artifacts and gates are stored under (<see cref="Guid.Empty"/> without a
-    /// subject).</summary>
-    public static Guid ReleaseVersionOf(PipelineRun run)
+    /// <summary>The release version id the run's artifacts and gates are stored under (FR-334: <c>null</c> without a
+    /// subject, so the rows belong to the run alone).</summary>
+    public static Guid? ReleaseVersionOf(PipelineRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        return run.SubjectId ?? Guid.Empty;
+        return run.SubjectId;
     }
 
     /// <summary>Whether an artifact belongs to <paramref name="run"/>'s subject.</summary>

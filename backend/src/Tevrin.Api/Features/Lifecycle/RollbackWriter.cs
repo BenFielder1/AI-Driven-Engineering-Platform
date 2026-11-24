@@ -59,10 +59,13 @@ public sealed class RollbackWriter(TevrinDbContext db, LifecycleWriter writer, B
         // so none of them can start meanwhile; a claim already in flight holds its rows, so this waits for it and then sees
         // the job running (PostgreSQL re-checks the row it waited for). The decision below and the cancellations use these rows.
         // Notification jobs (FR-47) are left alone: notifications about what happened before the rollback still go out.
+        // FR-332: so are the jobs of engine-controlled runs (EngineJobTypes.RunScoped): they belong to other runs.
+        var engineRunJobs = EngineJobTypes.RunScoped.ToArray();
         var activeJobs = await db.Jobs
             .FromSql($"""
                 SELECT * FROM jobs
                 WHERE project_id = {id} AND status IN ('queued', 'running') AND type <> {SdlcJobTypes.Notification}
+                  AND type <> ALL({engineRunJobs})
                 ORDER BY id
                 FOR UPDATE
                 """)

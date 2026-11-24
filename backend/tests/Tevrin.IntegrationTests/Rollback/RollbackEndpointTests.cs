@@ -126,6 +126,25 @@ public sealed class RollbackEndpointTests(TevrinApiFactory factory)
     }
 
     [Fact]
+    public async Task FR332_an_sdlc_rollback_leaves_the_jobs_of_engine_controlled_runs_queued()
+    {
+        using var seeded = await SeedVersion7InReviewAsync();
+        var engineJob = await ProjectApi.WithDbAsync(factory, async db =>
+        {
+            var queued = new Job { ProjectId = seeded.Id, Type = EngineJobTypes.StageRun, Payload = "{}", RunAfter = DateTimeOffset.UtcNow.AddHours(1), CreatedAt = DateTimeOffset.UtcNow };
+            db.Jobs.Add(queued);
+            await db.SaveChangesAsync(Ct);
+            return queued;
+        });
+
+        await ProjectApi.ReadAsync<RollbackDto>(await RollbackAsync(seeded.Fixture.Owner.Client, seeded.Id, 4));
+
+        var jobs = await LifecycleSeed.JobsAsync(factory, seeded.Id);
+        Assert.Equal(JobStatus.Queued, jobs.Single(j => j.Id == engineJob.Id).Status);
+        Assert.Equal(JobStatus.Cancelled, jobs.Single(j => j.Id == seeded.QueuedJob.Id).Status);
+    }
+
+    [Fact]
     public async Task FR44_amended_by_D_V2_11_Checkpoints_list_every_recorded_checkpoint_with_whether_it_is_a_target()
     {
         using var seeded = await SeedVersion7InReviewAsync();

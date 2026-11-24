@@ -4,9 +4,11 @@ using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Jobs;
 using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Persistence;
 using Tevrin.Engine.Runtime.Pipelines;
+using Tevrin.Engine.Runtime.Runs;
 
 namespace Tevrin.Engine.Api;
 
@@ -20,6 +22,7 @@ public sealed class PipelineRunReader(
     RunLogQueries runLog,
     IPipelineTransitionSource transitions,
     IRunActivityPolicy activity,
+    PipelineRegistryHost registryHost,
     TimeProvider time)
 {
     public Task<PipelineRun?> FindRunAsync(Guid runId, CancellationToken cancellationToken) =>
@@ -39,6 +42,27 @@ public sealed class PipelineRunReader(
     {
         ArgumentNullException.ThrowIfNull(run);
         return definitions.ResolveAsync(run.DefinitionHash, cancellationToken);
+    }
+
+    /// <summary>
+    /// §4.57, FR-332: whether a job makes the run <c>running</c>. A host-controlled run (the SDLC) counts its project's
+    /// active jobs except the ignored types and the engine-run jobs (<see cref="EngineJobTypes.RunScoped"/>, which belong to
+    /// other runs); an engine-controlled run counts only the queued or running <c>stage.run</c> jobs that name it.
+    /// </summary>
+    private async Task<bool> HasActiveJobAsync(PipelineRun run, CancellationToken cancellationToken)
+    {
+        if (registryHost.Registry?.RunControlOf(run.PipelineId) == RunControl.Host)
+        {
+            return await db.Jobs.AsNoTracking()
+                .AnyAsync(RunActivity.ActiveJobsOf(run.ProjectId, [.. activity.IgnoredJobTypes, .. EngineJobTypes.RunScoped]), cancellationToken);
+        }
+
+        var payloads = await db.Jobs.AsNoTracking()
+            .Where(j => j.ProjectId == run.ProjectId && j.Type == EngineJobTypes.StageRun
+                && (j.Status == JobStatus.Queued || j.Status == JobStatus.Running))
+            .Select(j => j.Payload)
+            .ToListAsync(cancellationToken);
+        return payloads.Any(p => StageRunPayload.Parse(p)?.RunId == run.Id);
     }
 
     /// <summary>A project's runs, newest first.</summary>
@@ -66,8 +90,7 @@ public sealed class PipelineRunReader(
         var final = PipelineRunRules.IsFinal(run.Status);
         var pendingGate = !final && await db.ApprovalGates.AsNoTracking()
             .AnyAsync(g => g.PipelineRunId == run.Id && g.Status == GateStatus.Pending, cancellationToken);
-        var activeJob = !final && !pendingGate && await db.Jobs.AsNoTracking()
-            .AnyAsync(RunActivity.ActiveJobsOf(run.ProjectId, activity.IgnoredJobTypes), cancellationToken);
+        var activeJob = !final && !pendingGate && await HasActiveJobAsync(run, cancellationToken);
         var totals = await runLog.RunTotalsAsync(run.Id, cancellationToken);
         return new PipelineRunDto(
             run.Id,

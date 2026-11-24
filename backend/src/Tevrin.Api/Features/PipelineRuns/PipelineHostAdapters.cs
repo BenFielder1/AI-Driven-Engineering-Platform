@@ -7,6 +7,7 @@ using Tevrin.Domain.Access;
 using Tevrin.Engine.Api.Hosting;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Runs;
 using Tevrin.Infrastructure.Persistence;
 using Tevrin.Pack.Sdlc;
 
@@ -87,6 +88,25 @@ internal sealed class ProjectGateDecisionService(
         new() { Comment = decision.Comment, Decision = decision.Decision, TargetCheckpoint = decision.TargetCheckpoint };
 }
 
+/// <summary>
+/// FR-331, FR-333, FR-335: run control uses the project's permissions: start, retry and inputs need
+/// <see cref="ProjectAction.RunAgents"/> (Contributor), cancel and rollback <see cref="ProjectAction.Rollback"/> (Owner).
+/// </summary>
+internal sealed class ProjectRunControlAccess(IProjectAccess access, ICurrentUser currentUser, TevrinDbContext db) : IRunControlAccess
+{
+    public Guid? UserId => currentUser.UserId;
+
+    public async Task<DomainError?> CheckAsync(Guid projectId, RunControlAction action, CancellationToken cancellationToken)
+    {
+        var projectAction = action is RunControlAction.Cancel or RunControlAction.Rollback ? ProjectAction.Rollback : ProjectAction.RunAgents;
+        var grant = await access.CheckAsync(projectId, projectAction, cancellationToken);
+        return grant.IsFailure ? grant.Error : null;
+    }
+
+    public async Task<Tevrin.Engine.Domain.Gates.ApprovalMode> ProjectApprovalModeAsync(Guid projectId, CancellationToken cancellationToken) =>
+        await db.Projects.AsNoTracking().Where(p => p.Id == projectId).Select(p => p.ApprovalMode).FirstAsync(cancellationToken);
+}
+
 /// <summary>FR-300: the run's <c>state_transitions</c> (stage ids are the SDLC phases' wire values).</summary>
 internal sealed class StateTransitionSource(TevrinDbContext db) : IPipelineTransitionSource
 {
@@ -136,6 +156,8 @@ public static class PipelineApiHosting
     {
         services.AddScoped<IRunAccessPolicy, ProjectRunAccessPolicy>();
         services.AddScoped<IGateDecisionService, ProjectGateDecisionService>();
+        services.AddScoped<IRunControlAccess, ProjectRunControlAccess>();
+        services.AddEngineRunDriver(); // FR-331–FR-335: the run driver (stage.run) and run control
         services.AddScoped<IPipelineTransitionSource, StateTransitionSource>();
         services.AddSingleton<IEngineProblems, EngineProblems>();
         services.AddSingleton<IRunActivityPolicy, SdlcRunActivityPolicy>();

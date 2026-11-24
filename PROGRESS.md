@@ -23,11 +23,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-327 | Images, k8s, Railway IaC, smoke scripts renamed; rename runbook | 3.1 | deploy + docs | M65 | done | 3f04ef7, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45371572456) |
 | FR-328 | One snapshot re-baseline with a mapped-equality CI check; freeze base moves | 3.1 | backend + CI | M65 | done | 4865d26 + 62c5ce1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480) |
 | FR-329 | Leftover-name scan test with `scripts/ci/aide-allowlist.txt`; docs updated | 3.1 | backend + docs + CI | M65 | done | 49b6412, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45374604868) |
-| FR-330 | `RunControl.Engine`/`Host` per pipeline; SDLC is `Host` | 3.2 | backend | M66 | todo | — |
+| FR-330 | `RunControl.Engine`/`Host` per pipeline; SDLC is `Host` | 3.2 | backend | M66 | done | 7a4f6da, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913) |
 | FR-331 | Start a run endpoint (inputs, one-active rule) | 3.2 | backend + data | M66 | todo | — |
 | FR-332 | Run driver `stage.run` (idempotent) | 3.2, 4.62 | backend | M66 | todo | — |
 | FR-333 | Cancel, roll back, retry endpoints | 3.2 | backend | M66 | todo | — |
-| FR-334 | Runs without a subject | 3.2 | backend + data | M66 | todo | — |
+| FR-334 | Runs without a subject | 3.2 | backend + data | M66 | done | 7a4f6da + 50ccb98, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913) |
 | FR-335 | Submit an input; `waiting_on_input` | 3.2 | backend + data | M66 | todo | — |
 | FR-336 | Schedule trigger (cron, timezone, skip when active) | 3.2, 4.71 | backend + data | M66 | todo | — |
 | FR-337 | Webhook trigger (signature, replay, rotation, deliveries) | 3.2, 4.72 | backend + data | M66 | todo | — |
@@ -72,6 +72,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] f. Snapshot re-baseline + mapped-equality check (FR-328): re-baseline 4865d26 (snapshots from scratch-branch CI run 45361838017), freeze pinned in 62c5ce1 ([CI 45365150480](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45365150480))
   - [x] g. Leftover-name scan + allowlist, CLAUDE.md/STACK.md/README/docs (FR-329) ([CI 45374604868](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45374604868))
 - [ ] M66 Run control and triggers — FR-330–FR-337
+  - [x] a. Run control, definition fields, `waiting_on_input`, runs without a subject, trigger tables, error codes (FR-330, FR-334) — 7a4f6da + fix 50ccb98 ([CI 45394797913](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913))
+  - [ ] b. `stage.run` driver; start, cancel, rollback, retry and input endpoints; engine gate decisions; `fixture-linear` (FR-331–FR-333, FR-335)
+  - [ ] c. Schedules and webhooks (FR-336, FR-337)
 - [ ] M67 Coach pack — FR-338–FR-342, FR-352
 - [ ] M68 Flow constructs — FR-343–FR-349
 - [ ] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
@@ -100,7 +103,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 - 2026-11-24 — FR-329's allowlist allows any `aide` name under the test folders (backend tests, e2e, Vitest files, mocks) with removal 0.9.0, rather than one entry per name: tests exercise the old names still read, the FR-197–FR-201 product-name rules and pre-rename fixtures. Outside tests, every entry names its tokens and files. The scanner is `scripts/ci/check-aide-names.py` (Python for per-entry path and token regexes) — Claude — SPEC updated: no
 
+- 2026-11-24 — Engine-run gates (M66): approval-link emails, gate reminders and timers, `NotificationComposer` and the Home "awaiting gates" count stay SDLC-only in 0.8.0; engine gates show in the engine gate inbox and the live `gateUpdated` push, and have their own decision path — Claude — SPEC updated: no
+
 ## Known issues
+- An SDLC rollback is refused (`ROLLBACK_BLOCKED`) while any agent run in the project is in progress, including an engine run's agent (M66): conservative, SDLC behaviour unchanged; revisit when engine and SDLC runs commonly share a project.
 - Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.
 
 ## Manual checks (Ben)
