@@ -218,9 +218,9 @@ export const contextualErrorMessages = {
     /** `baseVersion` is no longer the latest version; `errorMessage` names it when the details carry `latestVersion: N`. */
     CONFLICT:
       "Someone saved a newer version while you were editing. Your text is kept here: copy it, then cancel and edit again to start from their version.",
-    /** FR-18, FR-29: an edited plan's `aide-plan` block breaks the plan rules; the reasons are in `details`. */
+    /** FR-18, FR-29: an edited plan's plan block breaks the plan rules; the reasons are in `details`. */
     INVALID_PLAN:
-      "The plan in the aide-plan block is invalid, so it wasn't saved. Fix these problems and save again.",
+      "The plan in the plan block is invalid, so it wasn't saved. Fix these problems and save again.",
   },
   /** POST /api/projects/:id/artifacts/:type/versions/:v/restore (FR-58); RESTORE_NOT_ALLOWED uses its `reason`. */
   restoreArtifact: {
@@ -262,9 +262,9 @@ export const contextualErrorMessages = {
       "This version is already approved and locked, so it can no longer be rejected.",
     WRONG_PHASE:
       "Artifacts of this type can't be decided in the project's current phase.",
-    /** FR-30: the plan's `aide-plan` block can't produce execution steps; the reasons are in `details`. */
+    /** FR-30: the plan's plan block can't produce execution steps; the reasons are in `details`. */
     INVALID_PLAN:
-      "This plan's aide-plan block is invalid, so it can't be approved. Edit it as a new draft and fix these problems.",
+      "This plan's plan block is invalid, so it can't be approved. Edit it as a new draft and fix these problems.",
   },
   /** POST /api/projects/:id/execution/start · /pause · /resume (FR-31, FR-37); the unmet conditions are in `details`. */
   /** POST /api/projects/:id/gates/:gateId/approve on a step_blocked escalation (FR-33): accept is refused there. */

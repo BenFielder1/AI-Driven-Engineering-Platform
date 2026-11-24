@@ -80,7 +80,7 @@ public sealed partial class NetlifyDeploymentProvider
     {
         ArgumentNullException.ThrowIfNull(request);
         var preview = request.Environment == DeploymentEnvironment.Preview;
-        var deployId = await StartBuildAsync(auth, request.Target, request.GitRef, request.AideDeploymentId, cancellationToken);
+        var deployId = await StartBuildAsync(auth, request.Target, request.GitRef, request.TevrinDeploymentId, cancellationToken);
         return new ProviderDeployment(
             preview ? NetlifyRules.DeploymentId(deployId, request.GitSha, 1, request.GitRef) : deployId, null, null, null, null, State: DeploymentStatus.Queued);
     }
@@ -144,14 +144,15 @@ public sealed partial class NetlifyDeploymentProvider
     }
 
     public async Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         var site = Uri.EscapeDataString(target.ResourceId!);
-        if (aideDeploymentId is { } id)
+        if (tevrinDeploymentId is { } id)
         {
             using var recent = await SendAsync(auth, HttpMethod.Get, $"sites/{site}/deploys?per_page=30", null, cancellationToken);
-            var mine = Items(recent.RootElement).FirstOrDefault(d => Text(d, "title") == NetlifyRules.TitlePrefix + id.ToString("D"));
+            var titles = NetlifyRules.BuildTitles(id);
+            var mine = Items(recent.RootElement).FirstOrDefault(d => Text(d, "title") is { } title && titles.Contains(title));
             if (mine.ValueKind != JsonValueKind.Object || Text(mine, "id") is not { } deployId)
             {
                 return null;
@@ -234,8 +235,8 @@ public sealed partial class NetlifyDeploymentProvider
     private async Task<string?> FindHookBuildAsync(DeploymentAuth auth, DeploymentTargetRef target, string sha, CancellationToken cancellationToken)
     {
         using var recent = await SendAsync(auth, HttpMethod.Get, $"sites/{Uri.EscapeDataString(target.ResourceId!)}/deploys?per_page=30", null, cancellationToken);
-        var title = NetlifyRules.HookDeployTitle(sha);
-        var match = Items(recent.RootElement).FirstOrDefault(d => Text(d, "title") == title);
+        var titles = NetlifyRules.HookDeployTitles(sha);
+        var match = Items(recent.RootElement).FirstOrDefault(d => Text(d, "title") is { } title && titles.Contains(title));
         return match.ValueKind == JsonValueKind.Object ? Text(match, "id") : null;
     }
 
@@ -250,7 +251,8 @@ public sealed partial class NetlifyDeploymentProvider
         string? hookId;
         using (var hooks = await SendAsync(auth, HttpMethod.Get, $"sites/{site}/build_hooks", null, cancellationToken))
         {
-            var existing = Items(hooks.RootElement).FirstOrDefault(h => Text(h, "branch") == branch && Text(h, "title") == hookTitle);
+            var legacyHookTitle = NetlifyRules.LegacyHookTitlePrefix + branch;
+            var existing = Items(hooks.RootElement).FirstOrDefault(h => Text(h, "branch") == branch && Text(h, "title") is { } title && (title == hookTitle || title == legacyHookTitle));
             hookId = existing.ValueKind == JsonValueKind.Object ? Text(existing, "id") : null;
         }
 
@@ -277,11 +279,11 @@ public sealed partial class NetlifyDeploymentProvider
     }
 
     /// <summary>Starts a build of <paramref name="branch"/> after the account's deploy limit allows it; returns the deploy id.</summary>
-    private async Task<string> StartBuildAsync(DeploymentAuth auth, DeploymentTargetRef target, string branch, Guid? aideDeploymentId, CancellationToken cancellationToken)
+    private async Task<string> StartBuildAsync(DeploymentAuth auth, DeploymentTargetRef target, string branch, Guid? tevrinDeploymentId, CancellationToken cancellationToken)
     {
         var account = auth.AccountId ?? auth.AccountSlug ?? "netlify";
         limiter.Take(account);
-        var query = $"branch={Uri.EscapeDataString(branch)}" + (aideDeploymentId is { } id ? $"&title={Uri.EscapeDataString(NetlifyRules.TitlePrefix + id.ToString("D"))}" : string.Empty);
+        var query = $"branch={Uri.EscapeDataString(branch)}" + (tevrinDeploymentId is { } id ? $"&title={Uri.EscapeDataString(NetlifyRules.TitlePrefix + id.ToString("D"))}" : string.Empty);
         JsonDocument build;
         try
         {

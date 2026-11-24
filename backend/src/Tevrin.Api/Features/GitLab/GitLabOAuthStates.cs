@@ -28,7 +28,10 @@ public sealed class GitLabOAuthStates(IDataProtectionProvider dataProtection, Ti
     public static readonly TimeSpan SweepInterval = GitOAuthLimits.SweepInterval;
 
     /// <summary>The browser-binding cookie (path <c>/api/auth/gitlab</c>).</summary>
-    public const string CookieName = "aide.gitlab.oauth";
+    public const string CookieName = "tevrin.gitlab.oauth";
+
+    /// <summary>FR-326: the pre-0.8.0 name, read for a flow in flight across the upgrade (until 0.9.0).</summary>
+    public const string LegacyCookieName = "aide.gitlab.oauth";
 
     private const string Purpose = "Aide.GitLab.OAuthState.v1";
 
@@ -61,7 +64,10 @@ public sealed class GitLabPendingLinks(IDataProtectionProvider dataProtection, T
 {
     public static readonly TimeSpan Lifetime = GitOAuthLimits.Lifetime;
 
-    public const string CookieName = "aide.gitlab.link";
+    public const string CookieName = "tevrin.gitlab.link";
+
+    /// <summary>FR-326: the pre-0.8.0 name, read for a flow in flight across the upgrade (until 0.9.0).</summary>
+    public const string LegacyCookieName = "aide.gitlab.link";
 
     private const string Purpose = "Aide.GitLab.PendingLink.v1";
 

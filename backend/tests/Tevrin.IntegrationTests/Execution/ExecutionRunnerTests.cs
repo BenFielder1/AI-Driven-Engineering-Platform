@@ -123,7 +123,7 @@ public sealed class ExecutionRunnerTests(TevrinApiFactory factory)
         Assert.Equal(step2.CommitSha, await GitAsync(id, "rev-parse", $"{branch}~1"));
         var body = await GitAsync(id, "log", "-1", "--format=%b", step2.CommitSha!);
         Assert.Contains("Files:\n- src/part2.js", body, StringComparison.Ordinal);
-        Assert.Contains($"AIDE-Step-Id: {step2.Id:D}", body, StringComparison.Ordinal);
+        Assert.Contains($"Tevrin-Step-Id: {step2.Id:D}", body, StringComparison.Ordinal);
         var manifest = Assert.Single(step2.FileManifest!);
         var onDisk = await File.ReadAllTextAsync(Path.Combine(WorkingCopy(id), "src", "part2.js"), Ct);
         Assert.Equal(new FileManifestEntryDto("src/part2.js", FileAction.Create, ContentHash.Compute(onDisk)), manifest);

@@ -64,7 +64,7 @@
     {
       "agentRun": null,
       "checkpointAtCreation": 1,
-      "contentHash": "c4bea4fa106eb45246f7d48e2059fb6b6d8782b922ca8db10f78e38515bf4a6e",
+      "contentHash": "4d107221f6805ece53b66c5f05dca935351f19500c5929d96639d37e07fa87f2",
       "createdBy": null,
       "id": "artifact#3",
       "parentVersion": null,
@@ -101,7 +101,7 @@
       "type": "EXECUTION_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#3",
       "payload": {
         "attempt": 1,
@@ -113,7 +113,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#4",
       "payload": {
         "agent": "code_generator",
@@ -130,7 +130,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#5",
       "payload": {
         "agent": "code_generator",
@@ -140,7 +140,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#6",
       "payload": {
         "attempt": 1,
@@ -155,7 +155,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#7",
       "payload": {
         "attempt": 1,
@@ -167,7 +167,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#8",
       "payload": {
         "agent": "code_generator",
@@ -184,7 +184,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#9",
       "payload": {
         "agent": "code_generator",
@@ -194,7 +194,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#10",
       "payload": {
         "attempt": 1,
@@ -209,7 +209,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#11",
       "payload": {
         "branch": "tevrin/<slug>/v0.1.0",
@@ -220,7 +220,7 @@
       "type": "EXECUTION_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#12",
       "payload": {
         "baseBranch": "main",
@@ -239,7 +239,7 @@
       "type": "PULL_REQUEST_OPENED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#13",
       "payload": {
         "attempt": 0,
@@ -264,7 +264,7 @@
       "type": "BUILD_CHECK_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#14",
       "payload": {
         "deploymentId": "deployment#1",
@@ -283,7 +283,7 @@
       "type": "DEPLOYMENT_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#15",
       "payload": {
         "attempt": 0,
@@ -317,7 +317,7 @@
       "type": "BUILD_CHECK_UPDATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#16",
       "payload": {
         "deploymentId": "deployment#1",
@@ -331,7 +331,7 @@
       "type": "DEPLOYMENT_UPDATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#17",
       "payload": {
         "deploymentId": "deployment#1",
@@ -345,7 +345,7 @@
       "type": "DEPLOYMENT_UPDATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#18",
       "payload": {
         "components": [
@@ -357,7 +357,7 @@
         ],
         "errorCode": "PLATFORM_ERROR",
         "gitSha": "sha#2",
-        "message": "The Fake build failed: the commit contains .aide-fake/fail-build.",
+        "message": "The Fake build failed: the commit contains .tevrin-fake/fail-build.",
         "migrationRunId": null,
         "releaseVersionId": "release_version#1",
         "rolloutId": "job#4",
@@ -366,7 +366,7 @@
       "type": "PREVIEW_ROLLOUT_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#19",
       "payload": {
         "attempt": 0,
@@ -376,7 +376,7 @@
           "endReason": null,
           "failures": [
             {
-              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .aide-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
+              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .tevrin-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
               "failureId": "failure:preview:vercel",
               "message": "Vercel preview build failed",
               "source": "preview"
@@ -412,7 +412,7 @@
       "type": "BUILD_CHECK_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#20",
       "payload": {
         "attempt": 0,
@@ -422,7 +422,7 @@
           "endReason": null,
           "failures": [
             {
-              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .aide-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
+              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .tevrin-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
               "failureId": "failure:preview:vercel",
               "message": "Vercel preview build failed",
               "source": "preview"
@@ -453,7 +453,7 @@
       "type": "BUILD_CHECK_UPDATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#21",
       "payload": {
         "agent": "build_fix",
@@ -470,7 +470,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#22",
       "payload": {
         "agent": "build_fix",
@@ -480,7 +480,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#23",
       "payload": {
         "attempt": 0,
@@ -490,7 +490,7 @@
           "endReason": null,
           "failures": [
             {
-              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .aide-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
+              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .tevrin-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
               "failureId": "failure:preview:vercel",
               "message": "Vercel preview build failed",
               "source": "preview"
@@ -526,7 +526,7 @@
       "type": "BUILD_FIX_PLANNED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#24",
       "payload": {
         "attempt": 1,
@@ -538,7 +538,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#25",
       "payload": {
         "agent": "code_generator",
@@ -555,7 +555,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#26",
       "payload": {
         "agent": "code_generator",
@@ -565,7 +565,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#27",
       "payload": {
         "attempt": 1,
@@ -580,7 +580,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#28",
       "payload": {
         "branch": "tevrin/<slug>/v0.1.0",
@@ -591,7 +591,7 @@
       "type": "EXECUTION_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#29",
       "payload": {
         "attempt": 1,
@@ -616,7 +616,7 @@
       "type": "BUILD_CHECK_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#30",
       "payload": {
         "deploymentId": "deployment#2",
@@ -635,7 +635,7 @@
       "type": "DEPLOYMENT_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#31",
       "payload": {
         "attempt": 1,
@@ -669,7 +669,7 @@
       "type": "BUILD_CHECK_UPDATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#32",
       "payload": {
         "deploymentId": "deployment#2",
@@ -683,7 +683,7 @@
       "type": "DEPLOYMENT_UPDATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#33",
       "payload": {
         "deploymentId": "deployment#2",
@@ -697,7 +697,7 @@
       "type": "DEPLOYMENT_UPDATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#34",
       "payload": {
         "deploymentId": "deployment#2",
@@ -711,7 +711,7 @@
       "type": "DEPLOYMENT_PREVIEW_READY"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#35",
       "payload": {
         "components": [
@@ -732,7 +732,7 @@
       "type": "PREVIEW_ROLLOUT_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#36",
       "payload": {
         "attempt": 1,
@@ -769,7 +769,7 @@
       "type": "BUILD_CHECK_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#37",
       "payload": {
         "checkpoint": 5,
@@ -783,7 +783,7 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#38",
       "payload": {
         "checkpoint": 5,
@@ -795,7 +795,7 @@
       "type": "REVIEW_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#39",
       "payload": {
         "agent": "code_review",
@@ -812,7 +812,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#40",
       "payload": {
         "agent": "code_review",
@@ -822,7 +822,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#41",
       "payload": {
         "artifactId": null,
@@ -834,7 +834,7 @@
       "type": "GATE_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#42",
       "payload": {
         "checkpoint": 5,
@@ -857,7 +857,7 @@
       "type": "REVIEW_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#43",
       "payload": {
         "provider": "local",
@@ -865,7 +865,7 @@
           "canMerge": true,
           "checks": [],
           "mergeStateStatus": null,
-          "mergeStrategy": "aide_merges",
+          "mergeStrategy": "tevrin_merges",
           "reasons": [],
           "reviewDecision": null,
           "willAutoMerge": true
@@ -1015,7 +1015,7 @@
       "to": "refinement"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "checkpoint": 5,
       "from": "execution",
       "id": "transition#2",

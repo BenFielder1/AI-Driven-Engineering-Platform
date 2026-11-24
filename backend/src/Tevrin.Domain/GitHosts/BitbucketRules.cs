@@ -92,13 +92,13 @@ public static partial class BitbucketRules
     /// valid Bitbucket slug (<c>!</c> isn't allowed, <see cref="IsValidSlug"/>), and the probe's body is invalid too
     /// (<see cref="ScopeProbeCreateBody"/>), so Bitbucket rejects the request after its scope check and nothing is created.
     /// </summary>
-    public const string ScopeProbeSlug = "aide-scope-check!";
+    public const string ScopeProbeSlug = "tevrin-scope-check!";
 
     /// <summary>
     /// FR-134: the body of the <c>write:repository</c> probe: an unknown <c>scm</c> and an impossible project key, each of
     /// which Bitbucket rejects with a 400 on its own.
     /// </summary>
-    public const string ScopeProbeCreateBody = """{"scm":"aide-scope-check","project":{"key":"!"}}""";
+    public const string ScopeProbeCreateBody = """{"scm":"tevrin-scope-check","project":{"key":"!"}}""";
 
     /// <summary>A valid Bitbucket repository slug: non-empty and already in the form <see cref="Slug"/> produces.</summary>
     public static bool IsValidSlug(string? slug) => !string.IsNullOrEmpty(slug) && string.Equals(Slug(slug), slug, StringComparison.Ordinal);

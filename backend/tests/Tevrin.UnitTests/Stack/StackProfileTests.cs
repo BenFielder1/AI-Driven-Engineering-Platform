@@ -9,7 +9,7 @@ using Tevrin.UnitTests.Lifecycle;
 namespace Tevrin.UnitTests.Stack;
 
 /// <summary>
-/// FR-180–FR-184, §4.27: the pure <c>stack_profile</c> rules: the <c>aide-stack-profile</c> round trip, validation against the
+/// FR-180–FR-184, §4.27: the pure <c>stack_profile</c> rules: the <c>tevrin-stack-profile</c> round trip (and <c>aide-stack-profile</c> still read, FR-326), validation against the
 /// catalog and the base commit, the agent-versus-detector rule, and approval (the §4.27 worked examples, verbatim).
 /// </summary>
 public class StackProfileTests
@@ -60,7 +60,7 @@ public class StackProfileTests
     // ---------------------------------------------------------------- Parse / Render
 
     [Fact]
-    public void FR183_S4_27_Parse_and_Render_round_trip_the_aide_stack_profile_block()
+    public void FR183_FR326_Parse_and_Render_round_trip_the_tevrin_stack_profile_block()
     {
         var markdown = StackProfile.Render("A Vue SPA on Supabase.", VueSupabase());
 
@@ -69,7 +69,7 @@ public class StackProfileTests
         Assert.True(parsed.IsSuccess, string.Join("; ", parsed.Error?.Details ?? []));
         Assert.Equal("A Vue SPA on Supabase.", parsed.Value.Narrative);
         Assert.Equal(markdown, StackProfile.Render(parsed.Value.Narrative, parsed.Value.Document));
-        Assert.Contains("```aide-stack-profile\n", markdown, StringComparison.Ordinal);
+        Assert.Contains("```tevrin-stack-profile\n", markdown, StringComparison.Ordinal);
         Assert.Contains("\"status\": \"inferred\"", markdown, StringComparison.Ordinal);
         Assert.Equal("fe-vue", parsed.Value.Document.Layers.Frontend.Option);
         Assert.Equal([StackChoices.DatabaseHost], parsed.Value.Document.Hosts.Detected);
@@ -110,7 +110,7 @@ public class StackProfileTests
     [Theory]
     [InlineData("No block here.", "content: needs a fenced")]
     [InlineData("```aide-stack-profile\n{}\n```\n```aide-stack-profile\n{}\n```", "content: must have exactly one")]
-    [InlineData("```aide-stack-profile\n{\"layers\": ", "content: the ```aide-stack-profile block isn't closed")]
+    [InlineData("```aide-stack-profile\n{\"layers\": ", "content: the ```tevrin-stack-profile block isn't closed")]
     [InlineData("```aide-stack-profile\nnot json\n```", "profile: isn't valid JSON")]
     [InlineData("```aide-stack-profile\n{\"schemaVersion\": 1}\n```", "layers: is required")]
     [InlineData("```aide-stack-profile\n{\"layers\": {\"frontend\": {\"status\": \"maybe\"}}}\n```", "layers.frontend.status: must be one of")]

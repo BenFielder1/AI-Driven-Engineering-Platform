@@ -86,8 +86,14 @@ public static class MigrationConnections
 /// </summary>
 public sealed class FakeAwareMigrationSqlExecutor(NpgsqlMigrationSqlExecutor npgsql) : IMigrationSqlExecutor, IDatabaseSchemaReset
 {
-    /// <summary>SQL containing this makes the Fake migration fail.</summary>
-    public const string FailMarker = "aide-fake:fail";
+    /// <summary>SQL containing this makes the Fake migration fail (FR-326: from 0.8.0).</summary>
+    public const string FailMarker = "tevrin-fake:fail";
+
+    /// <summary>FR-326 (§4.77): the pre-0.8.0 marker, still detected.</summary>
+    public const string LegacyFailMarker = "aide-fake:fail";
+
+    /// <summary>FR-326: both markers.</summary>
+    public static IReadOnlyList<string> FailMarkers { get; } = [FailMarker, LegacyFailMarker];
 
     private readonly ConcurrentDictionary<string, List<RecordedMigration>> _fake = new(StringComparer.Ordinal);
 
@@ -125,9 +131,9 @@ public sealed class FakeAwareMigrationSqlExecutor(NpgsqlMigrationSqlExecutor npg
         public Task ApplyAsync(MigrationFile file, IReadOnlyList<string> statements, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(file);
-            if (file.Sql.Contains(FailMarker, StringComparison.Ordinal))
+            if (FailMarkers.FirstOrDefault(m => file.Sql.Contains(m, StringComparison.Ordinal)) is { } marker)
             {
-                throw new FakeMigrationException("The Fake migration failed: the file contains aide-fake:fail.");
+                throw new FakeMigrationException($"The Fake migration failed: the file contains {marker}.");
             }
 
             lock (history)

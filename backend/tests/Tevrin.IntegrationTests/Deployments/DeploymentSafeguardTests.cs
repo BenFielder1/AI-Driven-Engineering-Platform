@@ -92,15 +92,15 @@ public sealed class DeploymentSafeguardTests(TevrinApiFactory factory)
     [Fact]
     public async Task S4_15_A_create_that_timed_out_is_found_by_its_AIDE_id_on_retry_without_a_second_build()
     {
-        Guid? aideId = null;
+        Guid? tevrinId = null;
         var vercel = new FakeGitHubApi()
             .On(HttpMethod.Post, "/v13/deployments", request =>
             {
-                aideId = Guid.Parse(JsonDocument.Parse(request.Body).RootElement.GetProperty("meta").GetProperty("aideDeploymentId").GetString()!);
+                tevrinId = Guid.Parse(JsonDocument.Parse(request.Body).RootElement.GetProperty("meta").GetProperty("tevrinDeploymentId").GetString()!);
                 return (HttpStatusCode.GatewayTimeout, """{"error":{"code":"timeout","message":"Gateway timeout"}}"""); // created anyway
             })
-            .On(HttpMethod.Get, "/v6/deployments", _ => aideId is { } created
-                ? (HttpStatusCode.OK, JsonSerializer.Serialize(new { deployments = new[] { new { uid = "dpl_made", state = "BUILDING", url = "todo-made.vercel.app", meta = new { aideDeploymentId = created.ToString() } } } }))
+            .On(HttpMethod.Get, "/v6/deployments", _ => tevrinId is { } created
+                ? (HttpStatusCode.OK, JsonSerializer.Serialize(new { deployments = new[] { new { uid = "dpl_made", state = "BUILDING", url = "todo-made.vercel.app", meta = new { tevrinDeploymentId = created.ToString() } } } }))
                 : (HttpStatusCode.OK, """{"deployments":[]}"""))
             .On(HttpMethod.Get, "/v13/deployments/dpl_made", HttpStatusCode.OK, """{"id":"dpl_made","readyState":"READY","url":"todo-made.vercel.app"}""");
         var (app, owner, id, versionId) = await BoundAsync(vercel);
@@ -109,7 +109,7 @@ public sealed class DeploymentSafeguardTests(TevrinApiFactory factory)
 
         await DeploymentHarness.SettleAsync(app, (await DeploymentHarness.JobOfAsync(app, id, deployment.Id)).Id);
 
-        Assert.Equal(deployment.Id, aideId);
+        Assert.Equal(deployment.Id, tevrinId);
         var done = await DeploymentHarness.DeploymentAsync(app, deployment.Id);
         Assert.Equal(("dpl_made", DeploymentStatus.Ready), (done.ProviderDeploymentId, done.Status));
         Assert.Equal(1, vercel.Count(HttpMethod.Post, "/v13/deployments"));

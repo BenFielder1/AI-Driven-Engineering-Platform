@@ -177,8 +177,17 @@ public sealed record StackProfileApproval(StackComposition? Composition, bool Ge
 /// </summary>
 public static class StackProfile
 {
-    /// <summary>The fence tag of the block.</summary>
-    public const string FenceTag = "aide-stack-profile";
+    /// <summary>FR-326 (§4.77): the fence tag profiles are written with from 0.8.0 (<see cref="FenceTag"/>).</summary>
+    public const string TevrinFenceTag = "tevrin-stack-profile";
+
+    /// <summary>FR-326: the pre-0.8.0 fence tag. Stored profiles keep it, so it is always read.</summary>
+    public const string LegacyFenceTag = "aide-stack-profile";
+
+    /// <summary>The fence tag <see cref="Render"/> writes and messages name. <see cref="Parse"/> reads both tags.</summary>
+    public const string FenceTag = TevrinFenceTag;
+
+    /// <summary>FR-326: every fence tag a profile block may open with.</summary>
+    public static IReadOnlyList<string> FenceTags { get; } = [TevrinFenceTag, LegacyFenceTag];
 
     public const int SchemaVersion = 1;
 
@@ -358,7 +367,7 @@ public static class StackProfile
     private static bool IsOpeningFence(string line)
     {
         var trimmed = line.Trim();
-        return trimmed.StartsWith("```", StringComparison.Ordinal) && trimmed[3..].Trim() == FenceTag;
+        return trimmed.StartsWith("```", StringComparison.Ordinal) && FenceTags.Contains(trimmed[3..].Trim(), StringComparer.Ordinal);
     }
 
     // ---------------------------------------------------------------- validation

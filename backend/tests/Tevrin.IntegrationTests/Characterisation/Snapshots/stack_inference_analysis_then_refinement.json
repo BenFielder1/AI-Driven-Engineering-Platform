@@ -31,7 +31,7 @@
     {
       "agentRun": "job#2",
       "checkpointAtCreation": 1,
-      "contentHash": "normalised:9d092cdc741f1b1bb738caa444c5321c766ced8bfde9e325ac5ae122bc353529",
+      "contentHash": "normalised:eae2deda86ed26372288737843e5ed0be38297b0049d8e84d7dfd32fb438766e",
       "createdBy": null,
       "id": "artifact#2",
       "parentVersion": null,
@@ -60,7 +60,7 @@
       "type": "PROJECT_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#2",
       "payload": {
         "agent": "repository_analyst",
@@ -77,7 +77,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#3",
       "payload": {
         "agent": "repository_analyst",
@@ -87,7 +87,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#4",
       "payload": {
         "agentRunId": "job#1",
@@ -99,7 +99,7 @@
       "type": "CODEBASE_SUMMARY_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#5",
       "payload": {
         "baseCommitSha": "sha#1",
@@ -164,7 +164,7 @@
       "type": "STACK_DETECTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#6",
       "payload": {
         "agent": "stack_analyst",
@@ -181,7 +181,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#7",
       "payload": {
         "agent": "stack_analyst",
@@ -191,7 +191,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#8",
       "payload": {
         "agentRunId": "job#2",
@@ -204,7 +204,7 @@
       "type": "ARTIFACT_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#9",
       "payload": {
         "agentRunId": "job#2",

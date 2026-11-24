@@ -24,7 +24,7 @@ public static partial class SecretScanner
         ("private_key", PrivateKey()),
         ("google_api_key", GoogleApiKey()),
         ("stripe_live_key", StripeLiveKey()),
-        ("aide_api_token", AideToken()),
+        ("tevrin_api_token", TevrinToken()),
     ];
 
     public static IReadOnlyList<string> PatternNames { get; } = [.. Patterns.Select(p => p.Name)];
@@ -143,6 +143,7 @@ public static partial class SecretScanner
     [GeneratedRegex(@"\b(?:sk|rk)_live_[0-9A-Za-z]{24,}\b", RegexOptions.None, TimeoutMs)]
     private static partial Regex StripeLiveKey();
 
-    [GeneratedRegex(@"\baide_pat_[A-Za-z0-9_\-]{20,}", RegexOptions.None, TimeoutMs)]
-    private static partial Regex AideToken();
+    // FR-326: Tevrin API tokens, the 0.8.0 tevrin_pat_ prefix and the older aide_pat_ one.
+    [GeneratedRegex(@"\b(?:tevrin|aide)_pat_[A-Za-z0-9_\-]{20,}", RegexOptions.None, TimeoutMs)]
+    private static partial Regex TevrinToken();
 }

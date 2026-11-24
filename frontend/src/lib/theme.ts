@@ -2,14 +2,17 @@ import { useSyncExternalStore } from 'react'
 
 /**
  * FR-204 (amends 0.3.0 SPEC §7.1): Light, Dark and System; System is the default. The choice is stored in localStorage
- * `aide.theme` as `light` | `dark` | `system` (the key keeps its 0.5.0 name, so a saved theme carries over: FR-201).
+ * `tevrin.theme` as `light` | `dark` | `system`. FR-326: a theme saved under the pre-0.8.0 key `aide.theme` is read
+ * when the new key is missing, so it carries over (FR-201), and saving a choice removes the old key.
  * src/lib/theme-init.ts applies the same rule before first paint and follows the OS while System is chosen: keep the
  * two in step.
  */
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
 
-export const THEME_STORAGE_KEY = 'aide.theme'
+export const THEME_STORAGE_KEY = 'tevrin.theme'
+/** FR-326: the pre-0.8.0 key, read when THEME_STORAGE_KEY is missing. */
+export const LEGACY_THEME_STORAGE_KEY = 'aide.theme'
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark']
 export const DARK_SCHEME_QUERY = '(prefers-color-scheme: dark)'
 
@@ -22,7 +25,8 @@ let memoryPreference: ThemePreference | null = null
 
 export function readThemePreference(): ThemePreference {
   try {
-    const stored = globalThis.localStorage.getItem(THEME_STORAGE_KEY)
+    const stored =
+      globalThis.localStorage.getItem(THEME_STORAGE_KEY) ?? globalThis.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)
     return isThemePreference(stored) ? stored : 'system'
   } catch {
     return memoryPreference ?? 'system'
@@ -63,6 +67,7 @@ function notify() {
 export function setThemePreference(preference: ThemePreference): void {
   try {
     globalThis.localStorage.setItem(THEME_STORAGE_KEY, preference)
+    globalThis.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY)
   } catch {
     memoryPreference = preference
   }
@@ -80,7 +85,7 @@ function onSystemChange() {
 
 /** Another tab changed the theme. */
 function onStorage(event: StorageEvent) {
-  if (event.key === THEME_STORAGE_KEY || event.key === null) {
+  if (event.key === THEME_STORAGE_KEY || event.key === LEGACY_THEME_STORAGE_KEY || event.key === null) {
     applyTheme()
     notify()
   }

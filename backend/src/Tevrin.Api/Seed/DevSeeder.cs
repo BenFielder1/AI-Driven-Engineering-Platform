@@ -733,7 +733,7 @@ public sealed partial class DevSeeder(IServiceScopeFactory scopes, ILogger<DevSe
     private const string AnalysisDemoNarrative =
         "## Findings\n\nSeeded for the demo: the frontend is React with Vite at the repository root (`package.json`, `index.html`, `src/main.tsx`). No server code was found, so the backend is left for you to answer.";
 
-    /// <summary>The fixed id in the skeleton commit's <c>AIDE-Step-Id</c> trailer, so a second seed run finds the commit instead of adding one.</summary>
+    /// <summary>The fixed id in the skeleton commit's <c>Tevrin-Step-Id</c> trailer (or, seeded before 0.8.0, <c>AIDE-Step-Id</c>), so a second seed run finds the commit instead of adding one.</summary>
     private static readonly Guid DemoSkeletonCommitId = Guid.Parse("0199a5ee-d000-7000-8000-00000000c0de");
 
     /// <summary>§9 (0.5.0): the analysis demo's code: a minimal Vite + React app at the root, matching the draft profile.</summary>

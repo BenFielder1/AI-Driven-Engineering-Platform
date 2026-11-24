@@ -37,7 +37,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
             .IsRequired();
         builder.Property(p => p.ReleasedVersion).HasColumnType("text");
         builder.Property(p => p.DevelopmentVersion).HasColumnType("text");
-        builder.Property(p => p.MergeStrategy).HasDefaultValue(MergeStrategy.AideMerges).IsRequired();
+        builder.Property(p => p.MergeStrategy).HasDefaultValue(MergeStrategy.TevrinMerges).IsRequired();
         builder.Property(p => p.TagPrefix).HasColumnType("text").HasDefaultValue(ReleaseVersion.DefaultTagPrefix).IsRequired();
         builder.PrimitiveCollection(p => p.StackPacks).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]").IsRequired();
         builder.Property(p => p.RowVersion).IsXminRowVersion();

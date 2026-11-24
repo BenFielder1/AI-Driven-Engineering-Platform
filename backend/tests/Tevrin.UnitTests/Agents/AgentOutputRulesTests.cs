@@ -141,7 +141,7 @@ public class SpecSectionsTests
     }
 }
 
-/// <summary>FR-29, FR-18, D6: plan replies and the stored plan document with its canonical aide-plan block.</summary>
+/// <summary>FR-29, FR-18, D6: plan replies and the stored plan document with its canonical plan block (tevrin-plan from 0.8.0, FR-326).</summary>
 public class PlanDocumentTests
 {
     private const string Reply = """
@@ -251,6 +251,7 @@ public class PlanDocumentTests
     [Theory]
     [InlineData("Write it:\n```aide-plan\n{\"steps\": []}\n```\nDone.")]
     [InlineData("```aide-plan\n{\"steps\": []}")]
+    [InlineData("Write it:\n```tevrin-plan\n{\"steps\": []}\n```\nDone.")]
     [InlineData("Close it early\n```\nand go on")]
     [InlineData("~~~\nTilde fence\n~~~")]
     public void FR29_A_fence_inside_a_task_never_forges_or_breaks_the_block(string task)
@@ -260,7 +261,7 @@ public class PlanDocumentTests
         var markdown = PlanDocument.RenderChecked(SdlcArtifacts.ImplementationPlan, steps, 20);
 
         Assert.True(markdown.IsSuccess, markdown.Error?.Message);
-        Assert.Single(markdown.Value.Split('\n'), line => line.StartsWith("```aide-plan", StringComparison.Ordinal));
+        Assert.Single(markdown.Value.Split('\n'), line => line.StartsWith("```tevrin-plan", StringComparison.Ordinal) || line.StartsWith("```aide-plan", StringComparison.Ordinal));
         var parsed = PlanDocument.ParseMarkdown(markdown.Value, 20);
         Assert.True(parsed.IsSuccess, parsed.Error?.Message);
         Assert.Equal(task, parsed.Value[0].Task);
@@ -321,7 +322,7 @@ public class PlanDocumentTests
         var result = PlanDocument.ParseAgentOutput(reply, null);
 
         Assert.Equal(ErrorCodes.InvalidPlan, result.Error!.Code);
-        Assert.Equal([$"Step 1 declares the protected path '{path}'; a generated plan may not create or modify protected paths (.git/, .aide/, CI workflows, lockfiles, .env files)."], result.Error.Details);
+        Assert.Equal([$"Step 1 declares the protected path '{path}'; a generated plan may not create or modify protected paths (.git/, .tevrin/, .aide/, CI workflows, lockfiles, .env files)."], result.Error.Details);
         Assert.Contains(path, PlanDocument.CorrectiveFeedback(result.Error), StringComparison.Ordinal);
     }
 

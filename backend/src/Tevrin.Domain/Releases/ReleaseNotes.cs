@@ -20,7 +20,7 @@ public sealed record ReleaseNotesInput(
     string? RepoWebUrl,
     decimal? ReviewScore,
     int? ReviewCycle,
-    string AideUrl);
+    string TevrinUrl);
 
 /// <summary>FR-64, §4.14: Tevrin's own release notes (not GitHub's auto-generated ones). Pure.</summary>
 public static class ReleaseNotes
@@ -63,7 +63,7 @@ public static class ReleaseNotes
             ? string.Create(CultureInfo.InvariantCulture, $"Compliance score **{score:0.000}**{(input.ReviewCycle is { } cycle ? $" (review cycle {cycle})" : string.Empty)}.\n\n")
             : "_No review score was recorded._\n\n");
 
-        notes.Append(CultureInfo.InvariantCulture, $"---\nReleased as `{input.Tag}` with [Tevrin]({input.AideUrl}).\n");
+        notes.Append(CultureInfo.InvariantCulture, $"---\nReleased as `{input.Tag}` with [Tevrin]({input.TevrinUrl}).\n");
         var text = notes.ToString();
         return text.Length <= MaxBodyLength ? text : text[..(MaxBodyLength - 1)] + "…";
     }

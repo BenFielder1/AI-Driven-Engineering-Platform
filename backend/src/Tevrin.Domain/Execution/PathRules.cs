@@ -18,8 +18,17 @@ public static class PathRules
         ".gitlab-ci.yml", "azure-pipelines.yml", "Jenkinsfile", ".travis.yml", "bitbucket-pipelines.yml", "appveyor.yml",
     };
 
-    /// <summary>Agents never write here, even when a step declares it (§4.6, Decisions: only humans edit project rules).</summary>
-    public const string AideDirectory = ".aide/";
+    /// <summary>
+    /// Agents never write here, even when a step declares it (§4.6, Decisions: only humans edit project rules). FR-326
+    /// (§4.77): the project rules folder is <c>.tevrin/</c> from 0.8.0; repositories keep their <see cref="LegacyDirectory"/>.
+    /// </summary>
+    public const string TevrinDirectory = ".tevrin/";
+
+    /// <summary>FR-326: the pre-0.8.0 project rules folder, protected exactly like <see cref="TevrinDirectory"/>.</summary>
+    public const string LegacyDirectory = ".aide/";
+
+    /// <summary>FR-326: both project rules folders, which agents never write.</summary>
+    public static IReadOnlyList<string> RulesDirectories { get; } = [TevrinDirectory, LegacyDirectory];
 
     private static readonly HashSet<string> ReservedDeviceNames = new(
         [
@@ -32,7 +41,7 @@ public static class PathRules
     private static readonly SearchValues<char> WindowsForbiddenCharacters = SearchValues.Create(":<>\"|?*");
 
     private static readonly string[] ProtectedPrefixes =
-        [".git/", ".aide/", ".github/workflows/", ".circleci/", ".azure-pipelines/", ".gitea/workflows/", ".forgejo/workflows/"];
+        [".git/", TevrinDirectory, LegacyDirectory, ".github/workflows/", ".circleci/", ".azure-pipelines/", ".gitea/workflows/", ".forgejo/workflows/"];
 
     /// <summary>Forward slashes, no leading <c>./</c>, no repeated or trailing slashes, trimmed.</summary>
     public static string Normalize(string path)
@@ -85,13 +94,17 @@ public static class PathRules
     }
 
     /// <summary>
-    /// A path under <c>.aide/</c> (any case): the project's own rules for Tevrin, which only humans edit. The Guardian rejects
+    /// A path under <c>.tevrin/</c> or <c>.aide/</c> (any case, FR-326): the project's own rules for Tevrin, which only humans edit. The Guardian rejects
     /// agent output there even when the step declares it, and plans may not declare it (§4.6, Decisions).
     /// </summary>
-    public static bool IsAgentForbidden(string normalisedPath)
+    public static bool IsAgentForbidden(string normalisedPath) => RulesDirectoryOf(normalisedPath) is not null;
+
+    /// <summary>FR-326: the rules folder (<c>.tevrin/</c> or <c>.aide/</c>) <paramref name="normalisedPath"/> is under, or <c>null</c>.</summary>
+    public static string? RulesDirectoryOf(string normalisedPath)
     {
         ArgumentNullException.ThrowIfNull(normalisedPath);
-        return (normalisedPath + "/").StartsWith(AideDirectory, StringComparison.OrdinalIgnoreCase);
+        var withSlash = normalisedPath + "/";
+        return RulesDirectories.FirstOrDefault(directory => withSlash.StartsWith(directory, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsUnsafeSegment(string segment) =>
@@ -135,7 +148,7 @@ public static class PathRules
     }
 
     /// <summary>
-    /// Protected paths (§4.6 scope-creep): <c>.git/</c>, <c>.aide/</c>, CI workflow files, lockfiles and env files.
+    /// Protected paths (§4.6 scope-creep): <c>.git/</c>, <c>.tevrin/</c> and <c>.aide/</c>, CI workflow files, lockfiles and env files.
     /// Matching ignores case so a case-insensitive checkout can't sneak past.
     /// </summary>
     public static bool IsProtected(string normalisedPath)

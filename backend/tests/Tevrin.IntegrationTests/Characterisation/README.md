@@ -8,9 +8,12 @@ it with the committed file `Snapshots/<scenario>.json`.
 
 ## The freeze rule (FR-261)
 
-The snapshots are committed in M54. **No later milestone may change a committed snapshot.** A refactor is correct only
-if every scenario still produces exactly the same bytes. CI checks this with `scripts/ci/check-snapshots-frozen.sh`, which compares each snapshot byte for
-byte with the base commit's copy (at its pre-rename path under `backend/tests/Aide.IntegrationTests/`).
+The snapshots were committed in M54 (0.7.0) and re-baselined once, for the 0.8.0 rename to Tevrin (FR-328). **No later
+commit may change a committed snapshot.** A refactor is correct only if every scenario still produces exactly the same
+bytes. CI checks this with `scripts/ci/check-snapshots-frozen.sh`, which compares each snapshot (and each golden prompt
+file) byte for byte with the FR-328 re-baseline commit's copy. `scripts/ci/check-snapshots-rebaseline.sh` also checks
+that the re-baseline changed names only: each file equals its M54 copy (under `backend/tests/Aide.IntegrationTests/`)
+once `tevrin` is mapped back to `aide` and content hashes are dropped.
 
 If a scenario's snapshot differs, the refactor changed SDLC behaviour: fix the code, not the snapshot. The test
 fails with a unified-style diff of the first differing lines and writes the actual snapshot next to the results (see

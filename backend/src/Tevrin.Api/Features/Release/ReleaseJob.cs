@@ -119,7 +119,7 @@ public sealed partial class ReleaseJobHandler(
         }
 
         // FR-65: the manual strategy never merges; the release then waits for the merge on GitHub (or in the Local repository).
-        var merge = MergeReadinessRules.AideMerges(project.MergeStrategy);
+        var merge = MergeReadinessRules.TevrinMerges(project.MergeStrategy);
 
         // §4.21: when readiness hasn't passed, the migrations didn't run, so AIDE never calls an unpinned merge: a conflict
         // fails the release as FR-43 does (MERGE_CONFLICT with the files); a PR that isn't open is released without merging

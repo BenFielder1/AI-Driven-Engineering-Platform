@@ -199,7 +199,7 @@ public class ExecutionRunnerRulesTests
         var rules = CodeGeneration.ProjectRules(7, "Use tabs.");
 
         Assert.Contains("at most 7 files", rules, StringComparison.Ordinal);
-        Assert.EndsWith("Repository rules (.aide/rules.md):\nUse tabs.", rules, StringComparison.Ordinal);
+        Assert.EndsWith("Repository rules (.tevrin/rules.md, or .aide/rules.md before 0.8.0):\nUse tabs.", rules, StringComparison.Ordinal);
     }
 
     // ---------- FR-34 / FR-35: branch, commit, manifest ----------
@@ -221,7 +221,7 @@ public class ExecutionRunnerRulesTests
         var message = CodeGeneration.CommitMessage(4, "Add the\nREST API", ["./src/routes.js", "src\\server.js"], stepId);
 
         Assert.Equal("[Tevrin][Phase:execution][Step:4] Add the REST API", message.Subject);
-        Assert.Equal($"Files:\n- src/routes.js\n- src/server.js\n\nAIDE-Step-Id: {stepId:D}", message.Body);
+        Assert.Equal($"Files:\n- src/routes.js\n- src/server.js\n\nTevrin-Step-Id: {stepId:D}", message.Body);
     }
 
     [Fact]

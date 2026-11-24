@@ -212,14 +212,14 @@ public static class ReleaseRecords
             mergeStrategy);
     }
 
-    /// <summary>The project's merge strategy (FR-65; <c>aide_merges</c> when the project is missing).</summary>
+    /// <summary>The project's merge strategy (FR-65; <c>tevrin_merges</c> when the project is missing).</summary>
     public static async Task<MergeStrategy> MergeStrategyAsync(TevrinDbContext db, Guid projectId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         return await db.Projects.AsNoTracking()
             .Where(p => p.Id == projectId)
             .Select(p => (MergeStrategy?)p.MergeStrategy)
-            .FirstOrDefaultAsync(cancellationToken) ?? MergeStrategy.AideMerges;
+            .FirstOrDefaultAsync(cancellationToken) ?? MergeStrategy.TevrinMerges;
     }
 }
 

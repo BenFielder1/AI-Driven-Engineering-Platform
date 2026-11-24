@@ -50,7 +50,7 @@ describe('API client antiforgery (NFR-SEC)', () => {
           return problem(403, 'ANTIFORGERY', 'Missing token.')
         }
         return HttpResponse.json(
-          { id: '00000000-0000-7000-8000-000000000001', name: 'script', token: 'aide_pat_x', expiresAt: null },
+          { id: '00000000-0000-7000-8000-000000000001', name: 'script', token: 'tevrin_pat_x', expiresAt: null },
           { status: 201 },
         )
       }),

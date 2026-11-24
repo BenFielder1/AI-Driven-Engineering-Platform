@@ -34,7 +34,7 @@ Rules:
   - says how to verify the fix (the build command or check that must pass).
 - Steps are numbered 1..n in order. A step may depend only on earlier steps of this fix plan. A file is created by one
   step at most. Paths are relative to the repository root with forward slashes, never start with `/` or `./` and never
-  contain `..`. At most {{MAX_FILES_PER_STEP}} files per step. Never declare protected paths (`.git/`, `.aide/`, CI
+  contain `..`. At most {{MAX_FILES_PER_STEP}} files per step. Never declare protected paths (`.git/`, `.tevrin/`, CI
   workflow files, lockfiles, `.env*` files), except those the stack composition allows.
 - With a stack composition, every step names one of its specialists as `agent`; without one, `"agent": "generalist"`.
 - **Never hide errors.** The guardian rejects a fix step that adds any of these, or deletes or empties a test file:

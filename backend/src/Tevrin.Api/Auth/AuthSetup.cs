@@ -103,10 +103,12 @@ public static partial class AuthSetup
         return builder;
     }
 
-    /// <summary>Pipeline order: authenticate → user log scope → rate limits → authorize → antiforgery.</summary>
+    /// <summary>Pipeline order: legacy cookie names (FR-326) → authenticate → user log scope → rate limits → authorize →
+    /// antiforgery.</summary>
     public static WebApplication UseTevrinAuth(this WebApplication app)
     {
         ArgumentNullException.ThrowIfNull(app);
+        app.UseLegacyCookieNames();
         app.UseAuthentication();
         app.Use(async (context, next) =>
         {

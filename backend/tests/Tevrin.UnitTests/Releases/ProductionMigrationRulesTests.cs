@@ -59,7 +59,7 @@ public class ProductionMigrationRulesTests
                 ReviewDecision = "REVIEW_REQUIRED",
                 Checks = [new CheckObservation("ci", CheckRunStatus.Completed, CheckRunConclusion.Failure, true, null)],
             },
-            MergeStrategy.AideMerges);
+            MergeStrategy.TevrinMerges);
 
         Assert.Equal(MergeReadinessReasonCode.ReviewRequired, Blocking(verdict));
     }
@@ -68,7 +68,7 @@ public class ProductionMigrationRulesTests
     public void FR153_GitLab_not_approved_and_a_failed_pipeline_hold_the_migrations_back()
     {
         var approval = GitLabMergeReadiness.Map(new GitLabMergeFacts { DetailedMergeStatus = "not_approved" }, MergeStrategy.Manual);
-        var pipeline = GitLabMergeReadiness.Map(new GitLabMergeFacts { DetailedMergeStatus = "ci_must_pass", HeadPipelineStatus = "failed" }, MergeStrategy.AideMerges);
+        var pipeline = GitLabMergeReadiness.Map(new GitLabMergeFacts { DetailedMergeStatus = "ci_must_pass", HeadPipelineStatus = "failed" }, MergeStrategy.TevrinMerges);
 
         Assert.Equal(MergeReadinessReasonCode.ReviewRequired, Blocking(approval.Verdict!));
         Assert.Equal(MergeReadinessReasonCode.ChecksFailing, Blocking(pipeline.Verdict!));
@@ -79,7 +79,7 @@ public class ProductionMigrationRulesTests
     public void FR153_Bitbucket_blocking_approvals_and_builds_hold_the_migrations_back()
     {
         var approval = MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", "require_approvals_to_merge", "FAILED", true, true)], MergeStrategy.Manual);
-        var builds = MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", "require_passing_builds_to_merge", "FAILED", true, true)], MergeStrategy.AideMerges);
+        var builds = MergeabilityChecks.Map([new MergeabilityCheck("standard_merge_check", "require_passing_builds_to_merge", "FAILED", true, true)], MergeStrategy.TevrinMerges);
 
         Assert.Equal(MergeReadinessReasonCode.ReviewRequired, Blocking(approval.Verdict!));
         Assert.Equal(MergeReadinessReasonCode.ChecksFailing, Blocking(builds.Verdict!));

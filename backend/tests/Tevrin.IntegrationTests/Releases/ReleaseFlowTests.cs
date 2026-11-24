@@ -454,7 +454,7 @@ public sealed class ReleaseFlowTests(TevrinApiFactory factory)
 
         var stepMessage = await TestGit.RunAsync(remote.BarePath, Ct, "log", "-1", "--format=%B", $"refs/heads/{branch[0]}");
         Assert.EndsWith(line, stepMessage.TrimEnd(), StringComparison.Ordinal);
-        Assert.Contains("AIDE-Step-Id: ", stepMessage, StringComparison.Ordinal);
+        Assert.Contains("Tevrin-Step-Id: ", stepMessage, StringComparison.Ordinal);
         Assert.EndsWith(line, (await TestGit.RunAsync(remote.BarePath, Ct, "cat-file", "tag", $"refs/tags/{Tag}")).TrimEnd(), StringComparison.Ordinal);
         Assert.DoesNotContain(owner.Email, await TestGit.RunAsync(remote.BarePath, Ct, "log", "--format=%B", $"refs/heads/{branch[0]}"), StringComparison.OrdinalIgnoreCase);
     }

@@ -126,7 +126,7 @@ describe('FR-53: app shell', () => {
     }
     expect(within(dialog).getByRole('option', { name: /^Open docs/ })).toBeInTheDocument()
     await user.click(within(dialog).getByRole('option', { name: 'Switch theme: Dark' }))
-    expect(localStorage.getItem('aide.theme')).toBe('dark')
+    expect(localStorage.getItem('tevrin.theme')).toBe('dark')
     expect(document.documentElement).toHaveClass('dark')
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
@@ -368,17 +368,17 @@ describe('FR-53: app shell', () => {
     await user.click(within(menu).getByRole('menuitemradio', { name: 'Light' }))
     expect(document.documentElement).toHaveClass('light')
     expect(document.documentElement).not.toHaveClass('dark')
-    expect(localStorage.getItem('aide.theme')).toBe('light')
+    expect(localStorage.getItem('tevrin.theme')).toBe('light')
 
     menu = await openUserMenu(user)
     await user.click(within(menu).getByRole('menuitemradio', { name: 'Dark' }))
     expect(document.documentElement).toHaveClass('dark')
-    expect(localStorage.getItem('aide.theme')).toBe('dark')
+    expect(localStorage.getItem('tevrin.theme')).toBe('dark')
 
     menu = await openUserMenu(user)
     await user.click(within(menu).getByRole('menuitemradio', { name: 'System' }))
     // FR-204 (amends FR-53): System is stored as `system`, and follows the OS (here not dark), so the page is light.
-    expect(localStorage.getItem('aide.theme')).toBe('system')
+    expect(localStorage.getItem('tevrin.theme')).toBe('system')
     expect(document.documentElement).toHaveClass('light')
   })
 

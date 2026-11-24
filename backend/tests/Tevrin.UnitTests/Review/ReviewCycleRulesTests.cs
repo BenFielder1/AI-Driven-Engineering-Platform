@@ -62,7 +62,7 @@ public class ReviewCycleRulesTests
         Assert.Equal((ReviewCategory.Security, Severity.Major, FindingSource.Agent, "src/a.js"), (violation.Category, violation.Severity, violation.Source, violation.Path));
         Assert.Equal(["FR-7 Export: no endpoint"], review.MissingFeatures);
         Assert.Equal(2, review.OptimizationPlan.Count);
-        Assert.Contains("```aide-plan", review.OptimizationPlanMarkdown, StringComparison.Ordinal);
+        Assert.Contains("```tevrin-plan", review.OptimizationPlanMarkdown, StringComparison.Ordinal);
         Assert.StartsWith("# Optimization plan", review.OptimizationPlanMarkdown, StringComparison.Ordinal);
     }
 

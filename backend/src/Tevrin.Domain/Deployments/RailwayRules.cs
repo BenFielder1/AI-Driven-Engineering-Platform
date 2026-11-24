@@ -19,17 +19,38 @@ public sealed record RailwayInstanceSettings(
     IReadOnlyList<string>? PreDeployCommand);
 
 /// <summary>
-/// FR-144, FR-145, FR-147, FR-150, §4.20 Railway rules: the resource id encoding, the <c>aide-preview</c> environment,
+/// FR-144, FR-145, FR-147, FR-150, §4.20 Railway rules: the resource id encoding, the <c>tevrin-preview</c> environment,
 /// deployment states, instance settings from the build configuration, env ids, the Git-not-connected refusal and the
 /// polling floor (20 s: the Free plan allows 100 requests an hour). Pure.
 /// </summary>
 public static class RailwayRules
 {
-    public const string PreviewEnvironmentName = "aide-preview";
+    /// <summary>FR-326 (§4.77): the preview environment Tevrin creates from 0.8.0.</summary>
+    public const string PreviewEnvironmentName = "tevrin-preview";
+
+    /// <summary>FR-326: the preview environment created before 0.8.0. Projects keep it, so it is still found and used.</summary>
+    public const string LegacyPreviewEnvironmentName = "aide-preview";
     public const string ProductionEnvironmentName = "production";
 
     /// <summary>The port Tevrin sets (<c>PORT</c>) on a backend service it creates, so the private-network origin resolves.</summary>
     public const string BackendPort = "8080";
+
+    /// <summary>FR-326: whether <paramref name="name"/> is Tevrin's preview environment, under its current or pre-0.8.0 name.</summary>
+    public static bool IsPreviewEnvironment(string? name) =>
+        name is PreviewEnvironmentName or LegacyPreviewEnvironmentName;
+
+    /// <summary>
+    /// FR-326: the project's preview environment among <paramref name="environments"/> (by <paramref name="name"/>):
+    /// <c>tevrin-preview</c>, else a pre-0.8.0 <c>aide-preview</c>, else none (the caller creates <c>tevrin-preview</c>).
+    /// </summary>
+    public static T? FindPreviewEnvironment<T>(IEnumerable<T> environments, Func<T, string?> name)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(environments);
+        ArgumentNullException.ThrowIfNull(name);
+        var list = environments as IReadOnlyCollection<T> ?? [.. environments];
+        return list.FirstOrDefault(e => name(e) == PreviewEnvironmentName) ?? list.FirstOrDefault(e => name(e) == LegacyPreviewEnvironmentName);
+    }
 
     /// <summary>§4.20: Railway is polled at most every 20 seconds.</summary>
     public static readonly TimeSpan MinPollInterval = TimeSpan.FromSeconds(20);

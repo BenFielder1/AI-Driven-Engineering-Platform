@@ -95,12 +95,12 @@ public sealed partial class CloudflareDeploymentProvider
     }
 
     public async Task<ProviderDeployment?> FindDeploymentForShaAsync(
-        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? aideDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
+        DeploymentAuth auth, DeploymentTargetRef target, DeploymentEnvironment environment, string sha, Guid? tevrinDeploymentId, DateTimeOffset? createdAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         if (DeploymentRollbackRules.IsCloudflarePages(target.ResourceId))
         {
-            return await PagesFindAsync(auth, target, environment, sha, aideDeploymentId is null ? null : createdAfter, cancellationToken);
+            return await PagesFindAsync(auth, target, environment, sha, tevrinDeploymentId is null ? null : createdAfter, cancellationToken);
         }
 
         var (preview, production) = CloudflareRules.ParseTriggerIds(target.PreviewResourceId);
@@ -113,7 +113,7 @@ public sealed partial class CloudflareDeploymentProvider
 
         using var json = await SendAsync(auth, HttpMethod.Get, $"accounts/{Account(auth)}/builds/workers/{Uri.EscapeDataString(tag)}/builds", null, cancellationToken);
         // §4.20: a manual or redeploy row (an AIDE id) adopts only a build made after it, never an earlier build of the commit.
-        var after = aideDeploymentId is null ? null : createdAfter;
+        var after = tevrinDeploymentId is null ? null : createdAfter;
         var match = Items(Result(json)).FirstOrDefault(b =>
             string.Equals(Text(Property(b, "build_trigger_metadata"), "commit_hash"), sha, StringComparison.OrdinalIgnoreCase)
             && TriggerOfBuild(b) == trigger

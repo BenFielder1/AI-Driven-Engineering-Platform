@@ -64,7 +64,7 @@ test('FR-4: create a token (shown once) and revoke it', async ({ page, context }
 
   await page.getByLabel('Name', { exact: true }).fill('E2E token')
   await page.getByRole('button', { name: 'Create token' }).click()
-  await expect(page.getByLabel('Your new token')).toHaveValue(/^aide_pat_/)
+  await expect(page.getByLabel('Your new token')).toHaveValue(/^tevrin_pat_/)
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByLabel('Your new token')).toHaveCount(0)
 

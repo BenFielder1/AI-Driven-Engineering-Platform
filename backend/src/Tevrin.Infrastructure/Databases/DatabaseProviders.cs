@@ -119,7 +119,7 @@ public sealed class FakeDatabaseProvider(ManagedDatabaseProvider kind, Concurren
                 RailwaySeparateProject = true,
             },
             ManagedDatabaseProvider.Railway => connection with { RailwayService = ManagedDatabaseRules.RailwayServiceName },
-            _ => connection with { Url = $"postgresql://aide:fake@fake-db-{env}.test:5432/{slug}" },
+            _ => connection with { Url = $"postgresql://tevrin:fake@fake-db-{env}.test:5432/{slug}" },
         };
         return Task.FromResult(new DatabasePoll(ManagedDatabaseStatus.Available, true, null, connection, Region: "fake-region", Plan: "free"));
     }

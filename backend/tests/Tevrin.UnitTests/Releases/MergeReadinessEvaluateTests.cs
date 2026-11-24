@@ -22,7 +22,7 @@ public class MergeReadinessEvaluateTests
     {
         var verdict = MergeReadinessRules.Evaluate(
             Clean with { RequiredApprovingReviews = 1, ReviewDecision = "REVIEW_REQUIRED", MergeStateStatus = "BLOCKED" },
-            MergeStrategy.AideMerges);
+            MergeStrategy.TevrinMerges);
 
         Assert.False(verdict.CanMerge);
         Assert.False(verdict.WillAutoMerge);
@@ -33,7 +33,7 @@ public class MergeReadinessEvaluateTests
     [Fact]
     public void FR84_A_clean_PR_with_permission_merges_automatically_under_aide_merges()
     {
-        var verdict = MergeReadinessRules.Evaluate(Clean, MergeStrategy.AideMerges);
+        var verdict = MergeReadinessRules.Evaluate(Clean, MergeStrategy.TevrinMerges);
 
         Assert.Equal((true, true), (verdict.CanMerge, verdict.WillAutoMerge));
         Assert.Empty(verdict.Reasons);
@@ -60,7 +60,7 @@ public class MergeReadinessEvaluateTests
                 ReviewDecision = "CHANGES_REQUESTED",
                 Checks = [Check("ci / test", CheckRunStatus.Completed, CheckRunConclusion.Failure), Check("lint", CheckRunStatus.InProgress, null), Check("docs", CheckRunStatus.Completed, CheckRunConclusion.Failure, required: false)],
             },
-            MergeStrategy.AideMerges);
+            MergeStrategy.TevrinMerges);
 
         Assert.False(verdict.CanMerge);
         Assert.Equal(
@@ -73,7 +73,7 @@ public class MergeReadinessEvaluateTests
     [Fact]
     public void FR84_No_open_PR_is_pr_not_open_alone()
     {
-        var verdict = MergeReadinessRules.Evaluate(Clean with { PullRequestOpen = false, CanWrite = false }, MergeStrategy.AideMerges);
+        var verdict = MergeReadinessRules.Evaluate(Clean with { PullRequestOpen = false, CanWrite = false }, MergeStrategy.TevrinMerges);
 
         Assert.Equal([MergeReadinessReasonCode.PrNotOpen], verdict.Reasons.Select(r => r.Code));
     }
@@ -83,7 +83,7 @@ public class MergeReadinessEvaluateTests
     [InlineData("BEHIND")]
     public void FR84_Blocked_or_behind_without_another_reason_is_branch_protected(string state)
     {
-        var verdict = MergeReadinessRules.Evaluate(Clean with { MergeStateStatus = state }, MergeStrategy.AideMerges);
+        var verdict = MergeReadinessRules.Evaluate(Clean with { MergeStateStatus = state }, MergeStrategy.TevrinMerges);
 
         Assert.Equal([MergeReadinessReasonCode.BranchProtected], verdict.Reasons.Select(r => r.Code));
     }
@@ -92,8 +92,8 @@ public class MergeReadinessEvaluateTests
     public void FR84_Without_GraphQL_required_approvals_count_as_missing_and_unknown_facts_do_not_block()
     {
         var degraded = MergeReadinessRules.Evaluate(
-            new MergeReadinessFacts { GraphQlAvailable = false, RequiredApprovingReviews = 2 }, MergeStrategy.AideMerges);
-        var unknown = MergeReadinessRules.Evaluate(new MergeReadinessFacts { GraphQlAvailable = false }, MergeStrategy.AideMerges);
+            new MergeReadinessFacts { GraphQlAvailable = false, RequiredApprovingReviews = 2 }, MergeStrategy.TevrinMerges);
+        var unknown = MergeReadinessRules.Evaluate(new MergeReadinessFacts { GraphQlAvailable = false }, MergeStrategy.TevrinMerges);
 
         Assert.Equal([MergeReadinessReasonCode.ReviewRequired], degraded.Reasons.Select(r => r.Code));
         Assert.Contains("2 approving reviews are required.", degraded.Reasons[0].Message, StringComparison.Ordinal);

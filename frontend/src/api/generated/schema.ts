@@ -1302,7 +1302,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off. */
+        /** Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: tevrin_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to tevrin_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding ("connected by <name>"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off. */
         patch: operations["UpdateGitSettings"];
         trace?: never;
     };
@@ -2153,7 +2153,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Merge readiness of the version's PR (members, FR-84): whether Tevrin's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: "Tevrin will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65). */
+        /** Merge readiness of the version's PR (members, FR-84): whether Tevrin's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (tevrin_merges strategy and canMerge: "Tevrin will merge automatically", else "A merge on GitHub will be needed" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65). */
         get: operations["GetMergeReadiness"];
         put?: never;
         post?: never;
@@ -5354,7 +5354,7 @@ export interface components {
          *     For `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else
          *     `null`). `appInstalledOnRepo` says whether the Tevrin GitHub App can access a `github_pat` project's repo
          *     (`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an
-         *     Owner ("Switch to GitHub App"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and
+         *     Owner ("Switch to GitHub App"). `mergeStrategy` (FR-65: `tevrin_merges`, the default, or `manual`) and
          *     `tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings.
          */
         GitSettingsDto: {
@@ -5642,7 +5642,7 @@ export interface components {
         /**
          * @description FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether Tevrin's token may merge it
          *     now (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and
-         *     `reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy
+         *     `reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `tevrin_merges` strategy
          *     ("Tevrin will merge automatically"); otherwise "A merge on GitHub will be needed" with `reasons` (empty when
          *     `canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.
          *     `mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,
@@ -5678,12 +5678,13 @@ export interface components {
             message: string;
         };
         /**
-         * @description FR-65 merge strategy. Wire values: `aide_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and
-         *     `squash`, which are `aide_merges` with Bitbucket's `merge_strategy` of that name (`aide_merges` sends
-         *     `merge_commit`).
+         * @description FR-65 merge strategy. Wire values: `tevrin_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and
+         *     `squash`, which are `tevrin_merges` with Bitbucket's `merge_strategy` of that name (`tevrin_merges`
+         *     sends `merge_commit`). FR-326, D-0.8.0-10: `aide_merges` (0.7.0 and earlier) is still read as
+         *     `tevrin_merges` until 0.9.0.
          * @enum {unknown}
          */
-        MergeStrategy: "aide_merges" | "manual" | "fast_forward" | "squash";
+        MergeStrategy: "tevrin_merges" | "manual" | "fast_forward" | "squash";
         /** @description One file a migration run applied: version, name and duration (ms). */
         MigrationFileDto: {
             version: string;
@@ -15763,7 +15764,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable aide-stack-profile block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason). */
+            /** @description VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable tevrin-stack-profile (or aide-stack-profile) block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose tevrin-plan (or aide-plan) block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -15904,7 +15905,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtifactDto"];
                 };
             };
-            /** @description VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183). */
+            /** @description VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose tevrin-plan (or aide-plan) block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183). */
             400: {
                 headers: {
                     [name: string]: unknown;

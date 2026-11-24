@@ -90,7 +90,7 @@ public sealed class RenderRailwayDeploymentTests(TevrinApiFactory factory)
         Assert.Equal(("p1:s1:e-prod", "e-prev", "https://todo-api.up.railway.app"), (target.ResourceId, target.PreviewResourceId, target.ProductionUrl));
         var bodies = railway.Requests.Select(r => r.Body).ToList();
         var preview = Assert.Single(bodies, b => b.Contains("environmentCreate", StringComparison.Ordinal));
-        Assert.Contains("\"name\":\"aide-preview\",\"sourceEnvironmentId\":\"e-prod\",\"skipInitialDeploys\":true", preview, StringComparison.Ordinal);
+        Assert.Contains("\"name\":\"tevrin-preview\",\"sourceEnvironmentId\":\"e-prod\",\"skipInitialDeploys\":true", preview, StringComparison.Ordinal);
         Assert.Contains("\"prDeploys\":false", Assert.Single(bodies, b => b.Contains("projectCreate", StringComparison.Ordinal)), StringComparison.Ordinal);
         Assert.Contains("\"workspaceId\":\"usr_seed\"", Assert.Single(bodies, b => b.Contains("projectCreate", StringComparison.Ordinal)), StringComparison.Ordinal);
         Assert.Contains("\"branch\":\"main\"", Assert.Single(bodies, b => b.Contains("serviceCreate", StringComparison.Ordinal)), StringComparison.Ordinal);
@@ -143,7 +143,7 @@ public sealed class RenderRailwayDeploymentTests(TevrinApiFactory factory)
         : body.Contains("services { edges", StringComparison.Ordinal) ? """{"data":{"project":{"id":"p1","services":{"edges":[]}}}}"""
         : body.Contains("environments { edges", StringComparison.Ordinal) ? """{"data":{"project":{"id":"p1","environments":{"edges":[{"node":{"id":"e-prod","name":"production"}}]}}}}"""
         : body.Contains("serviceCreate", StringComparison.Ordinal) ? """{"data":{"serviceCreate":{"id":"s1","name":"todo-api"}}}"""
-        : body.Contains("environmentCreate", StringComparison.Ordinal) ? """{"data":{"environmentCreate":{"id":"e-prev","name":"aide-preview"}}}"""
+        : body.Contains("environmentCreate", StringComparison.Ordinal) ? """{"data":{"environmentCreate":{"id":"e-prev","name":"tevrin-preview"}}}"""
         : body.Contains("domains(", StringComparison.Ordinal) ? """{"data":{"domains":{"serviceDomains":[]}}}"""
         : body.Contains("serviceDomainCreate", StringComparison.Ordinal) ? """{"data":{"serviceDomainCreate":{"id":"d1","domain":"todo-api.up.railway.app"}}}"""
         : """{"data":{"serviceInstanceUpdate":true,"variableCollectionUpsert":true,"variableDelete":true}}""";

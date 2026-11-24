@@ -85,7 +85,7 @@
     {
       "agentRun": "job#3",
       "checkpointAtCreation": 3,
-      "contentHash": "43fe15b236cb8ee184887461a8620b7c7c359061643392d68cf8e9986a9de5bc",
+      "contentHash": "4e54c2e9012451b108cc60608b7ce9901b449c293e9f04076417429459d3e209",
       "createdBy": null,
       "id": "artifact#3",
       "parentVersion": null,
@@ -114,7 +114,7 @@
       "type": "PROJECT_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#2",
       "payload": {
         "agent": "idea_refinement",
@@ -131,7 +131,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#3",
       "payload": {
         "agent": "idea_refinement",
@@ -141,7 +141,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#4",
       "payload": {
         "agentRunId": "job#1",
@@ -182,7 +182,7 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#7",
       "payload": {
         "agent": "spec_generator",
@@ -199,7 +199,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#8",
       "payload": {
         "agent": "spec_generator",
@@ -209,7 +209,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#9",
       "payload": {
         "agentRunId": "job#2",
@@ -274,7 +274,7 @@
       "type": "GATE_APPROVED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#14",
       "payload": {
         "agent": "plan_generator",
@@ -291,7 +291,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#15",
       "payload": {
         "agent": "plan_generator",
@@ -301,7 +301,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#16",
       "payload": {
         "agentRunId": "job#3",
@@ -350,7 +350,7 @@
       "type": "EXECUTION_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#20",
       "payload": {
         "attempt": 1,
@@ -362,7 +362,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#21",
       "payload": {
         "agent": "code_generator",
@@ -379,7 +379,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#22",
       "payload": {
         "agent": "code_generator",
@@ -389,7 +389,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#23",
       "payload": {
         "attempt": 1,
@@ -404,7 +404,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#24",
       "payload": {
         "attempt": 1,
@@ -416,7 +416,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#25",
       "payload": {
         "agent": "code_generator",
@@ -433,7 +433,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#26",
       "payload": {
         "agent": "code_generator",
@@ -443,7 +443,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#27",
       "payload": {
         "attempt": 1,
@@ -458,7 +458,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#28",
       "payload": {
         "attempt": 1,
@@ -470,7 +470,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#29",
       "payload": {
         "agent": "code_generator",
@@ -487,7 +487,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#30",
       "payload": {
         "agent": "code_generator",
@@ -497,7 +497,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#31",
       "payload": {
         "attempt": 1,
@@ -512,7 +512,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#32",
       "payload": {
         "attempt": 1,
@@ -524,7 +524,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#33",
       "payload": {
         "agent": "code_generator",
@@ -541,7 +541,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#34",
       "payload": {
         "agent": "code_generator",
@@ -551,7 +551,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#35",
       "payload": {
         "attempt": 1,
@@ -566,7 +566,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#36",
       "payload": {
         "branch": "tevrin/<slug>/v0.1.0",
@@ -577,7 +577,7 @@
       "type": "EXECUTION_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#37",
       "payload": {
         "baseBranch": "main",
@@ -596,7 +596,7 @@
       "type": "PULL_REQUEST_OPENED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#38",
       "payload": {
         "attempt": 0,
@@ -621,7 +621,7 @@
       "type": "BUILD_CHECK_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#39",
       "payload": {
         "attempt": 0,
@@ -648,7 +648,7 @@
       "type": "BUILD_CHECK_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#40",
       "payload": {
         "checkpoint": 5,
@@ -662,7 +662,7 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#41",
       "payload": {
         "checkpoint": 5,
@@ -674,7 +674,7 @@
       "type": "REVIEW_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#42",
       "payload": {
         "agent": "code_review",
@@ -691,7 +691,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#43",
       "payload": {
         "agent": "code_review",
@@ -701,7 +701,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#44",
       "payload": {
         "artifactId": null,
@@ -713,7 +713,7 @@
       "type": "GATE_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#45",
       "payload": {
         "checkpoint": 5,
@@ -736,7 +736,7 @@
       "type": "REVIEW_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#46",
       "payload": {
         "provider": "local",
@@ -744,7 +744,7 @@
           "canMerge": true,
           "checks": [],
           "mergeStateStatus": null,
-          "mergeStrategy": "aide_merges",
+          "mergeStrategy": "tevrin_merges",
           "reasons": [],
           "reviewDecision": null,
           "willAutoMerge": true
@@ -795,7 +795,7 @@
       "type": "GATE_APPROVED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#50",
       "payload": {
         "checkpoint": 6,
@@ -809,7 +809,7 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#51",
       "payload": {
         "alreadyTagged": false,
@@ -973,7 +973,7 @@
       "to": "execution"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "checkpoint": 5,
       "from": "execution",
       "id": "transition#5",
@@ -989,7 +989,7 @@
       "to": "release"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "checkpoint": 6,
       "from": "release",
       "id": "transition#7",

@@ -110,9 +110,9 @@ public sealed partial class RailwayDeploymentProvider(PlatformHttp http) : IDepl
         var environments = await EnvironmentsAsync(auth, projectId, cancellationToken);
         var production = environments.FirstOrDefault(e => e.Name == RailwayRules.ProductionEnvironmentName) ?? (environments.Count > 0 ? environments[0] : null)
             ?? throw new DeploymentProviderException(DeploymentFailure.Upstream, null, "The Railway project has no environment.", platform: Railway);
-        // FR-147: a second component in a shared project finds aide-preview already made; its instance there needs the
+        // FR-147: a second component in a shared project finds its preview environment (tevrin-preview, or a pre-0.8.0 aide-preview) already made; its instance there needs the
         // same settings (an environment created now copies them from production).
-        var existingPreview = environments.FirstOrDefault(e => e.Name == RailwayRules.PreviewEnvironmentName)?.Id;
+        var existingPreview = RailwayRules.FindPreviewEnvironment(environments, e => e.Name)?.Id;
         string[] configured = existingPreview is null ? [production.Id] : [production.Id, existingPreview];
         if (createService)
         {

@@ -189,7 +189,7 @@ export const authHandlers = [
     const body = (await request.json()) as Schemas['CreateApiTokenRequest']
     const token = seedToken({ name: body.name, expiresAt: body.expiresAt ?? null, createdAt: new Date().toISOString() })
     return HttpResponse.json<Schemas['CreatedApiTokenDto']>(
-      { id: token.id, name: token.name, expiresAt: token.expiresAt, token: 'aide_pat_' + 'x'.repeat(43) },
+      { id: token.id, name: token.name, expiresAt: token.expiresAt, token: 'tevrin_pat_' + 'x'.repeat(43) },
       { status: 201 },
     )
   }),

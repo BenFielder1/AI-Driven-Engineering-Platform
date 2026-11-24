@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { sampleProfile, unknownBackendProfile, unsupportedBackendProfile } from '../../mocks/handlers/analysis'
 import {
   hostsReady,
+  LEGACY_STACK_PROFILE_FENCE,
+  STACK_PROFILE_FENCE,
+  TEVRIN_STACK_PROFILE_FENCE,
   optionsRequestOfProfile,
   parseStackProfile,
   profileFieldOfKey,
@@ -18,7 +21,7 @@ describe('stack profile format (§4.27, FR-183)', () => {
   it('FR183_render_then_parse_gives_back_the_same_document_and_narrative', () => {
     const doc = unknownBackendProfile()
     const markdown = renderStackProfile('  A Vue app on Supabase.\r\n\r\nNo backend found.  ', doc)
-    expect(markdown.startsWith('A Vue app on Supabase.\n\nNo backend found.\n\n```aide-stack-profile\n')).toBe(true)
+    expect(markdown.startsWith('A Vue app on Supabase.\n\nNo backend found.\n\n```tevrin-stack-profile\n')).toBe(true)
     expect(markdown.endsWith('\n```\n')).toBe(true)
     const parsed = parseStackProfile(markdown)
     expect(parsed).toEqual({ narrative: 'A Vue app on Supabase.\n\nNo backend found.', document: doc })
@@ -29,8 +32,27 @@ describe('stack profile format (§4.27, FR-183)', () => {
   it('FR183_a_blank_narrative_renders_only_the_block', () => {
     const doc = sampleProfile()
     const markdown = renderStackProfile('   ', doc)
-    expect(markdown.startsWith('```aide-stack-profile\n')).toBe(true)
+    expect(markdown.startsWith('```tevrin-stack-profile\n')).toBe(true)
     expect(parseStackProfile(markdown)).toEqual({ narrative: '', document: doc })
+  })
+
+  it('FR-326 both fences parse: a tevrin-stack-profile block and a legacy aide-stack-profile block read the same', () => {
+    const doc = sampleProfile()
+    const json = JSON.stringify(doc, null, 2)
+    const fenced = (tag: string) => '```' + tag + '\n' + json + '\n```'
+    const tevrin = parseStackProfile(`Narrative.\n\n${fenced('tevrin-stack-profile')}\n`)
+    const legacy = parseStackProfile(`Narrative.\n\n${fenced('aide-stack-profile')}\n`)
+    expect(tevrin).toEqual({ narrative: 'Narrative.', document: doc })
+    expect(legacy).toEqual(tevrin)
+    // One block of each is still two blocks.
+    expect(parseStackProfile(`${fenced('tevrin-stack-profile')}\n\n${fenced('aide-stack-profile')}`)).toBeNull()
+  })
+
+  it('FR-326 written fence: profiles are written with the tevrin tag (FR-328)', () => {
+    expect(STACK_PROFILE_FENCE).toBe(TEVRIN_STACK_PROFILE_FENCE)
+    expect(TEVRIN_STACK_PROFILE_FENCE).toBe('tevrin-stack-profile')
+    expect(LEGACY_STACK_PROFILE_FENCE).toBe('aide-stack-profile')
+    expect(renderStackProfile('', sampleProfile()).startsWith('```' + STACK_PROFILE_FENCE + '\n')).toBe(true)
   })
 
   it('FR183_parse_needs_exactly_one_closed_block_holding_a_json_object', () => {

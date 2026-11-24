@@ -218,7 +218,7 @@ public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, Netlify
     }
 
     private Task EnsureWebhookAsync(DeploymentTargetRef target, CancellationToken cancellationToken) =>
-        repoLinks.EnsurePushWebhookAsync(target.AideProjectId, target.Repo, NetlifyRules.WebhookUrl(target.Repo.Host), NetlifyRules.RepoLinkTitle, cancellationToken);
+        repoLinks.EnsurePushWebhookAsync(target.TevrinProjectId, target.Repo, NetlifyRules.WebhookUrl(target.Repo.Host), NetlifyRules.RepoLinkTitle, cancellationToken);
 
     /// <summary>
     /// The id of the Netlify deploy key on the repository: one an earlier attempt added (found by its public key), else a new
@@ -226,7 +226,7 @@ public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, Netlify
     /// </summary>
     private async Task<string> EnsureDeployKeyAsync(DeploymentAuth auth, DeploymentTargetRef target, CancellationToken cancellationToken)
     {
-        var onRepo = await repoLinks.ListDeployKeysAsync(target.AideProjectId, target.Repo, cancellationToken);
+        var onRepo = await repoLinks.ListDeployKeysAsync(target.TevrinProjectId, target.Repo, cancellationToken);
         using (var keys = await SendAsync(auth, HttpMethod.Get, "deploy_keys", null, cancellationToken))
         {
             var known = Items(keys.RootElement)
@@ -246,7 +246,7 @@ public sealed partial class NetlifyDeploymentProvider(PlatformHttp http, Netlify
             throw new DeploymentProviderException(DeploymentFailure.Upstream, null, "Netlify created a deploy key but returned no id or public key.", platform: Netlify);
         }
 
-        await repoLinks.AddReadOnlyDeployKeyAsync(target.AideProjectId, target.Repo, NetlifyRules.RepoLinkTitle, publicKey, cancellationToken);
+        await repoLinks.AddReadOnlyDeployKeyAsync(target.TevrinProjectId, target.Repo, NetlifyRules.RepoLinkTitle, publicKey, cancellationToken);
         return id;
     }
 

@@ -166,7 +166,7 @@ public static class DependencyInjection
             var baseUrl = string.IsNullOrWhiteSpace(configured) ? GitHubGitProvider.DefaultApiBaseUrl : configured.Trim();
             client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
             client.Timeout = TimeSpan.FromSeconds(15);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
             client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", GitHubGitProvider.ApiVersion);
         });
@@ -184,7 +184,7 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri(GitHubApi.WebBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(15);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
         });
         services.AddTransient<GitHubApi>();
         services.AddScoped<IGitHubAppStore, GitHubAppStore>();
@@ -206,7 +206,7 @@ public static class DependencyInjection
         services.AddSingleton<GitHostConnector>();
         services.AddHttpClient(GitLabClients.HttpClientName, client =>
             {
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             })
             .ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<GitHostConnector>().CreateHandler());
         services.AddSingleton<IGitLabClients, GitLabClients>();
@@ -228,7 +228,7 @@ public static class DependencyInjection
         services.AddSingleton<IValidateOptions<BitbucketOptions>, BitbucketOptionsValidator>();
         services.AddHttpClient(BitbucketClients.HttpClientName, client =>
             {
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             })
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
@@ -249,7 +249,7 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri(VercelApiClient.ApiBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(20);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
         });
         services.AddSingleton<VercelEnvWriteLimiter>();
         // §4.20: one provider per platform (all real since M30; every one Fake under Deployments:Provider=Fake).
@@ -287,7 +287,7 @@ public static class DependencyInjection
             {
                 client.BaseAddress = new Uri(baseUrl);
                 client.Timeout = TimeSpan.FromSeconds(20);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             });
         }
 
@@ -312,14 +312,14 @@ public static class DependencyInjection
             {
                 client.BaseAddress = new Uri(TrackerHosts.JiraGatewayBaseUrl);
                 client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             })
             .RedactLoggedHeaders(_ => true)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false });
         services.AddHttpClient(TrackerHosts.JiraSiteClient, client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(10);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             })
             .RedactLoggedHeaders(_ => true)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false });
@@ -327,7 +327,7 @@ public static class DependencyInjection
             {
                 client.BaseAddress = new Uri(TrackerHosts.LinearBaseUrl);
                 client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
             })
             .RedactLoggedHeaders(_ => true)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false });
@@ -353,6 +353,6 @@ public static class DependencyInjection
     private static void ConfigureLlmClient(HttpClient client)
     {
         client.Timeout = Timeout.InfiniteTimeSpan;
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("aide-platform");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("tevrin-platform");
     }
 }

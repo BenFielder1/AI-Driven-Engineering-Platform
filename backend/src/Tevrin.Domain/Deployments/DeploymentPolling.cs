@@ -522,8 +522,32 @@ public static class FakeProviderPolicy
 /// </summary>
 public static class FakeDeploymentRules
 {
-    /// <summary>A file whose presence on the deployed branch makes the Fake build fail.</summary>
-    public const string FailBuildMarker = ".aide-fake/fail-build";
+    /// <summary>FR-326 (§4.77): the Fake build-failure marker from 0.8.0.</summary>
+    public const string TevrinFailBuildMarker = ".tevrin-fake/fail-build";
+
+    /// <summary>FR-326: the pre-0.8.0 Fake build-failure marker, still detected (E2E plans and seeded repos write it).</summary>
+    public const string LegacyFailBuildMarker = ".aide-fake/fail-build";
+
+    /// <summary>A file whose presence on the deployed branch makes the Fake build fail. <see cref="FailsBuild"/> detects both markers.</summary>
+    public const string FailBuildMarker = TevrinFailBuildMarker;
+
+    /// <summary>FR-326 (§4.77): the Fake pre-deploy failure marker from 0.8.0.</summary>
+    public const string TevrinFailMigrationMarker = ".tevrin-fake/fail-migration";
+
+    /// <summary>FR-326: the pre-0.8.0 Fake pre-deploy failure marker, still detected.</summary>
+    public const string LegacyFailMigrationMarker = ".aide-fake/fail-migration";
+
+    /// <summary>
+    /// A file whose presence on the deployed branch makes a Fake backend pre-deploy (migration) fail (§4.20); the Fake's
+    /// failure messages name it. <see cref="FailsMigration"/> detects both markers.
+    /// </summary>
+    public const string FailMigrationMarker = TevrinFailMigrationMarker;
+
+    /// <summary>FR-326: both build-failure markers.</summary>
+    public static IReadOnlyList<string> FailBuildMarkers { get; } = [TevrinFailBuildMarker, LegacyFailBuildMarker];
+
+    /// <summary>FR-326: both pre-deploy failure markers.</summary>
+    public static IReadOnlyList<string> FailMigrationMarkers { get; } = [TevrinFailMigrationMarker, LegacyFailMigrationMarker];
 
     /// <summary>Polls before the Fake deployment finishes.</summary>
     public const int PollsToFinish = 2;
@@ -536,9 +560,6 @@ public static class FakeDeploymentRules
         return string.Create(CultureInfo.InvariantCulture, $"https://fake-{short8.ToLowerInvariant()}.vercel.test");
     }
 
-    /// <summary>A file whose presence on the deployed branch makes a Fake backend pre-deploy (migration) fail (§4.20).</summary>
-    public const string FailMigrationMarker = ".aide-fake/fail-migration";
-
     /// <summary>§4.20: the Fake URL of a component's deployment: <c>https://fake-&lt;sha8&gt;-&lt;component&gt;.&lt;provider&gt;.test</c>.</summary>
     public static string Url(string sha, DeploymentComponent component, DeploymentProvider provider)
     {
@@ -549,16 +570,26 @@ public static class FakeDeploymentRules
 
     /// <summary>Whether a backend commit with <paramref name="paths"/> fails its Fake pre-deploy migration.</summary>
     public static bool FailsMigration(IEnumerable<string>? paths) =>
-        paths?.Any(p => string.Equals(p.Replace('\\', '/').TrimStart('/'), FailMigrationMarker, StringComparison.OrdinalIgnoreCase)) ?? false;
+        paths?.Any(p => IsMarker(p, FailMigrationMarkers)) ?? false;
 
     /// <summary>The Fake log of a failed backend pre-deploy.</summary>
     public const string FailedMigrationLog =
         "==> Running pre-deploy command\nApplying migration 0002_add_items...\nerror: relation \"items\" already exists\n"
-        + "The Fake deployment provider fails backend pre-deploys of commits containing .aide-fake/fail-migration.\n==> Pre-deploy command failed (exit 1)";
+        + "The Fake deployment provider fails backend pre-deploys of commits containing " + FailMigrationMarker + ".\n==> Pre-deploy command failed (exit 1)";
 
-    /// <summary>Whether a commit with <paramref name="paths"/> fails the Fake build.</summary>
+    /// <summary>Whether a commit with <paramref name="paths"/> fails the Fake build (either marker, FR-326).</summary>
     public static bool FailsBuild(IEnumerable<string>? paths) =>
-        paths?.Any(p => string.Equals(p.Replace('\\', '/').TrimStart('/'), FailBuildMarker, StringComparison.OrdinalIgnoreCase)) ?? false;
+        paths?.Any(p => IsMarker(p, FailBuildMarkers)) ?? false;
+
+    /// <summary>FR-326: whether <paramref name="message"/> names a pre-deploy failure marker (either name).</summary>
+    public static bool NamesFailMigrationMarker(string message) =>
+        FailMigrationMarkers.Any(marker => message.Contains(marker, StringComparison.Ordinal));
+
+    private static bool IsMarker(string path, IReadOnlyList<string> markers)
+    {
+        var normalised = path.Replace('\\', '/').TrimStart('/');
+        return markers.Any(marker => string.Equals(normalised, marker, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>The Fake state after <paramref name="poll"/> polls (1-based): building, then ready or error.</summary>
     public static DeploymentStatus StateAfter(int poll, bool fails) =>
@@ -568,5 +599,5 @@ public static class FakeDeploymentRules
     public const string FailedBuildLog =
         "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n"
         + "./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\n"
-        + "The Fake deployment provider fails builds of commits containing .aide-fake/fail-build.\nError: Command \"npm run build\" exited with 1";
+        + "The Fake deployment provider fails builds of commits containing " + FailBuildMarker + ".\nError: Command \"npm run build\" exited with 1";
 }

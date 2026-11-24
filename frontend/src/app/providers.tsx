@@ -13,7 +13,7 @@ import { createQueryClient } from '../lib/query-client'
 import { initTheme } from '../lib/theme'
 
 let started = false
-const SESSION_ENDED_EVENT = 'aide:session-ended'
+const SESSION_ENDED_EVENT = 'tevrin:session-ended'
 
 /**
  * The browser keeps one QueryClient for the session, shared by the `(app)` and `(public)` layouts, so the cache (e.g.

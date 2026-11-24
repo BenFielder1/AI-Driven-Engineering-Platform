@@ -353,8 +353,8 @@ public sealed class BitbucketProjectTests(TevrinApiFactory factory)
         Assert.Equal(MergeStrategy.Squash, (await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(ana.Client, path, new { mergeStrategy = "squash" }))).MergeStrategy);
         var moved = await ProjectApi.ReadAsync<GitSettingsDto>(await ProjectApi.PatchAsync(ana.Client, path, new { provider = "local" }));
 
-        Assert.Equal((GitProvider.Local, MergeStrategy.AideMerges), (moved.Provider, moved.MergeStrategy));
-        Assert.Equal(MergeStrategy.AideMerges, (await LifecycleSeed.ProjectAsync(app, project.Id)).MergeStrategy);
+        Assert.Equal((GitProvider.Local, MergeStrategy.TevrinMerges), (moved.Provider, moved.MergeStrategy));
+        Assert.Equal(MergeStrategy.TevrinMerges, (await LifecycleSeed.ProjectAsync(app, project.Id)).MergeStrategy);
     }
 
     [Fact]

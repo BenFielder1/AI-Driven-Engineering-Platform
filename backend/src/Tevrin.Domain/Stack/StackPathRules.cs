@@ -45,7 +45,7 @@ public static class StackPathRules
 
         if (v1 && !IsOwnableV1Protected(normalisedPath))
         {
-            return $"declares the protected path '{normalisedPath}'; no plan step may declare .git/, .aide/, lockfiles or .env files other than .env.example.";
+            return $"declares the protected path '{normalisedPath}'; no plan step may declare .git/, .tevrin/, .aide/, lockfiles or .env files other than .env.example.";
         }
 
         var owners = resolution.Specialists.Where(s => s.Owns.IsMatch(normalisedPath)).Select(s => s.Key).ToList();

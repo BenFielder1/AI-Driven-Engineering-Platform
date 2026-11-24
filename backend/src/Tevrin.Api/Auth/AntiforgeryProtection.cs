@@ -16,7 +16,7 @@ public sealed class AntiforgeryExemptMetadata
 /// <summary>
 /// §8 NFR-SEC: cookie-authenticated mutations (POST/PUT/PATCH/DELETE) must send <c>X-XSRF-TOKEN</c> with the
 /// request token from the readable <c>XSRF-TOKEN</c> cookie (validated by ASP.NET Core antiforgery against its
-/// HttpOnly <c>aide.af</c> cookie and the signed-in user). Bearer-token requests are exempt: a cross-site page can't
+/// HttpOnly <c>tevrin.af</c> cookie and the signed-in user). Bearer-token requests are exempt: a cross-site page can't
 /// set an Authorization header. Failures are 403 <c>ANTIFORGERY</c>.
 /// </summary>
 public static partial class AntiforgeryProtection

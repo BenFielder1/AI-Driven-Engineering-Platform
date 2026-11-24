@@ -167,10 +167,10 @@ public static class ExecutionGuardian
                 continue;
             }
 
-            if (PathRules.IsAgentForbidden(path))
+            if (PathRules.RulesDirectoryOf(path) is { } rulesDirectory)
             {
-                // Decisions: .aide/ holds the project's rules for AIDE; only humans edit it, so no declaration allows it.
-                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is under .aide/, which agents never write.", path);
+                // Decisions: .tevrin/ (or, before 0.8.0, .aide/) holds the project's rules for Tevrin; only humans edit it, so no declaration allows it.
+                yield return Error(GuardianCheck.ScopeCreep, ErrorCodes.Guardian.ProtectedPath, $"'{path}' is under {rulesDirectory}, which agents never write.", path);
                 continue;
             }
 

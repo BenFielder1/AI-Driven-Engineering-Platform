@@ -321,7 +321,7 @@ public static partial class ManagedDatabaseRules
 
     /// <summary>
     /// A database resource name from the project's name: lowercase letters, digits and '-', at most 40 characters, starting
-    /// with a letter (<c>aide-db</c> when nothing is left); the preview adds <c>-preview</c>.
+    /// with a letter (<c>tevrin-db</c> when nothing is left; FR-326); the preview adds <c>-preview</c>.
     /// </summary>
     public static string ResourceName(string? projectName, DeploymentEnvironment environment)
     {
@@ -329,7 +329,7 @@ public static partial class ManagedDatabaseRules
         slug = slug.Length > 40 ? slug[..40].TrimEnd('-') : slug;
         if (slug.Length == 0 || !char.IsAsciiLetterLower(slug[0]))
         {
-            slug = slug.Length == 0 ? "aide-db" : $"db-{slug}";
+            slug = slug.Length == 0 ? "tevrin-db" : $"db-{slug}";
         }
 
         return environment == DeploymentEnvironment.Preview ? RenderPreviewName(slug) : slug;

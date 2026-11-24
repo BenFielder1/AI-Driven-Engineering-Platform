@@ -77,11 +77,11 @@ export function seedVersions(p: StoredProject, phasesByVersion: readonly Phase[]
   }
 }
 
-/** FR-84: a merge-readiness result. Defaults: mergeable under `aide_merges`, with one passing required check. */
+/** FR-84: a merge-readiness result. Defaults: mergeable under `tevrin_merges`, with one passing required check. */
 export function mergeReadiness(overrides: Partial<MergeReadiness> = {}): MergeReadiness {
   const reasons = overrides.reasons ?? []
   const canMerge = overrides.canMerge ?? reasons.every((r) => r.code === 'manual_strategy')
-  const mergeStrategy = overrides.mergeStrategy ?? 'aide_merges'
+  const mergeStrategy = overrides.mergeStrategy ?? 'tevrin_merges'
   return {
     canMerge,
     willAutoMerge: canMerge && mergeStrategy !== 'manual',

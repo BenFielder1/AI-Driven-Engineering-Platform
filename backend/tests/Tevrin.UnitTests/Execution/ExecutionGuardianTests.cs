@@ -355,7 +355,8 @@ public class SecretScannerTests
     [InlineData("private_key", "-----BEGIN PRIVATE KEY-----")]
     [InlineData("google_api_key", "AIzaSyA-abcdefghijklmnopqrstuvwxyz01234")]
     [InlineData("stripe_live_key", "sk_" + "live_abcdefghijklmnopqrstuvwx")] // split so secret scanners skip this fake key
-    [InlineData("aide_api_token", "aide_pat_abcdefghijklmnopqrstuvwxyz")]
+    [InlineData("tevrin_api_token", "tevrin_pat_abcdefghijklmnopqrstuvwxyz")]
+    [InlineData("tevrin_api_token", "aide_pat_abcdefghijklmnopqrstuvwxyz")] // FR-326: pre-0.8.0 tokens are still detected
     public void D18_Known_secret_patterns_are_detected(string pattern, string text)
     {
         var findings = SecretScanner.Scan($"const x = {text};", "f.ts");

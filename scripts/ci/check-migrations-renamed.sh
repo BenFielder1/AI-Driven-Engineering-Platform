@@ -4,6 +4,8 @@
 # context class AideDbContext (AideDbContextModelSnapshot). For every file under the migrations folder at the pre-rename
 # base, this reverses those substitutions in the current file and requires the result to equal the base file byte for
 # byte (only CRLF is normalised). Tevrin.Engine.* and Tevrin.Pack.* are never touched: migrations reference them legitimately.
+# The model snapshot must exist under its new name but isn't compared: it isn't an applied migration, every new
+# migration rewrites it (FR-326's merge-strategy default did), and FR-324's empty `migrations add` check covers it.
 # Usage: scripts/ci/check-migrations-renamed.sh   (run from the repo root; fetches the base commit if it's missing)
 #        MIGRATIONS_BASE=<sha> overrides the base (used by check-migrations-renamed.test.sh).
 set -euo pipefail
@@ -42,6 +44,9 @@ for old in "${files[@]}"; do
   if [ ! -f "$new" ]; then
     echo "::error file=$new::Missing: $old (at $base) has no renamed file $new." >&2
     failures=$((failures + 1))
+    continue
+  fi
+  if [[ "$name" == *ModelSnapshot.cs ]]; then
     continue
   fi
   git show "$base:$old" | tr -d '\r' > "$work/expected"

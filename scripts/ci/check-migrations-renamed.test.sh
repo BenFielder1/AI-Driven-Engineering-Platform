@@ -70,8 +70,12 @@ sed -i 's/Tevrin\.Engine\.Domain\.Entities\.PipelineRun/Tevrin.Engine.Domain.Ent
 expect fail FR324_engine_type_name_changed
 
 renamed
-sed -i 's/"Tevrin\.Pack\.Sdlc"/"Aide.Pack.Sdlc"/' "$repo/$new/TevrinDbContextModelSnapshot.cs"
-expect fail FR324_pack_name_is_never_reversed
+sed -i 's/Tevrin\.Engine\.Domain\.Entities\.PipelineRun/Aide.Engine.Domain.Entities.PipelineRun/' "$repo/$new/20260101000000_Init.cs"
+expect fail FR324_engine_name_is_never_reversed
+
+renamed
+sed -i 's/"Tevrin\.Pack\.Sdlc"/"Tevrin.Pack.Sdlc"; string c = "tevrin_merges"/' "$repo/$new/TevrinDbContextModelSnapshot.cs"
+expect pass FR324_FR326_the_model_snapshot_may_change_with_later_migrations
 
 renamed
 sed -i 's/Init {/Initial {/' "$repo/$new/20260101000000_Init.cs"

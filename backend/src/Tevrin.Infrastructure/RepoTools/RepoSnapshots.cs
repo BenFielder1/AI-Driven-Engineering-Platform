@@ -103,7 +103,7 @@ internal sealed partial class RepoSnapshotProvider : IRepoSnapshotProvider, IDis
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public RepoSnapshotProvider(IWorkingCopies workingCopies, IGitCli git, TimeProvider time, ILogger<RepoSnapshotProvider> logger)
-        : this(workingCopies, git, time, logger, Path.Combine(Path.GetTempPath(), "aide-snapshots"))
+        : this(workingCopies, git, time, logger, Path.Combine(Path.GetTempPath(), "tevrin-snapshots"))
     {
     }
 

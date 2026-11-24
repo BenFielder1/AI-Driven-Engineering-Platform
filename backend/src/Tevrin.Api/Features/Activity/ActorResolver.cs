@@ -20,7 +20,7 @@ public static class ActorResolver
         var names = await NamesAsync(db, ids, cancellationToken);
         return actor => Guid.TryParse(actor, out var id)
             ? new ActorDto(id, names.GetValueOrDefault(id, DeletedUserName), false)
-            : new ActorDto(null, actor == SystemActor.Name ? SystemDisplayName : actor, true);
+            : new ActorDto(null, SystemActor.IsSystemName(actor) ? SystemDisplayName : actor, true);
     }
 
     public static async Task<Dictionary<Guid, string>> NamesAsync(TevrinDbContext db, IEnumerable<Guid> userIds, CancellationToken cancellationToken)

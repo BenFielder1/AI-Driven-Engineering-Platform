@@ -234,7 +234,7 @@ export function gitSettings(overrides: Partial<GitSettings> = {}): GitSettings {
     repoId: app ? 4242 : null,
     appInstalledOnRepo: null,
     canSwitchToApp: false,
-    mergeStrategy: 'aide_merges',
+    mergeStrategy: 'tevrin_merges',
     tagPrefix: 'v',
     commitCreditEnabled: true,
     ...overrides,
@@ -300,7 +300,7 @@ export function bitbucketGitSettings(options: {
     externalRepoId: options.repoId,
     repoWebUrl: `https://bitbucket.org/${options.repoFullName}`,
     binding: options.binding,
-    mergeStrategy: options.mergeStrategy ?? 'aide_merges',
+    mergeStrategy: options.mergeStrategy ?? 'tevrin_merges',
   })
 }
 

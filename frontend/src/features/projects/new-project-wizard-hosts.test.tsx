@@ -214,7 +214,7 @@ describe('Wizard → Deployment step of a composed stack (§7, FR-115, FR-144, F
     const draft = readWizardDraft()
     expect(draft?.values.hostDbProductionMode).toBe('external')
     expect(draft?.values.hostDbProductionConnectionString).toBe('')
-    expect(window.sessionStorage.getItem('aide.new-project-wizard.draft')).not.toContain('postgres://')
+    expect(window.sessionStorage.getItem('tevrin.new-project-wizard.draft')).not.toContain('postgres://')
   })
 
   it('S7_FR188_windows_decide_the_hosts_and_a_railway_database_alone_needs_no_target', () => {

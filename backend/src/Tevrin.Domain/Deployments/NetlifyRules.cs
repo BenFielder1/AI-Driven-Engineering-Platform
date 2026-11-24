@@ -24,8 +24,15 @@ public static class NetlifyRules
 
     public const int DeploysPerDay = 100;
 
-    /// <summary>The build title Tevrin sets (<c>aide:&lt;deployment id&gt;</c>), so a retry finds what an earlier attempt made.</summary>
-    public const string TitlePrefix = "aide:";
+    /// <summary>The build title Tevrin sets (<c>tevrin:&lt;deployment id&gt;</c>), so a retry finds what an earlier attempt made.</summary>
+    public const string TitlePrefix = "tevrin:";
+
+    /// <summary>FR-326 (§4.77): the title prefix before 0.8.0, still matched when finding a build.</summary>
+    public const string LegacyTitlePrefix = "aide:";
+
+    /// <summary>FR-326: the build titles of <paramref name="deploymentId"/> Tevrin recognises (current first).</summary>
+    public static IReadOnlyList<string> BuildTitles(Guid deploymentId) =>
+        [TitlePrefix + deploymentId.ToString("D"), LegacyTitlePrefix + deploymentId.ToString("D")];
 
     /// <summary>The Netlify GitHub App install page (FR-144 <c>PLATFORM_GIT_NOT_CONNECTED</c> link).</summary>
     public const string GitHubInstallUrl = "https://github.com/apps/netlify/installations/new";
@@ -82,7 +89,10 @@ public static class NetlifyRules
     public const int HookAttempt = 3;
 
     /// <summary>The title of Tevrin's preview build hook of a branch.</summary>
-    public const string HookTitlePrefix = "aide previews ";
+    public const string HookTitlePrefix = "tevrin previews ";
+
+    /// <summary>FR-326 (§4.77): the hook title before 0.8.0; an existing hook with it is reused, not duplicated.</summary>
+    public const string LegacyHookTitlePrefix = "aide previews ";
 
     /// <summary>
     /// §4.20: whether Netlify skipped or cancelled a build (state <c>skipped</c> or <c>canceled</c>, or an error whose
@@ -110,6 +120,9 @@ public static class NetlifyRules
 
     /// <summary>The deploy title Tevrin gives a build-hook build of <paramref name="sha"/> (to find it again).</summary>
     public static string HookDeployTitle(string sha) => $"{TitlePrefix}hook:{sha}";
+
+    /// <summary>FR-326 (§4.77): the hook build titles of <paramref name="sha"/> Tevrin recognises, current first.</summary>
+    public static IReadOnlyList<string> HookDeployTitles(string sha) => [HookDeployTitle(sha), $"{LegacyTitlePrefix}hook:{sha}"];
 
     /// <summary>
     /// §4.20 adoption: whether a deploy's <paramref name="commitRef"/> is <paramref name="sha"/>. Both must be known and at

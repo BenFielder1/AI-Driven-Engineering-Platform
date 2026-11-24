@@ -81,7 +81,7 @@ public class NetlifyDeploymentProviderTests
     }
 
     [Fact]
-    public async Task FR147_A_preview_builds_the_version_branch_with_an_aide_title()
+    public async Task FR147_FR326_A_preview_builds_the_version_branch_with_a_tevrin_title()
     {
         var (provider, stub, _) = Create();
         stub.On("POST", "sites/s1/builds", """{"id":"b1","deploy_id":"d1"}""");
@@ -93,7 +93,7 @@ public class NetlifyDeploymentProviderTests
         Assert.Equal("d1|abc123|1|aide/v0.2.0", created.Id);
         var call = Assert.Single(stub.Where("POST", "sites/s1/builds"));
         Assert.Contains("branch=aide/v0.2.0", call.Path, StringComparison.Ordinal);
-        Assert.Contains($"title=aide:{id:D}", call.Path, StringComparison.Ordinal);
+        Assert.Contains($"title=tevrin:{id:D}", call.Path, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class NetlifyDeploymentProviderTests
         Assert.Equal($"{NetlifyRules.HookPending}|abc1234ff|{NetlifyRules.HookAttempt}|aide/v1", hooked.Id);
         Assert.Equal(DeploymentStatus.Queued, hooked.Status);
         Assert.Contains("\"branch\":\"aide/v1\"", Assert.Single(stub.Where("POST", "sites/s1/build_hooks")).Body, StringComparison.Ordinal);
-        Assert.Contains("trigger_title=aide:hook:abc1234ff", Assert.Single(stub.Where("POST", "/build_hooks/h1")).Path, StringComparison.Ordinal);
+        Assert.Contains("trigger_title=tevrin:hook:abc1234ff", Assert.Single(stub.Where("POST", "/build_hooks/h1")).Path, StringComparison.Ordinal);
         Assert.Equal("d9|abc1234ff|3|aide/v1", ready.Id);
         Assert.Equal(DeploymentStatus.Ready, ready.Status);
     }

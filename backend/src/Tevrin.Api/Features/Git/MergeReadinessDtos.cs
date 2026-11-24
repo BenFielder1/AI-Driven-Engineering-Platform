@@ -18,7 +18,7 @@ public sealed record CheckRunDto(string Name, CheckRunStatus Status, CheckRunCon
 /// <summary>
 /// FR-84 merge readiness of the version's PR, as of <c>checkedAt</c>. <c>canMerge</c> is whether Tevrin's token may merge it
 /// now (repository permission and allowed merge methods, branch rules, the PR's <c>mergeStateStatus</c> and
-/// <c>reviewDecision</c>, required checks). <c>willAutoMerge</c> is <c>canMerge</c> under the <c>aide_merges</c> strategy
+/// <c>reviewDecision</c>, required checks). <c>willAutoMerge</c> is <c>canMerge</c> under the <c>tevrin_merges</c> strategy
 /// ("Tevrin will merge automatically"); otherwise "A merge on GitHub will be needed" with <c>reasons</c> (empty when
 /// <c>canMerge</c>, except <c>manual_strategy</c>). <c>checks</c> are the PR head's check runs and commit statuses.
 /// <c>mergeStateStatus</c> and <c>reviewDecision</c> are GitHub's GraphQL values verbatim (e.g. <c>CLEAN</c>,

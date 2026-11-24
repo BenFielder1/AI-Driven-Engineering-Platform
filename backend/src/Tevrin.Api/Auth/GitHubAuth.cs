@@ -35,23 +35,51 @@ public static partial class GitHubAuth
     public const string LoginClaim = "urn:github:login";
     public const string AvatarClaim = "urn:github:avatar";
 
-    /// <summary>Authentication-property items (stored in the protected OAuth state).</summary>
-    public const string ModeItem = "aide.mode";
-    public const string LinkUserItem = "aide.link_user";
+    /// <summary>Authentication-property items (stored in the protected OAuth state). FR-326: a state issued before 0.8.0
+    /// carries the <c>aide.*</c> names (<see cref="LegacyItems"/>), read through <see cref="TryGetItem"/> until 0.9.0.</summary>
+    public const string ModeItem = "tevrin.mode";
+    public const string LinkUserItem = "tevrin.link_user";
     public const string LinkMode = "link";
 
     /// <summary>FR-81: "Connect GitHub" from the account page: links like <see cref="LinkMode"/> and returns to the page.</summary>
     public const string ConnectMode = "connect";
 
     /// <summary>The App's client id, bound into the protected state when the flow uses the App (D-V2-7).</summary>
-    public const string AppClientItem = "aide.github_app";
+    public const string AppClientItem = "tevrin.github_app";
 
     /// <summary><c>HttpContext.Items</c> key of the App user token pair between ticket creation and sign-in (never persisted
     /// outside the encrypted connection).</summary>
-    public const string TokensItem = "aide.github_tokens";
+    public const string TokensItem = "tevrin.github_tokens";
 
     /// <summary>Placeholder OAuth client when only an App is configured (the handler then always uses the App's).</summary>
-    private const string UnconfiguredClient = "aide-oauth-app-not-configured";
+    private const string UnconfiguredClient = "tevrin-oauth-app-not-configured";
+
+    /// <summary>FR-326 (§4.77): the pre-0.8.0 names of the protected-state items, for OAuth flows in flight across the
+    /// upgrade. Read until 0.9.0, never written.</summary>
+    public static readonly IReadOnlyDictionary<string, string> LegacyItems = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [ModeItem] = "aide.mode",
+        [LinkUserItem] = "aide.link_user",
+        [AppClientItem] = "aide.github_app",
+    };
+
+    /// <summary>Reads a protected-state item by its name, or by its pre-0.8.0 name (FR-326).</summary>
+    public static bool TryGetItem(AuthenticationProperties properties, string item, out string? value)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        if (properties.Items.TryGetValue(item, out value))
+        {
+            return true;
+        }
+
+        if (LegacyItems.TryGetValue(item, out var legacy) && properties.Items.TryGetValue(legacy, out value))
+        {
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
 
     public const string LoginPath = "/login";
 
@@ -133,7 +161,7 @@ public static partial class GitHubAuth
     /// keeps the user token pair for the connection (FR-81).</summary>
     private static async Task LoadProfileAsync(OAuthCreatingTicketContext context)
     {
-        if (context.Properties.Items.ContainsKey(AppClientItem) && context.TokenResponse.Response is { } tokenResponse)
+        if (TryGetItem(context.Properties, AppClientItem, out _) && context.TokenResponse.Response is { } tokenResponse)
         {
             var now = context.HttpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
             if (Infrastructure.GitHub.GitHubUserTokens.FromTokenResponse(tokenResponse.RootElement, now) is { } tokens)
@@ -165,7 +193,7 @@ public static partial class GitHubAuth
         {
             // The public profile email is optional; fall back to the primary verified address. With the App, a refused
             // email list (403/404: the email permission wasn't granted) just means "no email": linked users need none.
-            using var emails = await GetJsonAsync(context, EmailsEndpoint, optional: context.Properties.Items.ContainsKey(AppClientItem));
+            using var emails = await GetJsonAsync(context, EmailsEndpoint, optional: TryGetItem(context.Properties, AppClientItem, out _));
             email = emails is null || emails.RootElement.ValueKind != JsonValueKind.Array ? null : emails.RootElement.EnumerateArray()
                 .Where(e => e.TryGetProperty("primary", out var p) && p.GetBoolean()
                     && e.TryGetProperty("verified", out var v) && v.GetBoolean())
@@ -181,7 +209,7 @@ public static partial class GitHubAuth
 
     /// <summary>The failure redirect: back to the connect page (FR-81 connect mode), else the login page.</summary>
     private static string RemoteFailureUrl(AuthenticationProperties? properties, string reason) =>
-        properties is not null && properties.Items.TryGetValue(ModeItem, out var mode) && mode == ConnectMode
+        properties is not null && TryGetItem(properties, ModeItem, out var mode) && mode == ConnectMode
             ? FailureUrl(ReturnUrls.Sanitize(properties.RedirectUri), reason)
             : FailureUrl(reason == "access_denied" ? "oauth_failed" : reason);
 
@@ -245,7 +273,7 @@ public sealed partial class GitHubSignIn(
         var currentUserId = current.Succeeded ? current.Principal.GetUserId() : null;
         var linked = await users.Users.FirstOrDefaultAsync(u => u.GithubId == githubId, http.RequestAborted);
 
-        properties.Items.TryGetValue(GitHubAuth.ModeItem, out var mode);
+        GitHubAuth.TryGetItem(properties, GitHubAuth.ModeItem, out var mode);
         var linking = mode is GitHubAuth.LinkMode or GitHubAuth.ConnectMode;
         var (failure, userId) = linking
             ? await LinkAsync(properties, currentUserId, linked, github)
@@ -271,7 +299,7 @@ public sealed partial class GitHubSignIn(
 
     private async Task<(string? Failure, Guid? UserId)> LinkAsync(AuthenticationProperties properties, Guid? currentUserId, AppUser? linked, ClaimsPrincipal github)
     {
-        properties.Items.TryGetValue(GitHubAuth.LinkUserItem, out var expected);
+        GitHubAuth.TryGetItem(properties, GitHubAuth.LinkUserItem, out var expected);
         if (currentUserId is null || !string.Equals(currentUserId.ToString(), expected, StringComparison.Ordinal))
         {
             return ("link_session", null);

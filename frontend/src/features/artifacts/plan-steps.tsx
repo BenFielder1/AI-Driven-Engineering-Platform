@@ -21,7 +21,7 @@ interface Row extends Omit<PlanPreviewStep, 'files' | 'agent' | 'covers' | 'adde
   /** `protected` comes from the server (FR-30, §4.6); a draft preview can't tell, so it leaves it unset. */
   files: { path: string; action: string; protected?: boolean }[]
   status?: StepStatus
-  /** FR-244: from the plan version's aide-plan block (execution steps don't carry it). */
+  /** FR-244: from the plan version's plan block (execution steps don't carry it). */
   addedBy?: PlanPreviewStep['addedBy']
   addedReason?: PlanPreviewStep['addedReason']
 }
@@ -88,7 +88,7 @@ function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[
       </table>
       {rows.some((r) => r.files.some((f) => f.protected === true)) && (
         <p className="mt-2 text-xs text-muted-foreground">
-          Protected paths (.git, .aide, CI workflows, lockfiles and env files) may be changed only by the step that declares
+          Protected paths (.git, .tevrin, .aide, CI workflows, lockfiles and env files) may be changed only by the step that declares
           them; a change to one from any other step is a scope-creep violation.
         </p>
       )}
@@ -96,7 +96,7 @@ function StepsTable({ caption, rows, withStatus }: { caption: string; rows: Row[
   )
 }
 
-/** A draft has no steps yet (FR-30 creates them on approval): preview them from its aide-plan block. */
+/** A draft has no steps yet (FR-30 creates them on approval): preview them from its plan block. */
 function DraftPreview({ artifact }: { artifact: Artifact }) {
   const steps = readPlanBlock(artifact.content)
   if (!steps) {

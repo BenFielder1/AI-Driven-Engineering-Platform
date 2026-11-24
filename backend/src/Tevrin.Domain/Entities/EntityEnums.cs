@@ -1,3 +1,5 @@
+using Tevrin.Engine.Domain.Common;
+
 namespace Tevrin.Domain.Entities;
 
 /// <summary>Git provider of a project (FR-35, FR-82, FR-136). Wire values: <c>github_pat</c> (0.1.0 <c>github</c>), <c>local</c>,
@@ -46,13 +48,15 @@ public enum ReleaseVersionStatus
 }
 
 /// <summary>
-/// FR-65 merge strategy. Wire values: <c>aide_merges</c>, <c>manual</c>; FR-140 (Bitbucket only): <c>fast_forward</c> and
-/// <c>squash</c>, which are <c>aide_merges</c> with Bitbucket's <c>merge_strategy</c> of that name (<c>aide_merges</c> sends
-/// <c>merge_commit</c>).
+/// FR-65 merge strategy. Wire values: <c>tevrin_merges</c>, <c>manual</c>; FR-140 (Bitbucket only): <c>fast_forward</c> and
+/// <c>squash</c>, which are <c>tevrin_merges</c> with Bitbucket's <c>merge_strategy</c> of that name (<c>tevrin_merges</c>
+/// sends <c>merge_commit</c>). FR-326, D-0.8.0-10: <c>aide_merges</c> (0.7.0 and earlier) is still read as
+/// <c>tevrin_merges</c> until 0.9.0.
 /// </summary>
 public enum MergeStrategy
 {
-    AideMerges = 0,
+    [WireAlias("aide_merges")]
+    TevrinMerges = 0,
     Manual = 1,
 
     /// <summary>FR-140: Tevrin merges with Bitbucket's <c>fast_forward</c> merge strategy (Bitbucket projects only).</summary>

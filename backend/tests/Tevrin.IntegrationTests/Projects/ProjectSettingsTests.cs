@@ -40,7 +40,7 @@ public sealed class ProjectSettingsTests(TevrinApiFactory factory)
         var settings = await ProjectApi.ReadAsync<ProjectSettingsDto>(get);
 
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
-        Assert.Equal(new GitSettingsDto(GitProvider.GithubPat, "https://github.com/acme/widgets", "trunk", null, true, GitProvider.GithubPat, null, null, null, null, false, MergeStrategy.AideMerges, "v") { RepoWebUrl = "https://github.com/acme/widgets" }, settings.Git);
+        Assert.Equal(new GitSettingsDto(GitProvider.GithubPat, "https://github.com/acme/widgets", "trunk", null, true, GitProvider.GithubPat, null, null, null, null, false, MergeStrategy.TevrinMerges, "v") { RepoWebUrl = "https://github.com/acme/widgets" }, settings.Git);
         Assert.DoesNotContain(GitToken, patchText, StringComparison.Ordinal);
         Assert.DoesNotContain(GitToken, getText, StringComparison.Ordinal);
         await AssertStoredEncryptedAsync(fixture.Project.Id, GitToken, db => db.ProjectGitSettings.Where(s => s.ProjectId == fixture.Project.Id).Select(s => s.TokenEncrypted));

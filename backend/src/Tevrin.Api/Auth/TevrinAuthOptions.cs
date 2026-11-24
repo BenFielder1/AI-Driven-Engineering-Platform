@@ -41,18 +41,29 @@ public static class AuthConstants
 
     public const string GitHubScheme = "GitHub";
 
-    public const string AuthCookieName = "aide.auth";
+    /// <summary>FR-326: the session cookie. A browser holding only <see cref="LegacyAuthCookieName"/> is signed in and
+    /// moved onto this name (<see cref="LegacyCookies"/>).</summary>
+    public const string AuthCookieName = "tevrin.auth";
 
-    public const string ExternalCookieName = "aide.external";
+    public const string ExternalCookieName = "tevrin.external";
 
-    public const string AntiforgeryCookieName = "aide.af";
+    public const string AntiforgeryCookieName = "tevrin.af";
+
+    /// <summary>FR-326 (§4.77): the pre-0.8.0 cookie names, read until 0.9.0 and expired when read.</summary>
+    public const string LegacyAuthCookieName = "aide.auth";
+
+    public const string LegacyExternalCookieName = "aide.external";
+
+    public const string LegacyAntiforgeryCookieName = "aide.af";
 
     /// <summary>Readable (non-HttpOnly) cookie carrying the antiforgery request token for the SPA.</summary>
     public const string XsrfCookieName = "XSRF-TOKEN";
 
     public const string XsrfHeaderName = "X-XSRF-TOKEN";
 
-    public const string TokenIdClaim = "aide:token_id";
+    /// <summary>Marks an API-token principal. Built per request by <see cref="ApiTokenAuthenticationHandler"/> and never
+    /// stored in a cookie, so the 0.8.0 rename (FR-326) needs no fallback for the old <c>aide:token_id</c>.</summary>
+    public const string TokenIdClaim = "tevrin:token_id";
 
     public const string AdminPolicy = "Admin";
 

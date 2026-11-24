@@ -26,7 +26,7 @@ internal sealed partial class GitLabGitProvider
     /// FR-138: the merge request's <c>detailed_merge_status</c> (re-read while it is transient), the approvals, the target
     /// branch's protection, the connection's access level and the head's CI statuses, mapped by
     /// <see cref="GitLabMergeReadiness.Map"/>. The draft state Tevrin opened it with doesn't count: Tevrin marks it ready before
-    /// merging, until it has (<see cref="GitLabMergeReadiness.IgnoringAideDraft"/>). A missing merge request is
+    /// merging, until it has (<see cref="GitLabMergeReadiness.IgnoringTevrinDraft"/>). A missing merge request is
     /// <c>pr_not_open</c>.
     /// </summary>
     public async Task<Result<HostMergeReadiness>> GetMergeReadinessAsync(
@@ -98,7 +98,7 @@ internal sealed partial class GitLabGitProvider
             BlockingDiscussionsResolved = mr.BlockingDiscussionsResolved,
             Draft = mr.Draft || GitLabProjectRules.IsDraftTitle(mr.Title),
         };
-        var mapped = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringAideDraft(facts, markedReady), strategy);
+        var mapped = GitLabMergeReadiness.Map(GitLabMergeReadiness.IgnoringTevrinDraft(facts, markedReady), strategy);
         var readiness = mapped.RePoll ? new HostMergeReadiness(false, GitLabMergeReadiness.StillChecking(strategy)) : mapped;
         LogReadiness(logger, settings.ProjectId, number, mr.DetailedMergeStatus ?? "unknown", readiness.Verdict!.CanMerge);
         return Result.Success(readiness with { Checks = checks, HostStatus = mr.DetailedMergeStatus });

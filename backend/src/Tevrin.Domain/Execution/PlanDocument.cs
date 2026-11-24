@@ -28,7 +28,14 @@ namespace Tevrin.Domain.Execution;
 /// </summary>
 public static partial class PlanDocument
 {
-    public const string BlockLanguage = "aide-plan";
+    /// <summary>FR-326 (D-0.8.0-5): the block language new plans are written with.</summary>
+    public const string TevrinBlockLanguage = "tevrin-plan";
+
+    /// <summary>FR-326: the pre-0.8.0 block language. Stored plans keep it, so it is always read (§4.77).</summary>
+    public const string LegacyBlockLanguage = "aide-plan";
+
+    /// <summary>The block language <see cref="Render"/> writes and messages name. The parser reads both.</summary>
+    public const string BlockLanguage = TevrinBlockLanguage;
 
     /// <summary>The <c>format</c> written into the block.</summary>
     public const int FormatVersion = 1;
@@ -415,7 +422,8 @@ public static partial class PlanDocument
     private static Result<IReadOnlyList<PlanStep>> Invalid(string reason) =>
         Result.Failure<IReadOnlyList<PlanStep>>(new DomainError(ErrorCodes.InvalidPlan, $"The plan is invalid: {reason}") { Details = [reason] });
 
-    [GeneratedRegex(@"^```aide-plan[ \t]*\n(?<json>.*?)\n```[ \t]*$", RegexOptions.CultureInvariant | RegexOptions.Multiline | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
+    // FR-326: a plan block is ```tevrin-plan or (stored before 0.8.0) ```aide-plan; a document still holds exactly one.
+    [GeneratedRegex(@"^```(?:tevrin|aide)-plan[ \t]*\n(?<json>.*?)\n```[ \t]*$", RegexOptions.CultureInvariant | RegexOptions.Multiline | RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex BlockPattern();
 
     [GeneratedRegex("[`~]{3,}", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]

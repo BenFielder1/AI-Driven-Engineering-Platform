@@ -50,7 +50,7 @@
     {
       "agentRun": null,
       "checkpointAtCreation": 1,
-      "contentHash": "c4bea4fa106eb45246f7d48e2059fb6b6d8782b922ca8db10f78e38515bf4a6e",
+      "contentHash": "4d107221f6805ece53b66c5f05dca935351f19500c5929d96639d37e07fa87f2",
       "createdBy": null,
       "id": "artifact#3",
       "parentVersion": null,
@@ -87,7 +87,7 @@
       "type": "EXECUTION_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#3",
       "payload": {
         "attempt": 1,
@@ -99,7 +99,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#4",
       "payload": {
         "agent": "code_generator",
@@ -116,7 +116,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#5",
       "payload": {
         "agent": "code_generator",
@@ -126,7 +126,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#6",
       "payload": {
         "attempt": 1,
@@ -141,7 +141,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#7",
       "payload": {
         "attempt": 1,
@@ -153,7 +153,7 @@
       "type": "STEP_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#8",
       "payload": {
         "agent": "code_generator",
@@ -170,7 +170,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#9",
       "payload": {
         "agent": "code_generator",
@@ -180,7 +180,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#10",
       "payload": {
         "attempt": 1,
@@ -195,7 +195,7 @@
       "type": "STEP_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#11",
       "payload": {
         "branch": "tevrin/<slug>/v0.1.0",
@@ -206,7 +206,7 @@
       "type": "EXECUTION_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#12",
       "payload": {
         "baseBranch": "main",
@@ -225,7 +225,7 @@
       "type": "PULL_REQUEST_OPENED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#13",
       "payload": {
         "checkpoint": 5,
@@ -239,7 +239,7 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#14",
       "payload": {
         "checkpoint": 5,
@@ -251,7 +251,7 @@
       "type": "REVIEW_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#15",
       "payload": {
         "agent": "code_review",
@@ -268,7 +268,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#16",
       "payload": {
         "agent": "code_review",
@@ -278,7 +278,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#17",
       "payload": {
         "artifactId": null,
@@ -290,7 +290,7 @@
       "type": "GATE_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#18",
       "payload": {
         "checkpoint": 5,
@@ -313,7 +313,7 @@
       "type": "REVIEW_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#19",
       "payload": {
         "provider": "github_pat",
@@ -321,7 +321,7 @@
           "canMerge": false,
           "checks": [],
           "mergeStateStatus": "BLOCKED",
-          "mergeStrategy": "aide_merges",
+          "mergeStrategy": "tevrin_merges",
           "reasons": [
             {
               "code": "review_required",
@@ -377,7 +377,7 @@
       "type": "GATE_APPROVED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#23",
       "payload": {
         "checkpoint": 6,
@@ -391,13 +391,13 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#24",
       "payload": {
         "attempt": 1,
         "awaitingMerge": true,
         "checkpoint": 6,
-        "mergeStrategy": "aide_merges",
+        "mergeStrategy": "tevrin_merges",
         "provider": "github_pat",
         "pullRequestUrl": "https://github.com/acme/widgets/pull/42",
         "reasons": [
@@ -414,7 +414,7 @@
       "type": "RELEASE_AWAITING_MERGE"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#25",
       "payload": {
         "checkpoint": 6,
@@ -428,7 +428,7 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#26",
       "payload": {
         "checkpoint": 6,
@@ -444,7 +444,7 @@
       "type": "RELEASE_MERGED_EXTERNALLY"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#27",
       "payload": {
         "alreadyTagged": false,
@@ -546,7 +546,7 @@
       "to": "refinement"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "checkpoint": 5,
       "from": "execution",
       "id": "transition#2",
@@ -562,7 +562,7 @@
       "to": "release"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "checkpoint": 6,
       "from": "release",
       "id": "transition#4",
@@ -570,7 +570,7 @@
       "to": "release"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "checkpoint": 6,
       "from": "release",
       "id": "transition#5",

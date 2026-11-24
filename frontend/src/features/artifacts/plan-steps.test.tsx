@@ -7,7 +7,7 @@ import { createExecutionSteps, planMarkdown, planSteps, type MockPlanStep } from
 import type { StoredProject } from '../../mocks/handlers/projects'
 import { openArtifact, seedProjectAs } from '../../test/artifacts'
 import { requestsTo } from '../../test/project-settings'
-import { readPlanBlock } from './plan-block'
+import { LEGACY_PLAN_BLOCK_LANGUAGE, PLAN_BLOCK_LANGUAGE, readPlanBlock, TEVRIN_PLAN_BLOCK_LANGUAGE } from './plan-block'
 
 const PLAN = 'implementation_plan'
 
@@ -39,6 +39,18 @@ function stepRows(name: RegExp) {
 }
 
 describe('Plan steps (FR-29, FR-30)', () => {
+  it('FR-326 both tags parse: a ```tevrin-plan block and a legacy ```aide-plan block give the same steps', () => {
+    const tevrin = planMarkdown(planSteps(2))
+    expect(tevrin).toContain('```tevrin-plan\n')
+    const legacy = tevrin.replace('```tevrin-plan\n', '```aide-plan\n')
+    expect(readPlanBlock(tevrin)).not.toBeNull()
+    expect(readPlanBlock(tevrin)).toEqual(readPlanBlock(legacy))
+    expect(readPlanBlock(`${tevrin}\n${legacy}`)).toBeNull()
+    expect(PLAN_BLOCK_LANGUAGE).toBe(TEVRIN_PLAN_BLOCK_LANGUAGE)
+    expect(TEVRIN_PLAN_BLOCK_LANGUAGE).toBe('tevrin-plan')
+    expect(LEGACY_PLAN_BLOCK_LANGUAGE).toBe('aide-plan')
+  })
+
   it('FR29_reads_the_structured_steps_from_the_aide_plan_block', () => {
     expect(readPlanBlock(planMarkdown(steps))).toEqual([
       // FR-76: `agent` and `covers` are absent from this 0.1.0-style block.

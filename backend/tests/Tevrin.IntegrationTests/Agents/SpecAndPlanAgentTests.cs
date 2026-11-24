@@ -192,7 +192,7 @@ public sealed class SpecAndPlanAgentTests(TevrinApiFactory factory)
         Assert.Equal((SdlcJobTypes.PlanGeneration, JobStatus.Succeeded), (job.Type, job.Status));
         var plan = Assert.Single(await AgentJobs.ArtifactsAsync(factory, id, SdlcArtifacts.ImplementationPlan));
         Assert.Equal((ArtifactStatus.Draft, (Guid?)job.Id), (plan.Status, plan.AgentRunId));
-        Assert.Contains("```aide-plan\n", plan.Content, StringComparison.Ordinal);
+        Assert.Contains("```tevrin-plan\n", plan.Content, StringComparison.Ordinal);
         var steps = PlanDocument.ParseMarkdown(plan.Content, maxFilesPerStep: 20);
         Assert.True(steps.IsSuccess, steps.Error?.Message);
         Assert.Equal(4, steps.Value.Count);

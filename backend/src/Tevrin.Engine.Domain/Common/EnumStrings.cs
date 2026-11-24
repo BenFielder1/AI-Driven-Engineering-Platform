@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 
 namespace Tevrin.Engine.Domain.Common;
@@ -5,7 +6,8 @@ namespace Tevrin.Engine.Domain.Common;
 /// <summary>
 /// Stable string form of domain enums: the snake_case names used in SPEC.md, the database and the API
 /// (e.g. <c>StepStatus.InProgress</c> ⇄ <c>"in_progress"</c>). Renaming an enum member changes its stored
-/// value, so member names are part of the contract.
+/// value, so member names are part of the contract. A renamed member can keep reading its old value through
+/// <see cref="WireAliasAttribute"/> (FR-326: <c>aide_merges</c> is read as <c>tevrin_merges</c>).
 /// </summary>
 public static class EnumStrings
 {
@@ -38,6 +40,12 @@ public static class EnumStrings
         where TEnum : struct, Enum =>
         Cache<TEnum>.Ordered;
 
+    /// <summary>The read-only aliases of an enum's members (<see cref="WireAliasAttribute"/>), alias → member; empty for
+    /// most enums.</summary>
+    public static IReadOnlyDictionary<string, TEnum> Aliases<TEnum>()
+        where TEnum : struct, Enum =>
+        Cache<TEnum>.Aliases;
+
     internal static string ToSnakeCase(string name)
     {
         var sb = new StringBuilder(name.Length + 4);
@@ -69,8 +77,15 @@ public static class EnumStrings
         public static readonly Dictionary<TEnum, string> ToWire = Enum.GetValues<TEnum>()
             .ToDictionary(v => v, v => ToSnakeCase(v.ToString()));
 
+        public static readonly Dictionary<string, TEnum> Aliases = Enum.GetValues<TEnum>()
+            .SelectMany(v => (typeof(TEnum).GetField(v.ToString())?.GetCustomAttribute<WireAliasAttribute>()?.Aliases ?? [])
+                .Select(alias => KeyValuePair.Create(alias, v)))
+            .ToDictionary(StringComparer.Ordinal);
+
         public static readonly Dictionary<string, TEnum> FromWire = ToWire
-            .ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.Ordinal);
+            .Select(kv => KeyValuePair.Create(kv.Value, kv.Key))
+            .Concat(Aliases)
+            .ToDictionary(StringComparer.Ordinal);
 
         public static readonly IReadOnlyList<string> Ordered = [.. Enum.GetValues<TEnum>().Select(v => ToWire[v])];
     }

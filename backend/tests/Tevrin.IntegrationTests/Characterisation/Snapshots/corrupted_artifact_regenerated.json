@@ -69,7 +69,7 @@
     {
       "agentRun": "job#4",
       "checkpointAtCreation": 3,
-      "contentHash": "43fe15b236cb8ee184887461a8620b7c7c359061643392d68cf8e9986a9de5bc",
+      "contentHash": "4e54c2e9012451b108cc60608b7ce9901b449c293e9f04076417429459d3e209",
       "createdBy": null,
       "id": "artifact#4",
       "parentVersion": null,
@@ -98,7 +98,7 @@
       "type": "PROJECT_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#2",
       "payload": {
         "agent": "idea_refinement",
@@ -115,7 +115,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#3",
       "payload": {
         "agent": "idea_refinement",
@@ -125,7 +125,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#4",
       "payload": {
         "agentRunId": "job#1",
@@ -166,7 +166,7 @@
       "type": "PHASE_CHANGED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#7",
       "payload": {
         "agent": "spec_generator",
@@ -183,7 +183,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#8",
       "payload": {
         "agent": "spec_generator",
@@ -193,7 +193,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#9",
       "payload": {
         "agentRunId": "job#2",
@@ -206,7 +206,7 @@
       "type": "ARTIFACT_CREATED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#10",
       "payload": {
         "actualHash": "315faddc541ad93eca1abd691a5f66391ddd1e57219cf5dd9e53c380e8a62c85",
@@ -221,7 +221,7 @@
       "type": "ARTIFACT_CORRUPTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#11",
       "payload": {
         "actualHash": "315faddc541ad93eca1abd691a5f66391ddd1e57219cf5dd9e53c380e8a62c85",
@@ -236,7 +236,7 @@
       "type": "INTEGRITY_ALERT"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#12",
       "payload": {
         "agent": "spec_generator",
@@ -253,7 +253,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#13",
       "payload": {
         "agent": "spec_generator",
@@ -263,7 +263,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#14",
       "payload": {
         "agentRunId": "job#3",
@@ -328,7 +328,7 @@
       "type": "GATE_APPROVED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#19",
       "payload": {
         "agent": "plan_generator",
@@ -345,7 +345,7 @@
       "type": "RUN_STARTED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#20",
       "payload": {
         "agent": "plan_generator",
@@ -355,7 +355,7 @@
       "type": "RUN_COMPLETED"
     },
     {
-      "actor": "aide-system",
+      "actor": "tevrin-system",
       "id": "event#21",
       "payload": {
         "agentRunId": "job#4",

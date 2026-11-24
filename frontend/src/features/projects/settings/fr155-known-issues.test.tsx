@@ -42,7 +42,7 @@ describe('FR-155 (M31): host-neutral copy and release settings', () => {
 
     await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
     expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()
-    expect(requestsTo('PATCH', '/settings/git').at(-1)?.body).toEqual({ mergeStrategy: 'aide_merges' })
+    expect(requestsTo('PATCH', '/settings/git').at(-1)?.body).toEqual({ mergeStrategy: 'tevrin_merges' })
     await waitFor(() => {
       expect(within(form).queryByTestId('merge-strategy-unavailable')).not.toBeInTheDocument()
     })

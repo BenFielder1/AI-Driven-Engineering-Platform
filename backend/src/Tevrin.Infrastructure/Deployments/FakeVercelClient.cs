@@ -75,7 +75,7 @@ public sealed class FakeVercelClient(IWorkingCopies workingCopies) : IVercelClie
         IReadOnlyList<string>? paths = null;
         try
         {
-            paths = await workingCopies.ListPathsAtCommitAsync(request.AideProjectId, request.GitSha, MaxListedPaths, cancellationToken);
+            paths = await workingCopies.ListPathsAtCommitAsync(request.TevrinProjectId, request.GitSha, MaxListedPaths, cancellationToken);
         }
         catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
         {
@@ -99,14 +99,14 @@ public sealed class FakeVercelClient(IWorkingCopies workingCopies) : IVercelClie
             FakeDeploymentRules.Url(sha8),
             $"https://vercel.test/fake/{deploymentId}",
             state.ToWire().ToUpperInvariant(),
-            state == DeploymentStatus.Error ? "The Fake build failed: the commit contains .aide-fake/fail-build." : null));
+            state == DeploymentStatus.Error ? $"The Fake build failed: the commit contains {FakeDeploymentRules.FailBuildMarker}." : null));
     }
 
     public Task<string?> GetBuildLogAsync(DeploymentAuth auth, string deploymentId, CancellationToken cancellationToken) =>
         Task.FromResult<string?>(Parse(deploymentId).Fails ? FakeDeploymentRules.FailedBuildLog : "Running \"npm run build\"\n> next build\nBuild completed.");
 
-    public Task<ProviderDeployment?> FindByAideIdAsync(
-        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid aideDeploymentId, CancellationToken cancellationToken) =>
+    public Task<ProviderDeployment?> FindByTevrinIdAsync(
+        DeploymentAuth auth, string vercelProjectId, string sha, DeploymentEnvironment target, Guid tevrinDeploymentId, CancellationToken cancellationToken) =>
         Task.FromResult<ProviderDeployment?>(null);
 
     public Task CancelDeploymentAsync(DeploymentAuth auth, string deploymentId, CancellationToken cancellationToken) => Task.CompletedTask;

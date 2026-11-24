@@ -124,6 +124,7 @@ builder.Services.AddOpenApi(options =>
     });
     options.AddSchemaTransformer<ProblemDetailsSchemaTransformer>();
     options.AddSchemaTransformer<WireEnumSchemaTransformer>();
+    options.AddSchemaTransformer<WireAliasEnumSchemaTransformer>();
     options.AddSchemaTransformer<FreeFormObjectSchemaTransformer>();
     // SignalR message schemas (FR-46) aren't reachable from any operation; add them to components.
     options.AddDocumentTransformer<LiveContractDocumentTransformer>();

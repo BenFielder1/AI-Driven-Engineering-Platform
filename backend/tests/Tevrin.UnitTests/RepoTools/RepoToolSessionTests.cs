@@ -139,8 +139,8 @@ public sealed class RepoToolSessionTests : IDisposable
 
         var list = await session.ExecuteAsync(Call(RepoToolNames.ListFiles, """{"path":".","depth":3}"""), Ct);
         var search = await session.ExecuteAsync(Call(RepoToolNames.SearchCode, """{"query":"TODO"}"""), Ct);
-        var readAide = await session.ExecuteAsync(Call(RepoToolNames.ReadFile, """{"path":".aide/rules.md"}"""), Ct);
-        var listAide = await session.ExecuteAsync(Call(RepoToolNames.ListFiles, """{"path":".AIDE"}"""), Ct);
+        var readLegacyRules = await session.ExecuteAsync(Call(RepoToolNames.ReadFile, """{"path":".aide/rules.md"}"""), Ct);
+        var listLegacyRules = await session.ExecuteAsync(Call(RepoToolNames.ListFiles, """{"path":".AIDE"}"""), Ct);
         var readGit = await session.ExecuteAsync(Call(RepoToolNames.ReadFile, """{"path":"vendor/sub/.git/HEAD"}"""), Ct);
 
         Assert.Contains("README.md", list.Content, StringComparison.Ordinal);
@@ -150,8 +150,8 @@ public sealed class RepoToolSessionTests : IDisposable
         Assert.Contains("src/app.ts:2:", search.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("TODO-in-git", search.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("TODO-in-aide", search.Content, StringComparison.Ordinal);
-        Assert.StartsWith("NOT_FOUND:", readAide.Content, StringComparison.Ordinal);
-        Assert.StartsWith("NOT_FOUND:", listAide.Content, StringComparison.Ordinal);
+        Assert.StartsWith("NOT_FOUND:", readLegacyRules.Content, StringComparison.Ordinal);
+        Assert.StartsWith("NOT_FOUND:", listLegacyRules.Content, StringComparison.Ordinal);
         Assert.StartsWith("UNSAFE_PATH:", readGit.Content, StringComparison.Ordinal);
     }
 
