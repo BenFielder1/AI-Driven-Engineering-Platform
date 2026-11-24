@@ -15994,6 +15994,278 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-352: the versions of a project-scope artifact, newest first (project viewer). 404 NOT_FOUND for an unknown pipeline or an artifact that isn't project-scope.",
+        "operationId": "ListProjectArtifactVersions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}/versions": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-352: add the next version of a project-scope artifact, a draft unless the artifact auto-locks (Contributor). 400 VALIDATION (no content) or INPUT_INVALID (details: the failing paths), 403 FORBIDDEN, 404 NOT_FOUND.",
+        "operationId": "CreateProjectArtifactVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateProjectArtifactVersionRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}/versions/{version}/lock": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-352: lock a draft version of a project-scope artifact; runs started from now on pin it, running runs keep theirs (Owner). 403 FORBIDDEN, 404 NOT_FOUND, 409 ARTIFACT_NOT_DRAFT or CONFLICT.",
+        "operationId": "LockProjectArtifactVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -17673,6 +17945,13 @@
           "corrupted"
         ],
         "description": "Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no\nlonger matches `content_hash` (§4.3), or the row is already marked ArtifactStatus.Corrupted."
+      },
+      "ArtifactScope": {
+        "enum": [
+          "run",
+          "project"
+        ],
+        "description": "FR-352: whose version history an artifact has."
       },
       "ArtifactStateDto": {
         "required": [
@@ -19561,6 +19840,16 @@
           }
         },
         "description": "Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it\nis for (`accountId`: a team, account, workspace or organisation id the token reaches; required for a Railway\nworkspace token, which can't name its workspace itself). The token is checked with the platform before anything is\nsaved."
+      },
+      "CreateProjectArtifactVersionRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "description": "The content: a string for a Markdown artifact, the JSON value (checked against its schema) for a JSON one.",
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        },
+        "description": "FR-352: a new version of a project-scope artifact."
       },
       "CreateProjectDeploymentRequest": {
         "required": [
@@ -24692,6 +24981,10 @@
           },
           "format": {
             "$ref": "#/components/schemas/ArtifactFormat"
+          },
+          "scope": {
+            "description": "FR-352: `project` for a source-of-truth artifact people edit and runs pin; `run` otherwise.",
+            "$ref": "#/components/schemas/ArtifactScope"
           }
         },
         "description": "An artifact a definition produces or reads."
@@ -25221,9 +25514,57 @@
           "agentRuns": {
             "type": "integer",
             "format": "int32"
+          },
+          "pinnedArtifacts": {
+            "type": "array",
+            "items": {
+              "required": [
+                "key",
+                "artifactId",
+                "version"
+              ],
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "artifactId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "description": "FR-352: a project-scope artifact version a run pinned."
+            },
+            "description": "FR-352, §4.76: the project-scope artifact versions the run pinned at its start (every stage reads them)."
           }
         },
         "description": "FR-300: a pipeline run. `status` is the generic status derived on read (§4.57); `packStatus` the pack's own.\n`hashShort` is the first 12 characters of the pinned definition hash. `cost` and the token totals sum the\nrun's agent runs."
+      },
+      "PipelineRunPinDto": {
+        "required": [
+          "key",
+          "artifactId",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "artifactId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-352: a project-scope artifact version a run pinned."
       },
       "PipelineScheduleDto": {
         "required": [

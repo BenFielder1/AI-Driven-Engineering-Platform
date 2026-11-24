@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Tevrin.Domain.Entities;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Pipelines;
 
 namespace Tevrin.Infrastructure.Persistence;
 
@@ -48,7 +49,8 @@ public static class ReleaseVersionQueries
 /// <item>A new project without a current release version gets its first one (<c>in_development</c>,
 /// <see cref="Project.DevelopmentVersion"/> or <see cref="ReleaseVersionQueries.InitialVersion"/>), and the project points at it.</item>
 /// <item>New artifacts, steps, gates, transitions, reports, rollbacks, releases and agent runs saved without a
-/// <c>release_version_id</c> get the project's current release version (<see cref="ReleaseVersionQueries"/>).</item>
+/// <c>release_version_id</c> get the project's current release version (<see cref="ReleaseVersionQueries"/>), except
+/// rows of a run without a subject (FR-334) and project-scope artifacts (FR-352), which keep it null.</item>
 /// </list>
 /// Code that knows the version sets it explicitly; this only fills what was left unset, so the NOT NULL columns can't be
 /// forgotten. <c>projects.current_release_version_id</c> is a deferred FK (see the ReleaseVersions migration), so a project
@@ -165,6 +167,12 @@ public sealed class ReleaseVersionStampingInterceptor : SaveChangesInterceptor
 
             if (entry.Metadata.FindProperty(RunColumn) is not null && entry.Property(RunColumn).CurrentValue is Guid runId
                 && subjectlessRuns.Contains(runId))
+            {
+                continue;
+            }
+
+            // FR-352: a project-scope artifact has one history per project, outside any run or release version.
+            if (entry.Entity is Artifact { Scope: ArtifactScope.Project })
             {
                 continue;
             }

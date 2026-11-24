@@ -33,12 +33,19 @@ public static class DefinitionErrorCodes
     /// <summary>FR-295, D-0.7.0-33: an agent stage's prompt isn't one its pack registered.</summary>
     public const string UnknownPrompt = "DEF_UNKNOWN_PROMPT";
 
+    /// <summary>
+    /// FR-352 (0.8.0): a project-scope artifact a run would produce (a stage or agent output, a gate's <c>approves</c>, a
+    /// pack handler's product) or supply (<c>input: true</c>), or declared differently from another pipeline sharing its
+    /// key (D-0.8.0-19).
+    /// </summary>
+    public const string ScopeInput = "DEF_SCOPE_INPUT";
+
     /// <summary>Every code, in §4.49 table order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
         UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
-        UnknownSetting, TriggerNotSupported, UnknownPrompt,
+        UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput,
     ];
 
     /// <summary>

@@ -39,9 +39,11 @@ public sealed class PipelineRunStarter(
 {
     /// <summary>
     /// Creates the run (no subject, pinned to the pipeline's current definition hash, at its first start stage, checkpoint 1),
-    /// stores each input as version 1 of its artifact (locked, owned by the run) and queues the driver. Errors:
+    /// pins the newest locked version of each project-scope artifact (FR-352), stores each input as version 1 of its
+    /// artifact (locked, owned by the run) and queues the driver. Errors:
     /// <c>NOT_FOUND</c> (unknown pipeline), <c>RUN_CONTROLLED_BY_HOST</c>, <c>VALIDATION</c> (undeclared input key or approval
-    /// mode the definition doesn't offer), <c>INPUT_INVALID</c> (details: the failing paths), <c>RUN_ALREADY_ACTIVE</c>.
+    /// mode the definition doesn't offer), <c>INPUT_INVALID</c> (details: the failing paths), <c>RUN_ALREADY_ACTIVE</c>,
+    /// <c>SOURCE_ARTIFACT_MISSING</c> (a project-scope artifact has no locked version).
     /// </summary>
     public async Task<Result<PipelineRun>> StartAsync(StartPipelineRun request, CancellationToken cancellationToken)
     {
@@ -95,6 +97,14 @@ public sealed class PipelineRunStarter(
                 EngineErrorCodes.RunAlreadyActive, "This project already has a run in progress for this pipeline."));
         }
 
+        // FR-352, §4.76: pin the newest locked version of each project-scope artifact, inside the lock so a version
+        // locked from now on belongs to the next run.
+        var pins = await ProjectArtifacts.PinsAsync(db, request.ProjectId, definition, cancellationToken);
+        if (pins.IsFailure)
+        {
+            return Result.Failure<PipelineRun>(pins.Error!);
+        }
+
         await StoredDefinitions.StoreForEngineAsync(db, loaded, now, cancellationToken);
         var state = PipelineStateMachine.Start(definition, definition.Start[0]);
         var run = new PipelineRun
@@ -109,6 +119,7 @@ public sealed class PipelineRunStarter(
             Checkpoint = state.Checkpoint,
             ApprovalMode = mode.Value,
             Iterations = state.Iterations,
+            PinnedArtifacts = pins.Value,
             StartedAt = now,
         };
         db.PipelineRuns.Add(run);

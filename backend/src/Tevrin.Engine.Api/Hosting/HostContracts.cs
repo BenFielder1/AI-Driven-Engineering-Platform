@@ -112,6 +112,15 @@ public enum RunControlAction
 
     /// <summary>FR-336, FR-337: create, change, rotate and delete schedules and webhooks (Owner).</summary>
     ManageTriggers = 6,
+
+    /// <summary>FR-352: read a project-scope artifact's versions (Viewer).</summary>
+    ViewArtifacts = 7,
+
+    /// <summary>FR-352: add a version of a project-scope artifact (Contributor).</summary>
+    EditArtifacts = 8,
+
+    /// <summary>FR-352: lock a version of a project-scope artifact (the artifact-approval role).</summary>
+    LockArtifacts = 9,
 }
 
 /// <summary>

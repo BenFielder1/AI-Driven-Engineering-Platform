@@ -65,6 +65,12 @@ public sealed class PipelineRun
     /// mutate, the dictionary.</summary>
     public IReadOnlyDictionary<string, int> Iterations { get; set; } = PipelineRunRules.NoIterations;
 
+    /// <summary>
+    /// FR-352, §4.76: the version of each project-scope artifact the run pinned when it started (key → artifact id and
+    /// version). Every stage reads these; a version locked later doesn't change the run. Empty for the SDLC.
+    /// </summary>
+    public IReadOnlyDictionary<string, PinnedArtifact> PinnedArtifacts { get; init; } = PipelineRunRules.NoPins;
+
     public DateTimeOffset StartedAt { get; init; }
 
     public DateTimeOffset? CompletedAt { get; set; }
@@ -77,6 +83,9 @@ public sealed class PipelineRun
 public static class PipelineRunRules
 {
     public static IReadOnlyDictionary<string, int> NoIterations { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+
+    /// <summary>FR-352: a run that pinned nothing.</summary>
+    public static IReadOnlyDictionary<string, PinnedArtifact> NoPins { get; } = new Dictionary<string, PinnedArtifact>(StringComparer.Ordinal);
 
     /// <summary>The final generic statuses (§4.57): a run in one of them has ended.</summary>
     public static bool IsFinal(GenericRunStatus status) =>
@@ -138,3 +147,6 @@ public static class PipelineTransitionKinds
     public const string StatusChange = "status_change";
     public const string Noop = "noop";
 }
+
+/// <summary>FR-352: the project-scope artifact version a run pinned (<c>pipeline_runs.pinned_artifacts</c> values).</summary>
+public sealed record PinnedArtifact(Guid ArtifactId, int Version);

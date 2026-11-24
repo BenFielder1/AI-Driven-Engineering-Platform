@@ -40,6 +40,7 @@ public static class TevrinEngineModel
         MapEnum<NotificationDeliveryStatus>(configurationBuilder);
         MapEnum<ApprovalLinkDecision>(configurationBuilder);
         MapEnum<GenericRunStatus>(configurationBuilder);
+        MapEnum<ArtifactScope>(configurationBuilder);
         return configurationBuilder;
     }
 
@@ -153,8 +154,16 @@ public static class TevrinEngineModel
                 .HasFilter("release_version_id IS NOT NULL");
             b.HasIndex(a => new { a.PipelineRunId, a.Type, a.Version }, "ux_artifacts_pipeline_run_id_type_version")
                 .IsUnique()
-                .HasFilter("release_version_id IS NULL")
+                .HasFilter("release_version_id IS NULL AND scope = 'run'")
                 .HasDatabaseName("ux_artifacts_pipeline_run_id_type_version");
+
+            // FR-352: a project-scope (source-of-truth) artifact has one version history per project: no run, no release
+            // version. Existing rows are run scope (the column default).
+            b.Property(a => a.Scope).HasDefaultValue(ArtifactScope.Run);
+            b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }, "ux_artifacts_project_id_type_version_project_scope")
+                .IsUnique()
+                .HasFilter("scope = 'project'")
+                .HasDatabaseName("ux_artifacts_project_id_type_version_project_scope");
             b.HasIndex(a => new { a.ProjectId, a.Type, a.Status });
             b.HasIndex(a => new { a.ProjectId, a.ReleaseVersionId });
             b.HasIndex(a => a.ReleaseVersionId);
@@ -314,6 +323,12 @@ public static class TevrinEngineModel
                 .HasConversion(IterationsConverter, IterationsComparer)
                 .HasColumnType("jsonb")
                 .IsRequired();
+            // FR-352: key → { artifactId, version } of each project-scope artifact pinned at start; '{}' for older rows.
+            b.Property(r => r.PinnedArtifacts)
+                .HasConversion(PinsConverter, PinsComparer)
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'{}'::jsonb")
+                .IsRequired();
             XminRowVersion(b.Property(r => r.RowVersion));
 
             // FR-277: a run is pinned to a stored definition, which is never deleted.
@@ -414,6 +429,27 @@ public static class TevrinEngineModel
         JsonSerializer.Deserialize<Dictionary<string, int>>(json, IterationsJson) is { } parsed
             ? new Dictionary<string, int>(parsed, StringComparer.Ordinal)
             : new Dictionary<string, int>(StringComparer.Ordinal);
+
+    private static readonly JsonSerializerOptions PinsJson = new(JsonSerializerDefaults.Web);
+
+    private static readonly ValueConverter<IReadOnlyDictionary<string, PinnedArtifact>, string> PinsConverter = new(
+        v => SerializePins(v),
+        s => DeserializePins(s));
+
+    private static readonly ValueComparer<IReadOnlyDictionary<string, PinnedArtifact>> PinsComparer = new(
+        (a, b) => SerializePins(a!) == SerializePins(b!),
+        v => SerializePins(v).GetHashCode(StringComparison.Ordinal),
+        v => DeserializePins(SerializePins(v)));
+
+    private static string SerializePins(IReadOnlyDictionary<string, PinnedArtifact> pins) =>
+        JsonSerializer.Serialize(
+            new SortedDictionary<string, PinnedArtifact>(pins.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal), StringComparer.Ordinal),
+            PinsJson);
+
+    private static Dictionary<string, PinnedArtifact> DeserializePins(string json) =>
+        JsonSerializer.Deserialize<Dictionary<string, PinnedArtifact>>(json, PinsJson) is { } parsed
+            ? new Dictionary<string, PinnedArtifact>(parsed, StringComparer.Ordinal)
+            : new Dictionary<string, PinnedArtifact>(StringComparer.Ordinal);
 
     /// <summary>A definition hash: SHA-256, lower-case hex, <c>character(64)</c>.</summary>
     private static void HashColumn(PropertyBuilder<string> property) =>

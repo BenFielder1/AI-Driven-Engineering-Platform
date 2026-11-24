@@ -173,6 +173,23 @@ public sealed record ArtifactDefinition(
     /// trigger) rather than produced by a stage. Omitted from the canonical form when <c>false</c> (the hash is unchanged).
     /// </summary>
     public bool Input { get; init; }
+
+    /// <summary>
+    /// FR-352 (0.8.0): <c>scope: project</c>, one version history per project shared by every run, edited by people
+    /// through the artifact endpoints; a run pins its newest locked version when it starts (§4.76). Omitted from the
+    /// canonical form when <see cref="ArtifactScope.Run"/> (the default), so the hash is unchanged.
+    /// </summary>
+    public ArtifactScope Scope { get; init; }
+}
+
+/// <summary>FR-352: whose version history an artifact has.</summary>
+public enum ArtifactScope
+{
+    /// <summary>Each run (or SDLC release version) has its own versions (the default).</summary>
+    Run = 0,
+
+    /// <summary>One history per project, pinned by each run at its start (§4.76).</summary>
+    Project = 1,
 }
 
 public enum ArtifactFormat

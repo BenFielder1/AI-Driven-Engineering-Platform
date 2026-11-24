@@ -26,7 +26,7 @@ public static class PipelineDtoMapper
             packId,
             definition.Start,
             [.. definition.Stages.Select(s => ToStageDto(definition, s))],
-            [.. definition.Artifacts.Select(a => new PipelineArtifactDefinitionDto(a.Key, a.Title, a.Format))],
+            [.. definition.Artifacts.Select(a => new PipelineArtifactDefinitionDto(a.Key, a.Title, a.Format) { Scope = a.Scope })],
             [.. definition.Statuses.Select(s => new PipelineStatusDefinitionDto(s.Name, s.Generic))]);
     }
 

@@ -1,4 +1,5 @@
 using Tevrin.Engine.Domain.Artifacts;
+using Tevrin.Engine.Domain.Pipelines;
 
 namespace Tevrin.Engine.Domain.Entities;
 
@@ -35,6 +36,12 @@ public sealed class Artifact
 
     /// <summary>FR-294: the pipeline run the artifact belongs to (nullable until the contract step, D-0.7.0-28).</summary>
     public Guid? PipelineRunId { get; init; }
+
+    /// <summary>
+    /// FR-352: <see cref="ArtifactScope.Project"/> for a source-of-truth artifact: one version history per project (no run,
+    /// no release version), unique by (project, type, version). Runs read it through their pinned version.
+    /// </summary>
+    public ArtifactScope Scope { get; init; } = ArtifactScope.Run;
 
     /// <summary>FR-58: the version whose content a restored draft copies; null otherwise.</summary>
     public int? RestoredFromVersion { get; init; }

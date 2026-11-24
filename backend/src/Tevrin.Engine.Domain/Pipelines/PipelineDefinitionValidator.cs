@@ -152,6 +152,12 @@ public static partial class PipelineDefinitionValidator
                 }
 
                 CheckName(artifact.Key, path, "Artifact key");
+
+                // FR-352: a project-scope artifact is pinned from the project's history, not supplied to one run.
+                if (artifact.Scope == ArtifactScope.Project && artifact.Input)
+                {
+                    Add(DefinitionErrorCodes.ScopeInput, path + ".scope", $"Artifact '{artifact.Key}' can't be both 'input: true' and 'scope: project'.");
+                }
                 if (string.IsNullOrWhiteSpace(artifact.Title))
                 {
                     Add(DefinitionErrorCodes.Parse, path + ".title", "'title' is required.");
@@ -431,6 +437,17 @@ public static partial class PipelineDefinitionValidator
             if (stage.Output is { } output)
             {
                 CheckArtifactRef(output, path + ".output");
+                CheckNotProjectScoped(output, path + ".output");
+            }
+        }
+
+        /// <summary>FR-352: a project-scope artifact is edited by people through the artifact endpoints, never produced by a run.</summary>
+        private void CheckNotProjectScoped(string key, string path)
+        {
+            if (definition.FindArtifact(key) is { Scope: ArtifactScope.Project })
+            {
+                Add(DefinitionErrorCodes.ScopeInput, path,
+                    $"Artifact '{key}' has 'scope: project': people edit and lock it through the artifact endpoints, so no stage, gate or handler of a run may produce it.");
             }
         }
 
@@ -522,6 +539,7 @@ public static partial class PipelineDefinitionValidator
             if (gate.Approves is { } approves)
             {
                 CheckArtifactRef(approves, path + ".gate.approves");
+                CheckNotProjectScoped(approves, path + ".gate.approves");
             }
         }
 
@@ -662,9 +680,19 @@ public static partial class PipelineDefinitionValidator
         /// <summary>An artifact some stage reads must be some stage's output or produced by a pack handler.</summary>
         private void ValidateProducers()
         {
-            // FR-335: an input artifact is supplied from outside the run, so it needs no producer.
+            // FR-335: an input artifact is supplied from outside the run, so it needs no producer; FR-352: nor does a
+            // project-scope artifact, which people edit and the run pins at its start.
             var produced = new HashSet<string>(
-                catalog.ProducedArtifacts.Concat(definition.Artifacts.Where(a => a.Input).Select(a => a.Key)), StringComparer.Ordinal);
+                catalog.ProducedArtifacts.Concat(definition.Artifacts.Where(a => a.Input || a.Scope == ArtifactScope.Project).Select(a => a.Key)),
+                StringComparer.Ordinal);
+
+            // FR-352: a pack handler doesn't produce a project-scope artifact either (people edit it).
+            foreach (var artifact in definition.Artifacts.Where(a => a.Scope == ArtifactScope.Project && catalog.ProducedArtifacts.Contains(a.Key)))
+            {
+                Add(DefinitionErrorCodes.ScopeInput, $"artifacts.{artifact.Key}.scope",
+                    $"Artifact '{artifact.Key}' has 'scope: project', but a pack handler produces it; people edit and lock it through the artifact endpoints.");
+            }
+
             foreach (var stage in definition.Stages)
             {
                 if (stage.Output is { } output)

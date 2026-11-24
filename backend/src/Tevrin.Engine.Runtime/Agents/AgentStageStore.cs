@@ -89,12 +89,21 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
             return [];
         }
 
-        return await db.Artifacts.AsNoTracking()
+        // FR-352, §4.76: a project-scope artifact is read at the version the run pinned at its start, never a newer one.
+        var pinned = await Runs.ProjectArtifacts.PinnedAsync(db, run, keys, cancellationToken);
+        var own = keys.Where(k => !run.PinnedArtifacts.ContainsKey(k)).ToList();
+        if (own.Count == 0)
+        {
+            return pinned;
+        }
+
+        var latest = await db.Artifacts.AsNoTracking()
             .Where(AgentStageScope.InSubject(run))
-            .Where(a => keys.Contains(a.Type) && a.Status == ArtifactStatus.Locked)
+            .Where(a => own.Contains(a.Type) && a.Status == ArtifactStatus.Locked)
             .GroupBy(a => a.Type)
             .Select(g => g.OrderByDescending(a => a.Version).First())
             .ToListAsync(cancellationToken);
+        return [.. latest, .. pinned];
     }
 
     public async Task<IReadOnlyList<ArtifactVersion>> VersionsAsync(Guid projectId, string key, CancellationToken cancellationToken) =>

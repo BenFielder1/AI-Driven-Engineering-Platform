@@ -212,6 +212,10 @@ public sealed partial class EngineRunDriver(
             .Where(g => g.MaxBy(a => a.Version)!.Status == ArtifactStatus.Locked)
             .Select(g => g.Key)
             .ToHashSet(StringComparer.Ordinal);
+
+        // FR-352: a pinned project-scope artifact is a locked version the run has, whatever is added to its history later.
+        present.UnionWith(run.PinnedArtifacts.Keys);
+        locked.UnionWith(run.PinnedArtifacts.Keys);
         var gates = await db.ApprovalGates.AsNoTracking()
             .Where(g => g.PipelineRunId == run.Id)
             .Select(g => new { g.Type, g.Status, g.DecidedAt })

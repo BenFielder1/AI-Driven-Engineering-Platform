@@ -75,6 +75,7 @@ public static partial class PipelineRunEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict);
         MapRunControl(app, runs);
         MapTriggers(app);
+        MapProjectArtifacts(app);
         return app;
     }
 

@@ -42,7 +42,11 @@ public sealed record PipelineStageGateDto(string Type, IReadOnlyList<ApprovalMod
 public sealed record PipelineStageTransitionDto(string Kind, string To, string? On, string? Title, int? MaxIterations, string? MaxIterationsSetting);
 
 /// <summary>An artifact a definition produces or reads.</summary>
-public sealed record PipelineArtifactDefinitionDto(string Key, string Title, ArtifactFormat Format);
+public sealed record PipelineArtifactDefinitionDto(string Key, string Title, ArtifactFormat Format)
+{
+    /// <summary>FR-352: <c>project</c> for a source-of-truth artifact people edit and runs pin; <c>run</c> otherwise.</summary>
+    public ArtifactScope Scope { get; init; }
+}
 
 /// <summary>A pack status and the generic status it maps to (§4.57).</summary>
 public sealed record PipelineStatusDefinitionDto(string Name, GenericRunStatus Generic);
@@ -82,7 +86,14 @@ public sealed record PipelineRunDto(
     long InputTokens,
     long OutputTokens,
     long Tokens,
-    int AgentRuns);
+    int AgentRuns)
+{
+    /// <summary>FR-352, §4.76: the project-scope artifact versions the run pinned at its start (every stage reads them).</summary>
+    public IReadOnlyList<PipelineRunPinDto> PinnedArtifacts { get; init; } = [];
+}
+
+/// <summary>FR-352: a project-scope artifact version a run pinned.</summary>
+public sealed record PipelineRunPinDto(string Key, Guid ArtifactId, int Version);
 
 /// <summary>FR-300: a stage of a run (D-0.7.0-32: iterations count entries). <c>runId</c> identifies the run in live
 /// <c>stageUpdated</c> messages.</summary>

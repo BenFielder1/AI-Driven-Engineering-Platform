@@ -97,6 +97,12 @@ public static class DefinitionHash
             obj["input"] = true;
         }
 
+        // FR-352: omitted for the default run scope, so a definition without project-scope artifacts hashes as before.
+        if (a.Scope != ArtifactScope.Run)
+        {
+            obj["scope"] = a.Scope.ToWire();
+        }
+
         return obj;
     }
 

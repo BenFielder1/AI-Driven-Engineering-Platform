@@ -110,7 +110,11 @@ public sealed class PipelineRunReader(
             totals.InputTokens,
             totals.OutputTokens,
             totals.Tokens,
-            totals.AgentRuns);
+            totals.AgentRuns)
+        {
+            PinnedArtifacts = [.. run.PinnedArtifacts.OrderBy(p => p.Key, StringComparer.Ordinal)
+                .Select(p => new PipelineRunPinDto(p.Key, p.Value.ArtifactId, p.Value.Version))],
+        };
     }
 
     /// <summary>FR-300: the run's stages in definition order (none when its definition can't be resolved).</summary>

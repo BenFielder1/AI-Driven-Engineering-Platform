@@ -128,7 +128,7 @@ public static class PipelineDefinitionLoader
 
         private ArtifactDefinition? Artifact(string key, YamlNode node, string path)
         {
-            if (AsObject(node, path, ["title", "format", "schema", "approval", "cascade", "input"]) is not { } obj)
+            if (AsObject(node, path, ["title", "format", "schema", "approval", "cascade", "input", "scope"]) is not { } obj)
             {
                 return new ArtifactDefinition(key, string.Empty, ArtifactFormat.Markdown, null, ArtifactApproval.Required, CascadeMode.Downstream);
             }
@@ -143,6 +143,9 @@ public static class PipelineDefinitionLoader
             {
                 // FR-335: supplied from outside the run.
                 Input = obj.Bool("input") ?? false,
+
+                // FR-352: one version history per project, pinned at run start.
+                Scope = obj.Enum<ArtifactScope>("scope") ?? ArtifactScope.Run,
             };
         }
 

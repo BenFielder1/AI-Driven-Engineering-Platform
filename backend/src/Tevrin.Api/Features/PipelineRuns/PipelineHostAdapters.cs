@@ -92,7 +92,9 @@ internal sealed class ProjectGateDecisionService(
 /// FR-331, FR-333, FR-335: run control uses the project's permissions: start, retry and inputs need
 /// <see cref="ProjectAction.RunAgents"/> (Contributor), cancel and rollback <see cref="ProjectAction.Rollback"/> (Owner);
 /// FR-336, FR-337: listing triggers needs <see cref="ProjectAction.View"/> (Viewer), managing them
-/// <see cref="ProjectAction.ChangeSettings"/> (Owner).
+/// <see cref="ProjectAction.ChangeSettings"/> (Owner); FR-352: project-scope artifacts are read with
+/// <see cref="ProjectAction.View"/>, added with <see cref="ProjectAction.CreateDraft"/> (Contributor) and locked with
+/// <see cref="ProjectAction.DecideArtifact"/> (Owner).
 /// </summary>
 internal sealed class ProjectRunControlAccess(IProjectAccess access, ICurrentUser currentUser, TevrinDbContext db) : IRunControlAccess
 {
@@ -103,8 +105,12 @@ internal sealed class ProjectRunControlAccess(IProjectAccess access, ICurrentUse
         var projectAction = action switch
         {
             RunControlAction.Cancel or RunControlAction.Rollback => ProjectAction.Rollback,
-            RunControlAction.ViewTriggers => ProjectAction.View,
+            RunControlAction.ViewTriggers or RunControlAction.ViewArtifacts => ProjectAction.View,
             RunControlAction.ManageTriggers => ProjectAction.ChangeSettings,
+
+            // FR-352: project-scope artifacts: contributors add versions; locking follows the artifact-approval role.
+            RunControlAction.EditArtifacts => ProjectAction.CreateDraft,
+            RunControlAction.LockArtifacts => ProjectAction.DecideArtifact,
             _ => ProjectAction.RunAgents,
         };
         var grant = await access.CheckAsync(projectId, projectAction, cancellationToken);

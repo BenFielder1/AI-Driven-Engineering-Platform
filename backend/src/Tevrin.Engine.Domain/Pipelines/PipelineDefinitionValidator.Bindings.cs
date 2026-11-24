@@ -80,6 +80,7 @@ public static partial class PipelineDefinitionValidator
             if (binding.Output is { } output)
             {
                 CheckArtifactRef(output, path + ".output");
+                CheckNotProjectScoped(output, path + ".output");
             }
 
             for (var t = 0; t < binding.Tools.Count; t++)

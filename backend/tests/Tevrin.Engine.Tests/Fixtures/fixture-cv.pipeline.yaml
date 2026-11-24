@@ -1,0 +1,38 @@
+# Fixture pipeline (M67, FR-352, §4.76): an engine-controlled run of agent fit-scorer → agent cv-tailor, both reading the
+# project-scope master CV. A run pins the master CV's newest locked version when it starts, and both stages read that
+# version, even when a newer one is locked while the run is at the fit scorer.
+pipeline: fixture-cv
+version: 1
+title: Fixture CV
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [score]
+
+artifacts:
+  master_cv:   { title: Master CV, format: markdown, approval: required, cascade: none, scope: project }
+  job:         { title: Job, format: markdown, approval: auto_lock, cascade: none, input: true }
+  fit:         { title: Fit score, format: markdown, approval: auto_lock, cascade: downstream }
+  tailored_cv: { title: Tailored CV, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  scoring:   { generic: active }
+  tailoring: { generic: active }
+  tailored:  { generic: completed }
+
+stages:
+  - id: score
+    title: Score fit
+    status: scoring
+    agent: { key: fit-scorer, prompt: cv.score }
+    inputs: [master_cv, job]
+    output: fit
+    requires:
+      - { input: job }
+
+  - id: tailor
+    title: Tailor CV
+    status: tailoring
+    agent: { key: cv-tailor, prompt: cv.tailor }
+    inputs: [master_cv, fit]
+    output: tailored_cv

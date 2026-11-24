@@ -37,6 +37,9 @@ public static class EngineErrorCodes
     public const string InputInvalid = "INPUT_INVALID";
     public const string GateNotPending = "GATE_NOT_PENDING";
 
+    // FR-352 (0.8.0): a project-scope artifact the run needs has no locked version.
+    public const string SourceArtifactMissing = "SOURCE_ARTIFACT_MISSING";
+
     // FR-336, FR-337 (0.8.0): schedule and webhook triggers (the host's values).
     public const string ScheduleInvalid = "SCHEDULE_INVALID";
     public const string TriggerNotSupported = "TRIGGER_NOT_SUPPORTED";

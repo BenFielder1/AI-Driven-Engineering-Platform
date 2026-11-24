@@ -3038,6 +3038,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-352: the versions of a project-scope artifact, newest first (project viewer). 404 NOT_FOUND for an unknown pipeline or an artifact that isn't project-scope. */
+        get: operations["ListProjectArtifactVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-352: add the next version of a project-scope artifact, a draft unless the artifact auto-locks (Contributor). 400 VALIDATION (no content) or INPUT_INVALID (details: the failing paths), 403 FORBIDDEN, 404 NOT_FOUND. */
+        post: operations["CreateProjectArtifactVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}/versions/{version}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FR-352: lock a draft version of a project-scope artifact; runs started from now on pin it, running runs keep theirs (Owner). 403 FORBIDDEN, 404 NOT_FOUND, 409 ARTIFACT_NOT_DRAFT or CONFLICT. */
+        post: operations["LockProjectArtifactVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3593,6 +3644,11 @@ export interface components {
          * @enum {unknown}
          */
         ArtifactIntegrity: "ok" | "corrupted";
+        /**
+         * @description FR-352: whose version history an artifact has.
+         * @enum {unknown}
+         */
+        ArtifactScope: "run" | "project";
         /** @description Latest and current locked version of one artifact type (§6 project state). */
         ArtifactStateDto: {
             type: components["schemas"]["ArtifactType"];
@@ -4281,6 +4337,11 @@ export interface components {
             expiresAt?: null | string;
             /** @description FR-165 Jira: the custom field holding acceptance criteria, from `GET …/resources?type=fields`. */
             acceptanceCriteriaField?: null | string;
+        };
+        /** @description FR-352: a new version of a project-scope artifact. */
+        CreateProjectArtifactVersionRequest: {
+            /** @description The content: a string for a Markdown artifact, the JSON value (checked against its schema) for a JSON one. */
+            content?: components["schemas"]["JsonElement"];
         };
         /**
          * @description Deployment step of the new-project wizard (FR-88): `provider` `vercel`, one of the caller's own Vercel
@@ -6091,6 +6152,8 @@ export interface components {
             key: string;
             title: string;
             format: components["schemas"]["ArtifactFormat"];
+            /** @description FR-352: `project` for a source-of-truth artifact people edit and runs pin; `run` otherwise. */
+            scope?: components["schemas"]["ArtifactScope"];
         };
         /** @description FR-301: the line diff between two versions of a run's artifact. */
         PipelineArtifactDiffDto: {
@@ -6256,6 +6319,22 @@ export interface components {
             tokens: number;
             /** Format: int32 */
             agentRuns: number;
+            /** @description FR-352, §4.76: the project-scope artifact versions the run pinned at its start (every stage reads them). */
+            pinnedArtifacts?: {
+                key: string;
+                /** Format: uuid */
+                artifactId: string;
+                /** Format: int32 */
+                version: number;
+            }[];
+        };
+        /** @description FR-352: a project-scope artifact version a run pinned. */
+        PipelineRunPinDto: {
+            key: string;
+            /** Format: uuid */
+            artifactId: string;
+            /** Format: int32 */
+            version: number;
         };
         /** @description FR-336: a project schedule (cron evaluated in string PipelineScheduleDto.Timezone, §4.71). */
         PipelineScheduleDto: {
@@ -20087,6 +20166,173 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListProjectArtifactVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                pipelineId: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineArtifactVersionDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateProjectArtifactVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                pipelineId: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["CreateProjectArtifactVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineArtifactVersionDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    LockProjectArtifactVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                pipelineId: string;
+                key: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineArtifactVersionDto"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

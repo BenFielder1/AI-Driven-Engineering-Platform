@@ -68,6 +68,7 @@ public sealed class PipelineRegistry
         var jobTypes = jobHandlers.Select(j => j.JobType).ToList();
         Definitions = [.. registrations.SelectMany(r => r.Definitions.Select(d => Load(d, CatalogFor(r, registrations, componentList, jobTypes))))];
         Definitions = RejectDuplicateIds(Definitions);
+        Definitions = RejectScopeMismatches(Definitions, registrations);
 
         // FR-330: each parsed definition carries its pack's run-control mode.
         Definitions = [.. Definitions.Select(d => d.Definition is null
@@ -159,6 +160,51 @@ public sealed class PipelineRegistry
 
         var canonical = DefinitionHash.CanonicalJson(definition);
         return new LoadedPipelineDefinition(source.PackId, source.Name, definition, DefinitionHash.Compute(definition), canonical, result.Errors);
+    }
+
+    /// <summary>
+    /// FR-352, D-0.8.0-19: a project-scope history is shared by (project, key) across pipelines, so every pipeline that
+    /// declares a project-scope key declares it with the same <c>format</c> and the same schema (by content, as schemas are
+    /// per pack). Each definition after the first that differs gets <c>DEF_SCOPE_INPUT</c> at <c>artifacts.&lt;key&gt;</c>,
+    /// naming both pipelines.
+    /// </summary>
+    private static List<LoadedPipelineDefinition> RejectScopeMismatches(
+        IReadOnlyList<LoadedPipelineDefinition> definitions, IReadOnlyList<PackRegistration> registrations)
+    {
+        var schemasByPack = registrations.ToDictionary(r => r.PackId, r => r.Schemas, StringComparer.Ordinal);
+        string? SchemaOf(string packId, string? schema) =>
+            schema is null ? null : schemasByPack.GetValueOrDefault(packId)?.GetValueOrDefault(schema) ?? schema;
+
+        var first = new Dictionary<string, (string Pipeline, ArtifactFormat Format, string? Schema)>(StringComparer.Ordinal);
+        var result = new List<LoadedPipelineDefinition>(definitions.Count);
+        foreach (var loaded in definitions)
+        {
+            if (loaded.Definition is not { } definition)
+            {
+                result.Add(loaded);
+                continue;
+            }
+
+            var errors = new List<DefinitionError>();
+            foreach (var artifact in definition.Artifacts.Where(a => a.Scope == ArtifactScope.Project))
+            {
+                var schema = SchemaOf(loaded.PackId, artifact.Schema);
+                if (!first.TryGetValue(artifact.Key, out var earlier))
+                {
+                    first[artifact.Key] = (definition.Pipeline, artifact.Format, schema);
+                }
+                else if (earlier.Format != artifact.Format || !string.Equals(earlier.Schema, schema, StringComparison.Ordinal))
+                {
+                    errors.Add(new DefinitionError(DefinitionErrorCodes.ScopeInput, $"artifacts.{artifact.Key}",
+                        $"Project-scope artifact '{artifact.Key}' is declared by pipelines '{earlier.Pipeline}' and '{definition.Pipeline}' "
+                        + "with a different format or schema; pipelines sharing a project-scope key share its history, so they must declare it the same way."));
+                }
+            }
+
+            result.Add(errors.Count == 0 ? loaded : loaded with { Errors = [.. loaded.Errors, .. errors] });
+        }
+
+        return result;
     }
 
     /// <summary>A pipeline id is unique across packs (§4.49): every definition after the first with an id gets
