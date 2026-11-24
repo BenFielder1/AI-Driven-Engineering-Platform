@@ -81,8 +81,9 @@ public sealed class TriggerTests(TevrinApiFactory factory)
     private const string VectorBody = "{\"a\":1}";
     private const string VectorV1 = "54fe8ee64e5499df7c6cee87b1b22c2800b3fbfed80e088b818a25b927713fb0";
 
-    /// <summary>Monday 30 Nov 2026, 05:59 in Europe/London (GMT, so 05:59Z).</summary>
-    private static readonly DateTimeOffset MondayBeforeSix = new(2026, 11, 30, 5, 59, 0, TimeSpan.Zero);
+    /// <summary>Monday 2 Dec 2030, 05:59 in Europe/London (GMT, so 05:59Z). Fake clocks only move forward from a time after
+    /// today: sessions signed in at the fake time stay valid, and a clock set before the real time breaks sign-in.</summary>
+    private static readonly DateTimeOffset MondayBeforeSix = new(2030, 12, 2, 5, 59, 0, TimeSpan.Zero);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -104,7 +105,7 @@ public sealed class TriggerTests(TevrinApiFactory factory)
         using var fixture = await ProjectApi.FixtureAsync(app);
         var created = await ProjectApi.ReadAsync<PipelineScheduleDto>(
             await fixture.Owner.Client.PostAsJsonAsync($"{fixture.Path}/pipeline-schedules", Schedule(), Ct), HttpStatusCode.Created);
-        Assert.Equal(new DateTimeOffset(2026, 11, 30, 6, 0, 0, TimeSpan.Zero), created.NextFireAt);
+        Assert.Equal(new DateTimeOffset(2030, 12, 2, 6, 0, 0, TimeSpan.Zero), created.NextFireAt);
 
         Assert.Equal(0, await QueueDueAsync(app, fixture.Project.Id));
         clock.Advance(TimeSpan.FromMinutes(1));
@@ -116,10 +117,10 @@ public sealed class TriggerTests(TevrinApiFactory factory)
         var run = Assert.Single(runs);
         Assert.Equal(GenericRunStatus.Active, run.Status);
         var moved = Assert.Single(await fixture.Viewer.Client.GetFromJsonAsync<List<PipelineScheduleDto>>($"{fixture.Path}/pipeline-schedules", Ct) ?? []);
-        Assert.Equal((new DateTimeOffset(2026, 12, 7, 6, 0, 0, TimeSpan.Zero), created.NextFireAt), (moved.NextFireAt, moved.LastFireAt));
+        Assert.Equal((new DateTimeOffset(2030, 12, 9, 6, 0, 0, TimeSpan.Zero), created.NextFireAt), (moved.NextFireAt, moved.LastFireAt));
 
         // A week later the run is still active: the fire is skipped and recorded, no second run.
-        clock.Set(new DateTimeOffset(2026, 12, 7, 6, 0, 30, TimeSpan.Zero));
+        clock.Set(new DateTimeOffset(2030, 12, 9, 6, 0, 30, TimeSpan.Zero));
         Assert.Equal(1, await QueueDueAsync(app, fixture.Project.Id));
         await RunFiresAsync(app, fixture.Project.Id);
         Assert.Single(await RunsAsync(app, fixture.Project.Id));
@@ -138,11 +139,12 @@ public sealed class TriggerTests(TevrinApiFactory factory)
             await fixture.Owner.Client.PostAsJsonAsync($"{fixture.Path}/pipeline-schedules", Schedule(), Ct), HttpStatusCode.Created);
 
         // Down for three Mondays.
-        clock.Set(new DateTimeOffset(2026, 12, 16, 12, 0, 0, TimeSpan.Zero));
+        clock.Set(new DateTimeOffset(2030, 12, 18, 12, 0, 0, TimeSpan.Zero));
         Assert.Equal(1, await QueueDueAsync(app, fixture.Project.Id));
         Assert.Equal(0, await QueueDueAsync(app, fixture.Project.Id));
-        var schedule = Assert.Single(await fixture.Owner.Client.GetFromJsonAsync<List<PipelineScheduleDto>>($"{fixture.Path}/pipeline-schedules", Ct) ?? []);
-        Assert.Equal(new DateTimeOffset(2026, 12, 21, 6, 0, 0, TimeSpan.Zero), schedule.NextFireAt);
+        // 16 days on the sign-in cookie (14 days) has expired: read the schedule from the database.
+        var schedule = Assert.Single(await SchedulesAsync(app, fixture.Project.Id));
+        Assert.Equal(new DateTimeOffset(2030, 12, 23, 6, 0, 0, TimeSpan.Zero), schedule.NextFireAt);
     }
 
     [Fact]
@@ -177,7 +179,7 @@ public sealed class TriggerTests(TevrinApiFactory factory)
         await Problems.AssertAsync(await fixture.Owner.Client.PatchAsJsonAsync($"{path}/{created.Id}", new { cron = "nope" }, Ct), HttpStatusCode.BadRequest, ErrorCodes.ScheduleInvalid);
         await Problems.AssertAsync(await fixture.Contributor.Client.PatchAsJsonAsync($"{path}/{created.Id}", new { paused = false }, Ct), HttpStatusCode.Forbidden, ErrorCodes.Forbidden);
         var resumed = await ProjectApi.ReadAsync<PipelineScheduleDto>(await fixture.Owner.Client.PatchAsJsonAsync($"{path}/{created.Id}", new { paused = false }, Ct));
-        Assert.Equal((false, new DateTimeOffset(2026, 12, 7, 6, 0, 0, TimeSpan.Zero)), (resumed.Paused, resumed.NextFireAt)); // no catch-up of the paused fire
+        Assert.Equal((false, new DateTimeOffset(2030, 12, 9, 6, 0, 0, TimeSpan.Zero)), (resumed.Paused, resumed.NextFireAt)); // no catch-up of the paused fire
 
         Assert.Equal(HttpStatusCode.NoContent, (await fixture.Owner.Client.DeleteAsync($"{path}/{created.Id}", Ct)).StatusCode);
         await Problems.AssertAsync(await fixture.Owner.Client.DeleteAsync($"{path}/{created.Id}", Ct), HttpStatusCode.NotFound, ErrorCodes.NotFound);
@@ -186,7 +188,9 @@ public sealed class TriggerTests(TevrinApiFactory factory)
     [Fact]
     public async Task FR337_the_spec_vector_starts_a_run_a_repeated_delivery_is_WEBHOOK_REPLAY_and_a_301_second_old_timestamp_is_refused()
     {
-        var clock = new TriggerClock(DateTimeOffset.FromUnixTimeSeconds(VectorTimestamp));
+        // Signed-in setup runs at the real time; only the anonymous hook calls run at the vector's time (a year earlier,
+        // when no session is valid).
+        var clock = new TriggerClock(DateTimeOffset.UtcNow);
         await using var app = Create(factory, clock);
         using var fixture = await ProjectApi.FixtureAsync(app);
         var webhook = await CreateWebhookAsync(fixture);
@@ -196,6 +200,7 @@ public sealed class TriggerTests(TevrinApiFactory factory)
             await db.PipelineWebhooks.Where(w => w.Id == webhook.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(w => w.Secret, protector.Protect(VectorSecret)), Ct);
         });
+        clock.Set(DateTimeOffset.FromUnixTimeSeconds(VectorTimestamp));
         using var anonymous = app.CreateDefaultClient(TevrinApiFactory.BaseUri);
         var delivery = Guid.NewGuid();
 
@@ -316,23 +321,24 @@ public sealed class TriggerTests(TevrinApiFactory factory)
     public async Task FR336_a_London_schedule_created_in_summer_stores_and_fires_at_0500Z()
     {
         // BST (UTC+1): next_fire_at must be written as UTC, or PostgreSQL refuses the timestamptz.
-        var clock = new TriggerClock(new DateTimeOffset(2026, 7, 6, 4, 59, 0, TimeSpan.Zero));
+        // Mon 5 Jul 2027 (BST); signed in at the fake time, which never goes back before the sign-in.
+        var clock = new TriggerClock(new DateTimeOffset(2027, 7, 5, 4, 59, 0, TimeSpan.Zero));
         await using var app = Create(factory, clock);
         using var fixture = await ProjectApi.FixtureAsync(app);
         var created = await ProjectApi.ReadAsync<PipelineScheduleDto>(
             await fixture.Owner.Client.PostAsJsonAsync($"{fixture.Path}/pipeline-schedules", Schedule(), Ct), HttpStatusCode.Created);
-        Assert.Equal(new DateTimeOffset(2026, 7, 6, 5, 0, 0, TimeSpan.Zero), created.NextFireAt);
+        Assert.Equal(new DateTimeOffset(2027, 7, 5, 5, 0, 0, TimeSpan.Zero), created.NextFireAt);
 
         var patched = await ProjectApi.ReadAsync<PipelineScheduleDto>(
             await fixture.Owner.Client.PatchAsJsonAsync($"{fixture.Path}/pipeline-schedules/{created.Id}", new { cron = "30 6 * * 1" }, Ct));
-        Assert.Equal(new DateTimeOffset(2026, 7, 6, 5, 30, 0, TimeSpan.Zero), patched.NextFireAt);
+        Assert.Equal(new DateTimeOffset(2027, 7, 5, 5, 30, 0, TimeSpan.Zero), patched.NextFireAt);
 
         clock.Advance(TimeSpan.FromMinutes(31));
         Assert.Equal(1, await QueueDueAsync(app, fixture.Project.Id));
         await RunFiresAsync(app, fixture.Project.Id);
         Assert.Single(await RunsAsync(app, fixture.Project.Id));
         var moved = Assert.Single(await fixture.Owner.Client.GetFromJsonAsync<List<PipelineScheduleDto>>($"{fixture.Path}/pipeline-schedules", Ct) ?? []);
-        Assert.Equal(new DateTimeOffset(2026, 7, 13, 5, 30, 0, TimeSpan.Zero), moved.NextFireAt);
+        Assert.Equal(new DateTimeOffset(2027, 7, 12, 5, 30, 0, TimeSpan.Zero), moved.NextFireAt);
     }
 
     private static async Task<CreatedPipelineWebhookDto> CreateWebhookAsync(ProjectFixture fixture) =>
@@ -387,8 +393,16 @@ public sealed class TriggerTests(TevrinApiFactory factory)
         }
     }
 
+    /// <summary>The project's runs of the trigger fixtures (a new project also has its SDLC run, which isn't counted).</summary>
     private static Task<List<PipelineRun>> RunsAsync(WebApplicationFactory<Program> app, Guid projectId) =>
-        ProjectApi.WithDbAsync(app, db => db.PipelineRuns.AsNoTracking().Where(r => r.ProjectId == projectId).ToListAsync(Ct));
+        ProjectApi.WithDbAsync(app, db => db.PipelineRuns.AsNoTracking()
+            .Where(r => r.ProjectId == projectId
+                && (r.PipelineId == FixtureTriggersPack.ScheduledPipeline || r.PipelineId == FixtureTriggersPack.WebhookPipeline))
+            .ToListAsync(Ct));
+
+    /// <summary>The project's schedules, read from the database (the clock may have moved past the session's lifetime).</summary>
+    private static Task<List<PipelineSchedule>> SchedulesAsync(WebApplicationFactory<Program> app, Guid projectId) =>
+        ProjectApi.WithDbAsync(app, db => db.PipelineSchedules.AsNoTracking().Where(s => s.ProjectId == projectId).ToListAsync(Ct));
 
     private static async Task<List<JsonElement>> FiredEventsAsync(WebApplicationFactory<Program> app, Guid projectId)
     {
