@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
 using Tevrin.Domain.GitHosts;
@@ -31,7 +32,7 @@ public sealed partial class CommitCredit(TevrinDbContext db, ISecretProtectors p
             }
 
             var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-            var approver = await db.ApprovalGates.AsNoTracking()
+            var approver = await db.ApprovalGates.Sdlc().AsNoTracking()
                 .Where(g => g.ProjectId == projectId && g.ReleaseVersionId == versionId && g.Type == SdlcGates.PlanApproval
                     && g.Status == GateStatus.Approved && (g.ArtifactId == planId || g.ArtifactId == null))
                 .OrderByDescending(g => g.DecidedAt)
@@ -64,7 +65,7 @@ public sealed partial class CommitCredit(TevrinDbContext db, ISecretProtectors p
                 return null;
             }
 
-            var approver = await db.ApprovalGates.AsNoTracking()
+            var approver = await db.ApprovalGates.Sdlc().AsNoTracking()
                 .Where(g => g.ProjectId == release.ProjectId && g.ReleaseVersionId == release.ReleaseVersionId
                     && g.Type == SdlcGates.PreRelease && g.Status == GateStatus.Approved)
                 .OrderByDescending(g => g.DecidedAt)

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Releases;
 using Tevrin.Engine.Domain.Gates;
@@ -32,7 +33,7 @@ public sealed partial class MergeReadinessJobHandler(TevrinDbContext db, MergeRe
             throw new JobFailedException($"The merge readiness job payload can't be read: {ex.Message}", transient: false, ErrorCodes.Validation);
         }
 
-        var pending = await db.ApprovalGates.AsNoTracking()
+        var pending = await db.ApprovalGates.Sdlc().AsNoTracking()
             .AnyAsync(g => g.Id == payload.GateId && g.ProjectId == payload.ProjectId && g.Status == GateStatus.Pending, cancellationToken);
         var phase = await db.Projects.AsNoTracking().Where(p => p.Id == payload.ProjectId).Select(p => (Domain.Lifecycle.Phase?)p.CurrentPhase).FirstOrDefaultAsync(cancellationToken);
         if (!pending || phase is not { } current || MergeReadinessRules.CanCheck(current).IsFailure)

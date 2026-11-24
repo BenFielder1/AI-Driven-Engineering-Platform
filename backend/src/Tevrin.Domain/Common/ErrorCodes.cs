@@ -384,6 +384,33 @@ public static class ErrorCodes
     /// <summary>FR-148, §6 (409): the action can't run in the current state, e.g. a preview database reset while a preview rollout runs.</summary>
     public const string InvalidState = "INVALID_STATE";
 
+    /// <summary>FR-330, §6 (409): the pipeline's runs are started and moved by its own pages (<c>RunControl.Host</c>).</summary>
+    public const string RunControlledByHost = "RUN_CONTROLLED_BY_HOST";
+
+    /// <summary>FR-331, §6 (409): the project already has an active run of this pipeline.</summary>
+    public const string RunAlreadyActive = "RUN_ALREADY_ACTIVE";
+
+    /// <summary>FR-333, §6 (409): the run has finished.</summary>
+    public const string RunNotActive = "RUN_NOT_ACTIVE";
+
+    /// <summary>FR-331, FR-335, §6 (400): the input doesn't match its schema (details list the paths).</summary>
+    public const string InputInvalid = "INPUT_INVALID";
+
+    /// <summary>§6 (409): a project-wide artifact the run needs has no locked version.</summary>
+    public const string SourceArtifactMissing = "SOURCE_ARTIFACT_MISSING";
+
+    /// <summary>FR-336, §6 (400): bad cron or timezone.</summary>
+    public const string ScheduleInvalid = "SCHEDULE_INVALID";
+
+    /// <summary>FR-336, FR-337, §6 (409): the pipeline doesn't declare that trigger.</summary>
+    public const string TriggerNotSupported = "TRIGGER_NOT_SUPPORTED";
+
+    /// <summary>FR-337, §4.72, §6 (401, API only): a bad, missing or stale webhook signature.</summary>
+    public const string WebhookSignatureInvalid = "WEBHOOK_SIGNATURE_INVALID";
+
+    /// <summary>FR-337, §4.72, §6 (409, API only): the delivery id was already received in the last 24 hours.</summary>
+    public const string WebhookReplay = "WEBHOOK_REPLAY";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -479,6 +506,15 @@ public static class ErrorCodes
         [InvalidState] = 409,
         [LinkExpired] = 410,
         [LinkUsed] = 409,
+        [RunControlledByHost] = 409,
+        [RunAlreadyActive] = 409,
+        [RunNotActive] = 409,
+        [InputInvalid] = 400,
+        [SourceArtifactMissing] = 409,
+        [ScheduleInvalid] = 400,
+        [TriggerNotSupported] = 409,
+        [WebhookSignatureInvalid] = 401,
+        [WebhookReplay] = 409,
     };
 
     /// <summary>Every code that an endpoint can return, with its HTTP status (SPEC §6).</summary>

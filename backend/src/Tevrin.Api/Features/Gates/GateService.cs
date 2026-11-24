@@ -155,7 +155,7 @@ public sealed partial class GateService(
                 {
                     // FR-14 accept: release-eligible with the comment recorded on the gate; release still needs the
                     // pre_release gate (§4.2, every mode).
-                    var preReleasePending = await db.ApprovalGates.AnyAsync(
+                    var preReleasePending = await db.ApprovalGates.Sdlc().AnyAsync(
                         g => g.ProjectId == project.Id && g.Type == SdlcGates.PreRelease && g.Status == GateStatus.Pending,
                         cancellationToken);
                     if (state.Phase == Phase.Review && !preReleasePending)
@@ -331,7 +331,7 @@ public sealed partial class GateService(
 
     private async Task<(Project? Project, ApprovalGate? Gate)> LoadAsync(Guid projectId, Guid gateId, CancellationToken cancellationToken)
     {
-        var gate = await db.ApprovalGates.FirstOrDefaultAsync(g => g.Id == gateId && g.ProjectId == projectId, cancellationToken);
+        var gate = await db.ApprovalGates.Sdlc().FirstOrDefaultAsync(g => g.Id == gateId && g.ProjectId == projectId, cancellationToken);
         if (gate is null)
         {
             return (null, null);

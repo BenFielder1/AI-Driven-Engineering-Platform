@@ -29,7 +29,8 @@ public sealed class PipelineRunReader(
     public Task<PipelineRun?> CurrentRunAsync(Guid projectId, CancellationToken cancellationToken) =>
         db.PipelineRuns.AsNoTracking()
             .Where(r => r.ProjectId == projectId)
-            .OrderBy(r => r.Status == GenericRunStatus.Active ? 0 : 1)
+            // Non-final first (PipelineRunRules.IsFinal, written out so EF translates it): active and waiting_on_input (FR-335).
+            .OrderBy(r => r.Status == GenericRunStatus.Completed || r.Status == GenericRunStatus.Failed || r.Status == GenericRunStatus.Cancelled ? 1 : 0)
             .ThenByDescending(r => r.StartedAt)
             .ThenByDescending(r => r.Id)
             .FirstOrDefaultAsync(cancellationToken);

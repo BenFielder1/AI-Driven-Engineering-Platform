@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Execution;
 using Tevrin.Engine.Domain.Artifacts;
@@ -32,7 +33,7 @@ public sealed class ExecutionRunReader(TevrinDbContext db)
         }
 
         var planIds = steps.Select(s => s.PlanArtifactId).Distinct().ToList();
-        var plans = await db.Artifacts.AsNoTracking()
+        var plans = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => planIds.Contains(a.Id))
             .Select(a => new RunPlan(a.Id, a.Type, a.Version, a.Status, a.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -123,7 +124,7 @@ public sealed class ExecutionRunReader(TevrinDbContext db)
     /// </summary>
     public async Task<RunPlan?> RunOfReportAsync(Guid projectId, Guid releaseVersionId, Guid reportId, CancellationToken cancellationToken)
     {
-        var plans = await db.Artifacts.AsNoTracking()
+        var plans = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == SdlcArtifacts.OptimizationPlan
                 && db.ExecutionSteps.Any(s => s.PlanArtifactId == a.Id))
             .Select(a => new RunPlan(a.Id, a.Type, a.Version, a.Status, a.CreatedAt))

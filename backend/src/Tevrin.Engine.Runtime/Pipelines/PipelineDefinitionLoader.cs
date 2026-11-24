@@ -128,7 +128,7 @@ public static class PipelineDefinitionLoader
 
         private ArtifactDefinition? Artifact(string key, YamlNode node, string path)
         {
-            if (AsObject(node, path, ["title", "format", "schema", "approval", "cascade"]) is not { } obj)
+            if (AsObject(node, path, ["title", "format", "schema", "approval", "cascade", "input"]) is not { } obj)
             {
                 return new ArtifactDefinition(key, string.Empty, ArtifactFormat.Markdown, null, ArtifactApproval.Required, CascadeMode.Downstream);
             }
@@ -139,7 +139,11 @@ public static class PipelineDefinitionLoader
                 obj.Enum<ArtifactFormat>("format") ?? ArtifactFormat.Markdown,
                 obj.OptionalString("schema"),
                 obj.Enum<ArtifactApproval>("approval") ?? ArtifactApproval.Required,
-                obj.Enum<CascadeMode>("cascade") ?? CascadeMode.Downstream);
+                obj.Enum<CascadeMode>("cascade") ?? CascadeMode.Downstream)
+            {
+                // FR-335: supplied from outside the run.
+                Input = obj.Bool("input") ?? false,
+            };
         }
 
         private StatusDefinition? Status(string name, YamlNode node, string path)
@@ -176,7 +180,7 @@ public static class PipelineDefinitionLoader
                 return ConcurrencyDefinition.None;
             }
 
-            var obj = Object(concurrency.Map, concurrency.Path, ["exclusive"]);
+            var obj = Object(concurrency.Map, concurrency.Path, ["exclusive", "runs"]);
             var exclusive = obj.List("exclusive", (node, path) =>
             {
                 var item = AsObject(node, path, ["job_type", "scope"]);
@@ -184,7 +188,11 @@ public static class PipelineDefinitionLoader
                     ? null
                     : new ExclusiveJob(item.String("job_type"), item.Enum<ConcurrencyScope>("scope", required: true) ?? ConcurrencyScope.Project);
             });
-            return new ConcurrencyDefinition(exclusive.OfType<ExclusiveJob>().ToList());
+            return new ConcurrencyDefinition(exclusive.OfType<ExclusiveJob>().ToList())
+            {
+                // FR-331: runs per project, default one.
+                Runs = obj.Enum<RunConcurrency>("runs") ?? RunConcurrency.One,
+            };
         }
 
         private StageDefinition? Stage(YamlNode node, string path)
@@ -271,7 +279,7 @@ public static class PipelineDefinitionLoader
             {
                 if (node is not YamlMapping map || map.Entries.Count != 1)
                 {
-                    Error(path, "A requirement is one of { artifact_locked: <key> }, { no_pending_gates: { except: [...] } } or { guard: <name> }.");
+                    Error(path, "A requirement is one of { artifact_locked: <key> }, { no_pending_gates: { except: [...] } }, { guard: <name> } or { input: <key> }.");
                     return null;
                 }
 
@@ -283,6 +291,9 @@ public static class PipelineDefinitionLoader
                         return new ArtifactLockedRequirement(Text(value, valuePath) ?? string.Empty);
                     case "guard":
                         return new GuardRequirement(Text(value, valuePath) ?? string.Empty);
+                    case "input":
+                        // FR-335: the run waits for a version of this input artifact.
+                        return new InputRequirement(Text(value, valuePath) ?? string.Empty);
                     case "no_pending_gates":
                         if (value is YamlScalar { IsNull: true })
                         {

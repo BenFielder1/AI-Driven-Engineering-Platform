@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
 using Tevrin.Domain.Stack;
@@ -218,7 +219,7 @@ public sealed partial class ProjectStackService(
     /// <summary>FR-117: whether the version's first implementation plan has been locked.</summary>
     private async Task<bool> PlanWasLockedAsync(Guid projectId, Guid releaseVersionId, CancellationToken cancellationToken)
     {
-        var plans = await db.Artifacts.AsNoTracking()
+        var plans = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == SdlcArtifacts.ImplementationPlan)
             .Select(a => new { a.Status, a.ApprovedAt })
             .ToListAsync(cancellationToken);

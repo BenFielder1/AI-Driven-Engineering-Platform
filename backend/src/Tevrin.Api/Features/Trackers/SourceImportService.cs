@@ -4,6 +4,7 @@ using Npgsql;
 using Tevrin.Api.Features.Activity;
 using Tevrin.Api.Features.Lifecycle;
 using Tevrin.Api.Features.Versions;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
@@ -130,7 +131,7 @@ public sealed partial class SourceImportService(
             .OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id)
             .ToListAsync(cancellationToken);
         var names = await ActorResolver.NamesAsync(db, imports.Select(i => i.CreatedBy).Distinct(), cancellationToken);
-        var snapshot = await db.Artifacts.AsNoTracking()
+        var snapshot = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.SourceItems && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => new SourceSnapshotDto(a.Id, a.Version, a.ContentHash, a.CreatedAt))
@@ -327,7 +328,7 @@ public sealed partial class SourceImportService(
             db.ChangeTracker.Clear();
         }
 
-        var hash = await db.Artifacts.AsNoTracking()
+        var hash = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.SourceItems && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => a.ContentHash)
@@ -392,7 +393,7 @@ public sealed partial class SourceImportService(
 
     private async Task<SourceDraftStateDto?> DraftStateAsync(Guid projectId, Guid? versionId, SourceSnapshotDto? snapshot, CancellationToken cancellationToken)
     {
-        var draft = await db.Artifacts.AsNoTracking()
+        var draft = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == SdlcArtifacts.ProjectRequest)
             .OrderByDescending(a => a.Version)
             .Select(a => new { a.Id, a.Version, a.AgentRunId, a.CreatedAt })
@@ -466,7 +467,7 @@ public sealed class SourceSnapshotWriter(TevrinDbContext db)
     {
         ArgumentNullException.ThrowIfNull(project);
         project.UpdatedAt = now;
-        var existing = await db.Artifacts.AsNoTracking()
+        var existing = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.SourceItems)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);

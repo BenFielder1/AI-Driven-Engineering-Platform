@@ -7,6 +7,7 @@ using Tevrin.Api.Features.Execution;
 using Tevrin.Api.Features.Lifecycle;
 using Tevrin.Api.Features.Stack;
 using Tevrin.Api.Jobs;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Agents;
 using Tevrin.Domain.Common;
@@ -260,7 +261,7 @@ public sealed partial class ReviewJobHandler(
         project.UpdatedAt = now;
 
         // The decision gates of an earlier cycle no longer describe the code being reviewed: a new decision replaces them.
-        var superseded = await db.ApprovalGates
+        var superseded = await db.ApprovalGates.Sdlc()
             .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending && (g.Type == SdlcGates.PreRelease || g.Type == EngineGates.Escalation))
             .ToListAsync(cancellationToken);
         foreach (var gate in Artifacts.EventOrder.Cancelled(superseded))
@@ -682,7 +683,7 @@ public sealed partial class ReviewJobHandler(
             (beforeHistory ?? new FailureHistoryInput([], null)) with { Waivers = CollectedChecks.StoredWaivers(report.ExternalChecks) });
         var summary = CodeReviewOutput.PreviousReviewSummary(report.ReviewCycle, report.Score, report.Decision, report.Violations, report.MissingFeatures, report.DriftAreas);
         var rejected = payload.ArtifactId is { } id
-            ? await db.Artifacts.AsNoTracking().Where(a => a.Id == id && a.ProjectId == project.Id).Select(a => (int?)a.Version).FirstOrDefaultAsync(cancellationToken)
+            ? await db.Artifacts.Sdlc().AsNoTracking().Where(a => a.Id == id && a.ProjectId == project.Id).Select(a => (int?)a.Version).FirstOrDefaultAsync(cancellationToken)
             : null;
         var feedback = ArtifactAgentSpec.JoinFeedback(
             payload.Trigger == LifecycleJobPayload.ArtifactRejected
@@ -734,7 +735,7 @@ public sealed partial class ReviewJobHandler(
             return null;
         }
 
-        var content = await db.Artifacts.AsNoTracking().Where(a => a.Id == id).Select(a => a.Content).FirstOrDefaultAsync(cancellationToken);
+        var content = await db.Artifacts.Sdlc().AsNoTracking().Where(a => a.Id == id).Select(a => a.Content).FirstOrDefaultAsync(cancellationToken);
         return content is null ? null : Domain.Execution.PlanDocument.ReadSteps(content);
     }
 

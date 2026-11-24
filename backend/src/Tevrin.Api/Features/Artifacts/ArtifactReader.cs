@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Activity;
 using Tevrin.Api.Features.Stack;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Deployments;
 using Tevrin.Domain.Entities;
@@ -24,9 +25,15 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
     /// <summary>The highest version of each type that exists in release version <paramref name="releaseVersionId"/>, in type order.</summary>
     public async Task<IReadOnlyList<ArtifactSummaryDto>> ListLatestAsync(Guid projectId, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
-        var latest = await db.Artifacts.AsNoTracking()
+        // FR-334: no release version, no SDLC artifacts (a null scope never matches a subject-less run's rows).
+        if (releaseVersionId is null)
+        {
+            return [];
+        }
+
+        var latest = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId
-                && a.Version == db.Artifacts.Where(b => b.ProjectId == projectId && b.ReleaseVersionId == releaseVersionId && b.Type == a.Type).Max(b => b.Version))
+                && a.Version == db.Artifacts.Where(b => b.ReleaseVersionId != null && b.ProjectId == projectId && b.ReleaseVersionId == releaseVersionId && b.Type == a.Type).Max(b => b.Version))
             .ToListAsync(cancellationToken);
         // Type order is the 0.6.1 enum order (SdlcArtifacts.All), not alphabetical.
         return await SummariesAsync([.. latest.OrderBy(a => SdlcArtifacts.Order(a.Type))], cancellationToken);
@@ -35,7 +42,12 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
     /// <summary>Every version of a type in release version <paramref name="releaseVersionId"/>, newest first.</summary>
     public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAsync(Guid projectId, string type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
-        var versions = await db.Artifacts.AsNoTracking()
+        if (releaseVersionId is null)
+        {
+            return [];
+        }
+
+        var versions = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type)
             .OrderByDescending(a => a.Version)
             .ToListAsync(cancellationToken);
@@ -45,7 +57,7 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
     /// <summary>FR-59: every version of a type across all the project's release versions, newest first.</summary>
     public async Task<IReadOnlyList<ArtifactSummaryDto>> HistoryAcrossReleaseVersionsAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
-        var versions = await db.Artifacts.AsNoTracking()
+        var versions = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == type)
             .OrderByDescending(a => a.Version)
             .ToListAsync(cancellationToken);
@@ -55,8 +67,13 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
     /// <summary>The highest version of a type in release version <paramref name="releaseVersionId"/>, without its content, or <c>null</c>.</summary>
     public async Task<ArtifactSummaryDto?> LatestSummaryAsync(Guid projectId, string type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
+        if (releaseVersionId is null)
+        {
+            return null;
+        }
+
         var versionId = releaseVersionId;
-        var artifact = await db.Artifacts.AsNoTracking()
+        var artifact = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == type)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
@@ -66,7 +83,12 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
     /// <summary>The highest version of a type in release version <paramref name="releaseVersionId"/>, or <c>null</c>.</summary>
     public async Task<ArtifactDto?> LatestAsync(Guid projectId, string type, Guid? releaseVersionId, CancellationToken cancellationToken)
     {
-        var artifact = await db.Artifacts.AsNoTracking()
+        if (releaseVersionId is null)
+        {
+            return null;
+        }
+
+        var artifact = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
@@ -115,7 +137,7 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
         ArgumentNullException.ThrowIfNull(artifact);
         var checkedIntegrity = await integrity.CheckAsync(artifact, cancellationToken);
         var names = await ActorResolver.NamesAsync(db, new[] { artifact.CreatedByUserId, artifact.ApprovedBy }.OfType<Guid>(), cancellationToken);
-        var releaseVersions = await ReleaseVersionNamesAsync([artifact.ReleaseVersionId], cancellationToken);
+        var releaseVersions = await ReleaseVersionNamesAsync([SdlcRows.ReleaseVersion(artifact.ReleaseVersionId)], cancellationToken);
         return new ArtifactDto(
             artifact.Id,
             artifact.Type,
@@ -124,7 +146,7 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
             artifact.Content,
             artifact.ContentHash,
             artifact.Status,
-            artifact.ReleaseVersionId,
+            SdlcRows.ReleaseVersion(artifact.ReleaseVersionId),
             artifact.CheckpointAtCreation,
             Author(artifact, names),
             artifact.ApprovedBy is { } approver ? User(approver, names) : null,
@@ -132,7 +154,7 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
             artifact.RejectionComment,
             artifact.CreatedAt,
             checkedIntegrity,
-            releaseVersions.GetValueOrDefault(artifact.ReleaseVersionId, string.Empty),
+            releaseVersions.GetValueOrDefault(SdlcRows.ReleaseVersion(artifact.ReleaseVersionId), string.Empty),
             artifact.RestoredFromVersion,
             await WarningsAsync(artifact, cancellationToken));
     }
@@ -156,14 +178,14 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
             return [];
         }
 
-        var version = await stacks.ForVersionAsync(artifact.ReleaseVersionId, cancellationToken, readBase: false);
+        var version = await stacks.ForVersionAsync(SdlcRows.ReleaseVersion(artifact.ReleaseVersionId), cancellationToken, readBase: false);
         var plan = PlanDocument.ParseMarkdown(artifact.Content, maxFilesPerStep: null, version.PlanAgents(artifact.Type));
         if (plan.IsFailure)
         {
             return [];
         }
 
-        var spec = await db.Artifacts.AsNoTracking()
+        var spec = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == artifact.ProjectId && a.ReleaseVersionId == artifact.ReleaseVersionId
                 && a.Type == SdlcArtifacts.TechnicalSpecification && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
@@ -211,13 +233,13 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
     }
 
     private Task<Artifact?> FindAsync(Guid projectId, string type, int version, CancellationToken cancellationToken) =>
-        db.Artifacts.AsNoTracking().FirstOrDefaultAsync(a => a.ProjectId == projectId && a.Type == type && a.Version == version, cancellationToken);
+        db.Artifacts.Sdlc().AsNoTracking().FirstOrDefaultAsync(a => a.ProjectId == projectId && a.Type == type && a.Version == version, cancellationToken);
 
     private async Task<IReadOnlyList<ArtifactSummaryDto>> SummariesAsync(IReadOnlyList<Artifact> artifacts, CancellationToken cancellationToken)
     {
         var checkedIntegrity = await integrity.CheckAsync(artifacts, cancellationToken);
         var names = await ActorResolver.NamesAsync(db, artifacts.Select(a => a.CreatedByUserId).OfType<Guid>(), cancellationToken);
-        var releaseVersions = await ReleaseVersionNamesAsync([.. artifacts.Select(a => a.ReleaseVersionId).Distinct()], cancellationToken);
+        var releaseVersions = await ReleaseVersionNamesAsync([.. artifacts.Select(a => SdlcRows.ReleaseVersion(a.ReleaseVersionId)).Distinct()], cancellationToken);
         return
         [
             .. artifacts.Select(a => new ArtifactSummaryDto(
@@ -225,11 +247,11 @@ public sealed class ArtifactReader(TevrinDbContext db, ArtifactIntegrityGuard in
                 a.Type,
                 a.Version,
                 a.Status,
-                a.ReleaseVersionId,
+                SdlcRows.ReleaseVersion(a.ReleaseVersionId),
                 checkedIntegrity[a.Id],
                 a.CreatedAt,
                 Author(a, names),
-                releaseVersions.GetValueOrDefault(a.ReleaseVersionId, string.Empty),
+                releaseVersions.GetValueOrDefault(SdlcRows.ReleaseVersion(a.ReleaseVersionId), string.Empty),
                 a.RestoredFromVersion)),
         ];
     }

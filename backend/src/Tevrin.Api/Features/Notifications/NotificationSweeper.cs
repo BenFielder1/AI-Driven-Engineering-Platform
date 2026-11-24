@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Tevrin.Api.Logging;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Notifications;
@@ -32,7 +33,7 @@ public sealed partial class GateTimerService(TevrinDbContext db, JobEnqueuer job
         var overdueCutoff = now - GateTimers.OverdueAfter;
         // Only gates with something due: not yet reminded, or old enough to be overdue. A reminded gate waiting for its
         // 72-hour mark would otherwise fill the batch and starve newer gates of their reminders.
-        var candidates = await db.ApprovalGates.AsNoTracking()
+        var candidates = await db.ApprovalGates.Sdlc().AsNoTracking()
             .Where(g => g.Status == GateStatus.Pending && !g.Overdue && g.CreatedAt <= reminderCutoff
                 && (g.RemindedAt == null || g.CreatedAt <= overdueCutoff))
             .OrderBy(g => g.CreatedAt)
@@ -58,7 +59,7 @@ public sealed partial class GateTimerService(TevrinDbContext db, JobEnqueuer job
     private async Task<bool> MarkOverdueAsync(ApprovalGate gate, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var updated = await db.ApprovalGates
+        var updated = await db.ApprovalGates.Sdlc()
             .Where(g => g.Id == gate.Id && g.Status == GateStatus.Pending && !g.Overdue)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.Overdue, true), cancellationToken);
         if (updated == 0)
@@ -77,7 +78,7 @@ public sealed partial class GateTimerService(TevrinDbContext db, JobEnqueuer job
     private async Task<bool> RemindAsync(ApprovalGate gate, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var updated = await db.ApprovalGates
+        var updated = await db.ApprovalGates.Sdlc()
             .Where(g => g.Id == gate.Id && g.Status == GateStatus.Pending && !g.Overdue && g.RemindedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.RemindedAt, now), cancellationToken);
         if (updated == 0)

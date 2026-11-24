@@ -66,6 +66,12 @@ public sealed class TevrinDbContext(DbContextOptions<TevrinDbContext> options)
 
     public DbSet<ApprovalGate> ApprovalGates => Set<ApprovalGate>();
 
+    public DbSet<PipelineSchedule> PipelineSchedules => Set<PipelineSchedule>();
+
+    public DbSet<PipelineWebhook> PipelineWebhooks => Set<PipelineWebhook>();
+
+    public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+
     public DbSet<ExecutionStep> ExecutionSteps => Set<ExecutionStep>();
 
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();

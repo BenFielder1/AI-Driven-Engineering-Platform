@@ -40,6 +40,15 @@ public interface IEngineDbContext
     /// <summary>FR-296: approval gates (the agent stage runner raises <c>escalation</c> gates).</summary>
     DbSet<ApprovalGate> ApprovalGates { get; }
 
+    /// <summary>FR-336: <c>pipeline_schedules</c>.</summary>
+    DbSet<PipelineSchedule> PipelineSchedules { get; }
+
+    /// <summary>FR-337: <c>pipeline_webhooks</c>.</summary>
+    DbSet<PipelineWebhook> PipelineWebhooks { get; }
+
+    /// <summary>FR-337: <c>webhook_deliveries</c>.</summary>
+    DbSet<WebhookDelivery> WebhookDeliveries { get; }
+
     DatabaseFacade Database { get; }
 
     ChangeTracker ChangeTracker { get; }

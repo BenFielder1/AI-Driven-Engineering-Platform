@@ -8,6 +8,7 @@ using Tevrin.Api.Errors;
 using Tevrin.Api.Features.Admin;
 using Tevrin.Api.Features.Projects;
 using Tevrin.Api.Features.Versions;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Lifecycle;
 using Tevrin.Domain.Projects;
@@ -192,7 +193,7 @@ public static class RunEndpoints
             return [];
         }
 
-        var fromArtifacts = await db.Artifacts.AsNoTracking()
+        var fromArtifacts = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))
             .GroupBy(a => a.AgentRunId!.Value)
             .Select(g => new { RunId = g.Key, Checkpoint = g.Min(a => a.CheckpointAtCreation) })

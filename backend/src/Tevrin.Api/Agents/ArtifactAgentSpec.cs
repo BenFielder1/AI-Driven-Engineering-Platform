@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Artifacts;
 using Tevrin.Api.Jobs;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
@@ -71,7 +72,7 @@ public sealed class AgentJobInputs(TevrinDbContext db, ArtifactIntegrityGuard in
     public async Task<Artifact?> CurrentAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-        var artifact = await db.Artifacts.AsNoTracking()
+        var artifact = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == type && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
@@ -82,7 +83,7 @@ public sealed class AgentJobInputs(TevrinDbContext db, ArtifactIntegrityGuard in
     public async Task<Artifact?> LatestIntactAsync(Guid projectId, string type, CancellationToken cancellationToken)
     {
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-        var candidates = await db.Artifacts.AsNoTracking()
+        var candidates = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == type && a.Status != ArtifactStatus.Corrupted)
             .OrderByDescending(a => a.Version)
             .Take(5)
@@ -108,7 +109,7 @@ public sealed class AgentJobInputs(TevrinDbContext db, ArtifactIntegrityGuard in
         Guid? artifactId = payload.Trigger switch
         {
             LifecycleJobPayload.ArtifactRejected => payload.ArtifactId,
-            LifecycleJobPayload.GateRejected when payload.GateId is { } gateId => await db.ApprovalGates.AsNoTracking()
+            LifecycleJobPayload.GateRejected when payload.GateId is { } gateId => await db.ApprovalGates.Sdlc().AsNoTracking()
                 .Where(g => g.Id == gateId)
                 .Select(g => g.ArtifactId)
                 .FirstOrDefaultAsync(cancellationToken),
@@ -119,7 +120,7 @@ public sealed class AgentJobInputs(TevrinDbContext db, ArtifactIntegrityGuard in
             return null;
         }
 
-        var artifact = await db.Artifacts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id && a.ProjectId == payload.ProjectId && a.Type == type, cancellationToken);
+        var artifact = await db.Artifacts.Sdlc().AsNoTracking().FirstOrDefaultAsync(a => a.Id == id && a.ProjectId == payload.ProjectId && a.Type == type, cancellationToken);
         return await IntactAsync(artifact, cancellationToken);
     }
 

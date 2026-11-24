@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Auth;
 using Tevrin.Api.Errors;
 using Tevrin.Api.Features.Gates;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
@@ -82,7 +83,7 @@ public static class ApprovalEndpoints
         ApprovalArtifactSummaryDto? artifact = null;
         if (gate.ArtifactId is { } artifactId)
         {
-            artifact = await db.Artifacts.AsNoTracking()
+            artifact = await db.Artifacts.Sdlc().AsNoTracking()
                 .Where(a => a.Id == artifactId)
                 .Select(a => new { a.Type, a.Version, a.Content })
                 .FirstOrDefaultAsync(cancellationToken) is { } a
@@ -169,7 +170,7 @@ public static class ApprovalEndpoints
         var link = await links.FindAsync(token, cancellationToken);
         var gate = link is null
             ? null
-            : await db.ApprovalGates.AsNoTracking().FirstOrDefaultAsync(g => g.Id == link.GateId, cancellationToken);
+            : await db.ApprovalGates.Sdlc().AsNoTracking().FirstOrDefaultAsync(g => g.Id == link.GateId, cancellationToken);
         if (link is null || gate is null)
         {
             return new OpenedLink(null, null, ApiProblems.NotFound("This approval link is not valid."));

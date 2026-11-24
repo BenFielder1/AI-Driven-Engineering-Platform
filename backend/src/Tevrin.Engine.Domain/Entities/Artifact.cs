@@ -29,8 +29,9 @@ public sealed class Artifact
     /// <summary>The lifecycle checkpoint the artifact was created at (§4.10).</summary>
     public int CheckpointAtCreation { get; init; }
 
-    /// <summary>The release version the artifact belongs to (§4.10).</summary>
-    public Guid ReleaseVersionId { get; init; }
+    /// <summary>The release version the artifact belongs to (§4.10); FR-334: <c>null</c> for an artifact of a run without a
+    /// subject, which belongs to the run alone (<see cref="PipelineRunId"/>).</summary>
+    public Guid? ReleaseVersionId { get; init; }
 
     /// <summary>FR-294: the pipeline run the artifact belongs to (nullable until the contract step, D-0.7.0-28).</summary>
     public Guid? PipelineRunId { get; init; }

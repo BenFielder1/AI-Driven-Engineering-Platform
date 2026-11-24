@@ -5,6 +5,7 @@ using Tevrin.Api.Features.Lifecycle;
 using Tevrin.Api.Features.Refinement;
 using Tevrin.Api.Features.Stack;
 using Tevrin.Api.Jobs;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Agents;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
@@ -77,11 +78,11 @@ public sealed partial class AnalysisService(
                 pinned.Composition is { } c ? StackMapping.ToDto(c) : null, previous, Deployment(null, pinned.Composition)));
         }
 
-        var latest = await db.Artifacts.AsNoTracking()
+        var latest = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.StackProfile)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);
-        var lockedExists = latest is not null && (latest.Status == ArtifactStatus.Locked || await db.Artifacts.AsNoTracking().AnyAsync(
+        var lockedExists = latest is not null && (latest.Status == ArtifactStatus.Locked || await db.Artifacts.Sdlc().AsNoTracking().AnyAsync(
             a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.StackProfile && a.Status == ArtifactStatus.Locked,
             cancellationToken));
         var parsed = latest is null ? null : StackProfile.Parse(latest.Content);
@@ -290,7 +291,7 @@ public sealed partial class AnalysisService(
             .Select(AgentRunProjections.WithoutInput)
             .ToListAsync(cancellationToken);
         var run = runs.FirstOrDefault(r => r.Id == corrective) ?? runs.FirstOrDefault(r => r.Id == main);
-        var draft = await db.Artifacts.AsNoTracking()
+        var draft = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.StackProfile && a.AgentRunId != null && (a.AgentRunId == main || a.AgentRunId == corrective))
             .Select(a => new { a.Id, a.Version })
             .FirstOrDefaultAsync(cancellationToken);

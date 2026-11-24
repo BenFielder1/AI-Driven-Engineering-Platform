@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Review;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Entities;
 using Tevrin.Domain.Execution;
 using Tevrin.Domain.Lifecycle;
@@ -26,7 +27,7 @@ public sealed class LifecycleSnapshotLoader(TevrinDbContext db)
         // §4.10: "current" artifacts are those of the release version in development; the previous version's locked
         // artifacts are baseline inputs and never satisfy an entry condition.
         var currentVersionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(id, cancellationToken);
-        var locked = await db.Artifacts.AsNoTracking()
+        var locked = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == id && a.ReleaseVersionId == currentVersionId && a.Status == ArtifactStatus.Locked)
             .Select(a => new { a.Id, a.Type, a.CreatedAt })
             .ToListAsync(cancellationToken);
@@ -81,7 +82,7 @@ public sealed class LifecycleSnapshotLoader(TevrinDbContext db)
         EscalationDecision? escalation = null;
         if (report is not null)
         {
-            escalation = await db.ApprovalGates.AsNoTracking()
+            escalation = await db.ApprovalGates.Sdlc().AsNoTracking()
                 .Where(g => g.ProjectId == id && g.Type == EngineGates.Escalation && g.Status == GateStatus.Approved
                     && g.Decision != null && g.CreatedAt >= report.CreatedAt)
                 .OrderByDescending(g => g.DecidedAt)
@@ -89,7 +90,7 @@ public sealed class LifecycleSnapshotLoader(TevrinDbContext db)
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        var pending = await db.ApprovalGates.AsNoTracking()
+        var pending = await db.ApprovalGates.Sdlc().AsNoTracking()
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending)
             .Select(g => g.Type)
             .ToListAsync(cancellationToken);
@@ -106,7 +107,7 @@ public sealed class LifecycleSnapshotLoader(TevrinDbContext db)
                 .AnyAsync(v => v.Id == currentVersionId && v.StackComposition != null, cancellationToken);
             if (profileLocked)
             {
-                var content = await db.Artifacts.AsNoTracking()
+                var content = await db.Artifacts.Sdlc().AsNoTracking()
                     .Where(a => a.ProjectId == id && a.ReleaseVersionId == currentVersionId && a.Type == SdlcArtifacts.StackProfile && a.Status == ArtifactStatus.Locked)
                     .OrderByDescending(a => a.Version)
                     .Select(a => a.Content)
@@ -159,7 +160,7 @@ public sealed class LifecycleSnapshotLoader(TevrinDbContext db)
             return false;
         }
 
-        return await db.Artifacts.AsNoTracking().AnyAsync(
+        return await db.Artifacts.Sdlc().AsNoTracking().AnyAsync(
             a => a.ProjectId == project.Id && a.ReleaseVersionId == report.ReleaseVersionId && a.Type == SdlcArtifacts.OptimizationPlan && a.Status == ArtifactStatus.Draft
                 && (a.Id == report.OptimizationPlanArtifactId || a.CreatedAt >= report.CreatedAt),
             cancellationToken);

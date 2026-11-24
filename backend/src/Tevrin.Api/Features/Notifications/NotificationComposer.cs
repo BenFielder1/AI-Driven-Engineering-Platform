@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Notifications;
 using Tevrin.Engine.Domain.Entities;
@@ -63,14 +64,14 @@ public sealed class NotificationComposer(TevrinDbContext db)
 
         if (NotificationRules.IsAboutGate(type))
         {
-            var gate = await db.ApprovalGates.AsNoTracking().FirstOrDefaultAsync(g => g.Id == sourceId && g.ProjectId == projectId, cancellationToken);
+            var gate = await db.ApprovalGates.Sdlc().AsNoTracking().FirstOrDefaultAsync(g => g.Id == sourceId && g.ProjectId == projectId, cancellationToken);
             if (gate is null)
             {
                 return null;
             }
 
             var artifact = gate.ArtifactId is { } artifactId
-                ? await db.Artifacts.AsNoTracking().Where(a => a.Id == artifactId).Select(a => new { a.Type, a.Version }).FirstOrDefaultAsync(cancellationToken)
+                ? await db.Artifacts.Sdlc().AsNoTracking().Where(a => a.Id == artifactId).Select(a => new { a.Type, a.Version }).FirstOrDefaultAsync(cancellationToken)
                 : null;
             var facts = new NotificationFacts(type, projectName)
             {

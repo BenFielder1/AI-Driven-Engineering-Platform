@@ -26,6 +26,10 @@ public sealed class SdlcPack : IPipelinePack
 
     public string Id => PackId;
 
+    /// <summary>FR-330: the SDLC's runs are started and moved by its own pages and endpoints, so the engine's
+    /// run-control endpoints refuse it (<c>RUN_CONTROLLED_BY_HOST</c>). The definition and its hash are unchanged.</summary>
+    public RunControl RunControlOf(string pipelineId) => RunControl.Host;
+
     public void Register(IPackRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);

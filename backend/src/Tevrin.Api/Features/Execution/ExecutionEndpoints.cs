@@ -5,6 +5,7 @@ using Tevrin.Api.Auth;
 using Tevrin.Api.Errors;
 using Tevrin.Api.Features.Projects;
 using Tevrin.Api.Features.Versions;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Entities;
 using Tevrin.Domain.Execution;
@@ -151,7 +152,7 @@ public static class ExecutionEndpoints
         {
             // The current plan (FR-30, FR-40): the newest locked plan of either type, as the execution runner sees it.
             var currentId = await ExecutionQueries.CurrentPlanIdAsync(db, id, cancellationToken);
-            var current = currentId is { } cid ? await db.Artifacts.AsNoTracking().FirstAsync(a => a.Id == cid, cancellationToken) : null;
+            var current = currentId is { } cid ? await db.Artifacts.Sdlc().AsNoTracking().FirstAsync(a => a.Id == cid, cancellationToken) : null;
             return current is null
                 ? TypedResults.Ok(new ExecutionStepsDto(null, []))
                 : TypedResults.Ok(await StepsAsync(db, id, current, cancellationToken));
@@ -166,7 +167,7 @@ public static class ExecutionEndpoints
         // A plan version number names one plan (numbers are per project); without one, the latest locked plan of the release
         // version (§6 Notes: default the version in development, else the latest released).
         var versionId = scope.Value;
-        var plans = db.Artifacts.AsNoTracking().Where(a => a.ProjectId == id && a.Type == type && (planVersion != null || a.ReleaseVersionId == versionId));
+        var plans = db.Artifacts.Sdlc().AsNoTracking().Where(a => a.ProjectId == id && a.Type == type && (planVersion != null || a.ReleaseVersionId == versionId));
         var plan = planVersion is { } version
             ? await plans.FirstOrDefaultAsync(a => a.Version == version, cancellationToken)
             : await plans.Where(a => a.Status == ArtifactStatus.Locked).OrderByDescending(a => a.Version).FirstOrDefaultAsync(cancellationToken);

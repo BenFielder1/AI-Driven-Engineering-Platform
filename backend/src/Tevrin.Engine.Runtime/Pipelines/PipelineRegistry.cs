@@ -16,6 +16,9 @@ public sealed record LoadedPipelineDefinition(
     IReadOnlyList<DefinitionError> Errors)
 {
     public bool IsValid => Definition is not null && Errors.Count == 0;
+
+    /// <summary>FR-330: who controls the pipeline's runs, as its pack declares (<see cref="IPipelinePack.RunControlOf"/>).</summary>
+    public RunControl RunControl { get; init; } = RunControl.Engine;
 }
 
 /// <summary>
@@ -40,6 +43,7 @@ public sealed class PipelineRegistry
         ArgumentNullException.ThrowIfNull(jobHandlers);
 
         var registrations = new List<PackRegistration>();
+        var packById = new Dictionary<string, IPipelinePack>(StringComparer.Ordinal);
         foreach (var pack in packs)
         {
             if (registrations.Any(r => r.PackId == pack.Id))
@@ -50,6 +54,7 @@ public sealed class PipelineRegistry
             var registration = new PackRegistration(pack.Id);
             pack.Register(registration);
             registrations.Add(registration);
+            packById[pack.Id] = pack;
         }
 
         Packs = registrations;
@@ -63,6 +68,11 @@ public sealed class PipelineRegistry
         var jobTypes = jobHandlers.Select(j => j.JobType).ToList();
         Definitions = [.. registrations.SelectMany(r => r.Definitions.Select(d => Load(d, CatalogFor(r, registrations, componentList, jobTypes))))];
         Definitions = RejectDuplicateIds(Definitions);
+
+        // FR-330: each parsed definition carries its pack's run-control mode.
+        Definitions = [.. Definitions.Select(d => d.Definition is null
+            ? d
+            : d with { RunControl = packById[d.PackId].RunControlOf(d.Definition.Pipeline) })];
 
         foreach (var loaded in Definitions.Where(d => d.IsValid))
         {
@@ -89,6 +99,10 @@ public sealed class PipelineRegistry
     /// <summary>The valid definition with id <paramref name="pipelineId"/>.</summary>
     public bool TryGet(string pipelineId, out LoadedPipelineDefinition definition) =>
         _byId.TryGetValue(pipelineId, out definition!);
+
+    /// <summary>FR-330: who controls runs of <paramref name="pipelineId"/>; <c>null</c> when no valid definition has that id.</summary>
+    public RunControl? RunControlOf(string pipelineId) =>
+        _byId.TryGetValue(pipelineId, out var loaded) ? loaded.RunControl : null;
 
     /// <summary>The valid definition whose hash is <paramref name="hash"/>, or <c>null</c> (M58 falls back to the stored
     /// canonical content for older hashes).</summary>

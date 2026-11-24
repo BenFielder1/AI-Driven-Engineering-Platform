@@ -58,6 +58,9 @@ public sealed record RunFacts
     /// <see cref="PipelineStateMachine.RequestAdvance"/>).</summary>
     public IReadOnlyCollection<string> PendingGates { get; init; } = [];
 
+    /// <summary>FR-335: input artifact keys the run has a version of (<c>{ input: &lt;key&gt; }</c>).</summary>
+    public IReadOnlyCollection<string> PresentInputs { get; init; } = [];
+
     /// <summary>The entry gate of the stage being entered is approved (the approval is the trigger, as in 0.6.1).</summary>
     public bool EntryGateApproved { get; init; }
 

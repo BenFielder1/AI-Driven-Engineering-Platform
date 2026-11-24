@@ -177,6 +177,28 @@ public class ErrorCodesTests
     }
 
     [Fact]
+    public void FR330_FR337_Run_control_and_trigger_codes_have_their_section_6_statuses()
+    {
+        var expected = new Dictionary<string, int>
+        {
+            ["RUN_CONTROLLED_BY_HOST"] = 409,
+            ["RUN_ALREADY_ACTIVE"] = 409,
+            ["RUN_NOT_ACTIVE"] = 409,
+            ["INPUT_INVALID"] = 400,
+            ["SOURCE_ARTIFACT_MISSING"] = 409,
+            ["SCHEDULE_INVALID"] = 400,
+            ["TRIGGER_NOT_SUPPORTED"] = 409,
+            ["WEBHOOK_SIGNATURE_INVALID"] = 401,
+            ["WEBHOOK_REPLAY"] = 409,
+        };
+
+        foreach (var (code, status) in expected)
+        {
+            Assert.Equal(status, ErrorCodes.StatusCodeFor(code));
+        }
+    }
+
+    [Fact]
     public void Codes_are_unique_and_upper_snake_case()
     {
         var codes = AllCodes().Concat(ErrorCodes.Guardian.All).ToList();

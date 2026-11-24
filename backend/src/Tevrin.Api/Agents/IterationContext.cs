@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Versions;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Entities;
 using Tevrin.Domain.Releases;
@@ -103,7 +104,7 @@ public sealed class IterationContextReader(TevrinDbContext db, AgentJobInputs in
 
     private async Task<Artifact?> LockedAsync(Guid projectId, Guid releaseVersionId, string type, CancellationToken cancellationToken)
     {
-        var artifact = await db.Artifacts.AsNoTracking()
+        var artifact = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == releaseVersionId && a.Type == type && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .FirstOrDefaultAsync(cancellationToken);

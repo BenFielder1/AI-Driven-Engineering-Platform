@@ -77,7 +77,7 @@ public sealed partial class ArtifactService(
 
             // FR-244: an edit keeps "added by Tevrin" only on steps Tevrin added in the latest version (same agent and files).
             var latest = plan.IsSuccess
-                ? await db.Artifacts.AsNoTracking()
+                ? await db.Artifacts.Sdlc().AsNoTracking()
                     .Where(a => a.ProjectId == projectId && a.Type == type)
                     .OrderByDescending(a => a.Version)
                     .Select(a => a.Content)
@@ -106,7 +106,7 @@ public sealed partial class ArtifactService(
             content = profile.Value;
         }
 
-        var existing = await db.Artifacts.AsNoTracking()
+        var existing = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == type)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
@@ -169,7 +169,7 @@ public sealed partial class ArtifactService(
             return ProjectNotFound<Artifact>();
         }
 
-        var chosen = await db.Artifacts.AsNoTracking()
+        var chosen = await db.Artifacts.Sdlc().AsNoTracking()
             .FirstOrDefaultAsync(a => a.ProjectId == projectId && a.Type == type && a.Version == version, cancellationToken);
         if (chosen is null)
         {
@@ -177,7 +177,7 @@ public sealed partial class ArtifactService(
         }
 
         var chosenIntegrity = await integrity.CheckAsync(chosen, cancellationToken);
-        var existing = await db.Artifacts.AsNoTracking()
+        var existing = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == type)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
@@ -186,7 +186,7 @@ public sealed partial class ArtifactService(
             project.CurrentPhase,
             project.Status,
             project.DevelopmentVersion is null ? null : project.CurrentReleaseVersionId,
-            chosen.ReleaseVersionId,
+            SdlcRows.ReleaseVersion(chosen.ReleaseVersionId),
             chosen.Version,
             chosenIntegrity,
             existing.Max(a => a.Version)));
@@ -253,7 +253,7 @@ public sealed partial class ArtifactService(
             return;
         }
 
-        var drafts = await db.Artifacts
+        var drafts = await db.Artifacts.Sdlc()
             .Where(a => a.ProjectId == project.Id && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && numbering.SupersededVersions.Contains(a.Version))
             .ToListAsync(cancellationToken);
         foreach (var draft in EventOrder.Superseded(drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded))))
@@ -306,8 +306,8 @@ public sealed partial class ArtifactService(
 
         // §4.10: the cascade works on the release version in development only; earlier versions' artifacts are baseline
         // inputs and are never invalidated.
-        var versionId = checkedArtifact.ReleaseVersionId;
-        var artifacts = await db.Artifacts.Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
+        var versionId = SdlcRows.ReleaseVersion(checkedArtifact.ReleaseVersionId);
+        var artifacts = await db.Artifacts.Sdlc().Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
         var artifact = artifacts.Single(a => a.Id == artifactId);
         decided = ArtifactRules.Approve(artifact.Status);
         if (decided.IsFailure || !decided.Value.Changed)
@@ -452,7 +452,7 @@ public sealed partial class ArtifactService(
 
         foreach (var planStep in planSteps)
         {
-            var step = NewStep(projectId, artifact.ReleaseVersionId, artifact.Id, planStep);
+            var step = NewStep(projectId, SdlcRows.ReleaseVersion(artifact.ReleaseVersionId), artifact.Id, planStep);
             db.ExecutionSteps.Add(step);
             steps.Add(step);
         }
@@ -502,7 +502,7 @@ public sealed partial class ArtifactService(
             return Result.Failure<Artifact>(baseline);
         }
 
-        var artifact = await db.Artifacts.FirstAsync(a => a.Id == artifactId, cancellationToken);
+        var artifact = await db.Artifacts.Sdlc().FirstAsync(a => a.Id == artifactId, cancellationToken);
         decided = SdlcArtifactRules.Reject(artifact.Type, artifact.Status, authoredByAgent);
         if (decided.IsFailure)
         {
@@ -623,7 +623,7 @@ public sealed partial class ArtifactService(
             return Result.Success((draft, approval.Value));
         }
 
-        var existing = await db.Artifacts.AsNoTracking()
+        var existing = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == project.Id && a.Type == SdlcArtifacts.StackProfile)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
@@ -732,7 +732,7 @@ public sealed partial class ArtifactService(
     /// <summary>The artifact (untracked) after its FR-20 integrity check; a corrupted one comes back as <c>corrupted</c>.</summary>
     private async Task<Artifact?> CheckedAsync(Guid projectId, Guid artifactId, CancellationToken cancellationToken)
     {
-        var artifact = await db.Artifacts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == artifactId && a.ProjectId == projectId, cancellationToken);
+        var artifact = await db.Artifacts.Sdlc().AsNoTracking().FirstOrDefaultAsync(a => a.Id == artifactId && a.ProjectId == projectId, cancellationToken);
         if (artifact is not null)
         {
             await integrity.CheckAsync(artifact, cancellationToken);
@@ -744,7 +744,7 @@ public sealed partial class ArtifactService(
     private async Task CancelStaleGatesAsync(
         Project project, Artifact approved, IReadOnlyCollection<Guid> invalidated, bool fellBack, PipelineDefinition definition, string actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var pending = await db.ApprovalGates
+        var pending = await db.ApprovalGates.Sdlc()
             .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending)
             .ToListAsync(cancellationToken);
         var stale = GateRules.StaleAfterArtifactApproval(

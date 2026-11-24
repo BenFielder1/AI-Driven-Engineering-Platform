@@ -45,7 +45,8 @@ public static class TevrinEngineModel
 
     /// <summary>The engine's tables: <c>events</c>, <c>jobs</c>, <c>notifications</c>, <c>notification_deliveries</c>,
     /// <c>approval_links</c>, <c>artifacts</c>, <c>approval_gates</c>, <c>pipeline_definitions</c>, <c>pipeline_runs</c>,
-    /// <c>agent_runs</c> and <c>stage_executions</c>.</summary>
+    /// <c>agent_runs</c>, <c>stage_executions</c>, <c>pipeline_schedules</c>, <c>pipeline_webhooks</c> and
+    /// <c>webhook_deliveries</c>.</summary>
     public static ModelBuilder ApplyTevrinEngineModel(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -146,7 +147,14 @@ public static class TevrinEngineModel
             XminRowVersion(b.Property(a => a.RowVersion));
 
             // Artifact versions keep counting across release versions (FR-58, FR-59), so uniqueness stays per project.
-            b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }).IsUnique();
+            // FR-334: that holds for rows with a release version (the SDLC); a subject-less run's artifacts count per run.
+            b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }, "ix_artifacts_project_id_type_version")
+                .IsUnique()
+                .HasFilter("release_version_id IS NOT NULL");
+            b.HasIndex(a => new { a.PipelineRunId, a.Type, a.Version }, "ux_artifacts_pipeline_run_id_type_version")
+                .IsUnique()
+                .HasFilter("release_version_id IS NULL")
+                .HasDatabaseName("ux_artifacts_pipeline_run_id_type_version");
             b.HasIndex(a => new { a.ProjectId, a.Type, a.Status });
             b.HasIndex(a => new { a.ProjectId, a.ReleaseVersionId });
             b.HasIndex(a => a.ReleaseVersionId);
@@ -180,11 +188,16 @@ public static class TevrinEngineModel
             // Kept explicitly: the composite index would otherwise replace the foreign-key index (expand only).
             b.HasIndex(g => g.PipelineRunId);
 
-            // At most one pending gate per (project, type) — enforced by the database (§4.2).
+            // At most one pending gate per (project, type) — enforced by the database (§4.2). FR-334: for gates with a
+            // release version (the SDLC); a subject-less run's gates are unique per (run, type).
             b.HasIndex(g => new { g.ProjectId, g.Type })
                 .IsUnique()
-                .HasFilter("status = 'pending'")
+                .HasFilter("status = 'pending' AND release_version_id IS NOT NULL")
                 .HasDatabaseName("ux_approval_gates_project_id_type_pending");
+            b.HasIndex(g => new { g.PipelineRunId, g.Type }, "ux_approval_gates_pipeline_run_id_type_pending")
+                .IsUnique()
+                .HasFilter("status = 'pending' AND release_version_id IS NULL")
+                .HasDatabaseName("ux_approval_gates_pipeline_run_id_type_pending");
             b.HasIndex(g => new { g.ProjectId, g.Status });
             b.HasIndex(g => new { g.ProjectId, g.ReleaseVersionId });
             b.HasIndex(g => g.ReleaseVersionId);
@@ -306,19 +319,78 @@ public static class TevrinEngineModel
             // FR-277: a run is pinned to a stored definition, which is never deleted.
             b.HasOne<PipelineDefinitionRecord>().WithMany().HasForeignKey(r => r.DefinitionHash).OnDelete(DeleteBehavior.Restrict);
 
-            // D-0.7.0-10: one run per subject (the SDLC's release version) and pipeline.
+            // D-0.7.0-10: one run per subject (the SDLC's release version) and pipeline. FR-334: only for runs with a
+            // subject; subject-less runs are limited by the open-run index below (and concurrency.runs) alone.
             b.HasIndex(r => new { r.PipelineId, r.SubjectId })
                 .IsUnique()
+                .HasFilter("subject_id IS NOT NULL")
                 .HasDatabaseName("ux_pipeline_runs_pipeline_id_subject_id");
 
-            // §5: at most one run per project and pipeline that hasn't ended (final statuses, §4.57).
+            // §5: at most one run per project and pipeline that hasn't ended (final statuses, §4.57), for runs with a
+            // subject (the SDLC). FR-331, FR-334: subject-less engine runs apply the rule in code
+            // (PipelineRunRules.MayStart, concurrency.runs), under an advisory lock on (project, pipeline).
             b.HasIndex(r => new { r.ProjectId, r.PipelineId })
                 .IsUnique()
-                .HasFilter("status NOT IN ('completed', 'failed', 'cancelled')")
+                .HasFilter("status NOT IN ('completed', 'failed', 'cancelled') AND subject_id IS NOT NULL")
                 .HasDatabaseName("ux_pipeline_runs_project_id_pipeline_id_open");
 
             // The project cascade and per-project lookups (the partial index covers open runs only).
             b.HasIndex(r => r.ProjectId, "ix_pipeline_runs_project_id");
+        });
+
+        ApplyTriggers(builder);
+    }
+
+    /// <summary>FR-336, FR-337, §5: <c>pipeline_schedules</c>, <c>pipeline_webhooks</c> and <c>webhook_deliveries</c>. The
+    /// host adds the schedule's and webhook's relationships to its projects and users tables.</summary>
+    private static void ApplyTriggers(ModelBuilder builder)
+    {
+        builder.Entity<PipelineSchedule>(b =>
+        {
+            b.ToTable("pipeline_schedules");
+            b.HasKey(s => s.Id);
+            b.Property(s => s.Id).ValueGeneratedNever();
+            b.Property(s => s.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(s => s.Cron).HasMaxLength(100).IsRequired();
+            b.Property(s => s.Timezone).HasMaxLength(100).IsRequired();
+            b.Property(s => s.Inputs).HasColumnType("jsonb").IsRequired();
+
+            // §5: trigger.fire reads due schedules (WHERE NOT paused AND next_fire_at <= now).
+            b.HasIndex(s => s.NextFireAt).HasFilter("NOT paused");
+
+            // The project cascade and per-project lists.
+            b.HasIndex(s => s.ProjectId);
+        });
+
+        builder.Entity<PipelineWebhook>(b =>
+        {
+            b.ToTable("pipeline_webhooks");
+            b.HasKey(w => w.Id);
+            b.Property(w => w.Id).ValueGeneratedNever();
+            b.Property(w => w.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+
+            // Encrypted with ISecretProtector (text: the protected payload's length isn't fixed).
+            b.Property(w => w.Secret).HasColumnType("text").IsRequired();
+            b.Property(w => w.PreviousSecret).HasColumnType("text");
+            XminRowVersion(b.Property(w => w.RowVersion));
+
+            b.HasIndex(w => w.ProjectId);
+        });
+
+        builder.Entity<WebhookDelivery>(b =>
+        {
+            b.ToTable("webhook_deliveries");
+            // FR-337, §4.72: a delivery id is unique per webhook; an older row of the same pair is reused (upsert).
+            b.HasKey(d => new { d.WebhookId, d.DeliveryId });
+            b.Property(d => d.Status).HasMaxLength(EnumMaxLength).IsRequired();
+
+            // A webhook's deliveries go with it; a delivery outlives a deleted run only as a log line.
+            b.HasOne<PipelineWebhook>().WithMany().HasForeignKey(d => d.WebhookId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(d => d.RunId).OnDelete(DeleteBehavior.SetNull);
+
+            // §5: the 30-day retention purge reads by time.
+            b.HasIndex(d => d.ReceivedAt);
+            b.HasIndex(d => d.RunId);
         });
     }
 

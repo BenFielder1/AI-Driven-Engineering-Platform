@@ -38,6 +38,12 @@ internal sealed class OfflineEngineDbContext : DbContext, IEngineDbContext
 
     public DbSet<ApprovalGate> ApprovalGates => Set<ApprovalGate>();
 
+    public DbSet<PipelineSchedule> PipelineSchedules => Set<PipelineSchedule>();
+
+    public DbSet<PipelineWebhook> PipelineWebhooks => Set<PipelineWebhook>();
+
+    public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
         configurationBuilder.ApplyTevrinEngineConventions();
 

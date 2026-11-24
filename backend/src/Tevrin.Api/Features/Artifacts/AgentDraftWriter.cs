@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Common;
@@ -29,7 +30,7 @@ public sealed class AgentDraftWriter(TevrinDbContext db, TimeProvider time)
     public async Task<Artifact?> AddAsync(Guid projectId, string type, string content, Guid agentRunId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
-        var existingForRun = await db.Artifacts.AsNoTracking()
+        var existingForRun = await db.Artifacts.Sdlc().AsNoTracking()
             .FirstOrDefaultAsync(a => a.ProjectId == projectId && a.AgentRunId == agentRunId && a.Type == type, cancellationToken);
         if (existingForRun is not null)
         {
@@ -44,7 +45,7 @@ public sealed class AgentDraftWriter(TevrinDbContext db, TimeProvider time)
 
         project.UpdatedAt = time.GetUtcNow(); // xmin: the phase checked above must still hold when the draft commits
 
-        var existing = await db.Artifacts.AsNoTracking()
+        var existing = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == type)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
@@ -53,7 +54,7 @@ public sealed class AgentDraftWriter(TevrinDbContext db, TimeProvider time)
         {
             // §4.10, D-V2-3: only open drafts of the current release version are superseded; a closed version's drafts are
             // history. Version numbers stay project-wide.
-            var drafts = await db.Artifacts
+            var drafts = await db.Artifacts.Sdlc()
                 .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == project.CurrentReleaseVersionId && a.Type == type && plan.SupersededVersions.Contains(a.Version))
                 .ToListAsync(cancellationToken);
             foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
@@ -106,7 +107,7 @@ public sealed class AgentDraftWriter(TevrinDbContext db, TimeProvider time)
             throw new ArgumentOutOfRangeException(nameof(type), type, "Only auto-locked types are stored locked by an agent.");
         }
 
-        var existingForRun = await db.Artifacts.AsNoTracking()
+        var existingForRun = await db.Artifacts.Sdlc().AsNoTracking()
             .FirstOrDefaultAsync(a => a.ProjectId == projectId && a.AgentRunId == agentRunId && a.Type == type, cancellationToken);
         if (existingForRun is not null)
         {
@@ -121,7 +122,7 @@ public sealed class AgentDraftWriter(TevrinDbContext db, TimeProvider time)
 
         project.UpdatedAt = time.GetUtcNow(); // xmin: the version checked above must still be current when this commits
 
-        var existing = await db.Artifacts.AsNoTracking()
+        var existing = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == type)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Jobs;
 using Tevrin.Api.Logging;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Common;
@@ -59,7 +60,7 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
         var now = time.GetUtcNow();
 
         await using var transaction = await db.Database.BeginTransactionAsync(token);
-        var marked = await db.Artifacts
+        var marked = await db.Artifacts.Sdlc()
             .Where(a => a.Id == artifact.Id && a.Status != ArtifactStatus.Corrupted)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, ArtifactStatus.Corrupted), token);
         if (marked == 0)
@@ -70,7 +71,7 @@ public sealed partial class ArtifactIntegrityGuard(IServiceScopeFactory scopes, 
         }
 
         var authoredByAgent = ArtifactRules.IsAuthoredByAgent(artifact.CreatedByUserId);
-        var others = await db.Artifacts.AsNoTracking()
+        var others = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == artifact.ProjectId && a.Type == artifact.Type && a.Id != artifact.Id)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(token);

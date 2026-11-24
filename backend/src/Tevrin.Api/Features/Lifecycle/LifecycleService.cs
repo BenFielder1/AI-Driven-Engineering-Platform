@@ -127,7 +127,7 @@ public sealed partial class LifecycleService(
         }
 
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-        return await db.Artifacts.AsNoTracking()
+        return await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Type == artifactType && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => (Guid?)a.Id)

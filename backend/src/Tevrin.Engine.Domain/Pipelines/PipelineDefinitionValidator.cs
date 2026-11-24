@@ -89,11 +89,7 @@ public static partial class PipelineDefinitionValidator
                 Add(DefinitionErrorCodes.Parse, "title", "'title' is required.");
             }
 
-            if (definition.Trigger.Kind is not TriggerKind.Manual)
-            {
-                Add(DefinitionErrorCodes.TriggerNotSupported, "trigger.kind",
-                    $"Trigger kind '{definition.Trigger.Kind.ToWire()}' is not supported in this version; only 'manual' runs.");
-            }
+            ValidateTrigger();
 
             if (definition.ApprovalModes.Count == 0)
             {
@@ -229,6 +225,67 @@ public static partial class PipelineDefinitionValidator
                 {
                     Add(DefinitionErrorCodes.Parse, path + ".error_code", $"Error code '{change.ErrorCode}' must be UPPER_SNAKE_CASE.");
                 }
+            }
+        }
+
+        /// <summary>
+        /// FR-284, FR-336, FR-337: a <c>schedule</c> or <c>webhook</c> trigger takes only <c>input</c> and <c>on_active</c>,
+        /// and a <c>manual</c> trigger takes no option; any other option is <see cref="DefinitionErrorCodes.TriggerNotSupported"/>.
+        /// A webhook needs <c>input</c>; <c>input</c> names an artifact declared <c>input: true</c>.
+        /// </summary>
+        private void ValidateTrigger()
+        {
+            var trigger = definition.Trigger;
+            var triggered = trigger.Kind is TriggerKind.Schedule or TriggerKind.Webhook;
+            foreach (var key in trigger.Options.Keys)
+            {
+                var known = key is PipelineTrigger.InputOption or PipelineTrigger.OnActiveOption;
+                if (!triggered)
+                {
+                    Add(DefinitionErrorCodes.TriggerNotSupported, $"trigger.{key}",
+                        $"A '{trigger.Kind.ToWire()}' trigger takes no options; '{key}' needs a schedule or webhook trigger.");
+                }
+                else if (!known)
+                {
+                    Add(DefinitionErrorCodes.TriggerNotSupported, $"trigger.{key}",
+                        $"Trigger option '{key}' is not supported; a {trigger.Kind.ToWire()} trigger takes 'input' and 'on_active'.");
+                }
+            }
+
+            if (!triggered)
+            {
+                return;
+            }
+
+            if (trigger.Options.TryGetValue(PipelineTrigger.OnActiveOption, out var onActive) &&
+                !EnumStrings.TryParse(onActive, out TriggerOnActive _))
+            {
+                Add(DefinitionErrorCodes.Parse, "trigger.on_active", $"'on_active' must be 'submit' or 'skip', not '{onActive}'.");
+            }
+
+            if (trigger.Input is not { } input)
+            {
+                if (trigger.Kind == TriggerKind.Webhook)
+                {
+                    Add(DefinitionErrorCodes.Parse, "trigger.input", "A webhook trigger needs 'input': the artifact its body is stored as.");
+                }
+
+                return;
+            }
+
+            CheckInputArtifact(input, "trigger.input");
+        }
+
+        /// <summary>FR-335: <paramref name="key"/> is a declared artifact marked <c>input: true</c>.</summary>
+        private void CheckInputArtifact(string key, string path)
+        {
+            if (string.IsNullOrEmpty(key) || !_artifactKeys.Contains(key))
+            {
+                CheckArtifactRef(key, path);
+            }
+            else if (definition.FindArtifact(key) is { Input: false })
+            {
+                Add(DefinitionErrorCodes.Parse, path, $"Artifact '{key}' is not an input; declare it with 'input: true'.");
             }
         }
 
@@ -389,6 +446,9 @@ public static partial class PipelineDefinitionValidator
                         break;
                     case GuardRequirement guard:
                         CheckGuard(guard.Guard, itemPath + ".guard");
+                        break;
+                    case InputRequirement input:
+                        CheckInputArtifact(input.ArtifactKey, itemPath + ".input");
                         break;
                     case NoPendingGatesRequirement none:
                         for (var k = 0; k < none.Except.Count; k++)
@@ -602,7 +662,9 @@ public static partial class PipelineDefinitionValidator
         /// <summary>An artifact some stage reads must be some stage's output or produced by a pack handler.</summary>
         private void ValidateProducers()
         {
-            var produced = new HashSet<string>(catalog.ProducedArtifacts, StringComparer.Ordinal);
+            // FR-335: an input artifact is supplied from outside the run, so it needs no producer.
+            var produced = new HashSet<string>(
+                catalog.ProducedArtifacts.Concat(definition.Artifacts.Where(a => a.Input).Select(a => a.Key)), StringComparer.Ordinal);
             foreach (var stage in definition.Stages)
             {
                 if (stage.Output is { } output)

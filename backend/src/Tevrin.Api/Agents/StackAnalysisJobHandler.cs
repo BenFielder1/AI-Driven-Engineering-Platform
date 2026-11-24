@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Analysis;
 using Tevrin.Api.Features.Versions;
 using Tevrin.Api.Jobs;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Agents;
 using Tevrin.Domain.Common;
@@ -80,7 +81,7 @@ public sealed partial class StackAnalysisJobHandler(
         }
 
         var runIds = new[] { AgentRunRules.RunId(job.Id), AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey) };
-        if (payload.Trigger == LifecycleJobPayload.StageEntered && await db.Artifacts.AsNoTracking().AnyAsync(
+        if (payload.Trigger == LifecycleJobPayload.StageEntered && await db.Artifacts.Sdlc().AsNoTracking().AnyAsync(
                 a => a.ProjectId == project.Id && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.StackProfile
                     && (a.AgentRunId == null || !runIds.Contains(a.AgentRunId.Value)),
                 cancellationToken))

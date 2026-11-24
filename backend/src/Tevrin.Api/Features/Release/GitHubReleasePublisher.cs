@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Tevrin.Api.Features.Git;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Agents;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Execution;
@@ -99,13 +100,13 @@ public sealed partial class GitHubReleasePublisher(
         var projectName = await db.Projects.AsNoTracking().Where(p => p.Id == release.ProjectId).Select(p => p.Name).FirstAsync(cancellationToken);
         var version = await db.ReleaseVersions.AsNoTracking().Where(v => v.Id == release.ReleaseVersionId).Select(v => v.Version).FirstOrDefaultAsync(cancellationToken)
             ?? tag;
-        var spec = await db.Artifacts.AsNoTracking()
+        var spec = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == release.ProjectId && a.ReleaseVersionId == release.ReleaseVersionId
                 && a.Type == SdlcArtifacts.TechnicalSpecification && a.Status == ArtifactStatus.Locked)
             .OrderByDescending(a => a.Version)
             .Select(a => a.Content)
             .FirstOrDefaultAsync(cancellationToken);
-        var plans = await db.Artifacts.AsNoTracking()
+        var plans = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == release.ProjectId && a.ReleaseVersionId == release.ReleaseVersionId
                 && (a.Type == SdlcArtifacts.ImplementationPlan || a.Type == SdlcArtifacts.OptimizationPlan))
             .Select(a => new { a.Id, a.CreatedAt })

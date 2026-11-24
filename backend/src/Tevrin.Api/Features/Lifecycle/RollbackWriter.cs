@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
@@ -85,7 +86,7 @@ public sealed class RollbackWriter(TevrinDbContext db, LifecycleWriter writer, B
             .Where(t => t.ProjectId == id && t.ReleaseVersionId == versionId)
             .Select(t => new RecordedTransition(t.Checkpoint, t.ToPhase, t.CreatedAt))
             .ToListAsync(cancellationToken);
-        var artifacts = await db.Artifacts.Where(a => a.ProjectId == id && a.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
+        var artifacts = await db.Artifacts.Sdlc().Where(a => a.ProjectId == id && a.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
         var steps = await db.ExecutionSteps.Where(s => s.ProjectId == id && s.ReleaseVersionId == versionId).ToListAsync(cancellationToken);
         var runInProgress = await db.AgentRuns.AsNoTracking()
             .AnyAsync(r => r.ProjectId == id && (r.Status == AgentRunStatus.Queued || r.Status == AgentRunStatus.Running), cancellationToken);
@@ -171,7 +172,7 @@ public sealed class RollbackWriter(TevrinDbContext db, LifecycleWriter writer, B
         await buildChecks.CancelOpenAsync(id, actor, now, cancellationToken);
         await buildChecks.SupersedeAsync(id, now, cancellationToken);
 
-        var pendingGates = await db.ApprovalGates
+        var pendingGates = await db.ApprovalGates.Sdlc()
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending && g.Id != keepGateId)
             .ToListAsync(cancellationToken);
         foreach (var gate in Artifacts.EventOrder.Cancelled(pendingGates))

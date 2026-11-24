@@ -3,6 +3,7 @@ using Tevrin.Api.Agents;
 using Tevrin.Api.Features.Artifacts;
 using Tevrin.Api.Features.Lifecycle;
 using Tevrin.Api.Jobs;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Agents;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Common;
@@ -209,7 +210,7 @@ public sealed partial class RefinementService(
             return new CodebaseSummaryStatusDto(CodebaseSummaryState.NotNeeded, null, null, null);
         }
 
-        var summary = await db.Artifacts.AsNoTracking()
+        var summary = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.CodebaseSummary)
             .OrderByDescending(a => a.Version)
             .Select(a => new { a.Id, a.Version, a.AgentRunId })
@@ -268,7 +269,7 @@ public sealed partial class RefinementService(
             .Where(r => r.ProjectId == projectId && runIds.Contains(r.Id))
             .Select(r => new AgentRun { Id = r.Id, Status = r.Status, Output = r.Output, Error = r.Error, CompletedAt = r.CompletedAt })
             .ToDictionaryAsync(r => r.Id, cancellationToken);
-        var drafts = await db.Artifacts.AsNoTracking()
+        var drafts = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.Type == SdlcArtifacts.ProjectRequest && a.AgentRunId != null && runIds.Contains(a.AgentRunId.Value))
             .Select(a => new { a.Id, a.Version, RunId = a.AgentRunId!.Value })
             .ToListAsync(cancellationToken);

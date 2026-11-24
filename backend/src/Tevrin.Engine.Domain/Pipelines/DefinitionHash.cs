@@ -44,11 +44,7 @@ public static class DefinitionHash
             ["artifacts"] = Keyed(d.Artifacts.Select(a => (a.Key, (object?)Artifact(a)))),
             ["statuses"] = Keyed(d.Statuses.Select(s => (s.Name, (object?)new Obj { ["generic"] = s.Generic.ToWire() }))),
             ["status_changes"] = Keyed(d.StatusChanges.Select(c => (c.Name, (object?)StatusChange(c)))),
-            ["concurrency"] = new Obj
-            {
-                ["exclusive"] = d.Concurrency.Exclusive
-                    .Select(e => (object?)new Obj { ["job_type"] = e.JobType, ["scope"] = e.Scope.ToWire() }).ToList(),
-            },
+            ["concurrency"] = Concurrency(d.Concurrency),
             ["stages"] = d.Stages.Select(s => (object?)Stage(s)).ToList(),
         };
         root.AddIfSet("default_approval_mode", d.DefaultApprovalMode?.ToWire());
@@ -68,6 +64,22 @@ public static class DefinitionHash
         return obj;
     }
 
+    /// <summary>FR-331: <c>runs</c> only when it isn't the default <c>one</c>, so a definition without it hashes as before.</summary>
+    private static Obj Concurrency(ConcurrencyDefinition concurrency)
+    {
+        var obj = new Obj
+        {
+            ["exclusive"] = concurrency.Exclusive
+                .Select(e => (object?)new Obj { ["job_type"] = e.JobType, ["scope"] = e.Scope.ToWire() }).ToList(),
+        };
+        if (concurrency.Runs != RunConcurrency.One)
+        {
+            obj["runs"] = concurrency.Runs.ToWire();
+        }
+
+        return obj;
+    }
+
     private static Obj Artifact(ArtifactDefinition a)
     {
         var obj = new Obj
@@ -78,6 +90,13 @@ public static class DefinitionHash
             ["cascade"] = a.Cascade.ToWire(),
         };
         obj.AddIfSet("schema", a.Schema);
+
+        // FR-335: omitted unless set, so a definition without input artifacts hashes as before.
+        if (a.Input)
+        {
+            obj["input"] = true;
+        }
+
         return obj;
     }
 
@@ -202,6 +221,7 @@ public static class DefinitionHash
             ArtifactLockedRequirement locked => new Obj { ["artifact_locked"] = locked.ArtifactKey },
             NoPendingGatesRequirement none => new Obj { ["no_pending_gates"] = new Obj { ["except"] = Strings(none.Except) } },
             GuardRequirement guard => new Obj { ["guard"] = guard.Guard },
+            InputRequirement input => new Obj { ["input"] = input.ArtifactKey },
             _ => throw new InvalidOperationException($"Unknown requirement {r.GetType().Name}."),
         })).ToList();
 

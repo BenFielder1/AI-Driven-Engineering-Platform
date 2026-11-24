@@ -19,6 +19,24 @@ public interface IPipelinePack
     string Id { get; }
 
     void Register(IPackRegistry registry);
+
+    /// <summary>
+    /// FR-330 (0.8.0): who starts and moves runs of the pack's pipeline <paramref name="pipelineId"/>:
+    /// <see cref="RunControl.Engine"/> (the default) or <see cref="RunControl.Host"/>. The engine's run-control endpoints
+    /// refuse a host-controlled pipeline (<c>RUN_CONTROLLED_BY_HOST</c>). Declared in code, not in the definition, so the
+    /// definition and its hash don't change.
+    /// </summary>
+    RunControl RunControlOf(string pipelineId) => RunControl.Engine;
+}
+
+/// <summary>FR-330: who starts and moves a pipeline's runs.</summary>
+public enum RunControl
+{
+    /// <summary>The engine: its run-control endpoints and the run driver (FR-331–FR-337).</summary>
+    Engine = 0,
+
+    /// <summary>The host's own pages and endpoints (the SDLC); the engine only records and shows the run.</summary>
+    Host = 1,
 }
 
 /// <summary>

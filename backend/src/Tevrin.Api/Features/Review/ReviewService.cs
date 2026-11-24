@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Execution;
 using Tevrin.Api.Features.Lifecycle;
 using Tevrin.Api.Jobs;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
 using Tevrin.Domain.Lifecycle;
@@ -129,7 +130,7 @@ public sealed class ReviewReader(TevrinDbContext db, ExecutionRunReader runs)
         var plan = run is not null
             ? new ReportPlanDto(run.Id, run.Version, run.Status)
             : report.OptimizationPlanArtifactId is { } draftId
-                ? await db.Artifacts.AsNoTracking()
+                ? await db.Artifacts.Sdlc().AsNoTracking()
                     .Where(a => a.Id == draftId)
                     .Select(a => new ReportPlanDto(a.Id, a.Version, a.Status))
                     .FirstOrDefaultAsync(cancellationToken)

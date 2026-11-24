@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Activity;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Review;
 using Tevrin.Engine.Domain.Entities;
@@ -15,7 +16,7 @@ public sealed class GateReader(TevrinDbContext db, TimeProvider time)
 {
     public async Task<IReadOnlyList<GateDto>> ListAsync(Guid projectId, GateStatus? status, CancellationToken cancellationToken, Guid? releaseVersionId = null)
     {
-        var query = db.ApprovalGates.AsNoTracking().Where(g => g.ProjectId == projectId);
+        var query = db.ApprovalGates.Sdlc().AsNoTracking().Where(g => g.ProjectId == projectId);
         if (releaseVersionId is { } versionId)
         {
             query = query.Where(g => g.ReleaseVersionId == versionId);
@@ -46,7 +47,7 @@ public sealed class GateReader(TevrinDbContext db, TimeProvider time)
         var artifactIds = gates.Select(g => g.ArtifactId).OfType<Guid>().Distinct().ToList();
         var artifacts = artifactIds.Count == 0
             ? []
-            : await db.Artifacts.AsNoTracking()
+            : await db.Artifacts.Sdlc().AsNoTracking()
                 .Where(a => artifactIds.Contains(a.Id))
                 .Select(a => new { a.Id, a.Type, a.Version })
                 .ToDictionaryAsync(a => a.Id, cancellationToken);
@@ -95,7 +96,7 @@ public sealed class GateReader(TevrinDbContext db, TimeProvider time)
                 g.RemindedAt,
                 blocked?.StepId,
                 blocked?.StepNumber,
-                g.ReleaseVersionId);
+                SdlcRows.ReleaseVersion(g.ReleaseVersionId));
         })];
     }
 

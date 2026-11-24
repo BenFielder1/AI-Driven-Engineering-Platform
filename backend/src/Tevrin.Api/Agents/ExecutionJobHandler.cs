@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Execution;
 using Tevrin.Api.Features.Lifecycle;
 using Tevrin.Api.Features.Stack;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
@@ -341,7 +342,7 @@ public sealed partial class SdlcExecutionStageHandler(
         var projectRequest = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
         var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
         var summary = await inputs.CurrentAsync(project.Id, SdlcArtifacts.CodebaseSummary, cancellationToken);
-        var plan = await db.Artifacts.AsNoTracking().FirstAsync(a => a.Id == planId, cancellationToken);
+        var plan = await db.Artifacts.Sdlc().AsNoTracking().FirstAsync(a => a.Id == planId, cancellationToken);
         var files = await Git(() => workingCopies.ReadAsync(project.Id, step.DeclaredFiles.Select(f => f.Path), cancellationToken));
         var rules = await Git(() => workingCopies.ReadRulesAsync(project.Id, cancellationToken));
         var planView = CodeGeneration.PlanWithStatuses(steps.Select(s => new PlanStepView(s.StepNumber, s.Title, s.Task, s.Status, s.DeclaredFiles, s.Dependencies)));
@@ -482,7 +483,7 @@ public sealed partial class SdlcExecutionStageHandler(
                 new { stepId = step.Id, stepNumber = step.StepNumber, attempt = step.Attempt },
                 SystemActor.Name,
                 now);
-            var escalationPending = await db.ApprovalGates.AnyAsync(
+            var escalationPending = await db.ApprovalGates.Sdlc().AnyAsync(
                 g => g.ProjectId == projectId && g.Type == EngineGates.Escalation && g.Status == GateStatus.Pending,
                 cancellationToken);
             if (!escalationPending)

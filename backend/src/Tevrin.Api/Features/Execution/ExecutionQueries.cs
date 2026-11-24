@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Projects;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Deployments;
 using Tevrin.Domain.Entities;
 using Tevrin.Domain.Execution;
@@ -22,7 +23,7 @@ public static class ExecutionQueries
     {
         ArgumentNullException.ThrowIfNull(db);
         var versionId = await db.CurrentReleaseVersionIdAsync(projectId, cancellationToken);
-        return await db.Artifacts.AsNoTracking()
+        return await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == projectId && a.ReleaseVersionId == versionId && a.Status == ArtifactStatus.Locked
                 && (a.Type == SdlcArtifacts.ImplementationPlan || a.Type == SdlcArtifacts.OptimizationPlan))
             .OrderByDescending(a => a.CreatedAt)

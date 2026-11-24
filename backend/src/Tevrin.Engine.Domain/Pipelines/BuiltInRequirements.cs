@@ -26,6 +26,13 @@ public static class BuiltInRequirements
         return $"Other gates are pending: {string.Join(", ", gateTypes)}.";
     }
 
+    /// <summary>FR-335: <c>input</c> unmet: "The {title, first letter lower-cased} input hasn't been submitted."</summary>
+    public static string InputMissing(string artifactTitle)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(artifactTitle);
+        return $"The {LowerFirst(artifactTitle)} input hasn't been submitted.";
+    }
+
     /// <summary>The entry gate (FR-283) is required and not approved: "The {gate key} gate is not approved."</summary>
     public static string GateNotApproved(string gateType)
     {
@@ -36,14 +43,16 @@ public static class BuiltInRequirements
     /// <summary>
     /// The unmet reason of a built-in requirement, or <c>null</c> when it's met. <paramref name="lockedArtifacts"/> are
     /// the keys whose latest version is locked; <paramref name="pendingGates"/> the types of the run's pending gates, in
-    /// the order they're listed (duplicates are listed once). A <see cref="GuardRequirement"/> isn't built in: it throws
+    /// the order they're listed (duplicates are listed once); <paramref name="presentInputs"/> the input artifact keys the
+    /// run has a version of (FR-335). A <see cref="GuardRequirement"/> isn't built in: it throws
     /// <see cref="ArgumentException"/> (guards are evaluated through <see cref="IGuard"/>).
     /// </summary>
     public static string? Unmet(
         PipelineDefinition definition,
         StageRequirement requirement,
         IReadOnlyCollection<string> lockedArtifacts,
-        IEnumerable<string> pendingGates)
+        IEnumerable<string> pendingGates,
+        IReadOnlyCollection<string>? presentInputs = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(requirement);
@@ -67,6 +76,15 @@ public static class BuiltInRequirements
                     .Distinct(StringComparer.Ordinal)
                     .ToList();
                 return others.Count == 0 ? null : OtherGatesPending(others);
+
+            case InputRequirement input:
+                if (presentInputs is not null && presentInputs.Contains(input.ArtifactKey, StringComparer.Ordinal))
+                {
+                    return null;
+                }
+
+                var inputTitle = definition.FindArtifact(input.ArtifactKey)?.Title;
+                return InputMissing(string.IsNullOrEmpty(inputTitle) ? input.ArtifactKey : inputTitle);
 
             default:
                 throw new ArgumentException($"'{requirement.GetType().Name}' is not a built-in requirement.", nameof(requirement));

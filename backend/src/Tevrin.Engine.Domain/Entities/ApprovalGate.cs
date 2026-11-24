@@ -9,8 +9,9 @@ public sealed class ApprovalGate
 
     public Guid ProjectId { get; set; }
 
-    /// <summary>The release version the gate belongs to (§4.10).</summary>
-    public Guid ReleaseVersionId { get; set; }
+    /// <summary>The release version the gate belongs to (§4.10); FR-334: <c>null</c> for a gate of a run without a subject,
+    /// which belongs to the run alone (<see cref="PipelineRunId"/>).</summary>
+    public Guid? ReleaseVersionId { get; set; }
 
     /// <summary>FR-294: the pipeline run the gate belongs to (nullable until the contract step, D-0.7.0-28).</summary>
     public Guid? PipelineRunId { get; set; }

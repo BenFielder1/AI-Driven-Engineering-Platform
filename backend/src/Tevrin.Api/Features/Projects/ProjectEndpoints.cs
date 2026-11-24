@@ -7,6 +7,7 @@ using Tevrin.Api.Features.Admin;
 using Tevrin.Api.Features.GitHub;
 using Tevrin.Api.Features.Release;
 using Tevrin.Api.Features.Review;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Artifacts;
 using Tevrin.Domain.Common;
@@ -212,7 +213,7 @@ public static partial class ProjectEndpoints
                 Active = g.Count(p => p.Status != ProjectStatus.Released),
                 InReview = g.Count(p => p.Status == ProjectStatus.Reviewing),
                 Released = g.Count(p => p.Status == ProjectStatus.Released),
-                AwaitingGates = g.Sum(p => db.ApprovalGates.Count(gate => gate.ProjectId == p.Id && gate.Status == GateStatus.Pending)),
+                AwaitingGates = g.Sum(p => db.ApprovalGates.Count(gate => gate.ProjectId == p.Id && gate.ReleaseVersionId != null && gate.Status == GateStatus.Pending)),
             })
             .FirstOrDefaultAsync(cancellationToken);
         return TypedResults.Ok(counts is null
@@ -558,7 +559,7 @@ public static partial class ProjectEndpoints
             .Where(v => v.ProjectId == id)
             .Select(v => new ReleaseVersionRow(v.Version, v.Status))
             .ToListAsync(cancellationToken);
-        var artifacts = await db.Artifacts.AsNoTracking()
+        var artifacts = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.ProjectId == id && a.ReleaseVersionId == versionId)
             .Select(a => new { a.Id, a.Type, a.Version, a.Status, a.CreatedAt })
             .ToListAsync(cancellationToken);
@@ -620,7 +621,7 @@ public static partial class ProjectEndpoints
                 project.ReviewCycle));
 
         var now = time.GetUtcNow();
-        var gates = await db.ApprovalGates.AsNoTracking()
+        var gates = await db.ApprovalGates.Sdlc().AsNoTracking()
             .Where(g => g.ProjectId == id && g.Status == GateStatus.Pending)
             .OrderBy(g => g.CreatedAt)
             .Select(g => new { g.Id, g.Type, g.CreatedAt, g.Overdue })

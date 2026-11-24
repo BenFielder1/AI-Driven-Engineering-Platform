@@ -105,18 +105,58 @@ public sealed record PipelineDefinition
     }
 }
 
-/// <summary>FR-284: <c>trigger</c>. <see cref="Options"/> holds the kind's other scalar keys (e.g. a schedule's cron).</summary>
+/// <summary>
+/// FR-284: <c>trigger</c>. <see cref="Options"/> holds the kind's other scalar keys. FR-336, FR-337 (0.8.0): a
+/// <c>schedule</c> or <c>webhook</c> trigger takes <c>input: &lt;artifactKey&gt;</c> (required for a webhook; an artifact
+/// declared <c>input: true</c>) and <c>on_active: submit | skip</c> (what a fire or call does while a run is active;
+/// <c>skip</c> when omitted). Absent options are left out of the canonical form (§4.49 amended), so the hash is unchanged.
+/// </summary>
 public sealed record PipelineTrigger(TriggerKind Kind, IReadOnlyDictionary<string, string> Options)
 {
+    /// <summary>The <c>input</c> option key.</summary>
+    public const string InputOption = "input";
+
+    /// <summary>The <c>on_active</c> option key.</summary>
+    public const string OnActiveOption = "on_active";
+
     public static PipelineTrigger Manual { get; } = new(TriggerKind.Manual, new Dictionary<string, string>(StringComparer.Ordinal));
+
+    /// <summary>FR-337: the artifact a webhook body (or a schedule's inputs) is stored as, or <c>null</c>.</summary>
+    public string? Input => Options.TryGetValue(InputOption, out var input) ? input : null;
+
+    /// <summary>FR-336, FR-337: <c>on_active</c>; <see cref="TriggerOnActive.Skip"/> when omitted or not a known value
+    /// (the validator reports an unknown value).</summary>
+    public TriggerOnActive OnActive =>
+        Options.TryGetValue(OnActiveOption, out var value) && EnumStrings.TryParse(value, out TriggerOnActive parsed)
+            ? parsed
+            : TriggerOnActive.Skip;
 }
 
-/// <summary>FR-284: only <see cref="Manual"/> runs in 0.7.0 (D-0.7.0-3).</summary>
+/// <summary>FR-284: 0.7.0 ran only <see cref="Manual"/> (D-0.7.0-3); 0.8.0 adds schedules and webhooks (FR-336, FR-337).</summary>
 public enum TriggerKind
 {
     Manual = 0,
     Schedule = 1,
     Webhook = 2,
+}
+
+/// <summary>FR-336, FR-337: what a schedule fire or a webhook call does while a run of the pipeline is active.</summary>
+public enum TriggerOnActive
+{
+    /// <summary>The fire is skipped and recorded; a webhook call is refused (<c>RUN_ALREADY_ACTIVE</c>).</summary>
+    Skip = 0,
+
+    /// <summary>The payload is submitted to the active run as a new version of the trigger's input (FR-335).</summary>
+    Submit = 1,
+}
+
+/// <summary>FR-331: how many non-final runs of the pipeline a project may have at once.</summary>
+public enum RunConcurrency
+{
+    /// <summary>At most one (the default; <c>RUN_ALREADY_ACTIVE</c> otherwise).</summary>
+    One = 0,
+
+    Many = 1,
 }
 
 /// <summary>FR-279: an artifact the definition produces or reads.</summary>
@@ -126,7 +166,14 @@ public sealed record ArtifactDefinition(
     ArtifactFormat Format,
     string? Schema,
     ArtifactApproval Approval,
-    CascadeMode Cascade);
+    CascadeMode Cascade)
+{
+    /// <summary>
+    /// FR-335 (0.8.0): <c>input: true</c>, the artifact is supplied from outside the run (at start, by a submit or by a
+    /// trigger) rather than produced by a stage. Omitted from the canonical form when <c>false</c> (the hash is unchanged).
+    /// </summary>
+    public bool Input { get; init; }
+}
 
 public enum ArtifactFormat
 {
@@ -160,6 +207,10 @@ public enum GenericRunStatus
     Completed = 3,
     Failed = 4,
     Cancelled = 5,
+
+    /// <summary>FR-335 (0.8.0): an engine-controlled run stopped at a stage that requires an input it doesn't have yet.
+    /// Stored (unlike <see cref="WaitingOnGate"/>); only the run driver enters and leaves it (<see cref="Entities.PipelineRunRules"/>).</summary>
+    WaitingOnInput = 6,
 }
 
 /// <summary>FR-285: a custom pack status and the generic status it maps to.</summary>
@@ -209,6 +260,10 @@ public sealed record StatusChangeDefinition(
 public sealed record ConcurrencyDefinition(IReadOnlyList<ExclusiveJob> Exclusive)
 {
     public static ConcurrencyDefinition None { get; } = new([]);
+
+    /// <summary>FR-331 (0.8.0): <c>runs: one | many</c>, default <see cref="RunConcurrency.One"/>. Omitted from the
+    /// canonical form when it's the default (the hash is unchanged).</summary>
+    public RunConcurrency Runs { get; init; } = RunConcurrency.One;
 }
 
 public sealed record ExclusiveJob(string JobType, ConcurrencyScope Scope);
@@ -317,6 +372,12 @@ public sealed record NoPendingGatesRequirement(IReadOnlyList<string> Except) : S
 
 /// <summary><c>{ guard: &lt;pack&gt;.&lt;name&gt; }</c>: a registered <see cref="IGuard"/> passes.</summary>
 public sealed record GuardRequirement(string Guard) : StageRequirement;
+
+/// <summary>
+/// FR-335 (0.8.0): <c>{ input: &lt;key&gt; }</c>: the run has a version of the input artifact <paramref name="ArtifactKey"/>
+/// (declared <c>input: true</c>). Unmet, the run driver waits (<see cref="GenericRunStatus.WaitingOnInput"/>).
+/// </summary>
+public sealed record InputRequirement(string ArtifactKey) : StageRequirement;
 
 /// <summary>FR-282: one <c>validate:</c> entry, <c>{ guard: &lt;pack&gt;.&lt;name&gt; }</c>.</summary>
 public sealed record StageValidation(string Guard);

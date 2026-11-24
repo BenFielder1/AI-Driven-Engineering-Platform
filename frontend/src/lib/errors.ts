@@ -115,6 +115,17 @@ export const errorMessages = {
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
   LINK_USED: "This approval link has already been used.",
+  // Engine run control and triggers (FR-330–FR-337, §6). SOURCE_ARTIFACT_MISSING's `{artifact}` is the artifact's title.
+  RUN_CONTROLLED_BY_HOST: "This pipeline is run from its own pages, not from here.",
+  RUN_ALREADY_ACTIVE: "This project already has a run in progress for this pipeline.",
+  RUN_NOT_ACTIVE: "This run has already finished.",
+  INPUT_INVALID: "Some input values aren't valid. Check the highlighted fields.",
+  SOURCE_ARTIFACT_MISSING: "Lock a version of {artifact} before starting a run.",
+  SCHEDULE_INVALID: "That schedule isn't valid. Check the cron expression and timezone.",
+  TRIGGER_NOT_SUPPORTED: "This pipeline can't be started that way.",
+  // §6 "(API only)": returned to webhook callers (FR-337, §4.72), never shown in the app. The copy is for completeness.
+  WEBHOOK_SIGNATURE_INVALID: "The webhook signature is missing, invalid or stale.",
+  WEBHOOK_REPLAY: "This webhook delivery was already received.",
   // Agent runs (shown on run details)
   MISSING_INPUT: "The agent was missing a required input.",
   INVALID_PLAN: "The agent produced an invalid plan.",

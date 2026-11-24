@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Features.Artifacts;
 using Tevrin.Api.Features.Stack;
 using Tevrin.Api.Features.Versions;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Agents;
 using Tevrin.Domain.Artifacts;
@@ -74,7 +75,7 @@ public sealed partial class RepositoryAnalysisJobHandler(
         }
 
         var runIds = new[] { AgentRunRules.RunId(job.Id), AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey) };
-        if (await db.Artifacts.AsNoTracking().AnyAsync(
+        if (await db.Artifacts.Sdlc().AsNoTracking().AnyAsync(
                 a => a.ProjectId == project.Id && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.CodebaseSummary
                     && (a.AgentRunId == null || !runIds.Contains(a.AgentRunId.Value)),
                 cancellationToken))

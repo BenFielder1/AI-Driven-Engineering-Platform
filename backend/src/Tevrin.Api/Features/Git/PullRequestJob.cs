@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Api.Agents;
 using Tevrin.Api.Features.Execution;
 using Tevrin.Api.Features.Lifecycle;
+using Tevrin.Api.Pipelines;
 using Tevrin.Domain.Access;
 using Tevrin.Domain.Common;
 using Tevrin.Domain.Entities;
@@ -353,7 +354,7 @@ public sealed partial class PullRequestJobHandler(
     private async Task<PullRequestInput> DescriptionInputAsync(Project project, Guid planId, List<ExecutionStep> steps, CancellationToken cancellationToken)
     {
         var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
-        var plan = await db.Artifacts.AsNoTracking()
+        var plan = await db.Artifacts.Sdlc().AsNoTracking()
             .Where(a => a.Id == planId)
             .Select(a => new { a.Type, a.Version })
             .FirstAsync(cancellationToken);

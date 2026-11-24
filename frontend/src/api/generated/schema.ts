@@ -5001,7 +5001,7 @@ export interface components {
          * @description §4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final.
          * @enum {unknown}
          */
-        GenericRunStatus: "active" | "running" | "waiting_on_gate" | "completed" | "failed" | "cancelled";
+        GenericRunStatus: "active" | "running" | "waiting_on_gate" | "completed" | "failed" | "cancelled" | "waiting_on_input";
         /**
          * @description The Git connection bound to a GitLab or Bitbucket project (FR-136), shown to Owners as e.g. "GitLab · connected by Ana
          *     (@ana)". Never contains a token. `connectionId` only lets the binding Owner recognise their own connection.
@@ -6044,7 +6044,7 @@ export interface components {
              * @description §4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final.
              * @enum {unknown}
              */
-            status: "active" | "running" | "waiting_on_gate" | "completed" | "failed" | "cancelled";
+            status: "active" | "running" | "waiting_on_gate" | "completed" | "failed" | "cancelled" | "waiting_on_input";
             /** Format: int32 */
             checkpoint: number;
             /** Format: date-time */

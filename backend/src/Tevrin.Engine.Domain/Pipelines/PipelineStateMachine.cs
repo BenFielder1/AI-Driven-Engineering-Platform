@@ -129,7 +129,7 @@ public static class PipelineStateMachine
                     unmet.AddRange(result.Reasons.Count > 0 ? result.Reasons : [TransitionMessages.GuardFailed(guard.Guard)]);
                 }
             }
-            else if (BuiltInRequirements.Unmet(definition, requirement, facts.LockedArtifacts, facts.PendingGates) is { } reason)
+            else if (BuiltInRequirements.Unmet(definition, requirement, facts.LockedArtifacts, facts.PendingGates, facts.PresentInputs) is { } reason)
             {
                 unmet.Add(reason);
             }

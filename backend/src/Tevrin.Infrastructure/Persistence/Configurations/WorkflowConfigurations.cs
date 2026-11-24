@@ -46,6 +46,28 @@ internal sealed class PipelineRunConfiguration : IEntityTypeConfiguration<Pipeli
         builder.HasOne<Project>().WithMany().HasForeignKey(r => r.ProjectId).OnDelete(DeleteBehavior.Cascade);
 }
 
+/// <summary>FR-336: <c>pipeline_schedules</c> is configured by the engine (<see cref="TevrinEngineModel"/>); a schedule goes
+/// with its project, and keeps running after its creator is deleted.</summary>
+internal sealed class PipelineScheduleConfiguration : IEntityTypeConfiguration<PipelineSchedule>
+{
+    public void Configure(EntityTypeBuilder<PipelineSchedule> builder)
+    {
+        builder.HasOne<Project>().WithMany().HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(s => s.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+/// <summary>FR-337: <c>pipeline_webhooks</c> is configured by the engine (<see cref="TevrinEngineModel"/>); a webhook goes
+/// with its project, and keeps working after its creator is deleted.</summary>
+internal sealed class PipelineWebhookConfiguration : IEntityTypeConfiguration<PipelineWebhook>
+{
+    public void Configure(EntityTypeBuilder<PipelineWebhook> builder)
+    {
+        builder.HasOne<Project>().WithMany().HasForeignKey(w => w.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(w => w.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
 internal sealed class ExecutionStepConfiguration : IEntityTypeConfiguration<ExecutionStep>
 {
     public void Configure(EntityTypeBuilder<ExecutionStep> builder)
