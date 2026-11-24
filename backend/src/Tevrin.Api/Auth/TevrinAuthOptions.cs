@@ -35,7 +35,7 @@ public static class AuthConstants
 {
     /// <summary>Default policy scheme: Bearer API token when an <c>Authorization: Bearer</c> header is present,
     /// otherwise the Identity cookie.</summary>
-    public const string SmartScheme = "Aide";
+    public const string SmartScheme = "Tevrin";
 
     public const string ApiTokenScheme = "ApiToken";
 

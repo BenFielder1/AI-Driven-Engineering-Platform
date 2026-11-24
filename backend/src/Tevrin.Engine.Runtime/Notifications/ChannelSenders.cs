@@ -67,7 +67,7 @@ public static class NotificationHttp
     public const string ClientName = "notifications";
 
     /// <summary>Marks requests so tracing leaves them out: Slack and Teams URLs are credentials.</summary>
-    public static readonly HttpRequestOptionsKey<bool> NotTraced = new("aide.notification");
+    public static readonly HttpRequestOptionsKey<bool> NotTraced = new("tevrin.notification");
 
     /// <summary>Response bodies are never read; this caps anything buffered by accident.</summary>
     public const int MaxResponseBytes = 64 * 1024;

@@ -49,6 +49,7 @@ using Tevrin.Engine.Runtime.Jobs;
 using Tevrin.Engine.Runtime.Notifications;
 using Tevrin.Engine.Runtime.Pipelines;
 using Tevrin.Infrastructure;
+using Tevrin.Infrastructure.Configuration;
 using Tevrin.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -67,11 +68,11 @@ builder.Logging.AddRedactedRequestScope();
 // Tracing and metrics (OpenTelemetry). Console exporter only when Telemetry:ConsoleExporter=true (Development).
 var consoleExporter = builder.Configuration.GetValue("Telemetry:ConsoleExporter", false);
 builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource.AddService("aide-api"))
+    .ConfigureResource(resource => resource.AddService("tevrin-api"))
     .WithTracing(tracing =>
     {
         tracing
-            // NFR-OBS: job and agent-run spans, tagged aide.project_id / aide.job_id / aide.run_id like their log scopes.
+            // NFR-OBS: job and agent-run spans, tagged tevrin.project_id / tevrin.job_id / tevrin.run_id like their log scopes.
             .AddSource(TevrinTelemetry.SourceName)
             // §8: stage-execution and agent-stage spans from the engine.
             .AddSource(Tevrin.Engine.Runtime.EngineTelemetry.SourceName)
@@ -226,6 +227,9 @@ builder.Services.AddHealthChecks()
     .AddCheck<PipelineDefinitionsHealthCheck>("pipeline-definitions", tags: [HealthEndpoints.ReadyTag]);
 
 var app = builder.Build();
+
+// FR-325 (§4.77): one warning per pre-0.8.0 config name still set (ConnectionStrings:Aide), read until 0.9.0.
+LegacyConfigNames.LogWarnings(app.Configuration, app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Tevrin.Api.Configuration"));
 
 app.UseRequestLogScope();
 app.UseExceptionHandler();

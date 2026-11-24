@@ -64,9 +64,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Phases
 - [ ] M65 Rename (base: d1301d2) — FR-323–FR-329; version bump to 0.8.0 (FR-367)
-  - [x] a. Version bump + PROGRESS
-  - [ ] b. Projects, namespaces and types (mechanical) + migration-check script (FR-323, FR-324)
-  - [ ] c. Config and telemetry fallbacks (FR-325)
+  - [x] a. Version bump + PROGRESS ([CI 45272691359](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45272691359))
+  - [x] b. Projects, namespaces and types (mechanical) + migration-check script (FR-323, FR-324) ([CI 45278720358](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45278720358))
+  - [x] c. Config and telemetry fallbacks (FR-325)
   - [ ] d. Wire and stored identifiers, read both; contract + client (FR-326)
   - [ ] e. Images, k8s, IaC, smoke scripts, runbook (FR-327)
   - [ ] f. Snapshot re-baseline + mapped-equality check (FR-328)
@@ -82,6 +82,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Decisions
 - 2026-11-23 — The 0.8.0 spec moved from `docs/0.8.0/` to the root `SPEC.md` after 0.7.0 was released (PR #63) — CLAUDE.md version workflow — SPEC updated: yes (header)
+
+- 2026-11-24 — D-0.8.0-16: `AIDE_RUN_MIGRATIONS`, the data-protection application name `aide` and the `Aide.Secrets.*` purposes keep their names (generated-project contract; decryption of stored secrets) — FR-325 acceptance corrected — SPEC updated: yes
 
 ## Known issues
 - Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.

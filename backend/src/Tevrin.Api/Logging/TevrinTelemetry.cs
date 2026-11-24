@@ -9,29 +9,29 @@ namespace Tevrin.Api.Logging;
 /// </summary>
 public static class TevrinTelemetry
 {
-    public const string SourceName = "Aide";
+    public const string SourceName = "Tevrin";
 
-    public const string ProjectIdTag = "aide.project_id";
-    public const string JobIdTag = "aide.job_id";
-    public const string JobTypeTag = "aide.job_type";
-    public const string JobAttemptTag = "aide.job_attempt";
-    public const string RunIdTag = "aide.run_id";
-    public const string AgentTag = "aide.agent";
-    public const string UserIdTag = "aide.user_id";
+    public const string ProjectIdTag = "tevrin.project_id";
+    public const string JobIdTag = "tevrin.job_id";
+    public const string JobTypeTag = "tevrin.job_type";
+    public const string JobAttemptTag = "tevrin.job_attempt";
+    public const string RunIdTag = "tevrin.run_id";
+    public const string AgentTag = "tevrin.agent";
+    public const string UserIdTag = "tevrin.user_id";
 
     /// <summary>§8: the pipeline run an agent run belongs to, and its stage.</summary>
-    public const string PipelineRunIdTag = "aide.pipeline_run_id";
-    public const string StageTag = "aide.stage";
+    public const string PipelineRunIdTag = "tevrin.pipeline_run_id";
+    public const string StageTag = "tevrin.stage";
 
     /// <summary>How a job attempt ended: one of <see cref="Tevrin.Engine.Runtime.Jobs.JobOutcomes"/>.</summary>
-    public const string JobOutcomeTag = "aide.job_outcome";
+    public const string JobOutcomeTag = "tevrin.job_outcome";
 
     /// <summary>The run's status when the runner returned or threw (<c>running</c> while a transient failure is retried,
     /// <c>not_started</c> when no run row exists, e.g. a refused budget).</summary>
-    public const string RunStatusTag = "aide.run_status";
+    public const string RunStatusTag = "tevrin.run_status";
 
     /// <summary>The spec error code (or exception type name) of a failed span; also its status description.</summary>
-    public const string ErrorCodeTag = "aide.error_code";
+    public const string ErrorCodeTag = "tevrin.error_code";
 
     public static readonly ActivitySource Source = new(SourceName);
 

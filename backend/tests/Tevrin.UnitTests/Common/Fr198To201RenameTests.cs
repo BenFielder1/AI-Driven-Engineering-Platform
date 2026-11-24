@@ -154,6 +154,7 @@ public sealed partial class Fr198To201RenameTests
     public void FR201_Server_identifiers_keep_their_aide_names()
     {
         Assert.Equal("aide", DataProtectionSetup.DefaultApplicationName);
-        Assert.Equal("Aide", DependencyInjection.ConnectionStringName);
+        // FR-325 (D-0.8.0-7) renames the connection string to ConnectionStrings:Tevrin; the old name is still read until 0.9.0.
+        Assert.Equal("Aide", DependencyInjection.LegacyConnectionStringName);
     }
 }

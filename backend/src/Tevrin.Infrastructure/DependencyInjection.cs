@@ -9,6 +9,7 @@ using Tevrin.Engine.Runtime.Persistence;
 using Tevrin.Engine.Runtime.Pipelines;
 using Tevrin.Infrastructure.Agents;
 using Tevrin.Infrastructure.Bitbucket;
+using Tevrin.Infrastructure.Configuration;
 using Tevrin.Infrastructure.Deployments;
 using Tevrin.Infrastructure.Git;
 using Tevrin.Infrastructure.GitHub;
@@ -24,9 +25,13 @@ namespace Tevrin.Infrastructure;
 
 public static class DependencyInjection
 {
-    /// <summary>Configuration key of the PostgreSQL connection string (<c>ConnectionStrings:Aide</c>,
-    /// env var <c>ConnectionStrings__Aide</c>).</summary>
-    public const string ConnectionStringName = "Aide";
+    /// <summary>Configuration key of the PostgreSQL connection string (<c>ConnectionStrings:Tevrin</c>,
+    /// env var <c>ConnectionStrings__Tevrin</c>).</summary>
+    public const string ConnectionStringName = "Tevrin";
+
+    /// <summary>FR-325: the pre-0.8.0 name, read when <see cref="ConnectionStringName"/> is unset, until 0.9.0
+    /// (<see cref="LegacyConfigNames"/>).</summary>
+    public const string LegacyConnectionStringName = "Aide";
 
     public const string MigrationsHistoryTable = "__ef_migrations_history";
 
@@ -36,7 +41,8 @@ public static class DependencyInjection
         // so tests and build-time OpenAPI generation can supply or omit it.
         services.AddDbContext<TevrinDbContext>((sp, options) =>
         {
-            var connectionString = sp.GetRequiredService<IConfiguration>().GetConnectionString(ConnectionStringName);
+            // FR-325: ConnectionStrings:Tevrin, else the old ConnectionStrings:Aide (warned at startup).
+            var connectionString = LegacyConfigNames.Get(sp.GetRequiredService<IConfiguration>(), LegacyConfigNames.ConnectionString);
             if (string.IsNullOrWhiteSpace(connectionString))
             {
                 // Design-time tools (`migrations add`, `migrations bundle` in the image build) need no connection;

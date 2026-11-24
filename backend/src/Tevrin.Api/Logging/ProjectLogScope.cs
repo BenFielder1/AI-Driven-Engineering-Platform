@@ -4,7 +4,7 @@ namespace Tevrin.Api.Logging;
 
 /// <summary>
 /// NFR-OBS: every log entry written while handling a <c>/api/projects/{id}/…</c> request carries the project id as a
-/// <c>ProjectId</c> scope value, and the request span an <c>aide.project_id</c> tag (background jobs add
+/// <c>ProjectId</c> scope value, and the request span an <c>tevrin.project_id</c> tag (background jobs add
 /// <c>JobId</c>/<c>ProjectId</c> in the job worker). The id comes from the matched route's <c>{id}</c>; a value that isn't a
 /// GUID (no route matched it) is ignored.
 /// </summary>
