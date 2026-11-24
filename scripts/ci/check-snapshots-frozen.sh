@@ -36,7 +36,7 @@ frozen() {
   return "$bad"
 }
 
-rebaseline=
+rebaseline=4865d264ac0585a6e2b4585a0d104f2937be4f90
 if [ -z "$rebaseline" ]; then
   echo "FR-328 re-baseline commit: byte freeze deferred to the next commit; check-snapshots-rebaseline.sh checks the change"
   exit 0
