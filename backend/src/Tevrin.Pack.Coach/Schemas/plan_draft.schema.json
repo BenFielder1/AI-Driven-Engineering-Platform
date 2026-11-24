@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Plan draft",
+  "type": "object",
+  "required": ["weeks"],
+  "properties": {
+    "weeks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["week", "sessions"],
+        "properties": {
+          "week": { "type": "integer", "minimum": 1 },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["date", "type", "intensity"],
+              "properties": {
+                "date": { "type": "string", "format": "date" },
+                "type": { "type": "string", "minLength": 1 },
+                "intensity": { "enum": ["easy", "moderate", "hard", "race"] },
+                "distanceKm": { "type": "number", "minimum": 0 },
+                "durationMin": { "type": "number", "minimum": 0 },
+                "notes": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "rationale": { "type": "string" }
+  }
+}

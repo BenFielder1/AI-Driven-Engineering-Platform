@@ -3,6 +3,7 @@ using System.Xml.Linq;
 using Tevrin.Engine.Api;
 using Tevrin.Engine.Domain;
 using Tevrin.Engine.Runtime;
+using Tevrin.Pack.Coach;
 using Tevrin.Pack.Sdlc;
 
 namespace Tevrin.Engine.Tests.Architecture;
@@ -82,6 +83,45 @@ public class EngineDependencyTests
 
         Assert.Empty(offending);
         Assert.Equal(["project:Tevrin.Engine.Domain"], ProjectItems("Tevrin.Pack.Sdlc"));
+    }
+
+    /// <summary>FR-338: every pack assembly, by project name.</summary>
+    private static readonly (string Project, Assembly Assembly)[] PackProjects =
+    [
+        ("Tevrin.Pack.Sdlc", typeof(SdlcPack).Assembly),
+        ("Tevrin.Pack.Coach", typeof(CoachPack).Assembly),
+    ];
+
+    [Fact]
+    public void FR338_every_pack_references_only_the_engine_domain_never_another_pack_or_a_host()
+    {
+        var offending = PackProjects
+            .SelectMany(p => References(p.Project, p.Assembly)
+                .Where(r => IsOursButNotEngine(r) || (r.StartsWith("Tevrin.Engine.", StringComparison.OrdinalIgnoreCase) && r != "Tevrin.Engine.Domain"))
+                .Select(r => $"{p.Project} → {r}"))
+            .ToList();
+
+        Assert.Empty(offending);
+        Assert.All(PackProjects, p => Assert.Equal(["project:Tevrin.Engine.Domain"], ProjectItems(p.Project)));
+    }
+
+    [Fact]
+    public void FR338_every_pack_project_under_src_is_checked()
+    {
+        var packs = Directory.EnumerateDirectories(SourceRoot(), PackPrefix + "*").Select(Path.GetFileName).Order(StringComparer.Ordinal);
+
+        Assert.Equal(PackProjects.Select(p => p.Project).Order(StringComparer.Ordinal), packs);
+    }
+
+    [Fact]
+    public void FR338_no_engine_assembly_references_the_coach_pack()
+    {
+        var offending = EngineProjects
+            .Where(p => References(p.Project, p.Assembly).Contains("Tevrin.Pack.Coach", StringComparer.OrdinalIgnoreCase))
+            .Select(p => p.Project)
+            .ToList();
+
+        Assert.Empty(offending);
     }
 
     [Fact]

@@ -237,23 +237,49 @@ public static partial class PipelineDefinitionValidator
         /// <summary>
         /// FR-284, FR-336, FR-337: a <c>schedule</c> or <c>webhook</c> trigger takes only <c>input</c> and <c>on_active</c>,
         /// and a <c>manual</c> trigger takes no option; any other option is <see cref="DefinitionErrorCodes.TriggerNotSupported"/>.
-        /// A webhook needs <c>input</c>; <c>input</c> names an artifact declared <c>input: true</c>.
+        /// A webhook needs <c>input</c>; <c>input</c> names an artifact declared <c>input: true</c>. FR-339: each entry of a
+        /// <c>triggers:</c> list follows the same rules; the list is not empty and has at most one webhook and one schedule.
         /// </summary>
         private void ValidateTrigger()
         {
-            var trigger = definition.Trigger;
+            if (definition.Triggers is not { } triggers)
+            {
+                ValidateTrigger(definition.Trigger, "trigger");
+                return;
+            }
+
+            if (triggers.Count == 0)
+            {
+                Add(DefinitionErrorCodes.Parse, "triggers", "'triggers' needs at least one trigger.");
+            }
+
+            for (var i = 0; i < triggers.Count; i++)
+            {
+                var path = $"triggers[{i}]";
+                var kind = triggers[i].Kind;
+                if (kind is TriggerKind.Schedule or TriggerKind.Webhook && triggers.Take(i).Any(t => t.Kind == kind))
+                {
+                    Add(DefinitionErrorCodes.Parse, path + ".kind", $"A pipeline declares at most one {kind.ToWire()} trigger.");
+                }
+
+                ValidateTrigger(triggers[i], path);
+            }
+        }
+
+        private void ValidateTrigger(PipelineTrigger trigger, string path)
+        {
             var triggered = trigger.Kind is TriggerKind.Schedule or TriggerKind.Webhook;
             foreach (var key in trigger.Options.Keys)
             {
                 var known = key is PipelineTrigger.InputOption or PipelineTrigger.OnActiveOption;
                 if (!triggered)
                 {
-                    Add(DefinitionErrorCodes.TriggerNotSupported, $"trigger.{key}",
+                    Add(DefinitionErrorCodes.TriggerNotSupported, $"{path}.{key}",
                         $"A '{trigger.Kind.ToWire()}' trigger takes no options; '{key}' needs a schedule or webhook trigger.");
                 }
                 else if (!known)
                 {
-                    Add(DefinitionErrorCodes.TriggerNotSupported, $"trigger.{key}",
+                    Add(DefinitionErrorCodes.TriggerNotSupported, $"{path}.{key}",
                         $"Trigger option '{key}' is not supported; a {trigger.Kind.ToWire()} trigger takes 'input' and 'on_active'.");
                 }
             }
@@ -266,20 +292,20 @@ public static partial class PipelineDefinitionValidator
             if (trigger.Options.TryGetValue(PipelineTrigger.OnActiveOption, out var onActive) &&
                 !EnumStrings.TryParse(onActive, out TriggerOnActive _))
             {
-                Add(DefinitionErrorCodes.Parse, "trigger.on_active", $"'on_active' must be 'submit' or 'skip', not '{onActive}'.");
+                Add(DefinitionErrorCodes.Parse, $"{path}.on_active", $"'on_active' must be 'submit' or 'skip', not '{onActive}'.");
             }
 
             if (trigger.Input is not { } input)
             {
                 if (trigger.Kind == TriggerKind.Webhook)
                 {
-                    Add(DefinitionErrorCodes.Parse, "trigger.input", "A webhook trigger needs 'input': the artifact its body is stored as.");
+                    Add(DefinitionErrorCodes.Parse, $"{path}.input", "A webhook trigger needs 'input': the artifact its body is stored as.");
                 }
 
                 return;
             }
 
-            CheckInputArtifact(input, "trigger.input");
+            CheckInputArtifact(input, $"{path}.input");
         }
 
         /// <summary>FR-335: <paramref name="key"/> is a declared artifact marked <c>input: true</c>.</summary>

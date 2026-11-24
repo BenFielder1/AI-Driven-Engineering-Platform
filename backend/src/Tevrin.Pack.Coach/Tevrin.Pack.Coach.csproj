@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- FR-338: the Impulse coaching pack. Depends on the engine domain only (D-0.7.0-23); the engine never depends on it. -->
+  <PropertyGroup>
+    <RootNamespace>Tevrin.Pack.Coach</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tevrin.Engine.Domain\Tevrin.Engine.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FR-339: the definition, its artifact schemas and the agents' prompt templates. -->
+    <EmbeddedResource Include="Definitions/*.yaml" LogicalName="Definitions/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Schemas/*.json" LogicalName="Schemas/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Prompts/*.md" LogicalName="Prompts/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

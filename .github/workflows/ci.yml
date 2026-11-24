@@ -74,6 +74,7 @@ jobs:
         run: |
           dotnet test --project tests/Tevrin.UnitTests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
           dotnet test --project tests/Tevrin.Engine.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
+          dotnet test --project tests/Tevrin.Pack.Coach.Tests -c Release --no-build --results-directory "${{ github.workspace }}/backend/TestResults" --report-xunit-trx
       - name: Format
         run: dotnet format --verify-no-changes --no-restore
       - uses: actions/upload-artifact@v7

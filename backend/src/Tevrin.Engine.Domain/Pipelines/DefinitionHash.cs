@@ -37,7 +37,6 @@ public static class DefinitionHash
             ["pipeline"] = d.Pipeline,
             ["version"] = d.Version,
             ["title"] = d.Title,
-            ["trigger"] = Trigger(d.Trigger),
             ["approval_modes"] = d.ApprovalModes.Select(m => (object?)m.ToWire()).ToList(),
             ["start"] = Strings(d.Start),
             ["settings"] = Strings(d.Settings),
@@ -47,6 +46,17 @@ public static class DefinitionHash
             ["concurrency"] = Concurrency(d.Concurrency),
             ["stages"] = d.Stages.Select(s => (object?)Stage(s)).ToList(),
         };
+        // FR-339: the single 'trigger' as before, or the 'triggers' list instead (absent unless declared, so existing
+        // hashes are unchanged).
+        if (d.Triggers is { } triggers)
+        {
+            root["triggers"] = triggers.Select(t => (object?)Trigger(t)).ToList();
+        }
+        else
+        {
+            root["trigger"] = Trigger(d.Trigger);
+        }
+
         root.AddIfSet("default_approval_mode", d.DefaultApprovalMode?.ToWire());
         root.AddIfSet("rollback_status", d.RollbackStatus);
         return root;

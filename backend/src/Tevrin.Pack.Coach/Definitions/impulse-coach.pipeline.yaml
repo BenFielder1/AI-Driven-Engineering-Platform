@@ -1,0 +1,61 @@
+# FR-339 (M67): the Impulse coaching pipeline, engine-controlled. A session log goes to the performance analyst; the
+# programme planner drafts the next weeks, checked by the deterministic Velocity load rules (FR-340, §4.63) with retry
+# with feedback, capped at 3 attempts, then escalation; the coach approves the plan; coach-voice writes the message.
+# Triggers: manual, a webhook whose signed body is the session log, and a schedule (e.g. a weekly plan). While a run is
+# active, a webhook call or schedule fire is skipped (on_active: skip, the default).
+pipeline: impulse-coach
+version: 1
+title: Impulse coaching
+triggers:
+  - { kind: manual }
+  - { kind: webhook, input: session_log, on_active: skip }
+  - { kind: schedule }
+approval_modes: [strict, advisory]
+default_approval_mode: strict
+start: [analyse]
+
+artifacts:
+  athlete_profile: { title: Athlete profile, format: json, schema: athlete_profile.schema.json, approval: required, cascade: none, scope: project }
+  session_log:     { title: Session log, format: json, schema: session_log.schema.json, approval: auto_lock, cascade: downstream, input: true }
+  performance:     { title: Performance, format: json, schema: performance.schema.json, approval: auto_lock, cascade: downstream }
+  plan_draft:      { title: Plan draft, format: json, schema: plan_draft.schema.json, approval: required, cascade: downstream }
+  coach_message:   { title: Coach message, format: json, schema: coach_message.schema.json, approval: auto_lock, cascade: none }
+
+statuses:
+  analysing: { generic: active }
+  planning:  { generic: active }
+  reviewing: { generic: active }
+  writing:   { generic: active }
+  coached:   { generic: completed }
+
+stages:
+  - id: analyse
+    title: Analyse
+    status: analysing
+    agent: { key: performance-analyst, prompt: coach.performance-analyst }
+    inputs: [session_log, athlete_profile]
+    output: performance
+    requires:
+      - { input: session_log }
+
+  - id: plan
+    title: Plan
+    status: planning
+    agent: { key: programme-planner, prompt: coach.programme-planner }
+    inputs: [performance, athlete_profile]
+    output: plan_draft
+    validate:
+      - { guard: coach.velocity-load-rules }
+    on_invalid: { retry_with_feedback: true, max_attempts: 3, then: escalate }
+
+  - id: review
+    title: Review
+    status: reviewing
+    gate: { type: plan_approval, modes: [strict, advisory], approves: plan_draft }
+
+  - id: write
+    title: Write
+    status: writing
+    agent: { key: coach-voice, prompt: coach.coach-voice }
+    inputs: [plan_draft]
+    output: coach_message

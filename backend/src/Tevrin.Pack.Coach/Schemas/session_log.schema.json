@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Session log",
+  "type": "object",
+  "required": ["sessions"],
+  "properties": {
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["date", "type"],
+        "properties": {
+          "date": { "type": "string", "format": "date" },
+          "type": { "type": "string", "minLength": 1 },
+          "intensity": { "enum": ["easy", "moderate", "hard", "race"] },
+          "distanceKm": { "type": "number", "minimum": 0 },
+          "durationMin": { "type": "number", "minimum": 0 },
+          "rpe": { "type": "number", "minimum": 1, "maximum": 10 },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

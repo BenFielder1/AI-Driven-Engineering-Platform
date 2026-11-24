@@ -19,8 +19,23 @@ public sealed record PipelineDefinition
 
     public string Title { get; init; } = string.Empty;
 
-    /// <summary>FR-284: defaults to <c>{ kind: manual }</c> when omitted.</summary>
+    /// <summary>FR-284: defaults to <c>{ kind: manual }</c> when omitted. Unused when <see cref="Triggers"/> is set.</summary>
     public PipelineTrigger Trigger { get; init; } = PipelineTrigger.Manual;
+
+    /// <summary>
+    /// FR-339 (0.8.0, §4.49 amended): <c>triggers: [ { kind: … }, … ]</c>, the list form of <see cref="Trigger"/>, or
+    /// <c>null</c> when the definition uses the single <c>trigger:</c> (or neither). A definition declares one form or the
+    /// other, and at most one <c>webhook</c> and one <c>schedule</c> entry. Absent from the canonical form when <c>null</c>,
+    /// so existing hashes don't change.
+    /// </summary>
+    public IReadOnlyList<PipelineTrigger>? Triggers { get; init; }
+
+    /// <summary>Every trigger the definition declares: <see cref="Triggers"/>, else the single <see cref="Trigger"/>.</summary>
+    public IReadOnlyList<PipelineTrigger> DeclaredTriggers => Triggers ?? [Trigger];
+
+    /// <summary>FR-336, FR-337, FR-339: the declared trigger of <paramref name="kind"/> (the first, if a list repeats it), or
+    /// <c>null</c> when the definition doesn't declare one. Manual starts don't depend on it.</summary>
+    public PipelineTrigger? TriggerOf(TriggerKind kind) => DeclaredTriggers.FirstOrDefault(t => t.Kind == kind);
 
     public IReadOnlyList<ApprovalMode> ApprovalModes { get; init; } = [];
 

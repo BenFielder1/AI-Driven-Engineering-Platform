@@ -220,7 +220,7 @@ public sealed partial class PipelineWebhooks(
             return Result.Failure<WebhookReceipt>(pipeline.Error!);
         }
 
-        var trigger = pipeline.Value.Definition!.Trigger;
+        var trigger = pipeline.Value.Definition!.TriggerOf(TriggerKind.Webhook)!;
         var key = trigger.Input!;
         JsonElement value;
         try

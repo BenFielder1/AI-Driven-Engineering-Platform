@@ -310,8 +310,8 @@ public sealed partial class PipelineSchedules(
         PipelineSchedule schedule, IReadOnlyDictionary<string, JsonElement> inputs, CancellationToken cancellationToken)
     {
         if (!registry.TryGet(schedule.PipelineId, out var loaded) || loaded.Definition is not { } definition
-            || definition.Trigger.OnActive != TriggerOnActive.Submit
-            || definition.Trigger.Input is not { } key || !inputs.TryGetValue(key, out var value)
+            || definition.TriggerOf(TriggerKind.Schedule) is not { OnActive: TriggerOnActive.Submit, Input: { } key }
+            || !inputs.TryGetValue(key, out var value)
             || await TriggerChecks.ActiveRunAsync(db, schedule.ProjectId, schedule.PipelineId, cancellationToken) is not { } run)
         {
             return (ScheduleFireOutcomes.Skipped, null, null);
@@ -373,7 +373,7 @@ public static class TriggerChecks
             return Result.Failure<LoadedPipelineDefinition>(RunControlErrors.ControlledByHost());
         }
 
-        if (definition.Trigger.Kind != kind || (kind == TriggerKind.Webhook && definition.Trigger.Input is null))
+        if (definition.TriggerOf(kind) is not { } trigger || (kind == TriggerKind.Webhook && trigger.Input is null))
         {
             return Result.Failure<LoadedPipelineDefinition>(new DomainError(EngineErrorCodes.TriggerNotSupported, "This pipeline can't be started that way."));
         }

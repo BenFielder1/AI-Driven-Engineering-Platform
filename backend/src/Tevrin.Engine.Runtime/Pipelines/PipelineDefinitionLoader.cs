@@ -61,7 +61,7 @@ public static class PipelineDefinitionLoader
     {
         private static readonly string[] TopKeys =
         [
-            "pipeline", "version", "title", "trigger", "approval_modes", "default_approval_mode", "start", "artifacts",
+            "pipeline", "version", "title", "trigger", "triggers", "approval_modes", "default_approval_mode", "start", "artifacts",
             "stages", "statuses", "status_changes", "concurrency", "settings", "rollback_status",
         ];
 
@@ -82,6 +82,7 @@ public static class PipelineDefinitionLoader
                 Version = obj.Int("version") ?? 0,
                 Title = obj.String("title"),
                 Trigger = Trigger(obj),
+                Triggers = Triggers(obj),
                 ApprovalModes = obj.List("approval_modes", (node, path) => Enum<ApprovalMode>(node, path)).OfType<ApprovalMode>().ToList(),
                 DefaultApprovalMode = obj.Enum<ApprovalMode>("default_approval_mode"),
                 Start = obj.StringList("start"),
@@ -95,14 +96,39 @@ public static class PipelineDefinitionLoader
             };
         }
 
-        private PipelineTrigger Trigger(Obj top)
+        private PipelineTrigger Trigger(Obj top) =>
+            top.Mapping("trigger") is { } trigger ? TriggerEntry(trigger.Map, trigger.Path) : PipelineTrigger.Manual;
+
+        /// <summary>FR-339: <c>triggers:</c>, a list of trigger mappings, or <c>null</c> when absent. Declaring it with
+        /// <c>trigger:</c> is an error.</summary>
+        private List<PipelineTrigger>? Triggers(Obj top)
         {
-            if (top.Mapping("trigger") is not { } trigger)
+            if (top.Entries.All(e => e.Key != "triggers"))
             {
-                return PipelineTrigger.Manual;
+                return null;
             }
 
+            if (top.Entries.Any(e => e.Key == "trigger"))
+            {
+                Error("triggers", "Declare either 'trigger' or 'triggers', not both.");
+            }
+
+            return [.. top.List("triggers", (node, path) =>
+            {
+                if (node is YamlMapping map)
+                {
+                    return TriggerEntry(map, path);
+                }
+
+                Error(path, "Expected a mapping.");
+                return null;
+            }).OfType<PipelineTrigger>()];
+        }
+
+        private PipelineTrigger TriggerEntry(YamlMapping map, string path)
+        {
             // Every key besides 'kind' is the kind's option (a schedule's cron, a webhook's path), kept as text.
+            var trigger = (Map: map, Path: path);
             var obj = Object(trigger.Map, trigger.Path, null);
             var kind = obj.Enum<TriggerKind>("kind", required: true) ?? TriggerKind.Manual;
             var options = new SortedDictionary<string, string>(StringComparer.Ordinal);

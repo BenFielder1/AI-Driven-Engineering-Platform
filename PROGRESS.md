@@ -45,7 +45,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-349 | Multiple output variants | 3.4, 4.67 | backend | M68 | todo | — |
 | FR-350 | Validator agent (`fixture-factcheck`) | 3.5 | backend | M69 | todo | — |
 | FR-351 | Agent feedback store (`fixture-postmortem`) | 3.5, 4.75 | backend + data | M69 | todo | — |
-| FR-352 | Source-of-truth artifacts pinned per run (`fixture-cv`) | 3.5, 4.76 | backend + data | M67 | todo | — |
+| FR-352 | Source-of-truth artifacts pinned per run (`fixture-cv`) | 3.5, 4.76 | backend + data | M67 | done | 9372e8b, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45467772497) |
 | FR-353 | External outcome scoring, Brier | 3.5, 4.74 | backend + data | M69 | todo | — |
 | FR-354 | Follow-up stages (delayed jobs) | 3.5, 4.70 | backend + data | M69 | todo | — |
 | FR-355 | Map-reduce (`fixture-qa`) | 3.6, 4.68 | backend + data | M70 | todo | — |
@@ -76,6 +76,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] b. `stage.run` driver; start, cancel, rollback, retry and input endpoints; engine gate decisions; `fixture-linear` (FR-331–FR-333, FR-335) — 63c8601 ([CI 45412232128](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128))
   - [x] c. Schedules and webhooks (FR-336, FR-337) — c9b6a15 + test fix 88a87d0 ([CI 45452701300](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300))
 - [ ] M67 Coach pack — FR-338–FR-342, FR-352
+  - [x] a. Source-of-truth artifacts pinned per run, `fixture-cv` (FR-352) — 9372e8b ([CI 45467772497](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45467772497))
+  - [ ] b1. `Tevrin.Pack.Coach`: definition, schemas, prompts, `velocity.load-rules` guard, architecture tests, test project (FR-338–FR-340)
+  - [ ] b2. Token budget and audit hooks for every pipeline, pack registration, Fake outputs, worked-example integration tests (FR-341, FR-339 acceptance)
+  - [ ] c. Pipeline tab render check (Vitest) and the Impulse coaching pack guide (FR-339 acceptance, FR-342)
 - [ ] M68 Flow constructs — FR-343–FR-349
 - [ ] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
 - [ ] M70 Scale and conversation — FR-355–FR-357

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Athlete profile",
+  "type": "object",
+  "required": ["name", "baselineWeeklyKm"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "baselineWeeklyKm": { "type": "number", "minimum": 0 },
+    "volumeUnit": { "enum": ["km", "minutes"] },
+    "raceDate": { "type": "string", "format": "date" },
+    "goal": { "type": "string" },
+    "velocity": {
+      "type": "object",
+      "properties": {
+        "maxWeeklyIncreasePct": { "type": "number", "minimum": 0 },
+        "minHoursBetweenHard": { "type": "number", "minimum": 0 },
+        "maxHardPerWeek": { "type": "integer", "minimum": 0 },
+        "taperPctWithin14Days": { "type": "number", "minimum": 0 },
+        "taperPctWithin7Days": { "type": "number", "minimum": 0 },
+        "minRestDaysPerWeek": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
+}
