@@ -34,7 +34,7 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         "flow.research", "flow.write", "flow.edit",
         "flow.headline", "flow.tagline", "flow.judge",
         "flow.factwrite", "flow.fact-check",
-        "flow.pm-work", "flow.pm-review",
+        "flow.pm-work", "flow.pm-review", "flow.pm-grade",
     ];
 
     public static IReadOnlyList<string> JobTypes { get; } =

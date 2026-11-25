@@ -38,6 +38,10 @@ public sealed class StageExecution
 
     /// <summary>FR-343–FR-349, §5: the veto findings (JSON) when a veto stage stopped the run; null otherwise.</summary>
     public string? VetoFindings { get; set; }
+
+    /// <summary>FR-354, §5: the follow-up label (<c>followup:&lt;duration&gt;</c>) of an execution run after the run completed;
+    /// null for the main flow.</summary>
+    public string? FollowUp { get; init; }
 }
 
 /// <summary>FR-297: pure rules for stage executions.</summary>

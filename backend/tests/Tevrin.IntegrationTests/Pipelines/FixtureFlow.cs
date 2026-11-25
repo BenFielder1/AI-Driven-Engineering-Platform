@@ -66,6 +66,7 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddDefinition(Postmortem + ".pipeline.yaml", Read(Postmortem + ".pipeline.yaml"));
         registry.AddPrompt("flow.pm-work", "---\nversion: flow.pm-work-1\n---\nYou do tasks.\n<!-- user -->\nTask: {{TASK}}\nLessons from earlier runs:\n{{AGENT_FEEDBACK?}}\n");
         registry.AddPrompt("flow.pm-review", "---\nversion: flow.pm-review-1\n---\nYou write postmortems.\n<!-- user -->\nResult: {{RESULT}}\n");
+        registry.AddPrompt("flow.pm-grade", "---\nversion: flow.pm-grade-1\n---\nYou grade results.\n<!-- user -->\nResult: {{RESULT}}\nPostmortem: {{POSTMORTEM}}\nOutcome scores:\n{{OUTCOME_SCORES}}\nLabel: {{VARIANT}}\n");
         registry.AddPrompt("flow.factwrite", "---\nversion: flow.factwrite-1\n---\nYou write articles.\n<!-- user -->\nTopic: {{TOPIC}}\n");
         registry.AddPrompt("flow.fact-check", "---\nversion: flow.fact-check-1\n---\nYou check facts.\n<!-- user -->\nArticle:\n{{OUTPUT}}\n");
         registry.AddJobType("flow.fact-check");

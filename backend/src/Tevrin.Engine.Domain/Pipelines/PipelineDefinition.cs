@@ -69,6 +69,10 @@ public sealed record PipelineDefinition
     /// <c>null</c>.</summary>
     public RunLimits? Limits { get; init; }
 
+    /// <summary>FR-354 (0.8.0): <c>followups:</c>, the stages run after the run completes (§4.70). Empty when not declared,
+    /// and then absent from the canonical form.</summary>
+    public IReadOnlyList<FollowUpDefinition> FollowUps { get; init; } = [];
+
     /// <summary>FR-343 (0.8.0): every stage in declared order, each parallel group followed by its branch stages (branch by
     /// branch).</summary>
     public IEnumerable<StageDefinition> AllStages => Stages.SelectMany(s => s.WithBranchStages());
@@ -104,7 +108,7 @@ public sealed record PipelineDefinition
 
     /// <summary>
     /// FR-281: where a successful stage goes: its <c>on_success</c>, else the following stage (linear by default), else
-    /// <c>null</c> for the last stage.
+    /// <c>null</c> for the last stage. FR-354: the linear default skips follow-up stages, which sit outside the main flow.
     /// </summary>
     public string? SuccessorOf(string stageId)
     {
@@ -115,7 +119,21 @@ public sealed record PipelineDefinition
         }
 
         var stage = Stages[index];
-        return stage.OnSuccess ?? (index + 1 < Stages.Count ? Stages[index + 1].Id : null);
+        return stage.OnSuccess ?? NextInFlow(index);
+    }
+
+    /// <summary>The first stage after position <paramref name="index"/> that isn't a follow-up stage (FR-354), or <c>null</c>.</summary>
+    public string? NextInFlow(int index)
+    {
+        for (var i = index + 1; i < Stages.Count; i++)
+        {
+            if (!FollowUpRules.IsFollowUpStage(this, Stages[i].Id))
+            {
+                return Stages[i].Id;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The generic status a pack status maps to (§4.57): its <see cref="Statuses"/> entry, else the generic

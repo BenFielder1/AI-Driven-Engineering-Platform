@@ -1,5 +1,6 @@
 # Fixture pipeline (M69, FR-351): the worker does a task with its agent feedback injected ({{AGENT_FEEDBACK}}), then a
-# reviewer writes a postmortem whose `lessons` become stage feedback entries for the worker. FR-354 adds follow-ups.
+# reviewer writes a postmortem whose `lessons` become stage feedback entries for the worker. FR-354: once the run completes,
+# a grader grades the result 1, 5 and 20 days later (follow-up stage `grade`, outside the main flow).
 pipeline: fixture-postmortem
 version: 1
 title: Fixture postmortem
@@ -12,10 +13,12 @@ artifacts:
   task:       { title: Task, format: markdown, approval: auto_lock, cascade: none, input: true }
   result:     { title: Result, format: markdown, approval: auto_lock, cascade: none }
   postmortem: { title: Postmortem, format: markdown, approval: auto_lock, cascade: none }
+  grade:      { title: Grade, format: markdown, approval: auto_lock, cascade: none }
 
 statuses:
   working:   { generic: active }
   reviewing: { generic: active }
+  grading:   { generic: active }
 
 stages:
   - id: work
@@ -35,3 +38,13 @@ stages:
     inputs: [result]
     output: postmortem
     writes_feedback: { agent: worker, from: lessons }
+
+  - id: grade
+    title: Grade the result
+    status: grading
+    agent: { key: grader, prompt: flow.pm-grade }
+    inputs: [result, postmortem]
+    output: grade
+
+followups:
+  - { stage: grade, after: [1d, 5d, 20d] }

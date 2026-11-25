@@ -111,6 +111,12 @@ public sealed partial class AgentStageRunner
             values[VariantRules.LabelPlaceholder] = variant;
         }
 
+        // FR-354: a follow-up reads the run's outcome scores as {{OUTCOME_SCORES}} (one "metric: score" line each).
+        if (FollowUpRules.IsLabel(request.Variant))
+        {
+            values[FollowUpRules.OutcomeScoresPlaceholder] = FollowUpRules.RenderScores(await store.RunOutcomeScoresAsync(run, cancellationToken));
+        }
+
         // FR-351, §4.75: a stage with feedback.inject gets its agent's feedback entries as {{AGENT_FEEDBACK}}, and the agent
         // run records the entries it used. A stage without it is unchanged (FeedbackIds stays null).
         if (stage.Feedback is { Inject: true } feedback && string.Equals(agent.Key, stage.Agent?.Key, StringComparison.Ordinal))
@@ -163,7 +169,7 @@ public sealed partial class AgentStageRunner
     /// </summary>
     private async Task CheckIsolationAsync(AgentAttempt attempt, string rendered, CancellationToken cancellationToken)
     {
-        if (attempt.Request.Variant is not { } label || attempt.Stage.Output is not { } key)
+        if (attempt.Request.Variant is not { } label || attempt.Stage.Output is not { } key || FollowUpRules.IsLabel(label))
         {
             return;
         }

@@ -25,6 +25,15 @@ public sealed record StageRunPayload(Guid RunId, Guid StageExecutionId)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Retry { get; init; }
 
+    /// <summary>FR-354: the follow-up stage this job runs on the completed run, with <see cref="FollowUp"/>; omitted (null) for
+    /// the main flow. <see cref="StageExecutionId"/> is then the id the follow-up's execution is created with.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FollowUpStage { get; init; }
+
+    /// <summary>FR-354: the follow-up label, <c>followup:&lt;duration&gt;</c>; omitted (null) for the main flow.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FollowUp { get; init; }
+
     /// <summary>Reads a stored payload (camelCase JSON); <c>null</c> when it isn't one.</summary>
     public static StageRunPayload? Parse(string json)
     {
@@ -80,6 +89,12 @@ public sealed partial class EngineRunDriver(
         if (registry.RunControlOf(run.PipelineId) == RunControl.Host)
         {
             LogHostControlled(logger, run.Id, run.PipelineId);
+            return;
+        }
+
+        if (payload.FollowUp is not null)
+        {
+            await DriveFollowUpAsync(job, run, payload, cancellationToken);
             return;
         }
 
@@ -384,6 +399,7 @@ public sealed partial class EngineRunDriver(
                 run.Outcome = RunDriverRules.VetoedOutcome;
                 run.CompletedAt = now;
                 await StageExecutionWriter.EndAsync(db, run.Id, GenericRunStatus.Completed, now, cancellationToken);
+                ScheduleFollowUps(run, definition, now);
                 LogCompleted(logger, run.Id);
                 break;
         }
@@ -411,6 +427,7 @@ public sealed partial class EngineRunDriver(
                 run.Status = GenericRunStatus.Completed;
                 run.CompletedAt = now;
                 await StageExecutionWriter.EndAsync(db, run.Id, GenericRunStatus.Completed, now, cancellationToken);
+                ScheduleFollowUps(run, definition, now);
                 LogCompleted(logger, run.Id);
                 break;
         }

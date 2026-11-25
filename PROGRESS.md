@@ -94,6 +94,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [ ] M70 Scale and conversation — FR-355–FR-357
 - [ ] M71 Tools and safety — FR-358–FR-361
 - [ ] M72 Engine UI — FR-362–FR-366
+  - Carry-over from M69: show the follow-up label (`stage_executions.followup`) on timeline entries (additive DTO field), and the outcome scores and feedback (FR-365).
   - Carry-over from M68: expose `approval_gates.payload` (variant labels and artifact ids) on the engine gate DTO for the `variant_select` card.
   - Carry-over from M67: show an artifact's project scope and a run's pinned project artifacts (`pinnedArtifacts`, FR-352) in the run view; fill `{artifact}` in `SOURCE_ARTIFACT_MISSING` from the problem `reason`.
 - [ ] M73 Release 0.8.0 — FR-367 (on Ben's confirmation)
@@ -124,6 +125,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - An SDLC rollback is refused (`ROLLBACK_BLOCKED`) while any agent run in the project is in progress, including an engine run's agent (M66): conservative, SDLC behaviour unchanged; revisit when engine and SDLC runs commonly share a project.
 - Non-SDLC agent runs (coach, fixtures) record `ARTIFACT_CREATED`/`GATE_CREATED` and token use (FR-341), but not `RUN_STARTED`/`RUN_COMPLETED` events: the engine hook interface has no slot for them. Their payloads carry ids and counts only, never content (M67).
 - Parallel groups with `on_branch_failure: continue`: a branch whose job is dead-lettered after its transient retries waits for a manual retry instead of being marked failed (M68).
+- A follow-up stage whose job is dead-lettered leaves its stage execution open (the reconcile skips follow-up rows); like the parallel `continue` case, it needs a job-ended hook (M69).
 - Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.
 
 ## Manual checks (Ben)

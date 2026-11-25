@@ -75,13 +75,45 @@ public static class StageExecutionWriter
         return execution;
     }
 
+    /// <summary>
+    /// FR-354: opens follow-up execution <paramref name="id"/> of stage <paramref name="stageId"/>, labelled
+    /// <paramref name="followUp"/>, on a completed run. Other executions are untouched.
+    /// </summary>
+    public static async Task<StageExecution> EnterFollowUpAsync(
+        IEngineDbContext db,
+        Guid id,
+        Guid pipelineRunId,
+        string stageId,
+        string followUp,
+        int checkpoint,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentException.ThrowIfNullOrEmpty(stageId);
+        ArgumentException.ThrowIfNullOrEmpty(followUp);
+        var rows = await RowsAsync(db, pipelineRunId, cancellationToken);
+        var execution = new StageExecution
+        {
+            Id = id,
+            PipelineRunId = pipelineRunId,
+            StageId = stageId,
+            FollowUp = followUp,
+            Iteration = rows.Count(r => string.Equals(r.StageId, stageId, StringComparison.Ordinal)) + 1,
+            Checkpoint = checkpoint,
+            EnteredAt = at,
+        };
+        db.StageExecutions.Add(execution);
+        return execution;
+    }
+
     /// <summary>Closes run <paramref name="pipelineRunId"/>'s open execution, if any, with the run's final
     /// <paramref name="status"/> as its outcome.</summary>
     public static async Task EndAsync(
         IEngineDbContext db, Guid pipelineRunId, GenericRunStatus status, DateTimeOffset at, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        Close(await RowsAsync(db, pipelineRunId, cancellationToken), status.ToWire(), at);
+        Close((await RowsAsync(db, pipelineRunId, cancellationToken)).Where(r => r.FollowUp is null), status.ToWire(), at);
     }
 
     /// <summary>
@@ -98,7 +130,7 @@ public static class StageExecutionWriter
             UPDATE stage_executions s
             SET exited_at = GREATEST(s.entered_at, COALESCE(r.completed_at, {now})), outcome = r.status
             FROM pipeline_runs r
-            WHERE s.pipeline_run_id = r.id AND s.exited_at IS NULL
+            WHERE s.pipeline_run_id = r.id AND s.exited_at IS NULL AND s.followup IS NULL
               AND r.status IN ('completed', 'failed', 'cancelled')
               AND ({all} OR r.project_id = {only})
             """,

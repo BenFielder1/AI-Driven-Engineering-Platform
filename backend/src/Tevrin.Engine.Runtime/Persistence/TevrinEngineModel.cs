@@ -290,6 +290,8 @@ public static class TevrinEngineModel
             b.Property(e => e.Branch).HasMaxLength(IdMaxLength);
             b.Property(e => e.Variant).HasMaxLength(IdMaxLength);
             b.Property(e => e.VetoFindings).HasColumnType("jsonb");
+            // FR-354: the follow-up label (followup:<duration>), null for the main flow.
+            b.Property(e => e.FollowUp).HasColumnName("followup").HasMaxLength(IdMaxLength);
             b.HasIndex(e => new { e.PipelineRunId, e.StageId, e.Branch, e.ItemIndex });
 
             // A run's timings go with the run (and the run with its project).

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Pipelines;
+using Tevrin.Engine.Runtime.Runs;
 using Tevrin.IntegrationTests.Support;
 
 namespace Tevrin.IntegrationTests.Pipelines;
@@ -85,7 +86,15 @@ public static class FixtureLinearApp
         return ran;
     }
 
-    public static Task<List<Job>> QueuedDriverJobsAsync(WebApplicationFactory<Program> app, Guid projectId) =>
+    /// <summary>The project's queued main-flow <c>stage.run</c> jobs (FR-354 follow-ups, due days later, are left out).</summary>
+    public static async Task<List<Job>> QueuedDriverJobsAsync(WebApplicationFactory<Program> app, Guid projectId) =>
+        [.. (await QueuedStageRunJobsAsync(app, projectId)).Where(j => StageRunPayload.Parse(j.Payload)?.FollowUp is null)];
+
+    /// <summary>FR-354: the project's queued follow-up <c>stage.run</c> jobs, oldest first.</summary>
+    public static async Task<List<Job>> QueuedFollowUpJobsAsync(WebApplicationFactory<Program> app, Guid projectId) =>
+        [.. (await QueuedStageRunJobsAsync(app, projectId)).Where(j => StageRunPayload.Parse(j.Payload)?.FollowUp is not null)];
+
+    private static Task<List<Job>> QueuedStageRunJobsAsync(WebApplicationFactory<Program> app, Guid projectId) =>
         ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
             .Where(j => j.ProjectId == projectId && j.Type == EngineJobTypes.StageRun && j.Status == JobStatus.Queued)
             .OrderBy(j => j.CreatedAt)

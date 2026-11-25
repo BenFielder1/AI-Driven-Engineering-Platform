@@ -63,7 +63,7 @@ public static class PipelineDefinitionLoader
         [
             "pipeline", "version", "title", "trigger", "triggers", "approval_modes", "default_approval_mode", "start", "artifacts",
             "stages", "statuses", "status_changes", "concurrency", "settings", "rollback_status",
-            "limits",
+            "limits", "followups",
         ];
 
         private static readonly string[] StageKeys =
@@ -98,6 +98,7 @@ public static class PipelineDefinitionLoader
                 Concurrency = Concurrency(obj),
                 Stages = obj.List("stages", Stage).OfType<StageDefinition>().ToList(),
                 Limits = Limits(obj),
+                FollowUps = FollowUps(obj),
             };
         }
 
@@ -270,6 +271,33 @@ public static class PipelineDefinitionLoader
                 WritesFeedback = WritesFeedback(obj),
             };
         }
+
+        /// <summary>FR-354: <c>followups: [ { stage, after: [duration…] } ]</c>; both keys required (durations are checked by
+        /// the validator).</summary>
+        private List<FollowUpDefinition> FollowUps(Obj top) =>
+        [
+            .. top.List("followups", (node, path) =>
+            {
+                if (node is not YamlMapping map)
+                {
+                    Error(path, "Expected a mapping.");
+                    return null;
+                }
+
+                var obj = Object(map, path, ["stage", "after"]);
+                if (obj.Get("stage") is null)
+                {
+                    Error(Join(path, "stage"), "'stage' is required.");
+                }
+
+                if (obj.Get("after") is null)
+                {
+                    Error(Join(path, "after"), "'after' is required.");
+                }
+
+                return new FollowUpDefinition(obj.String("stage"), obj.StringList("after", allowSingle: true));
+            }).OfType<FollowUpDefinition>(),
+        ];
 
         /// <summary>FR-348: <c>limits: { revisions, then }</c>; both required.</summary>
         private RunLimits? Limits(Obj top)

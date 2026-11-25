@@ -51,12 +51,19 @@ public static class DefinitionErrorCodes
     /// <c>agents:</c>.</summary>
     public const string FanOutAgent = "DEF_FANOUT_AGENT";
 
+    /// <summary>FR-354 (0.8.0): a <c>followups:</c> entry whose stage isn't a top-level stage, is listed twice, is reached by
+    /// the main flow (a start, the linear default, <c>on_success</c>, <c>on_reject</c>, <c>loop</c>, a route or
+    /// <c>on_veto</c>), or whose <c>after</c> is empty, repeats a duration or holds one that isn't <c>&lt;n&gt;d|h|m</c> with
+    /// <c>n</c> &gt; 0.</summary>
+    public const string FollowUpStage = "DEF_FOLLOWUP_STAGE";
+
     /// <summary>Every code, in §4.49 table order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
         UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
         UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput, BranchInput, RouteTarget, FanOutAgent,
+        FollowUpStage,
     ];
 
     /// <summary>

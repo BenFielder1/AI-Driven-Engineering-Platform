@@ -66,6 +66,14 @@ public static class DefinitionHash
             root["limits"] = new Obj { ["revisions"] = limits.Revisions, ["then"] = limits.Then.ToWire() };
         }
 
+        // FR-354: omitted unless declared, so existing hashes are unchanged.
+        if (d.FollowUps.Count > 0)
+        {
+            root["followups"] = d.FollowUps
+                .Select(f => (object?)new Obj { ["stage"] = f.Stage, ["after"] = Strings(f.After) })
+                .ToList();
+        }
+
         return root;
     }
 

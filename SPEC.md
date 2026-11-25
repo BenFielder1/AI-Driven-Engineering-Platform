@@ -362,7 +362,7 @@ Example: 2 participants, `max_turns: 6`, phrase "goodbye". Customer, agent, cust
 
 ### 4.70 Follow-ups
 
-`after` is an absolute duration from the run's `completed_at`: `1d` = 24 h, and no timezone applies. A delayed job's `run_after` is set to `completed_at + after`. A follow-up that fails retries as a normal job and never changes the run's status.
+`after` is an absolute duration from the run's `completed_at`: `1d` = 24 h, and no timezone applies. A delayed job's `run_after` is set to `completed_at + after`. A follow-up that fails retries as a normal job and never changes the run's status. A follow-up stage is a plain agent stage with an output (no gate, parallel, fan-out, variants or veto), never reached by the main flow (`DEF_FOLLOWUP_STAGE`); its prompt may use `{{OUTCOME_SCORES}}` and `{{VARIANT}}` (the label). Its outputs are artifact versions with variant `followup:<duration>`, and its stage execution carries the same label. Cancelling a completed run that has pending follow-ups cancels them and returns 200 (the run stays `completed`); with none pending it is 409 `RUN_NOT_ACTIVE`.
 
 Example: completed 2026-12-01 18:00Z with `[1d, 5d, 20d]` → due 2026-12-02 18:00Z, 2026-12-06 18:00Z and 2026-12-21 18:00Z.
 

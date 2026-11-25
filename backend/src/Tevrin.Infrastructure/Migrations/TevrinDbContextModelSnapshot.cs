@@ -3846,6 +3846,11 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("exited_at");
 
+                    b.Property<string>("FollowUp")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("followup");
+
                     b.Property<int?>("ItemIndex")
                         .HasColumnType("integer")
                         .HasColumnName("item_index");

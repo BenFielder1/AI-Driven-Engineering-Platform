@@ -100,7 +100,8 @@ public sealed partial class AgentStageRunner(
         {
             // FR-345, §4.65: a fan-out branch reads the stage's declared inputs and stores the stage's own output (checked
             // by the stage's validate guards), labelled with its variant; only the agent (prompt, model, tools) is its own.
-            if (FanOutRules.BranchOf(defined, variant) is null)
+            // FR-354: a follow-up's label (followup:<duration>) is the variant its outputs are stored with.
+            if (!FollowUpRules.IsDeclared(definition, defined.Id, variant) && FanOutRules.BranchOf(defined, variant) is null)
             {
                 throw Permanent($"Stage '{defined.Id}' has no fan-out branch '{variant}'.");
             }

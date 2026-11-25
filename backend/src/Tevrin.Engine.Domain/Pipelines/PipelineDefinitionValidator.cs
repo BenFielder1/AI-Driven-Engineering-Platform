@@ -66,6 +66,7 @@ public static partial class PipelineDefinitionValidator
             ValidateStageHandlers();
             ValidateStart();
             ValidateReachability();
+            ValidateFollowUps();
             ValidateProducers();
             return _errors;
         }
@@ -401,6 +402,13 @@ public static partial class PipelineDefinitionValidator
         /// pack registered, and its required placeholders must be filled by the stage's inputs or the pack's context
         /// (<see cref="AgentPromptPlaceholders.Problem"/>); skipped when the catalog doesn't list prompts
         /// (<see cref="PackCatalog.Prompts"/> null).</summary>
+        /// <summary>FR-354: a follow-up stage's prompt also gets its label as <c>{{VARIANT}}</c> and the run's outcome scores
+        /// as <c>{{OUTCOME_SCORES}}</c>.</summary>
+        private IReadOnlyCollection<string>? WithFollowUp(StageDefinition stage, IReadOnlyCollection<string>? supplied) =>
+            FollowUpRules.IsFollowUpStage(definition, stage.Id)
+                ? [.. supplied ?? [], VariantRules.LabelPlaceholder, FollowUpRules.OutcomeScoresPlaceholder]
+                : supplied;
+
         private void CheckPrompt(StageDefinition stage, AgentStageDefinition agent, string path, IReadOnlyCollection<string>? supplied = null)
         {
             if (catalog.Prompts is not { } prompts || string.IsNullOrEmpty(agent.Key))
@@ -414,7 +422,7 @@ public static partial class PipelineDefinitionValidator
             {
                 Add(DefinitionErrorCodes.UnknownPrompt, at, $"No pack registered prompt '{name}'.");
             }
-            else if (AgentPromptPlaceholders.Problem(stage, source, catalog.ContextNames, supplied) is { } problem)
+            else if (AgentPromptPlaceholders.Problem(stage, source, catalog.ContextNames, WithFollowUp(stage, supplied)) is { } problem)
             {
                 Add(DefinitionErrorCodes.UnknownPrompt, at, $"Prompt '{name}' can't be rendered for stage '{stage.Id}': {problem}.");
             }
@@ -696,7 +704,7 @@ public static partial class PipelineDefinitionValidator
                 var stage = stages[index];
                 string?[] targets =
                 [
-                    stage.OnSuccess ?? (index + 1 < stages.Count ? stages[index + 1].Id : null),
+                    stage.OnSuccess ?? definition.NextInFlow(index),
                     stage.OnReject?.To,
                     stage.Loop?.To,
                 ];
@@ -714,7 +722,8 @@ public static partial class PipelineDefinitionValidator
             var reported = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i < stages.Count; i++)
             {
-                if (!visited[i] && definition.IndexOfStage(stages[i].Id) == i && reported.Add(stages[i].Id))
+                if (!visited[i] && definition.IndexOfStage(stages[i].Id) == i && !FollowUpRules.IsFollowUpStage(definition, stages[i].Id)
+                    && reported.Add(stages[i].Id))
                 {
                     Add(DefinitionErrorCodes.UnreachableStage, $"stages[{i}]", $"No path from a start stage reaches stage '{stages[i].Id}'.");
                 }

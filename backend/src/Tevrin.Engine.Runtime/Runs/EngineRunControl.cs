@@ -50,9 +50,33 @@ public sealed class EngineRunControl(
         return registry.RunControlOf(run.PipelineId) == RunControl.Host;
     }
 
-    /// <summary>FR-333: the run ends <c>cancelled</c>; its pending gates and queued jobs are cancelled.</summary>
+    /// <summary>
+    /// FR-333: the run ends <c>cancelled</c>; its pending gates and queued jobs are cancelled. FR-354: a <c>completed</c> run
+    /// with queued follow-ups has those cancelled and stays <c>completed</c>; without any it is refused as before
+    /// (<c>RUN_NOT_ACTIVE</c>).
+    /// </summary>
     public async Task<Result<PipelineRun>> CancelAsync(PipelineRun run, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(run);
+        if (run.Status == GenericRunStatus.Completed && !IsHostControlled(run))
+        {
+            var followUps = (await EngineRunMoves.DriverJobsAsync(db, run, [JobStatus.Queued], cancellationToken))
+                .Where(j => StageRunPayload.Parse(j.Payload)?.FollowUp is not null)
+                .ToList();
+            if (followUps.Count > 0)
+            {
+                var at = time.GetUtcNow();
+                foreach (var job in followUps)
+                {
+                    job.Status = JobStatus.Cancelled;
+                    job.CompletedAt = at;
+                }
+
+                await db.SaveChangesAsync(cancellationToken);
+                return Result.Success(run);
+            }
+        }
+
         var (definition, refused) = await ControllableAsync(run, cancellationToken);
         if (refused is not null)
         {
