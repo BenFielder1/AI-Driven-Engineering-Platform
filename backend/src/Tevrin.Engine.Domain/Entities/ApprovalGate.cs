@@ -40,5 +40,8 @@ public sealed class ApprovalGate
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>§5: the gate's redacted JSON payload, e.g. the variant labels of a <c>variant_select</c> gate; null otherwise.</summary>
+    public string? Payload { get; set; }
+
     public uint RowVersion { get; set; }
 }

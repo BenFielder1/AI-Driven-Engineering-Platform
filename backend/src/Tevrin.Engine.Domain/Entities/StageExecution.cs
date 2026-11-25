@@ -26,6 +26,18 @@ public sealed class StageExecution
     /// <summary>How the run left the stage: the transition kind (<see cref="PipelineTransitionKinds"/>), or the run's final
     /// status (<c>completed</c>, <c>failed</c>, <c>cancelled</c>) when it ended in the stage. Null while open.</summary>
     public string? Outcome { get; set; }
+
+    /// <summary>FR-343–FR-349, §5: the parallel branch this execution ran in; null outside a branch.</summary>
+    public string? Branch { get; init; }
+
+    /// <summary>§5: the for-each item index (M70); null outside a for-each.</summary>
+    public int? ItemIndex { get; init; }
+
+    /// <summary>FR-343–FR-349, §5: the variant label this execution produced; null otherwise.</summary>
+    public string? Variant { get; init; }
+
+    /// <summary>FR-343–FR-349, §5: the veto findings (JSON) when a veto stage stopped the run; null otherwise.</summary>
+    public string? VetoFindings { get; set; }
 }
 
 /// <summary>FR-297: pure rules for stage executions.</summary>

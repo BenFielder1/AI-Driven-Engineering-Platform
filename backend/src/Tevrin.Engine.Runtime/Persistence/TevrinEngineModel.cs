@@ -152,8 +152,11 @@ public static class TevrinEngineModel
             b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }, "ix_artifacts_project_id_type_version")
                 .IsUnique()
                 .HasFilter("release_version_id IS NOT NULL");
-            b.HasIndex(a => new { a.PipelineRunId, a.Type, a.Version }, "ux_artifacts_pipeline_run_id_type_version")
+            // FR-343–FR-349: variants of one version coexist; NULLS NOT DISTINCT so two rows without a variant still collide.
+            b.Property(a => a.Variant).HasMaxLength(IdMaxLength);
+            b.HasIndex(a => new { a.PipelineRunId, a.Type, a.Version, a.Variant }, "ux_artifacts_pipeline_run_id_type_version")
                 .IsUnique()
+                .AreNullsDistinct(false)
                 .HasFilter("release_version_id IS NULL AND scope = 'run'")
                 .HasDatabaseName("ux_artifacts_pipeline_run_id_type_version");
 
@@ -186,6 +189,8 @@ public static class TevrinEngineModel
 
             // FR-271, FR-274: the gate key (EngineGates and a pack's gate keys), the same column as the 0.6.1 enum.
             b.Property(g => g.Type).HasMaxLength(EnumMaxLength);
+            // §5: redacted gate payload (variant labels for variant_select).
+            b.Property(g => g.Payload).HasColumnType("jsonb");
             XminRowVersion(b.Property(g => g.RowVersion));
 
             b.HasOne<Artifact>().WithMany().HasForeignKey(g => g.ArtifactId).OnDelete(DeleteBehavior.NoAction);
@@ -275,6 +280,11 @@ public static class TevrinEngineModel
             b.Property(e => e.Id).ValueGeneratedNever();
             b.Property(e => e.StageId).HasMaxLength(IdMaxLength).IsRequired();
             b.Property(e => e.Outcome).HasMaxLength(EnumMaxLength);
+            // FR-343–FR-349, §5: flow constructs (item_index is filled from M70).
+            b.Property(e => e.Branch).HasMaxLength(IdMaxLength);
+            b.Property(e => e.Variant).HasMaxLength(IdMaxLength);
+            b.Property(e => e.VetoFindings).HasColumnType("jsonb");
+            b.HasIndex(e => new { e.PipelineRunId, e.StageId, e.Branch, e.ItemIndex });
 
             // A run's timings go with the run (and the run with its project).
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(e => e.PipelineRunId).OnDelete(DeleteBehavior.Cascade);
@@ -329,6 +339,9 @@ public static class TevrinEngineModel
                 .HasColumnType("jsonb")
                 .HasDefaultValueSql("'{}'::jsonb")
                 .IsRequired();
+            // FR-343–FR-349, §5: revision count (0 for older rows) and a terminal outcome such as vetoed.
+            b.Property(r => r.Revisions).HasDefaultValue(0);
+            b.Property(r => r.Outcome).HasMaxLength(EnumMaxLength);
             XminRowVersion(b.Property(r => r.RowVersion));
 
             // FR-277: a run is pinned to a stored definition, which is never deleted.

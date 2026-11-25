@@ -9,4 +9,7 @@ public static class EngineGates
 {
     /// <summary>An escalation gate (FR-14, D3): a step or run needs a human decision.</summary>
     public const string Escalation = "escalation";
+
+    /// <summary>FR-343–FR-349: a human picks one of a stage's variants; the gate payload holds the variant labels.</summary>
+    public const string VariantSelect = "variant_select";
 }

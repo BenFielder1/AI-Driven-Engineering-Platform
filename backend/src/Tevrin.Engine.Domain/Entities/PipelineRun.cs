@@ -71,6 +71,12 @@ public sealed class PipelineRun
     /// </summary>
     public IReadOnlyDictionary<string, PinnedArtifact> PinnedArtifacts { get; init; } = PipelineRunRules.NoPins;
 
+    /// <summary>FR-343–FR-349, §5: how many times a reviewer has sent the run back for revision (0 for older rows).</summary>
+    public int Revisions { get; set; }
+
+    /// <summary>§5: a terminal outcome beyond the status, e.g. <c>vetoed</c>; null otherwise.</summary>
+    public string? Outcome { get; set; }
+
     public DateTimeOffset StartedAt { get; init; }
 
     public DateTimeOffset? CompletedAt { get; set; }
