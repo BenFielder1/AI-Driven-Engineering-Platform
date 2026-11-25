@@ -1,0 +1,46 @@
+# Fixture pipeline (M68, FR-347, FR-348, §4.66): the editor sends the piece back to research or writing, or lets it
+# continue; at most 3 backward transitions per run, then an escalation.
+pipeline: fixture-editorial
+version: 1
+title: Fixture editorial
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [research]
+limits: { revisions: 3, then: escalate }
+
+artifacts:
+  topic:  { title: Topic, format: markdown, approval: auto_lock, cascade: none, input: true }
+  notes:  { title: Research notes, format: markdown, approval: auto_lock, cascade: downstream }
+  draft:  { title: Draft, format: markdown, approval: auto_lock, cascade: downstream }
+  edited: { title: Edited piece, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  researching: { generic: active }
+  writing:     { generic: active }
+  editing:     { generic: active }
+
+stages:
+  - id: research
+    title: Research
+    status: researching
+    agent: { key: researcher, prompt: flow.research }
+    inputs: [topic]
+    output: notes
+    requires:
+      - { input: topic }
+
+  - id: write
+    title: Write
+    status: writing
+    agent: { key: writer, prompt: flow.write }
+    inputs: [notes]
+    output: draft
+
+  - id: edit
+    title: Edit
+    status: editing
+    agent: { key: editor, prompt: flow.edit }
+    inputs: [notes, draft]
+    output: edited
+    routes: [research, write]

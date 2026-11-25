@@ -59,6 +59,13 @@ public static class DefinitionHash
 
         root.AddIfSet("default_approval_mode", d.DefaultApprovalMode?.ToWire());
         root.AddIfSet("rollback_status", d.RollbackStatus);
+
+        // FR-348: omitted unless declared, so existing hashes are unchanged.
+        if (d.Limits is { } limits)
+        {
+            root["limits"] = new Obj { ["revisions"] = limits.Revisions, ["then"] = limits.Then.ToWire() };
+        }
+
         return root;
     }
 
@@ -200,7 +207,78 @@ public static class DefinitionHash
             obj["loop"] = l;
         }
 
+        AddFlowConstructs(obj, s);
         return obj;
+    }
+
+    /// <summary>FR-343–FR-349 (0.8.0): each construct only when used, so a definition without them hashes as before.</summary>
+    private static void AddFlowConstructs(Obj obj, StageDefinition s)
+    {
+        if (s.Parallel is { } parallel)
+        {
+            obj["parallel"] = new Obj
+            {
+                ["branches"] = parallel.Branches.Select(b => (object?)b.Select(st => (object?)Stage(st)).ToList()).ToList(),
+                ["join"] = parallel.Join.ToWire(),
+                ["on_branch_failure"] = parallel.OnBranchFailure.ToWire(),
+            };
+        }
+
+        if (s.Veto.Count > 0)
+        {
+            obj["veto"] = s.Veto.Select(v =>
+            {
+                var o = new Obj();
+                o.AddIfSet("guard", v.Guard);
+                o.AddIfSet("agent", v.Agent);
+                return (object?)o;
+            }).ToList();
+        }
+
+        if (s.OnVeto is { } onVeto)
+        {
+            obj["on_veto"] = onVeto.To is { } to ? new Obj { ["to"] = to } : new Obj { ["end"] = OnVetoDefinition.Vetoed };
+        }
+
+        if (s.FanOut is { } fanOut)
+        {
+            var f = new Obj();
+            if (fanOut.Count is { } count)
+            {
+                f["count"] = count;
+            }
+            else
+            {
+                f["agents"] = Strings(fanOut.Agents);
+            }
+
+            obj["fan_out"] = f;
+        }
+
+        if (s.Aggregate is { } aggregate)
+        {
+            var g = new Obj { ["from"] = aggregate.From };
+            if (aggregate.DisagreementGuard is { } guard)
+            {
+                g["disagreement"] = new Obj { ["guard"] = guard };
+            }
+
+            obj["aggregate"] = g;
+        }
+
+        if (s.Routes.Count > 0)
+        {
+            obj["routes"] = Strings(s.Routes);
+        }
+
+        if (s.Variants is { } variants)
+        {
+            obj["variants"] = new Obj
+            {
+                ["count"] = variants.Count,
+                ["select"] = variants.SelectAgent is { } agent ? new Obj { ["agent"] = agent } : "gate",
+            };
+        }
     }
 
     /// <summary>D-0.7.0-42: a secondary binding with its defaults filled (inputs, tools); prompt and output only when set.</summary>

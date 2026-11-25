@@ -65,6 +65,14 @@ public sealed record PipelineDefinition
 
     public IReadOnlyList<StageDefinition> Stages { get; init; } = [];
 
+    /// <summary>FR-348 (0.8.0): the run-wide revision cap, or <c>null</c> for none. Absent from the canonical form when
+    /// <c>null</c>.</summary>
+    public RunLimits? Limits { get; init; }
+
+    /// <summary>FR-343 (0.8.0): every stage in declared order, each parallel group followed by its branch stages (branch by
+    /// branch).</summary>
+    public IEnumerable<StageDefinition> AllStages => Stages.SelectMany(s => s.WithBranchStages());
+
     /// <summary>The position of stage <paramref name="stageId"/> in <see cref="Stages"/> (first match), or -1.</summary>
     public int IndexOfStage(string? stageId)
     {
@@ -375,6 +383,31 @@ public sealed record StageDefinition
     /// across the pipeline (<see cref="Handler"/> and every <c>handlers:</c> entry).
     /// </summary>
     public IReadOnlyList<string> Handlers { get; init; } = [];
+
+    /// <summary>FR-343 (0.8.0): the parallel group this entry is, or <c>null</c>.</summary>
+    public ParallelDefinition? Parallel { get; init; }
+
+    /// <summary>FR-344 (0.8.0): checks that stop the path when they veto the stage's output.</summary>
+    public IReadOnlyList<VetoDefinition> Veto { get; init; } = [];
+
+    /// <summary>FR-344 (0.8.0): where a veto goes; required when <see cref="Veto"/> is set.</summary>
+    public OnVetoDefinition? OnVeto { get; init; }
+
+    /// <summary>FR-345 (0.8.0): the agent stage's fan-out, or <c>null</c>.</summary>
+    public FanOutDefinition? FanOut { get; init; }
+
+    /// <summary>FR-346 (0.8.0): the branch outputs this stage aggregates, or <c>null</c>.</summary>
+    public AggregateDefinition? Aggregate { get; init; }
+
+    /// <summary>FR-347 (0.8.0): earlier stages the agent may route back to.</summary>
+    public IReadOnlyList<string> Routes { get; init; } = [];
+
+    /// <summary>FR-349 (0.8.0): the agent stage's output variants, or <c>null</c>.</summary>
+    public VariantsDefinition? Variants { get; init; }
+
+    /// <summary>This stage, then (for a parallel group) every branch stage, branch by branch.</summary>
+    public IEnumerable<StageDefinition> WithBranchStages() =>
+        Parallel is null ? [this] : [this, .. Parallel.Branches.SelectMany(b => b).SelectMany(s => s.WithBranchStages())];
 
     /// <summary>The stage's kind; a stage with both an agent and a handler is invalid (<see cref="DefinitionErrorCodes.StageKind"/>)
     /// and reads as an agent stage.</summary>

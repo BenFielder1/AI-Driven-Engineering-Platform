@@ -38,6 +38,9 @@ public static partial class PipelineDefinitionValidator
     {
         private readonly List<DefinitionError> _errors = [];
         private readonly HashSet<string> _stageIds = new(definition.Stages.Select(s => s.Id), StringComparer.Ordinal);
+
+        /// <summary>FR-343: every stage with its YAML path, each parallel group followed by its branch stages.</summary>
+        private readonly List<(StageDefinition Stage, string Path)> _allStages = AllStagesWithPaths(definition);
         private readonly HashSet<string> _artifactKeys = new(definition.Artifacts.Select(a => a.Key), StringComparer.Ordinal);
         private readonly HashSet<string> _statuses = new(
             definition.Statuses.Select(s => s.Name).Concat(EnumStrings.Values<GenericRunStatus>()), StringComparer.Ordinal);
@@ -48,7 +51,7 @@ public static partial class PipelineDefinitionValidator
         private readonly HashSet<string> _registeredSettings = new(catalog.Settings, StringComparer.Ordinal);
         private readonly HashSet<string> _schemas = new(catalog.Schemas, StringComparer.Ordinal);
         private readonly HashSet<string> _gateTypes = new(
-            definition.Stages.Select(s => s.Gate?.Type).OfType<string>().Append(EngineGates.Escalation), StringComparer.Ordinal);
+            definition.AllStages.Select(s => s.Gate?.Type).OfType<string>().Append(EngineGates.Escalation), StringComparer.Ordinal);
 
         public List<DefinitionError> Execute()
         {
@@ -57,6 +60,7 @@ public static partial class PipelineDefinitionValidator
             ValidateStatuses();
             ValidateStatusChanges();
             ValidateConcurrency();
+            ValidateLimits();
             ValidateStages();
             ValidateAgentBindings();
             ValidateStageHandlers();
@@ -389,6 +393,7 @@ public static partial class PipelineDefinitionValidator
                 ValidateGuards(stage, path);
                 ValidateGate(stage, path);
                 ValidateTransitions(stage, i, path);
+                ValidateFlow(stage, i, path, seen);
             }
         }
 
@@ -719,7 +724,7 @@ public static partial class PipelineDefinitionValidator
                     $"Artifact '{artifact.Key}' has 'scope: project', but a pack handler produces it; people edit and lock it through the artifact endpoints.");
             }
 
-            foreach (var stage in definition.Stages)
+            foreach (var stage in definition.AllStages)
             {
                 if (stage.Output is { } output)
                 {
@@ -731,20 +736,20 @@ public static partial class PipelineDefinitionValidator
             }
 
             var reported = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage, at) in _allStages)
             {
-                var inputs = definition.Stages[i].Inputs;
+                var inputs = stage.Inputs;
                 for (var j = 0; j < inputs.Count; j++)
                 {
                     var key = inputs[j];
                     if (_artifactKeys.Contains(key) && !produced.Contains(key) && reported.Add(key))
                     {
-                        Add(DefinitionErrorCodes.ArtifactNoProducer, $"stages[{i}].inputs[{j}]",
+                        Add(DefinitionErrorCodes.ArtifactNoProducer, $"{at}.inputs[{j}]",
                             $"Artifact '{key}' is read but no stage outputs it and no pack handler produces it.");
                     }
                 }
 
-                var bindings = definition.Stages[i].Agents;
+                var bindings = stage.Agents;
                 for (var b = 0; b < bindings.Count; b++)
                 {
                     for (var j = 0; j < bindings[b].Inputs.Count; j++)
@@ -752,7 +757,7 @@ public static partial class PipelineDefinitionValidator
                         var key = bindings[b].Inputs[j];
                         if (_artifactKeys.Contains(key) && !produced.Contains(key) && reported.Add(key))
                         {
-                            Add(DefinitionErrorCodes.ArtifactNoProducer, $"stages[{i}].agents[{b}].inputs[{j}]",
+                            Add(DefinitionErrorCodes.ArtifactNoProducer, $"{at}.agents[{b}].inputs[{j}]",
                                 $"Artifact '{key}' is read but no stage outputs it and no pack handler produces it.");
                         }
                     }

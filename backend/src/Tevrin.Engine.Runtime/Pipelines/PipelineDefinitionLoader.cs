@@ -63,12 +63,16 @@ public static class PipelineDefinitionLoader
         [
             "pipeline", "version", "title", "trigger", "triggers", "approval_modes", "default_approval_mode", "start", "artifacts",
             "stages", "statuses", "status_changes", "concurrency", "settings", "rollback_status",
+            "limits",
         ];
 
         private static readonly string[] StageKeys =
         [
             "id", "title", "status", "agent", "handler", "inputs", "output", "requires", "validate", "on_invalid", "gate",
             "on_success", "on_reject", "loop", "enqueue_on_enter", "agents", "handlers",
+
+            // FR-343–FR-349 (0.8.0): the flow constructs.
+            "parallel", "veto", "on_veto", "fan_out", "aggregate", "routes", "variants",
         ];
 
         private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid"];
@@ -93,6 +97,7 @@ public static class PipelineDefinitionLoader
                 RollbackStatus = obj.OptionalString("rollback_status"),
                 Concurrency = Concurrency(obj),
                 Stages = obj.List("stages", Stage).OfType<StageDefinition>().ToList(),
+                Limits = Limits(obj),
             };
         }
 
@@ -232,9 +237,10 @@ public static class PipelineDefinitionLoader
             }
 
             var inputs = obj.StringList("inputs");
+            var parallel = Parallel(obj, out var parallelId);
             return new StageDefinition
             {
-                Id = obj.String("id"),
+                Id = obj.OptionalString("id") ?? parallelId ?? string.Empty,
                 Title = obj.String("title"),
                 Status = obj.String("status"),
                 Agent = Agent(obj),
@@ -253,7 +259,164 @@ public static class PipelineDefinitionLoader
                 OnReject = OnReject(obj),
                 Loop = Loop(obj),
                 EnqueueOnEnter = obj.OptionalString("enqueue_on_enter"),
+                Parallel = parallel,
+                Veto = obj.List("veto", Veto).OfType<VetoDefinition>().ToList(),
+                OnVeto = OnVeto(obj),
+                FanOut = FanOut(obj),
+                Aggregate = Aggregate(obj),
+                Routes = obj.StringList("routes"),
+                Variants = Variants(obj),
             };
+        }
+
+        /// <summary>FR-348: <c>limits: { revisions, then }</c>; both required.</summary>
+        private RunLimits? Limits(Obj top)
+        {
+            if (top.Mapping("limits") is not { } limits)
+            {
+                return null;
+            }
+
+            var obj = Object(limits.Map, limits.Path, ["revisions", "then"]);
+            if (obj.Get("revisions") is null)
+            {
+                Error(Join(limits.Path, "revisions"), "'revisions' is required.");
+            }
+
+            return new RunLimits(obj.Int("revisions") ?? 0, obj.Enum<InvalidOutcome>("then", required: true) ?? InvalidOutcome.Fail);
+        }
+
+        /// <summary>FR-343: <c>parallel: { id, branches: [[stage…], …], join, on_branch_failure }</c>. <paramref name="id"/> is
+        /// <c>parallel.id</c>; it must match the entry's own <c>id</c> when both are given.</summary>
+        private ParallelDefinition? Parallel(Obj stage, out string? id)
+        {
+            id = null;
+            if (stage.Mapping("parallel") is not { } parallel)
+            {
+                return null;
+            }
+
+            var obj = Object(parallel.Map, parallel.Path, ["id", "branches", "join", "on_branch_failure"]);
+            id = obj.OptionalString("id");
+            if (id is not null && stage.OptionalString("id") is { } own && !string.Equals(own, id, StringComparison.Ordinal))
+            {
+                Error(Join(parallel.Path, "id"), $"'parallel.id' '{id}' must match the stage id '{own}'.");
+            }
+
+            var branches = obj.List("branches", (node, path) =>
+            {
+                if (node is not YamlSequence sequence)
+                {
+                    Error(path, "Expected a list of stages.");
+                    return null;
+                }
+
+                IReadOnlyList<StageDefinition> branch = [.. sequence.Items.Select((item, i) => Stage(item, $"{path}[{i}]")).OfType<StageDefinition>()];
+                return branch;
+            });
+            return new ParallelDefinition([.. branches.OfType<IReadOnlyList<StageDefinition>>()])
+            {
+                Join = obj.Enum<ParallelJoin>("join") ?? ParallelJoin.All,
+                OnBranchFailure = obj.Enum<BranchFailurePolicy>("on_branch_failure") ?? BranchFailurePolicy.Fail,
+            };
+        }
+
+        /// <summary>FR-344: one <c>veto:</c> entry; the validator checks that exactly one of <c>guard</c> and <c>agent</c> is set.</summary>
+        private VetoDefinition? Veto(YamlNode node, string path) =>
+            AsObject(node, path, ["guard", "agent"]) is { } obj ? new VetoDefinition(obj.OptionalString("guard"), obj.OptionalString("agent")) : null;
+
+        /// <summary>FR-344: <c>on_veto: { to: &lt;stage&gt; }</c> or <c>on_veto: { end: vetoed }</c>.</summary>
+        private OnVetoDefinition? OnVeto(Obj stage)
+        {
+            if (stage.Mapping("on_veto") is not { } onVeto)
+            {
+                return null;
+            }
+
+            var obj = Object(onVeto.Map, onVeto.Path, ["to", "end"]);
+            var to = obj.OptionalString("to");
+            var end = obj.OptionalString("end");
+            if ((to is null) == (end is null))
+            {
+                Error(onVeto.Path, "'on_veto' needs exactly one of 'to: <earlier stage>' and 'end: vetoed'.");
+            }
+            else if (end is not null && end != OnVetoDefinition.Vetoed)
+            {
+                Error(Join(onVeto.Path, "end"), $"'end' must be '{OnVetoDefinition.Vetoed}', not '{end}'.");
+            }
+
+            return to is null ? OnVetoDefinition.EndVetoed : new OnVetoDefinition(to);
+        }
+
+        /// <summary>FR-345: <c>fan_out: { agents: [...] }</c> or <c>fan_out: { count: n }</c>.</summary>
+        private FanOutDefinition? FanOut(Obj stage)
+        {
+            if (stage.Mapping("fan_out") is not { } fanOut)
+            {
+                return null;
+            }
+
+            var obj = Object(fanOut.Map, fanOut.Path, ["agents", "count"]);
+            var hasAgents = obj.Get("agents") is not null;
+            var hasCount = obj.Get("count") is not null;
+            if (hasAgents == hasCount)
+            {
+                Error(fanOut.Path, "'fan_out' needs exactly one of 'agents: [<key>…]' and 'count: n'.");
+            }
+
+            return new FanOutDefinition(obj.StringList("agents"), hasCount ? obj.Int("count") ?? 0 : null);
+        }
+
+        /// <summary>FR-346: <c>aggregate: { from, disagreement: { guard } }</c>.</summary>
+        private AggregateDefinition? Aggregate(Obj stage)
+        {
+            if (stage.Mapping("aggregate") is not { } aggregate)
+            {
+                return null;
+            }
+
+            var obj = Object(aggregate.Map, aggregate.Path, ["from", "disagreement"]);
+            string? guard = null;
+            if (obj.Mapping("disagreement") is { } disagreement)
+            {
+                guard = Object(disagreement.Map, disagreement.Path, ["guard"]).String("guard");
+            }
+
+            return new AggregateDefinition(obj.String("from"), guard);
+        }
+
+        /// <summary>FR-349: <c>variants: { count, select: gate | { agent: &lt;key&gt; } }</c>.</summary>
+        private VariantsDefinition? Variants(Obj stage)
+        {
+            if (stage.Mapping("variants") is not { } variants)
+            {
+                return null;
+            }
+
+            var obj = Object(variants.Map, variants.Path, ["count", "select"]);
+            if (obj.Get("count") is null)
+            {
+                Error(Join(variants.Path, "count"), "'count' is required.");
+            }
+
+            string? agent = null;
+            var selectPath = Join(variants.Path, "select");
+            switch (obj.Get("select"))
+            {
+                case null or YamlScalar { IsNull: true }:
+                    Error(selectPath, "'select' is required: 'gate' or '{ agent: <key> }'.");
+                    break;
+                case YamlScalar { Value: "gate" }:
+                    break;
+                case YamlMapping map:
+                    agent = Object(map, selectPath, ["agent"]).String("agent");
+                    break;
+                default:
+                    Error(selectPath, "'select' must be 'gate' or '{ agent: <key> }'.");
+                    break;
+            }
+
+            return new VariantsDefinition(obj.Int("count") ?? 0, agent);
         }
 
         private AgentStageDefinition? Agent(Obj stage)

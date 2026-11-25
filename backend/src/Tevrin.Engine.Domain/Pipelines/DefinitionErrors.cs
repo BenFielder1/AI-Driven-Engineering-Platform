@@ -40,12 +40,23 @@ public static class DefinitionErrorCodes
     /// </summary>
     public const string ScopeInput = "DEF_SCOPE_INPUT";
 
+    /// <summary>FR-343 (0.8.0): a stage in one branch of a <c>parallel</c> group reads an artifact another branch of the
+    /// same group produces.</summary>
+    public const string BranchInput = "DEF_BRANCH_INPUT";
+
+    /// <summary>FR-344, FR-347 (0.8.0): a <c>routes:</c> entry or <c>on_veto.to</c> that isn't an earlier stage.</summary>
+    public const string RouteTarget = "DEF_ROUTE_TARGET";
+
+    /// <summary>FR-345 (0.8.0, also FR-344 and FR-349 agent references): an agent key the stage doesn't bind in
+    /// <c>agents:</c>.</summary>
+    public const string FanOutAgent = "DEF_FANOUT_AGENT";
+
     /// <summary>Every code, in §4.49 table order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
         UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
-        UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput,
+        UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput, BranchInput, RouteTarget, FanOutAgent,
     ];
 
     /// <summary>

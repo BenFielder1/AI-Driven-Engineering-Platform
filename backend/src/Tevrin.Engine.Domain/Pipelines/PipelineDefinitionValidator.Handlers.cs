@@ -14,18 +14,17 @@ public static partial class PipelineDefinitionValidator
         private void ValidateStageHandlers()
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage, at) in _allStages)
             {
-                var stage = definition.Stages[i];
                 if (!string.IsNullOrEmpty(stage.Handler) && !names.Add(stage.Handler))
                 {
-                    Add(DefinitionErrorCodes.DuplicateId, $"stages[{i}].handler", DuplicateHandler(stage.Handler));
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.handler", DuplicateHandler(stage.Handler));
                 }
 
                 for (var j = 0; j < stage.Handlers.Count; j++)
                 {
                     var handler = stage.Handlers[j];
-                    var path = $"stages[{i}].handlers[{j}]";
+                    var path = $"{at}.handlers[{j}]";
                     if (string.IsNullOrEmpty(handler))
                     {
                         Add(DefinitionErrorCodes.Parse, path, "A handler name is required.");

@@ -19,30 +19,29 @@ public static partial class PipelineDefinitionValidator
         {
             var keys = new HashSet<string>(StringComparer.Ordinal);
             var jobTypes = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage0, at) in _allStages)
             {
-                if (definition.Stages[i].Agent is not { } agent)
+                if (stage0.Agent is not { } agent)
                 {
                     continue;
                 }
 
                 if (!string.IsNullOrEmpty(agent.Key) && !keys.Add(agent.Key))
                 {
-                    Add(DefinitionErrorCodes.DuplicateId, $"stages[{i}].agent.key", $"Agent '{agent.Key}' is already bound in this pipeline; agent keys are unique.");
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.agent.key", $"Agent '{agent.Key}' is already bound in this pipeline; agent keys are unique.");
                 }
 
                 if (!string.IsNullOrEmpty(agent.JobType) && !jobTypes.Add(agent.JobType) && agent.JobType != EngineJobTypes.AgentRun)
                 {
-                    Add(DefinitionErrorCodes.DuplicateId, $"stages[{i}].agent.job_type", $"Job type '{agent.JobType}' already runs another agent in this pipeline.");
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.agent.job_type", $"Job type '{agent.JobType}' already runs another agent in this pipeline.");
                 }
             }
 
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage, at) in _allStages)
             {
-                var stage = definition.Stages[i];
                 for (var j = 0; j < stage.Agents.Count; j++)
                 {
-                    ValidateBinding(stage, stage.Agents[j], $"stages[{i}].agents[{j}]", keys, jobTypes);
+                    ValidateBinding(stage, stage.Agents[j], $"{at}.agents[{j}]", keys, jobTypes);
                 }
             }
         }

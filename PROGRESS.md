@@ -81,6 +81,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] b2. Token budget and audit hooks for every pipeline, pack registration, Fake outputs, worked-example integration tests (FR-341, FR-339 acceptance) — e13bbc7 + fix 2968049 ([CI 45578882959](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959))
   - [x] c. Pipeline tab render check (Vitest) and the Impulse coaching pack guide (FR-339 acceptance, FR-342) — 07f4ade ([CI 45578882959](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959))
 - [ ] M68 Flow constructs — FR-343–FR-349
+  - [ ] a. Definition syntax, validator and hash for parallel, veto, fan-out, aggregate, routes, limits and variants; fixtures (FR-343–FR-349)
+  - [ ] b. Data: `pipeline_runs.revisions`/`outcome`, branch, variant and veto columns, `variant_select` gates with payload
+  - [ ] c. Driver: parallel, veto, routes, revision cap; `AllStages` in the resolver, cascade, handlers, run views and DTO mapper; duplicate cross-branch producers (FR-343, FR-344, FR-347, FR-348)
+  - [ ] d. Driver: fan-out with isolation, aggregate with disagreement, variants with gate or agent selection (FR-345, FR-346, FR-349)
 - [ ] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
 - [ ] M70 Scale and conversation — FR-355–FR-357
 - [ ] M71 Tools and safety — FR-358–FR-361

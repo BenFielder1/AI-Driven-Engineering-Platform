@@ -1,0 +1,43 @@
+# Fixture pipeline (M68, FR-345, FR-346, §4.65): three forecasters answer the question in isolated branches (none sees
+# another's forecast); the aggregator reads every forecast, and a spread guard flags strong disagreement.
+pipeline: fixture-forecast
+version: 1
+title: Fixture forecast
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [forecast]
+
+artifacts:
+  question:  { title: Question, format: markdown, approval: auto_lock, cascade: none, input: true }
+  forecast:  { title: Forecast, format: json, approval: auto_lock, cascade: downstream }
+  consensus: { title: Consensus, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  forecasting: { generic: active }
+  aggregating: { generic: active }
+
+stages:
+  - id: forecast
+    title: Forecast
+    status: forecasting
+    agent: { key: forecaster, prompt: flow.forecast }
+    inputs: [question]
+    output: forecast
+    requires:
+      - { input: question }
+    agents:
+      - { key: forecaster-base-rate, job_type: flow.forecast-base-rate, prompt: flow.forecast-base-rate }
+      - { key: forecaster-trend, job_type: flow.forecast-trend, prompt: flow.forecast-trend }
+      - { key: forecaster-contrarian, job_type: flow.forecast-contrarian, prompt: flow.forecast-contrarian }
+    fan_out: { agents: [forecaster-base-rate, forecaster-trend, forecaster-contrarian] }
+
+  - id: aggregate
+    title: Aggregate
+    status: aggregating
+    agent: { key: aggregator, prompt: flow.aggregate }
+    inputs: [question, forecast]
+    output: consensus
+    aggregate:
+      from: forecast
+      disagreement: { guard: flow.forecast-spread }

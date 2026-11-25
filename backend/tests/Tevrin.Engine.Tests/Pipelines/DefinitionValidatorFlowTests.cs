@@ -83,5 +83,5 @@ public class DefinitionValidatorFlowTests
 
     [Fact]
     public void FR276_every_code_in_the_table_is_exercised() =>
-        Assert.Equal(19, DefinitionErrorCodes.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(22, DefinitionErrorCodes.All.Distinct(StringComparer.Ordinal).Count());
 }

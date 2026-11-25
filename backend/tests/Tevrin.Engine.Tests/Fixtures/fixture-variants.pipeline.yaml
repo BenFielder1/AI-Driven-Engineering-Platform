@@ -1,0 +1,38 @@
+# Fixture pipeline (M68, FR-349, §4.67): the copywriter drafts three headline variants and a person picks one at a
+# variant_select gate; then two tagline variants, which a judge agent picks between.
+pipeline: fixture-variants
+version: 1
+title: Fixture variants
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [headline]
+
+artifacts:
+  product:  { title: Product, format: markdown, approval: auto_lock, cascade: none, input: true }
+  headline: { title: Headline, format: markdown, approval: auto_lock, cascade: downstream }
+  tagline:  { title: Tagline, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  drafting: { generic: active }
+
+stages:
+  - id: headline
+    title: Headline
+    status: drafting
+    agent: { key: copywriter, prompt: flow.headline }
+    inputs: [product]
+    output: headline
+    requires:
+      - { input: product }
+    variants: { count: 3, select: gate }
+
+  - id: tagline
+    title: Tagline
+    status: drafting
+    agent: { key: tagliner, prompt: flow.tagline }
+    inputs: [product, headline]
+    output: tagline
+    agents:
+      - { key: tagline-judge, job_type: flow.judge, prompt: flow.judge }
+    variants: { count: 2, select: { agent: tagline-judge } }
