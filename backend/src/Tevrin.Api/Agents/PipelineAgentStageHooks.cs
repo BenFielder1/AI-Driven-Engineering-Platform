@@ -48,12 +48,20 @@ public sealed class PipelineAgentStageHooks(SdlcAgentStageHooks sdlc, IServicePr
             return null;
         }
 
-        Db.AddEvent(
-            EventTypes.BudgetExceeded,
-            projectId,
-            new { pipelineId = run.PipelineId, pipelineRunId = run.Id, stage = run.CurrentStage, agent = agentKey, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
-            SystemActor.Name,
-            time.GetUtcNow());
+        // The refusal fails the job and nothing else of this unit of work is saved, so the audit event is saved on its own
+        // context (as the SDLC saves its refusal event before failing).
+        await using (var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope())
+        {
+            var audit = scope.ServiceProvider.GetRequiredService<TevrinDbContext>();
+            audit.AddEvent(
+                EventTypes.BudgetExceeded,
+                projectId,
+                new { pipelineId = run.PipelineId, pipelineRunId = run.Id, stage = run.CurrentStage, agent = agentKey, tokenBudget = project.TokenBudget, tokensUsed = project.TokensUsed },
+                SystemActor.Name,
+                time.GetUtcNow());
+            await audit.SaveChangesAsync(CancellationToken.None);
+        }
+
         return budget.Error!.Message;
     }
 

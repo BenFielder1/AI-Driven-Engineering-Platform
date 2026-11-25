@@ -143,9 +143,13 @@ public sealed class CoachPackTests(TevrinApiFactory factory)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.TokenBudget, (long?)100_000L).SetProperty(p => p.TokensUsed, 100_000L), Ct));
 
         var job = Assert.Single(await FixtureLinearApp.QueuedDriverJobsAsync(app, fixture.Project.Id));
-        var ex = await Assert.ThrowsAsync<JobFailedException>(() => AgentJobs.RunAsync(app, job));
+        // Like the worker, AgentJobs records a JobFailedException on the job (failed, non-transient) instead of rethrowing.
+        await AgentJobs.RunAsync(app, job);
 
-        Assert.Equal((false, ErrorCodes.BudgetExceeded), (ex.Transient, ex.ErrorCode));
+        var failed = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking().SingleAsync(j => j.Id == job.Id && j.ProjectId == fixture.Project.Id, Ct));
+        Assert.Equal(JobStatus.Failed, failed.Status);
+        Assert.StartsWith(ErrorCodes.BudgetExceeded + ":", failed.LastError, StringComparison.Ordinal);
+        Assert.Equal(1, await ProjectApi.WithDbAsync(app, db => db.Events.CountAsync(e => e.ProjectId == fixture.Project.Id && e.Type == EventTypes.BudgetExceeded, Ct)));
         Assert.Empty(script.Prompts);
         Assert.Equal(0, await ProjectApi.WithDbAsync(app, db => db.AgentRuns.CountAsync(r => r.ProjectId == fixture.Project.Id && r.PipelineRunId == run.Id, Ct)));
     }
