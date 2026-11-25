@@ -52,4 +52,7 @@ public static class EngineErrorCodes
     /// <summary>FR-349, §4.67, §6: a variant choice outside <c>v1…vn</c> (a job failure for an agent selector; 400 on a
     /// <c>variant_select</c> gate's approve).</summary>
     public const string VariantChoiceInvalid = "VARIANT_CHOICE_INVALID";
+
+    /// <summary>FR-350, §6: a validator agent's answer isn't valid JSON matching the verdict schema (a job failure).</summary>
+    public const string ValidatorInvalidOutput = "VALIDATOR_INVALID_OUTPUT";
 }

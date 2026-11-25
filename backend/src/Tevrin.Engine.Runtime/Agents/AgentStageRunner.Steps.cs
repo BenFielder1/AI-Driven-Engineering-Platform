@@ -184,15 +184,18 @@ public sealed partial class AgentStageRunner
             .With(new StageAttemptFact(attempt.Request.Attempt, reply, attempt.Request.HostState));
         var (run, stage) = (attempt.Run, attempt.Stage);
         var guardContext = new GuardContext(run.Id, run.ProjectId, stage.Id, run.ApprovalMode, facts);
-        foreach (var validation in stage.Validate)
+        foreach (var validation in stage.Validate.Where(v => v.Agent is null))
         {
-            var guard = services.GetPipelineGuard(validation.Guard) ?? throw Permanent($"Guard '{validation.Guard}' is not bound.");
+            var guard = services.GetPipelineGuard(validation.Guard!) ?? throw Permanent($"Guard '{validation.Guard}' is not bound.");
             var result = await guard.EvaluateAsync(guardContext, cancellationToken);
             if (!result.Ok)
             {
                 reasons.AddRange(result.Reasons.Count > 0 ? result.Reasons : [$"{validation.Guard} rejected the output."]);
             }
         }
+
+        // FR-350: validator agents' rejecting findings count as the guards' reasons do (none declared: no call).
+        reasons.AddRange(await RunValidatorAgentsAsync(attempt, content, cancellationToken));
 
         // FR-314: the host's own checks come after the guards' reasons.
         reasons.AddRange(await extension.ValidateOutputAsync(attempt, content, cancellationToken));

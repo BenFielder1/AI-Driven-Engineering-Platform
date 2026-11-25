@@ -419,6 +419,10 @@ public static class ErrorCodes
     /// <c>variant_select</c> gate's approve with one is refused (400).</summary>
     public const string VariantChoiceInvalid = "VARIANT_CHOICE_INVALID";
 
+    /// <summary>FR-350, §6: a validator agent's answer isn't valid JSON matching the verdict schema; fails the attempt's
+    /// job (not HTTP).</summary>
+    public const string ValidatorInvalidOutput = "VALIDATOR_INVALID_OUTPUT";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {

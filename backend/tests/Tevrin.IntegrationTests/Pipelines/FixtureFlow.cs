@@ -42,6 +42,9 @@ public sealed class FlowFixturePack : IPipelinePack
     /// <summary>FR-349: three headline variants picked at a <c>variant_select</c> gate, then two tagline variants a judge picks.</summary>
     public const string Variants = "fixture-variants";
 
+    /// <summary>FR-350: a writer stage with a fact-checker validator agent (retry with feedback, 2 attempts, then fail).</summary>
+    public const string FactCheck = "fixture-factcheck";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
@@ -56,6 +59,10 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddDefinition(Forecast + ".pipeline.yaml", Read(Forecast + ".pipeline.yaml"));
         registry.AddDefinition(ForecastLeak + ".pipeline.yaml", LeakYaml());
         registry.AddDefinition(Variants + ".pipeline.yaml", Read(Variants + ".pipeline.yaml"));
+        registry.AddDefinition(FactCheck + ".pipeline.yaml", Read(FactCheck + ".pipeline.yaml"));
+        registry.AddPrompt("flow.factwrite", "---\nversion: flow.factwrite-1\n---\nYou write articles.\n<!-- user -->\nTopic: {{TOPIC}}\n");
+        registry.AddPrompt("flow.fact-check", "---\nversion: flow.fact-check-1\n---\nYou check facts.\n<!-- user -->\nArticle:\n{{OUTPUT}}\n");
+        registry.AddJobType("flow.fact-check");
         registry.AddPrompt("flow.headline", "---\nversion: flow.headline-1\n---\nYou write headlines.\n<!-- user -->\nProduct: {{PRODUCT}}\nWrite variant {{VARIANT}}.\n");
         registry.AddPrompt("flow.tagline", "---\nversion: flow.tagline-1\n---\nYou write taglines.\n<!-- user -->\nProduct: {{PRODUCT}}\nHeadline: {{HEADLINE}}\nWrite variant {{VARIANT}}.\n");
         registry.AddPrompt("flow.judge", "---\nversion: flow.judge-1\n---\nYou pick the best tagline.\n<!-- user -->\nTaglines:\n{{TAGLINE_ALL?}}\n");

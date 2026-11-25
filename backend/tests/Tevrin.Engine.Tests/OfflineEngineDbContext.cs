@@ -35,6 +35,10 @@ internal sealed class OfflineEngineDbContext : DbContext, IEngineDbContext
 
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
 
+    public DbSet<AgentFeedback> AgentFeedback => Set<AgentFeedback>();
+
+    public DbSet<OutcomeScore> OutcomeScores => Set<OutcomeScore>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseNpgsql("Host=unused.invalid;Database=unused");
 

@@ -51,7 +51,7 @@ public sealed record PipelineArtifactDefinitionDto(string Key, string Title, Art
 /// <summary>A pack status and the generic status it maps to (§4.57).</summary>
 public sealed record PipelineStatusDefinitionDto(string Name, GenericRunStatus Generic);
 
-/// <summary>FR-298: one (agent key, prompt version) group of a pipeline's agent runs.</summary>
+/// <summary>FR-298: one (agent key, prompt version) group of a pipeline's agent runs; FR-353: <c>outcomes</c>, the mean outcome score and scored-target count per metric.</summary>
 public sealed record PromptStatsDto(
     string AgentKey,
     string PromptVersion,
@@ -61,7 +61,8 @@ public sealed record PromptStatsDto(
     decimal AvgCost,
     double? AvgLatencyMs,
     double AvgDurationMs,
-    double FailureRate);
+    double FailureRate,
+    IReadOnlyList<PromptOutcomeDto> Outcomes);
 
 /// <summary>
 /// FR-300: a pipeline run. <c>status</c> is the generic status derived on read (§4.57); <c>packStatus</c> the pack's own.

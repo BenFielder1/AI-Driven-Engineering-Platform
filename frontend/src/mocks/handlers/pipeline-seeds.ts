@@ -88,7 +88,7 @@ export function seedSdlcRun(project: StoredProject, overrides: Partial<Run> = {}
     overrides,
   )
   seedPromptStats(project, 'sdlc', [
-    { agentKey: 'spec_generator', promptVersion: '1', runs: 2, avgInputTokens: 3_450, avgOutputTokens: 9_850, avgCost: 0.215, avgLatencyMs: 900, avgDurationMs: 12_000, failureRate: 0 },
+    { agentKey: 'spec_generator', promptVersion: '1', runs: 2, avgInputTokens: 3_450, avgOutputTokens: 9_850, avgCost: 0.215, avgLatencyMs: 900, avgDurationMs: 12_000, failureRate: 0, outcomes: [] },
   ])
   return stored
 }
@@ -136,9 +136,9 @@ export function seedFixtureRun(project: StoredProject, overrides: Partial<Run> =
     overrides,
   )
   seedPromptStats(project, 'fixture-review', [
-    { agentKey: 'drafter', promptVersion: '1', runs: 4, avgInputTokens: 1_200, avgOutputTokens: 800, avgCost: 0.05, avgLatencyMs: 900, avgDurationMs: 12_000, failureRate: 0 },
-    { agentKey: 'checker', promptVersion: '1', runs: 3, avgInputTokens: 1_500.5, avgOutputTokens: 420, avgCost: 0.0312, avgLatencyMs: null, avgDurationMs: 8_250, failureRate: 0.3333 },
-    { agentKey: 'checker', promptVersion: '2', runs: 2, avgInputTokens: 1_480, avgOutputTokens: 400, avgCost: 0.03, avgLatencyMs: 750, avgDurationMs: 7_900, failureRate: 0 },
+    { agentKey: 'drafter', promptVersion: '1', runs: 4, avgInputTokens: 1_200, avgOutputTokens: 800, avgCost: 0.05, avgLatencyMs: 900, avgDurationMs: 12_000, failureRate: 0, outcomes: [] },
+    { agentKey: 'checker', promptVersion: '1', runs: 3, avgInputTokens: 1_500.5, avgOutputTokens: 420, avgCost: 0.0312, avgLatencyMs: null, avgDurationMs: 8_250, failureRate: 0.3333, outcomes: [] },
+    { agentKey: 'checker', promptVersion: '2', runs: 2, avgInputTokens: 1_480, avgOutputTokens: 400, avgCost: 0.03, avgLatencyMs: 750, avgDurationMs: 7_900, failureRate: 0, outcomes: [] },
   ])
   return stored
 }

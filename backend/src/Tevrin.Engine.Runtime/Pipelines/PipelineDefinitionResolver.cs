@@ -119,9 +119,9 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
         foreach (var stage in definition.AllStages)
         {
             var guards = stage.Requires.OfType<GuardRequirement>().Select(r => r.Guard)
-                .Concat(stage.Validate.Select(v => v.Guard))
+                .Concat(stage.Validate.Select(v => v.Guard).OfType<string>()) // FR-350: an agent entry has no guard
                 .Concat(stage.Loop?.Requires.OfType<GuardRequirement>().Select(r => r.Guard) ?? [])
-                .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard)) // D-0.7.0-44: the bindings' own checks
+                .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard).OfType<string>()) // D-0.7.0-44: the bindings' own checks
                 .Concat(stage.Veto.Select(v => v.Guard).OfType<string>())
                 .Concat(stage.Aggregate?.DisagreementGuard is { } disagreement ? [disagreement] : []);
             foreach (var guard in guards)

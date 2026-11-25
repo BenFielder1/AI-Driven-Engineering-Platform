@@ -130,6 +130,8 @@ export const errorMessages = {
   FANOUT_ISOLATION_BROKEN:
     "A fan-out branch was stopped because its input contained another branch's output. Check the stage's context providers.",
   VARIANT_CHOICE_INVALID: "That isn't one of the stage's variants. Pick one of v1 to vn.",
+  VALIDATOR_INVALID_OUTPUT:
+    "The stage's validator agent didn't return a valid verdict, so the attempt failed. Check the validator's prompt and model.",
   // Agent runs (shown on run details)
   MISSING_INPUT: "The agent was missing a required input.",
   INVALID_PLAN: "The agent produced an invalid plan.",

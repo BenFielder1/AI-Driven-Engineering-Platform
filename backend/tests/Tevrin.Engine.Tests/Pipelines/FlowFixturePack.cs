@@ -15,10 +15,13 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
     public const string Editorial = "fixture-editorial";
     public const string Variants = "fixture-variants";
 
+    /// <summary>FR-350 (M69): a writer stage with a fact-checker validator agent.</summary>
+    public const string FactCheck = "fixture-factcheck";
+
     public const string PositionLimitGuard = "flow.position-limit";
     public const string ForecastSpreadGuard = "flow.forecast-spread";
 
-    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants];
+    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants, FactCheck];
 
     public static IReadOnlyList<string> Prompts { get; } =
     [
@@ -27,10 +30,11 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         "flow.forecast", "flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian", "flow.aggregate",
         "flow.research", "flow.write", "flow.edit",
         "flow.headline", "flow.tagline", "flow.judge",
+        "flow.factwrite", "flow.fact-check",
     ];
 
     public static IReadOnlyList<string> JobTypes { get; } =
-        ["flow.risk-review", "flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian", "flow.judge"];
+        ["flow.risk-review", "flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian", "flow.judge", "flow.fact-check"];
 
     /// <summary>The catalog the fixtures validate against (prompts unchecked), for the invalid-case tests.</summary>
     public static PackCatalog Catalog { get; } = new()

@@ -517,7 +517,20 @@ public static partial class PipelineDefinitionValidator
         {
             for (var j = 0; j < stage.Validate.Count; j++)
             {
-                CheckGuard(stage.Validate[j].Guard, $"{path}.validate[{j}].guard");
+                var validation = stage.Validate[j];
+                if (validation.Agent is null)
+                {
+                    CheckGuard(validation.Guard!, $"{path}.validate[{j}].guard");
+                }
+                else if (validation.Guard is not null)
+                {
+                    Add(DefinitionErrorCodes.Parse, $"{path}.validate[{j}]", "A 'validate' entry needs exactly one of 'guard' and 'agent'.");
+                }
+                else
+                {
+                    // FR-350: a validator agent is one the stage binds under 'agents:'.
+                    CheckBoundAgent(stage, validation.Agent, $"{path}.validate[{j}].agent");
+                }
             }
 
             if (stage.OnInvalid is { } onInvalid && onInvalid.MaxAttempts is < MinAttempts or > MaxAttempts)

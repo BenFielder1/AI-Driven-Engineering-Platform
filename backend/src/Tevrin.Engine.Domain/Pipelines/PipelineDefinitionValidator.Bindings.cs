@@ -102,6 +102,11 @@ public static partial class PipelineDefinitionValidator
 
                 // D-0.7.0-44: the binding's own validate: and on_invalid:, checked as a stage's.
                 ValidateGuards(view, path);
+                if (binding.Validate.Any(v => v.Agent is not null))
+                {
+                    // FR-350: validator agents run on the stage's output; a binding's own validation stays guards only.
+                    Add(DefinitionErrorCodes.Parse, path + ".validate", "A binding's 'validate' takes guards only; declare validator agents on the stage.");
+                }
             }
         }
     }

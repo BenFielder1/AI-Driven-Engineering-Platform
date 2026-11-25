@@ -74,7 +74,8 @@ public static class PipelineDtoMapper
         ArgumentNullException.ThrowIfNull(stats);
         return new PromptStatsDto(
             stats.Agent, stats.PromptVersion, stats.Runs, stats.AvgInputTokens, stats.AvgOutputTokens, stats.AvgCost,
-            stats.AvgLatencyMs, stats.AvgDurationMs, stats.FailureRate);
+            stats.AvgLatencyMs, stats.AvgDurationMs, stats.FailureRate,
+            [.. stats.Outcomes.Select(o => new PromptOutcomeDto(o.Metric, o.MeanScore, o.Count))]);
     }
 
     /// <summary>FR-301: a gate of a run; <paramref name="artifactKey"/>/<paramref name="artifactVersion"/> describe its

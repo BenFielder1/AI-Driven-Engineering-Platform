@@ -49,6 +49,12 @@ public interface IEngineDbContext
     /// <summary>FR-337: <c>webhook_deliveries</c>.</summary>
     DbSet<WebhookDelivery> WebhookDeliveries { get; }
 
+    /// <summary>FR-351: <c>agent_feedback</c>.</summary>
+    DbSet<AgentFeedback> AgentFeedback { get; }
+
+    /// <summary>FR-353: <c>outcome_scores</c>.</summary>
+    DbSet<OutcomeScore> OutcomeScores { get; }
+
     DatabaseFacade Database { get; }
 
     ChangeTracker ChangeTracker { get; }

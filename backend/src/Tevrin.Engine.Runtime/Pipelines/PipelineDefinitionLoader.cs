@@ -462,8 +462,16 @@ public static class PipelineDefinitionLoader
         private List<StageValidation> Validations(Obj owner) =>
             owner.List("validate", (item, itemPath) =>
             {
-                var v = AsObject(item, itemPath, ["guard"]);
-                return v is null ? null : new StageValidation(v.String("guard"));
+                // FR-350: { agent: <key> } names a validator agent; otherwise the entry is a guard, as before.
+                var v = AsObject(item, itemPath, ["guard", "agent"]);
+                if (v is null)
+                {
+                    return null;
+                }
+
+                return v.OptionalString("agent") is { } agent
+                    ? new StageValidation(v.OptionalString("guard")) { Agent = agent }
+                    : new StageValidation(v.String("guard"));
             }).OfType<StageValidation>().ToList();
 
         private List<StageRequirement> Requirements(Obj owner, string key) =>

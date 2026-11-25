@@ -2950,6 +2950,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/pipeline-runs/{runId}/outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-353: the run's outcome scores, oldest first, optionally only those about one agent run (agentRunId) or one artifact (artifactKey, with version and variant). 400 VALIDATION for a bad filter. */
+        get: operations["ListPipelineRunOutcomes"];
+        put?: never;
+        /** FR-353: store an external outcome score for an agent run or artifact version of this run (Contributor). probability_brier scores are (prediction − value)² (§4.74). 400 VALIDATION, 403 FORBIDDEN, 404 NOT_FOUND for a target not in this run. */
+        post: operations["CreatePipelineRunOutcome"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/pipeline-schedules": {
         parameters: {
             query?: never;
@@ -4300,6 +4318,26 @@ export interface components {
             plan?: null | string;
             /** @description The resource name; defaults to the project's name (Render preview: `&lt;name&gt;-preview`). */
             name?: null | string;
+        };
+        /** @description FR-353: an external outcome score for a run. */
+        CreateOutcomeScoreRequest: {
+            target: null | components["schemas"]["OutcomeTargetDto"];
+            metric: null | string;
+            kind: null | components["schemas"]["OutcomeScoreKind"];
+            /**
+             * Format: double
+             * @description The observed value; for `probability_brier` the outcome, 0 or 1.
+             */
+            value: null | number;
+            /**
+             * Format: double
+             * @description The predicted probability in [0, 1] (`probability_brier` only).
+             */
+            prediction?: null | number;
+            /** Format: date-time */
+            observedAt: null | string;
+            /** @description Who or what reported the outcome (e.g. a system name). */
+            source: null | string;
         };
         /** @description FR-336: schedule a pipeline that declares `trigger: { kind: schedule }`. */
         CreatePipelineScheduleRequest: {
@@ -6083,6 +6121,51 @@ export interface components {
          * @enum {unknown}
          */
         NotificationType: "gate_required" | "gate_overdue" | "gate_reminder" | "artifact_ready" | "step_blocked" | "run_failed" | "budget_exceeded" | "review_completed" | "release_completed" | "release_failed" | "rollback" | "release_awaiting_merge" | "deployment_failed" | "preview_ready" | "connection_invalid" | "llm_binding_cleared" | "git_binding_cleared" | "database_provisioning_failed" | "database_expiring" | "migration_failed" | "deployment_target_attention" | "stack_profile_ready" | "tracker_import_failed";
+        /** @description FR-353: a stored outcome score. `score` is the value for `number`, the Brier score for `probability_brier`. */
+        OutcomeScoreDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            pipelineRunId: string;
+            target: components["schemas"]["OutcomeTargetDto"];
+            metric: string;
+            kind: components["schemas"]["OutcomeScoreKind"];
+            /** Format: double */
+            value: number;
+            /** Format: double */
+            prediction: null | number;
+            /** Format: double */
+            score: number;
+            /** Format: date-time */
+            observedAt: string;
+            source: string;
+            /** Format: uuid */
+            createdBy: null | string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
+         * @description FR-353, §4.74: how an outcome score is computed. Wire values: `number`, `probability_brier`.
+         * @enum {unknown}
+         */
+        OutcomeScoreKind: "number" | "probability_brier";
+        /** @description FR-353: what an outcome score is about: `{ agentRunId }` or `{ artifactKey, version, variant? }`. */
+        OutcomeTargetDto: {
+            /**
+             * Format: uuid
+             * @description An agent run of the run.
+             */
+            agentRunId?: null | string;
+            /** @description An artifact key of the run (with int? OutcomeTargetDto.Version). */
+            artifactKey?: null | string;
+            /**
+             * Format: int32
+             * @description The artifact version (with string? OutcomeTargetDto.ArtifactKey).
+             */
+            version?: null | number;
+            /** @description The variant label (FR-349) of the artifact version; the plain version when omitted. */
+            variant?: null | string;
+        };
         /** @description One page of results. int PagedResult&lt;T&gt;.Page is 1-based. */
         PagedResultOfAdminAgentRunDto: {
             items: components["schemas"]["AdminAgentRunDto"][];
@@ -6920,7 +7003,15 @@ export interface components {
             presetVersion: null | string;
             stackPacks: string[];
         };
-        /** @description FR-298: one (agent key, prompt version) group of a pipeline's agent runs. */
+        /** @description FR-353: an agent key and prompt version's mean outcome score on one metric, over its scored targets. */
+        PromptOutcomeDto: {
+            metric: string;
+            /** Format: double */
+            meanScore: number;
+            /** Format: int32 */
+            count: number;
+        };
+        /** @description FR-298: one (agent key, prompt version) group of a pipeline's agent runs; FR-353: `outcomes`, the mean outcome score and scored-target count per metric. */
         PromptStatsDto: {
             agentKey: string;
             promptVersion: string;
@@ -6938,6 +7029,7 @@ export interface components {
             avgDurationMs: number;
             /** Format: double */
             failureRate: number;
+            outcomes: components["schemas"]["PromptOutcomeDto"][];
         };
         /** @description A commit on the project branch that isn't on the default branch; `url` links it on GitHub (`null` for Local). */
         PullRequestCommitDto: {
@@ -19728,6 +19820,122 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListPipelineRunOutcomes: {
+        parameters: {
+            query?: {
+                agentRunId?: string;
+                artifactKey?: string;
+                version?: number;
+                variant?: string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeScoreDto"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreatePipelineRunOutcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["CreateOutcomeScoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeScoreDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

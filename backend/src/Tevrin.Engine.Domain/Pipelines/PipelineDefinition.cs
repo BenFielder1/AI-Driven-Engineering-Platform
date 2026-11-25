@@ -448,8 +448,15 @@ public sealed record GuardRequirement(string Guard) : StageRequirement;
 /// </summary>
 public sealed record InputRequirement(string ArtifactKey) : StageRequirement;
 
-/// <summary>FR-282: one <c>validate:</c> entry, <c>{ guard: &lt;pack&gt;.&lt;name&gt; }</c>.</summary>
-public sealed record StageValidation(string Guard);
+/// <summary>
+/// FR-282: one <c>validate:</c> entry, <c>{ guard: &lt;pack&gt;.&lt;name&gt; }</c>; FR-350 (0.8.0): or
+/// <c>{ agent: &lt;key&gt; }</c>, a validator agent the stage binds under <c>agents:</c> (<see cref="Guard"/> is then <c>null</c>).
+/// </summary>
+public sealed record StageValidation(string? Guard)
+{
+    /// <summary>FR-350: the bound validator agent's key, or <c>null</c> for a guard.</summary>
+    public string? Agent { get; init; }
+}
 
 /// <summary>FR-282, §4.55: what happens when validation fails.</summary>
 public sealed record OnInvalidPolicy(bool RetryWithFeedback, int MaxAttempts, InvalidOutcome Then);

@@ -139,6 +139,15 @@ public static class DefinitionHash
         return obj;
     }
 
+    /// <summary>A <c>validate:</c> entry; FR-350's <c>agent</c> is omitted when unset, so a guard entry hashes as before.</summary>
+    private static object? Validation(StageValidation v)
+    {
+        var o = new Obj();
+        o.AddIfSet("guard", v.Guard);
+        o.AddIfSet("agent", v.Agent);
+        return o;
+    }
+
     private static Obj Stage(StageDefinition s)
     {
         var obj = new Obj
@@ -148,7 +157,7 @@ public static class DefinitionHash
             ["status"] = s.Status,
             ["inputs"] = Strings(s.Inputs),
             ["requires"] = Requirements(s.Requires),
-            ["validate"] = s.Validate.Select(v => (object?)new Obj { ["guard"] = v.Guard }).ToList(),
+            ["validate"] = s.Validate.Select(Validation).ToList(),
         };
         if (s.Agent is { } agent)
         {
@@ -298,7 +307,7 @@ public static class DefinitionHash
         // D-0.7.0-44: omitted when unset, so a binding without its own validation hashes as before.
         if (b.Validate.Count > 0)
         {
-            obj["validate"] = b.Validate.Select(v => (object?)new Obj { ["guard"] = v.Guard }).ToList();
+            obj["validate"] = b.Validate.Select(Validation).ToList();
         }
 
         if (b.OnInvalid is { } onInvalid)

@@ -74,6 +74,7 @@ public static partial class PipelineRunEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict);
         MapRunControl(app, runs);
+        MapOutcomes(runs);
         MapTriggers(app);
         MapProjectArtifacts(app);
         return app;
