@@ -16447,6 +16447,243 @@
           }
         }
       }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/agents/{agentKey}/feedback": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-351: an agent's feedback entries in the project, newest first, deleted ones left out (project viewer). 404 NOT_FOUND for an unknown pipeline or agent key.",
+        "operationId": "ListAgentFeedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentFeedbackDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-351: add a human feedback entry for an agent (Contributor). 400 VALIDATION (text blank or over 2,000 characters), 403 FORBIDDEN, 404 NOT_FOUND.",
+        "operationId": "CreateAgentFeedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateAgentFeedbackRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentFeedbackDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/agent-feedback/{feedbackId}": {
+      "delete": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-351: delete a feedback entry; it is never injected again (Owner, or the entry's author as a Contributor). 403 FORBIDDEN, 404 NOT_FOUND.",
+        "operationId": "DeleteAgentFeedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "feedbackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -17204,6 +17441,71 @@
           }
         },
         "description": "A Supabase security advisor finding recorded on a run (FR-153)."
+      },
+      "AgentFeedbackDto": {
+        "required": [
+          "id",
+          "pipelineId",
+          "agentKey",
+          "source",
+          "text",
+          "runId",
+          "agentRunId",
+          "createdBy",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "agentKey": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AgentFeedbackSource"
+          },
+          "text": {
+            "type": "string"
+          },
+          "runId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "FR-351: one agent feedback entry (`human` or `stage`)."
+      },
+      "AgentFeedbackSource": {
+        "enum": [
+          "human",
+          "stage"
+        ],
+        "description": "FR-351: where an agent feedback entry came from. Wire values: `human`, `stage`."
       },
       "AgentJobTrigger": {
         "enum": [
@@ -19600,6 +19902,19 @@
           }
         },
         "description": "Confirms the decision of a one-click approval link; `comment` is optional (feedback on reject)."
+      },
+      "CreateAgentFeedbackRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The feedback, 1–2,000 characters."
+          }
+        },
+        "description": "FR-351: a human feedback entry for an agent."
       },
       "CreateApiTokenRequest": {
         "required": [

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Persistence;
 
 namespace Tevrin.Engine.Runtime.Agents;
@@ -16,6 +17,10 @@ namespace Tevrin.Engine.Runtime.Agents;
 public interface IAgentStageStore
 {
     Task<PipelineRun?> FindRunAsync(Guid runId, CancellationToken cancellationToken);
+
+    /// <summary>FR-351, §4.75: the newest not-deleted feedback entries for (pipeline, agent key, the run's project), at most
+    /// <paramref name="max"/>, for <see cref="FeedbackInjectionRules.Select"/>.</summary>
+    Task<IReadOnlyList<FeedbackEntry>> FeedbackAsync(PipelineRun run, string pipelineId, string agentKey, int max, CancellationToken cancellationToken);
 
     /// <summary>The highest locked version of each of <paramref name="keys"/> in the run's subject (a key without one is
     /// left out). The caller checks integrity.</summary>
@@ -91,6 +96,17 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
 {
     public Task<PipelineRun?> FindRunAsync(Guid runId, CancellationToken cancellationToken) =>
         db.PipelineRuns.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
+
+    public async Task<IReadOnlyList<FeedbackEntry>> FeedbackAsync(PipelineRun run, string pipelineId, string agentKey, int max, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var rows = await db.AgentFeedback.AsNoTracking()
+            .Where(f => f.ProjectId == run.ProjectId && f.PipelineId == pipelineId && f.AgentKey == agentKey && f.DeletedAt == null)
+            .OrderByDescending(f => f.CreatedAt).ThenByDescending(f => f.Id)
+            .Take(max)
+            .ToListAsync(cancellationToken);
+        return [.. rows.Select(f => new FeedbackEntry(f.Id, f.Source == AgentFeedbackSource.Stage ? FeedbackInjectionRules.SourceStage : FeedbackInjectionRules.SourceHuman, f.Text, f.CreatedAt, Deleted: false))];
+    }
 
     public async Task<IReadOnlyList<Artifact>> LatestLockedAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
     {

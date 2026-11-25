@@ -402,7 +402,7 @@ Mean scores in prompt stats are plain means over the scored targets. `number` sc
 
 ### 4.75 Feedback injection
 
-Entries for (pipeline, agent key, project) are taken newest first, up to `limit` (default 10, maximum 50) and capped at 4,000 characters in total (oldest dropped first). Each is rendered as `- [<date> <source>] <text>`. Deleted entries are never injected.
+Entries for (pipeline, agent key, project) are taken newest first, up to `limit` (default 10, maximum 50) and capped at 4,000 characters in total (oldest dropped first). Each is rendered as `- [<date> <source>] <text>`. Deleted entries are never injected. The placeholder is optional in templates (`{{AGENT_FEEDBACK?}}`), so a first run with no entries renders it empty. A stage writes one entry per string, or object with a `text` field, in its output field; the writes are idempotent on redelivery. A resumed agent run keeps the entry ids recorded for its first prompt.
 
 ### 4.76 Source-of-truth pinning
 

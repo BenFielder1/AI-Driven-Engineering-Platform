@@ -58,6 +58,7 @@ public static partial class PipelineDefinitionValidator
             ValidateAggregate(stage, index, path);
             ValidateRoutes(stage, index, path);
             ValidateVariants(stage, path);
+            ValidateFeedback(stage, path);
             ValidateParallel(stage, path, seen);
         }
 

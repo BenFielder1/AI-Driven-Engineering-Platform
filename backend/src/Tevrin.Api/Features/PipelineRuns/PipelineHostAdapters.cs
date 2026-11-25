@@ -111,6 +111,11 @@ internal sealed class ProjectRunControlAccess(IProjectAccess access, ICurrentUse
             // FR-352: project-scope artifacts: contributors add versions; locking follows the artifact-approval role.
             RunControlAction.EditArtifacts => ProjectAction.CreateDraft,
             RunControlAction.LockArtifacts => ProjectAction.DecideArtifact,
+
+            // FR-351: the agent feedback store: viewers list, contributors add (and delete their own), owners delete any.
+            RunControlAction.ViewFeedback => ProjectAction.View,
+            RunControlAction.AddFeedback => ProjectAction.CreateDraft,
+            RunControlAction.ManageFeedback => ProjectAction.ChangeSettings,
             _ => ProjectAction.RunAgents,
         };
         var grant = await access.CheckAsync(projectId, projectAction, cancellationToken);

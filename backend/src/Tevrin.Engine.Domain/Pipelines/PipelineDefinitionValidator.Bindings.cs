@@ -95,10 +95,11 @@ public static partial class PipelineDefinitionValidator
                 }
             }
 
-            // A duplicate key's prompt is checked at its first binding only.
+            // A duplicate key's prompt is checked at its first binding only (FR-350: a validator agent's prompt also gets
+            // {{OUTPUT}} and the stage output's own placeholder, the output under validation).
             if (keyValid && stage.ForAgent(binding.Key) is { Agent: { } agent } view)
             {
-                CheckPrompt(view, agent, path);
+                CheckPrompt(view, agent, path, ValidatorPlaceholders(stage, binding.Key));
 
                 // D-0.7.0-44: the binding's own validate: and on_invalid:, checked as a stage's.
                 ValidateGuards(view, path);
@@ -109,5 +110,14 @@ public static partial class PipelineDefinitionValidator
                 }
             }
         }
+
+        /// <summary>FR-350: the placeholders the runner fills for validator agent <paramref name="key"/> of
+        /// <paramref name="stage"/>; <c>null</c> when it isn't one of the stage's validators.</summary>
+        private static string[]? ValidatorPlaceholders(StageDefinition stage, string? key) =>
+            stage.Validate.Any(v => v.Agent is not null && string.Equals(v.Agent, key, StringComparison.Ordinal))
+                ? string.IsNullOrEmpty(stage.Output)
+                    ? [Agents.ValidatorAgentRules.OutputPlaceholder]
+                    : [Agents.ValidatorAgentRules.OutputPlaceholder, Agents.AgentPromptPlaceholders.Of(stage.Output)]
+                : null;
     }
 }

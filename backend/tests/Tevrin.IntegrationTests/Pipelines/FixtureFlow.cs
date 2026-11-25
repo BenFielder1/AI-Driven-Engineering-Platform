@@ -45,6 +45,9 @@ public sealed class FlowFixturePack : IPipelinePack
     /// <summary>FR-350: a writer stage with a fact-checker validator agent (retry with feedback, 2 attempts, then fail).</summary>
     public const string FactCheck = "fixture-factcheck";
 
+    /// <summary>FR-351: a worker with its agent feedback injected, then a reviewer whose lessons become worker feedback.</summary>
+    public const string Postmortem = "fixture-postmortem";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
@@ -60,6 +63,9 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddDefinition(ForecastLeak + ".pipeline.yaml", LeakYaml());
         registry.AddDefinition(Variants + ".pipeline.yaml", Read(Variants + ".pipeline.yaml"));
         registry.AddDefinition(FactCheck + ".pipeline.yaml", Read(FactCheck + ".pipeline.yaml"));
+        registry.AddDefinition(Postmortem + ".pipeline.yaml", Read(Postmortem + ".pipeline.yaml"));
+        registry.AddPrompt("flow.pm-work", "---\nversion: flow.pm-work-1\n---\nYou do tasks.\n<!-- user -->\nTask: {{TASK}}\nLessons from earlier runs:\n{{AGENT_FEEDBACK?}}\n");
+        registry.AddPrompt("flow.pm-review", "---\nversion: flow.pm-review-1\n---\nYou write postmortems.\n<!-- user -->\nResult: {{RESULT}}\n");
         registry.AddPrompt("flow.factwrite", "---\nversion: flow.factwrite-1\n---\nYou write articles.\n<!-- user -->\nTopic: {{TOPIC}}\n");
         registry.AddPrompt("flow.fact-check", "---\nversion: flow.fact-check-1\n---\nYou check facts.\n<!-- user -->\nArticle:\n{{OUTPUT}}\n");
         registry.AddJobType("flow.fact-check");

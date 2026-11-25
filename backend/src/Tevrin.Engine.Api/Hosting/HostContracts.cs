@@ -121,6 +121,15 @@ public enum RunControlAction
 
     /// <summary>FR-352: lock a version of a project-scope artifact (the artifact-approval role).</summary>
     LockArtifacts = 9,
+
+    /// <summary>FR-351: list an agent's feedback entries (Viewer).</summary>
+    ViewFeedback = 10,
+
+    /// <summary>FR-351: add a feedback entry, and delete one's own (Contributor).</summary>
+    AddFeedback = 11,
+
+    /// <summary>FR-351: delete anyone's feedback entry (Owner).</summary>
+    ManageFeedback = 12,
 }
 
 /// <summary>

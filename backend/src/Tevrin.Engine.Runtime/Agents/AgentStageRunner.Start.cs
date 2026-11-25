@@ -111,6 +111,17 @@ public sealed partial class AgentStageRunner
             values[VariantRules.LabelPlaceholder] = variant;
         }
 
+        // FR-351, §4.75: a stage with feedback.inject gets its agent's feedback entries as {{AGENT_FEEDBACK}}, and the agent
+        // run records the entries it used. A stage without it is unchanged (FeedbackIds stays null).
+        if (stage.Feedback is { Inject: true } feedback && string.Equals(agent.Key, stage.Agent?.Key, StringComparison.Ordinal))
+        {
+            var entries = await store.FeedbackAsync(run, attempt.Definition.Pipeline, agent.Key, FeedbackInjectionRules.MaxLimit, cancellationToken);
+            var selection = FeedbackInjectionRules.Select(entries, feedback.Limit);
+            values[FeedbackInjectionRules.Placeholder] = selection.Rendered;
+            // A resumed run keeps the ids recorded for its first prompt.
+            attempt.AgentRun!.FeedbackIds ??= selection.Ids;
+        }
+
         foreach (var (name, value) in request.PromptValues ?? new Dictionary<string, string?>())
         {
             values[name] = value;

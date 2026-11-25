@@ -288,6 +288,17 @@ public static class DefinitionHash
                 ["select"] = variants.SelectAgent is { } agent ? new Obj { ["agent"] = agent } : "gate",
             };
         }
+
+        // FR-351: left out when unused, so existing hashes are unchanged.
+        if (s.Feedback is { } feedback)
+        {
+            obj["feedback"] = new Obj { ["inject"] = feedback.Inject, ["limit"] = feedback.Limit };
+        }
+
+        if (s.WritesFeedback is { } writes)
+        {
+            obj["writes_feedback"] = new Obj { ["agent"] = writes.Agent, ["from"] = writes.From };
+        }
     }
 
     /// <summary>D-0.7.0-42: a secondary binding with its defaults filled (inputs, tools); prompt and output only when set.</summary>

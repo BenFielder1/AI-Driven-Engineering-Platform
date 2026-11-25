@@ -3107,6 +3107,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/pipelines/{pipelineId}/agents/{agentKey}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-351: an agent's feedback entries in the project, newest first, deleted ones left out (project viewer). 404 NOT_FOUND for an unknown pipeline or agent key. */
+        get: operations["ListAgentFeedback"];
+        put?: never;
+        /** FR-351: add a human feedback entry for an agent (Contributor). 400 VALIDATION (text blank or over 2,000 characters), 403 FORBIDDEN, 404 NOT_FOUND. */
+        post: operations["CreateAgentFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/agent-feedback/{feedbackId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** FR-351: delete a feedback entry; it is never injected again (Owner, or the entry's author as a Contributor). 403 FORBIDDEN, 404 NOT_FOUND. */
+        delete: operations["DeleteAgentFeedback"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3363,6 +3398,28 @@ export interface components {
             detail: null | string;
             remediation: null | string;
         };
+        /** @description FR-351: one agent feedback entry (`human` or `stage`). */
+        AgentFeedbackDto: {
+            /** Format: uuid */
+            id: string;
+            pipelineId: string;
+            agentKey: string;
+            source: components["schemas"]["AgentFeedbackSource"];
+            text: string;
+            /** Format: uuid */
+            runId: null | string;
+            /** Format: uuid */
+            agentRunId: null | string;
+            /** Format: uuid */
+            createdBy: null | string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
+         * @description FR-351: where an agent feedback entry came from. Wire values: `human`, `stage`.
+         * @enum {unknown}
+         */
+        AgentFeedbackSource: "human" | "stage";
         /** @enum {unknown} */
         AgentJobTrigger: "user_requested" | "phase_entered" | "gate_rejected" | "artifact_rejected" | "artifact_corrupted" | null;
         /**
@@ -4196,6 +4253,11 @@ export interface components {
         /** @description Confirms the decision of a one-click approval link; `comment` is optional (feedback on reject). */
         ConfirmApprovalLinkRequest: {
             comment?: null | string;
+        };
+        /** @description FR-351: a human feedback entry for an agent. */
+        CreateAgentFeedbackRequest: {
+            /** @description The feedback, 1–2,000 characters. */
+            text?: null | string;
         };
         CreateApiTokenRequest: {
             name: string;
@@ -20543,6 +20605,160 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ListAgentFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                pipelineId: string;
+                agentKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentFeedbackDto"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateAgentFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                pipelineId: string;
+                agentKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["CreateAgentFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentFeedbackDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteAgentFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                feedbackId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

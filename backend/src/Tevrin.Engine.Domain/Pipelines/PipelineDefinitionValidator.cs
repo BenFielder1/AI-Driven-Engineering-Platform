@@ -401,7 +401,7 @@ public static partial class PipelineDefinitionValidator
         /// pack registered, and its required placeholders must be filled by the stage's inputs or the pack's context
         /// (<see cref="AgentPromptPlaceholders.Problem"/>); skipped when the catalog doesn't list prompts
         /// (<see cref="PackCatalog.Prompts"/> null).</summary>
-        private void CheckPrompt(StageDefinition stage, AgentStageDefinition agent, string path)
+        private void CheckPrompt(StageDefinition stage, AgentStageDefinition agent, string path, IReadOnlyCollection<string>? supplied = null)
         {
             if (catalog.Prompts is not { } prompts || string.IsNullOrEmpty(agent.Key))
             {
@@ -414,7 +414,7 @@ public static partial class PipelineDefinitionValidator
             {
                 Add(DefinitionErrorCodes.UnknownPrompt, at, $"No pack registered prompt '{name}'.");
             }
-            else if (AgentPromptPlaceholders.Problem(stage, source, catalog.ContextNames) is { } problem)
+            else if (AgentPromptPlaceholders.Problem(stage, source, catalog.ContextNames, supplied) is { } problem)
             {
                 Add(DefinitionErrorCodes.UnknownPrompt, at, $"Prompt '{name}' can't be rendered for stage '{stage.Id}': {problem}.");
             }

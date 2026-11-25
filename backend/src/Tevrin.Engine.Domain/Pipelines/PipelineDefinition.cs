@@ -409,6 +409,12 @@ public sealed record StageDefinition
     /// <summary>FR-349 (0.8.0): the agent stage's output variants, or <c>null</c>.</summary>
     public VariantsDefinition? Variants { get; init; }
 
+    /// <summary>FR-351 (0.8.0): <c>feedback: { inject, limit }</c> on an agent stage, or <c>null</c> (no injection).</summary>
+    public FeedbackInjectionDefinition? Feedback { get; init; }
+
+    /// <summary>FR-351 (0.8.0): <c>writes_feedback: { agent, from }</c>, or <c>null</c>.</summary>
+    public WritesFeedbackDefinition? WritesFeedback { get; init; }
+
     /// <summary>This stage, then (for a parallel group) every branch stage, branch by branch.</summary>
     public IEnumerable<StageDefinition> WithBranchStages() =>
         Parallel is null ? [this] : [this, .. Parallel.Branches.SelectMany(b => b).SelectMany(s => s.WithBranchStages())];
@@ -526,3 +532,9 @@ public static class KeyWords
 /// <c>on_reject</c> pointing backwards is a loop and needs the cap (<see cref="DefinitionErrorCodes.UncappedLoop"/>).
 /// </summary>
 public sealed record RejectTransition(string To, IterationCap? MaxIterations);
+
+/// <summary>FR-351, §4.75: <c>feedback: { inject: true, limit: n }</c> (limit 1–50, default 10).</summary>
+public sealed record FeedbackInjectionDefinition(bool Inject, int Limit);
+
+/// <summary>FR-351: <c>writes_feedback: { agent: &lt;key&gt;, from: &lt;output field&gt; }</c>.</summary>
+public sealed record WritesFeedbackDefinition(string Agent, string From);

@@ -72,7 +72,7 @@ public static class PipelineDefinitionLoader
             "on_success", "on_reject", "loop", "enqueue_on_enter", "agents", "handlers",
 
             // FR-343–FR-349 (0.8.0): the flow constructs.
-            "parallel", "veto", "on_veto", "fan_out", "aggregate", "routes", "variants",
+            "parallel", "veto", "on_veto", "fan_out", "aggregate", "routes", "variants", "feedback", "writes_feedback",
         ];
 
         private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid"];
@@ -266,6 +266,8 @@ public static class PipelineDefinitionLoader
                 Aggregate = Aggregate(obj),
                 Routes = obj.StringList("routes"),
                 Variants = Variants(obj),
+                Feedback = Feedback(obj),
+                WritesFeedback = WritesFeedback(obj),
             };
         }
 
@@ -383,6 +385,30 @@ public static class PipelineDefinitionLoader
             }
 
             return new AggregateDefinition(obj.String("from"), guard);
+        }
+
+        /// <summary>FR-351, §4.75: <c>feedback: { inject, limit }</c>; <c>limit</c> defaults to 10.</summary>
+        private FeedbackInjectionDefinition? Feedback(Obj stage)
+        {
+            if (stage.Mapping("feedback") is not { } feedback)
+            {
+                return null;
+            }
+
+            var obj = Object(feedback.Map, feedback.Path, ["inject", "limit"]);
+            return new FeedbackInjectionDefinition(obj.Bool("inject") ?? false, obj.Int("limit") ?? FeedbackInjectionRules.DefaultLimit);
+        }
+
+        /// <summary>FR-351: <c>writes_feedback: { agent, from }</c>.</summary>
+        private WritesFeedbackDefinition? WritesFeedback(Obj stage)
+        {
+            if (stage.Mapping("writes_feedback") is not { } writes)
+            {
+                return null;
+            }
+
+            var obj = Object(writes.Map, writes.Path, ["agent", "from"]);
+            return new WritesFeedbackDefinition(obj.String("agent"), obj.String("from"));
         }
 
         /// <summary>FR-349: <c>variants: { count, select: gate | { agent: &lt;key&gt; } }</c>.</summary>

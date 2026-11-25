@@ -18,10 +18,13 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
     /// <summary>FR-350 (M69): a writer stage with a fact-checker validator agent.</summary>
     public const string FactCheck = "fixture-factcheck";
 
+    /// <summary>FR-351 (M69): a worker with its agent feedback injected, then a reviewer whose lessons become feedback.</summary>
+    public const string Postmortem = "fixture-postmortem";
+
     public const string PositionLimitGuard = "flow.position-limit";
     public const string ForecastSpreadGuard = "flow.forecast-spread";
 
-    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants, FactCheck];
+    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants, FactCheck, Postmortem];
 
     public static IReadOnlyList<string> Prompts { get; } =
     [
@@ -31,6 +34,7 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         "flow.research", "flow.write", "flow.edit",
         "flow.headline", "flow.tagline", "flow.judge",
         "flow.factwrite", "flow.fact-check",
+        "flow.pm-work", "flow.pm-review",
     ];
 
     public static IReadOnlyList<string> JobTypes { get; } =
@@ -53,7 +57,10 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
     {
         ArgumentNullException.ThrowIfNull(registry);
         registry.AddDefinition(pipelineId + ".pipeline.yaml", Yaml(pipelineId));
-        foreach (var prompt in Prompts)
+        // FR-350: real placeholders, so a registry refusing them fails here as the integration host would.
+        registry.AddPrompt("flow.factwrite", "---\nversion: flow.factwrite-1\n---\nYou write articles.\n<!-- user -->\nTopic: {{TOPIC}}\n");
+        registry.AddPrompt("flow.fact-check", "---\nversion: flow.fact-check-1\n---\nYou check facts.\n<!-- user -->\nArticle:\n{{OUTPUT}}\n");
+        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check"]))
         {
             registry.AddPrompt(prompt, $"""
                 ---

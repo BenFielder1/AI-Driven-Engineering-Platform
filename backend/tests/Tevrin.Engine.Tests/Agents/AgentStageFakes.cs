@@ -24,6 +24,16 @@ internal sealed class InMemoryAgentStageStore : IAgentStageStore
     public Task<PipelineRun?> FindRunAsync(Guid runId, CancellationToken cancellationToken) =>
         Task.FromResult(Runs.FirstOrDefault(r => r.Id == runId));
 
+    /// <summary>FR-351: the agent feedback entries (pipeline, agent key, project).</summary>
+    public List<AgentFeedback> Feedback { get; } = [];
+
+    public Task<IReadOnlyList<FeedbackEntry>> FeedbackAsync(PipelineRun run, string pipelineId, string agentKey, int max, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<FeedbackEntry>>([.. Feedback
+            .Where(f => f.ProjectId == run.ProjectId && f.PipelineId == pipelineId && f.AgentKey == agentKey && f.DeletedAt is null)
+            .OrderByDescending(f => f.CreatedAt).ThenByDescending(f => f.Id)
+            .Take(max)
+            .Select(f => new FeedbackEntry(f.Id, f.Source == AgentFeedbackSource.Stage ? "stage" : "human", f.Text, f.CreatedAt, Deleted: false))]);
+
     public Task<IReadOnlyList<Artifact>> LatestLockedAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
     {
         var inSubject = AgentStageScope.InSubject(run).Compile();

@@ -77,6 +77,7 @@ public static partial class PipelineRunEndpoints
         MapOutcomes(runs);
         MapTriggers(app);
         MapProjectArtifacts(app);
+        MapAgentFeedback(app);
         return app;
     }
 

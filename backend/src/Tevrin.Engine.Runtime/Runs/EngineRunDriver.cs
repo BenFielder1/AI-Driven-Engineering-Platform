@@ -144,6 +144,9 @@ public sealed partial class EngineRunDriver(
             throw;
         }
 
+        // FR-351: a stage with writes_feedback stores its entries once its work is done (idempotent on redelivery).
+        await WriteFeedbackAsync(run, stage, execution, definition, output, cancellationToken);
+
         if (execution.Branch is not null)
         {
             await BranchStageDoneAsync(job, run, execution, group!, definition, cancellationToken);

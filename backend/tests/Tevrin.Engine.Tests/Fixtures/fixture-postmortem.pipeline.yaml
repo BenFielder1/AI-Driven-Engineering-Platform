@@ -1,0 +1,37 @@
+# Fixture pipeline (M69, FR-351): the worker does a task with its agent feedback injected ({{AGENT_FEEDBACK}}), then a
+# reviewer writes a postmortem whose `lessons` become stage feedback entries for the worker. FR-354 adds follow-ups.
+pipeline: fixture-postmortem
+version: 1
+title: Fixture postmortem
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [work]
+
+artifacts:
+  task:       { title: Task, format: markdown, approval: auto_lock, cascade: none, input: true }
+  result:     { title: Result, format: markdown, approval: auto_lock, cascade: none }
+  postmortem: { title: Postmortem, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  working:   { generic: active }
+  reviewing: { generic: active }
+
+stages:
+  - id: work
+    title: Do the task
+    status: working
+    agent: { key: worker, prompt: flow.pm-work }
+    inputs: [task]
+    output: result
+    requires:
+      - { input: task }
+    feedback: { inject: true, limit: 10 }
+
+  - id: review
+    title: Write the postmortem
+    status: reviewing
+    agent: { key: reviewer, prompt: flow.pm-review }
+    inputs: [result]
+    output: postmortem
+    writes_feedback: { agent: worker, from: lessons }

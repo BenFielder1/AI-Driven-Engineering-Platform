@@ -18,6 +18,7 @@ public static class EngineRunServiceCollectionExtensions
         services.TryAddScoped<PipelineRunStarter>();
         services.TryAddScoped<EngineRunControl>();
         services.TryAddScoped<ProjectArtifacts>();
+        services.TryAddScoped<AgentFeedbackEntries>();
         services.AddJobHandler<StageRunJobHandler>(EngineJobTypes.StageRun);
 
         // FR-336, FR-337: schedule and webhook triggers (the host registers Triggers.IProjectApprovalModes).
