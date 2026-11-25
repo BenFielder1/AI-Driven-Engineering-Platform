@@ -85,6 +85,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [ ] M70 Scale and conversation — FR-355–FR-357
 - [ ] M71 Tools and safety — FR-358–FR-361
 - [ ] M72 Engine UI — FR-362–FR-366
+  - Carry-over from M67: show an artifact's project scope and a run's pinned project artifacts (`pinnedArtifacts`, FR-352) in the run view; fill `{artifact}` in `SOURCE_ARTIFACT_MISSING` from the problem `reason`.
 - [ ] M73 Release 0.8.0 — FR-367 (on Ben's confirmation)
 
 ## Decisions

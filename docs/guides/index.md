@@ -21,3 +21,4 @@ Task-based guides for connecting Tevrin to the services it works with. Start wit
 | [Deployments and databases](deployments-and-databases.md) | Deploy generated projects and provision databases |
 | [Notifications](notifications.md) | Email, Slack, Teams and signed webhooks |
 | [Pipelines and packs](pipelines-and-packs.md) | Understand the pipeline engine, definitions and packs |
+| [Impulse coaching pack](impulse-coaching-pack.md) | Run the coaching pipeline, its Velocity rules, webhooks and schedules |

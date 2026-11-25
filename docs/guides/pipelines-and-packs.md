@@ -200,3 +200,7 @@ In 0.7.0 the SDLC runs on the engine runner. All eight SDLC agents run as agent 
 The loader uses YamlDotNet 18.1.0 and the schema check uses JsonSchema.Net, pinned at 8.0.5 because later releases use a commercial licence. Both are referenced by `Tevrin.Engine.Runtime` only.
 
 See also [Architecture](../reference/architecture.md) and [Pipeline definitions](../operations/pipeline-definitions.md).
+
+## Other packs
+
+Since 0.8.0 a second pack, `coach`, runs the `impulse-coach` pipeline. See the [Impulse coaching pack](impulse-coaching-pack.md) guide.

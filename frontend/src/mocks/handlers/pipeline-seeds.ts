@@ -1,5 +1,5 @@
 import type { Schemas } from '../../api/client'
-import { fixtureReviewDefinition, sdlcDefinition } from './pipeline-definitions'
+import { fixtureReviewDefinition, impulseCoachDefinition, sdlcDefinition } from './pipeline-definitions'
 import { seedPipelineRun, seedPromptStats, type StoredPipelineRun } from './pipeline-store'
 import type { StoredProject } from './projects'
 
@@ -141,4 +141,53 @@ export function seedFixtureRun(project: StoredProject, overrides: Partial<Run> =
     { agentKey: 'checker', promptVersion: '2', runs: 2, avgInputTokens: 1_480, avgOutputTokens: 400, avgCost: 0.03, avgLatencyMs: 750, avgDurationMs: 7_900, failureRate: 0 },
   ])
   return stored
+}
+
+/**
+ * (c) FR-339: a run of the Impulse coaching pipeline (`impulse-coach`): the session log analysed, the plan drafted twice
+ * (the first draft rejected by the Velocity load-rules guard and retried with feedback), now in Review with its
+ * `plan_approval` gate pending on the second draft.
+ */
+export function seedCoachRun(project: StoredProject, overrides: Partial<Run> = {}): StoredPipelineRun {
+  const sessionLog = '{"date":"2026-11-02","sessions":[{"type":"tempo","distanceKm":10,"rpe":7}]}'
+  const performance = '{"load":"rising","summary":"Tempo held at RPE 7"}'
+  return seedPipelineRun(
+    project,
+    {
+      definition: impulseCoachDefinition,
+      current: 'review',
+      packStatus: 'reviewing',
+      status: 'waiting_on_gate',
+      checkpoint: 3,
+      completedStages: ['analyse', 'plan'],
+      timeline: [
+        version('session_log', 1, 'locked'),
+        entered('analyse', 1, '2026-11-02T10:04:00.000Z'),
+        agentRun('analyse', 'performance-analyst', { output: performance }),
+        version('performance', 1, 'locked'),
+        transition('analyse', 'plan', 2),
+        entered('plan', 1, '2026-11-02T10:10:00.000Z'),
+        agentRun('plan', 'programme-planner', { error: 'validation_rejected: /weeks/0: weekly load rises more than 10%', output: '{"weeks":[{"loadKm":60}]}' }),
+        version('plan_draft', 1, 'superseded'),
+        agentRun('plan', 'programme-planner', { output: '{"weeks":[{"loadKm":44}]}' }),
+        version('plan_draft', 2, 'draft'),
+        transition('plan', 'review', 3),
+        entered('review'),
+        { kind: 'gate_created', gateType: 'plan_approval', gateStatus: 'pending' },
+      ],
+      artifacts: [
+        { key: 'session_log', versions: [{ status: 'locked', content: sessionLog }] },
+        { key: 'performance', versions: [{ status: 'locked', content: performance }] },
+        {
+          key: 'plan_draft',
+          versions: [
+            { status: 'superseded', content: '{\n  "weeks": [{ "loadKm": 60 }]\n}' },
+            { status: 'draft', content: '{\n  "weeks": [{ "loadKm": 44 }]\n}' },
+          ],
+        },
+      ],
+      gates: [{ type: 'plan_approval', artifactKey: 'plan_draft', artifactVersion: 2 }],
+    },
+    overrides,
+  )
 }
