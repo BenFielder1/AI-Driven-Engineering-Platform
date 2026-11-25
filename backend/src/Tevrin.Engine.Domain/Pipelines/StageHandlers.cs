@@ -6,13 +6,13 @@ public static class StageHandlers
     /// <summary>
     /// The stage whose <c>handler:</c>, or one of whose <c>handlers:</c> entries, is <paramref name="handler"/>, or
     /// <c>null</c> when no stage declares it (e.g. a definition written before the handler existed). Names are unique
-    /// across a valid pipeline, so the first match is the only one.
+    /// across a valid pipeline, so the first match is the only one. Branch stages of parallel groups count (FR-343).
     /// </summary>
     public static StageDefinition? StageOf(PipelineDefinition definition, string handler)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(handler);
-        return definition.Stages.FirstOrDefault(s => s.Declares(handler));
+        return definition.AllStages.FirstOrDefault(s => s.Declares(handler));
     }
 
     /// <summary>Whether <paramref name="stage"/> declares <paramref name="handler"/> as its <c>handler:</c> or in <c>handlers:</c>.</summary>
