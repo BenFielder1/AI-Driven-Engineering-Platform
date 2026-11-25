@@ -44,7 +44,8 @@ public static class StageExecutionWriter
 
     /// <summary>
     /// FR-343: opens an execution of branch stage <paramref name="stageId"/> in branch <paramref name="branch"/> of the
-    /// run's current parallel group. Other open executions (the group's and sibling branches') stay open.
+    /// run's current parallel group (or, FR-345, a fan-out branch of the current stage, with its <paramref name="variant"/>
+    /// label). Other open executions (the group's and sibling branches') stay open.
     /// </summary>
     public static async Task<StageExecution> EnterBranchAsync(
         IEngineDbContext db,
@@ -53,7 +54,8 @@ public static class StageExecutionWriter
         string branch,
         int checkpoint,
         DateTimeOffset at,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? variant = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentException.ThrowIfNullOrEmpty(stageId);
@@ -64,6 +66,7 @@ public static class StageExecutionWriter
             PipelineRunId = pipelineRunId,
             StageId = stageId,
             Branch = branch,
+            Variant = variant,
             Iteration = rows.Count(r => string.Equals(r.StageId, stageId, StringComparison.Ordinal)) + 1,
             Checkpoint = checkpoint,
             EnteredAt = at,

@@ -411,6 +411,10 @@ public static class ErrorCodes
     /// <summary>FR-337, §4.72, §6 (409, API only): the delivery id was already received in the last 24 hours.</summary>
     public const string WebhookReplay = "WEBHOOK_REPLAY";
 
+    /// <summary>FR-345, §4.65, §6 (job and run failure, not HTTP): a fan-out branch's rendered input held a sibling
+    /// branch's output.</summary>
+    public const string FanoutIsolationBroken = "FANOUT_ISOLATION_BROKEN";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {

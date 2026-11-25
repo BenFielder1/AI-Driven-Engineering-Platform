@@ -104,6 +104,13 @@ public sealed partial class EngineRunDriver(
         // FR-343: inside a parallel group the run's current stage is the group; each branch stage has its own execution
         // (Branch set) and its own stage.run job. The group's own execution enters (or resumes) the branches.
         var group = current.Parallel;
+        if (current.FanOut is not null)
+        {
+            // FR-345: a fan-out stage's own execution enters its branches; each branch execution runs one agent.
+            await DriveFanOutAsync(job, run, current, execution!, definition, payload.Retry, cancellationToken);
+            return;
+        }
+
         if (execution!.Branch is not null && (group is null || !RunDriverRules.InGroup(group, execution)))
         {
             LogStale(logger, run.Id, payload.StageExecutionId, "the branch is not in the run's current group");
@@ -143,6 +150,7 @@ public sealed partial class EngineRunDriver(
             return;
         }
 
+        await FlagDisagreementAsync(run, stage, execution, definition, cancellationToken);
         await TransitionAsync(job, run, stage, execution, definition, output, cancellationToken);
     }
 
@@ -214,7 +222,7 @@ public sealed partial class EngineRunDriver(
                 var dispatch = await handlers.RunAsync(
                     new StageHandlerRequest(run.Id, run.ProjectId, run.DefinitionHash, handler.Handler)
                     {
-                        Facts = FactBag.Empty.With(new StageJobFact(job)),
+                        Facts = await AggregateFactsAsync(run, stage, definition, FactBag.Empty.With(new StageJobFact(job)), cancellationToken),
                     },
                     cancellationToken);
                 var handled = dispatch.RequireRan(handler.Handler);

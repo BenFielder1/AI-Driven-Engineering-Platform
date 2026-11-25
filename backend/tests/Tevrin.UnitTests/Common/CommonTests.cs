@@ -223,6 +223,13 @@ public class ErrorCodesTests
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.MergeTimeout));
         Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.PrClosed));
     }
+
+    [Fact]
+    public void FR345_FANOUT_ISOLATION_BROKEN_is_a_job_failure_code_not_an_http_error()
+    {
+        Assert.Equal("FANOUT_ISOLATION_BROKEN", ErrorCodes.FanoutIsolationBroken);
+        Assert.Null(ErrorCodes.StatusCodeFor(ErrorCodes.FanoutIsolationBroken));
+    }
 }
 
 public class ResultTests

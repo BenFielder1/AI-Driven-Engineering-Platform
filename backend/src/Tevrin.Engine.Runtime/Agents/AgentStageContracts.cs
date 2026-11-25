@@ -43,6 +43,14 @@ public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigge
     /// </summary>
     public string? AgentKey { get; init; }
 
+    /// <summary>
+    /// FR-345: the fan-out branch this attempt runs (its variant label: the agent key, or <c>#i</c>), or <c>null</c>. The
+    /// output is stored as the stage's own artifact with this variant, context providers are called with it as
+    /// <see cref="AgentContextRequest.Branch"/>, and the rendered prompt must hold no sibling's output (§4.65,
+    /// <c>FANOUT_ISOLATION_BROKEN</c>).
+    /// </summary>
+    public string? Variant { get; init; }
+
     /// <summary>Whatever the host passes to its own <see cref="AgentStageExtension"/> (the engine never reads it).</summary>
     public object? HostState { get; init; }
 }

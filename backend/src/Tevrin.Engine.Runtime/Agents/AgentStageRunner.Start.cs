@@ -87,13 +87,24 @@ public sealed partial class AgentStageRunner
             .Where(a => ArtifactRules.IntegrityOf(a.Status, a.Content, a.ContentHash) == ArtifactIntegrity.Ok)
             .ToList();
         var context = new List<AgentContextSection>();
-        var contextRequest = new AgentContextRequest(run.Id, run.ProjectId, attempt.Definition.Pipeline, stage.Id, agent.Key) { SuppliedPlaceholders = supplied };
+        var contextRequest = new AgentContextRequest(run.Id, run.ProjectId, attempt.Definition.Pipeline, stage.Id, agent.Key)
+        {
+            SuppliedPlaceholders = supplied,
+            Branch = request.Variant,
+        };
         foreach (var provider in contextProviders.Where(p => p.PipelineId == attempt.Definition.Pipeline))
         {
             context.AddRange(await provider.GetContextAsync(contextRequest, cancellationToken));
         }
 
         var values = AgentStagePrompt.Values(inputs, context, request.Feedback);
+
+        // FR-346: an aggregate stage gets every branch output of its source as {{<KEY>_ALL}}, each item labelled.
+        foreach (var (placeholder, items) in await AggregateInputs.LoadAsync(store, run, attempt.Definition, stage.Id, cancellationToken))
+        {
+            values[placeholder] = FanOutRules.RenderList(items);
+        }
+
         foreach (var (name, value) in request.PromptValues ?? new Dictionary<string, string?>())
         {
             values[name] = value;
@@ -124,8 +135,29 @@ public sealed partial class AgentStageRunner
         }
 
         var user = AgentStagePrompt.UserMessage(template, prompt, request.AppendFeedback ? request.Feedback : null);
+        await CheckIsolationAsync(attempt, string.Join('\n', prompt.System, user), cancellationToken);
         var tools = agent.Tools.Select(name => services.GetPipelineTool(name) ?? throw Permanent($"Tool '{name}' is not bound.")).ToList();
         return new PreparedCall(prompt.System, user, tools);
+    }
+
+    /// <summary>
+    /// §4.65: a fan-out branch's rendered input must hold no sibling branch's output (any stored version, so a retry is
+    /// checked against outputs its siblings stored meanwhile); else the branch fails with <c>FANOUT_ISOLATION_BROKEN</c>.
+    /// </summary>
+    private async Task CheckIsolationAsync(AgentAttempt attempt, string rendered, CancellationToken cancellationToken)
+    {
+        if (attempt.Request.Variant is not { } label || attempt.Stage.Output is not { } key)
+        {
+            return;
+        }
+
+        var siblings = (await store.RunVariantsAsync(attempt.Run, key, cancellationToken))
+            .Select(a => new AggregateItem(a.Variant!, a.Content));
+        if (FanOutRules.IsolationBreach(rendered, label, siblings) is { } leaked)
+        {
+            throw new JobFailedException(
+                $"Fan-out branch '{label}' of {attempt.Stage.Id} was given branch '{leaked}''s output.", transient: false, EngineErrorCodes.FanoutIsolationBroken);
+        }
     }
 
     /// <summary>

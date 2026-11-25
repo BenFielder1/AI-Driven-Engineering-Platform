@@ -96,6 +96,18 @@ public sealed partial class AgentStageRunner(
         var stage = defined.ForAgent(request.AgentKey) ?? throw Permanent(request.AgentKey is null
             ? $"Stage '{defined.Id}' is not an agent stage."
             : $"Stage '{defined.Id}' binds no agent '{request.AgentKey}'.");
+        if (request.Variant is { } variant)
+        {
+            // FR-345, §4.65: a fan-out branch reads the stage's declared inputs and stores the stage's own output (checked
+            // by the stage's validate guards), labelled with its variant; only the agent (prompt, model, tools) is its own.
+            if (FanOutRules.BranchOf(defined, variant) is null)
+            {
+                throw Permanent($"Stage '{defined.Id}' has no fan-out branch '{variant}'.");
+            }
+
+            stage = stage with { Inputs = defined.Inputs, Output = defined.Output, Validate = defined.Validate, OnInvalid = defined.OnInvalid };
+        }
+
         var agent = stage.Agent!;
         activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
         var existing = request.AgentRunId is { } runId ? await store.FindAgentRunAsync(runId, cancellationToken) : null;

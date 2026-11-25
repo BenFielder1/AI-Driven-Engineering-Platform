@@ -29,7 +29,7 @@ public static class AgentPromptPlaceholders
     /// <summary>
     /// Why <paramref name="templateSource"/> can't serve <paramref name="stage"/>'s agent, or <c>null</c>: it doesn't parse,
     /// <c>{{FEEDBACK}}</c> is required, or a required placeholder is neither one of the stage's inputs nor one of the
-    /// pack's <paramref name="contextNames"/>.
+    /// pack's <paramref name="contextNames"/> (nor, on an aggregate stage, an input's <c>_ALL</c> list, FR-346).
     /// </summary>
     public static string? Problem(StageDefinition stage, string templateSource, IReadOnlyCollection<string> contextNames)
     {
@@ -43,6 +43,12 @@ public static class AgentPromptPlaceholders
         }
 
         var known = stage.Inputs.Select(Of).Concat(contextNames.Select(Of)).ToHashSet(StringComparer.Ordinal);
+        if (stage.Aggregate is not null)
+        {
+            // FR-346: an aggregate stage also gets {{<KEY>_ALL}}, every branch output of an input key.
+            known.UnionWith(stage.Inputs.Select(Pipelines.FanOutRules.AllPlaceholder));
+        }
+
         var problems = new List<string>();
         foreach (var name in parsed.Value.RequiredInputs)
         {

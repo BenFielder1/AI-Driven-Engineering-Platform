@@ -31,6 +31,13 @@ public sealed class FlowFixturePack : IPipelinePack
     public const string ParallelContinue = "fixture-parallel-continue";
     public const string BearDeskHandler = "flow.bear-desk";
 
+    /// <summary>FR-345, FR-346: three forecasters fan out, then an aggregate with the spread guard.</summary>
+    public const string Forecast = "fixture-forecast";
+
+    /// <summary>§4.65: <c>fixture-forecast</c> with a context provider that leaks the base-rate forecast to the contrarian.</summary>
+    public const string ForecastLeak = "fixture-forecast-leak";
+    public const string SpreadGuard = "flow.forecast-spread";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
@@ -42,6 +49,19 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddDefinition(Parallel + ".pipeline.yaml", Read(Parallel + ".pipeline.yaml"));
         registry.AddDefinition(ParallelFail + ".pipeline.yaml", FailingBearYaml(ParallelFail, "fail"));
         registry.AddDefinition(ParallelContinue + ".pipeline.yaml", FailingBearYaml(ParallelContinue, "continue"));
+        registry.AddDefinition(Forecast + ".pipeline.yaml", Read(Forecast + ".pipeline.yaml"));
+        registry.AddDefinition(ForecastLeak + ".pipeline.yaml", LeakYaml());
+        foreach (var forecaster in (string[])["flow.forecast", "flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian"])
+        {
+            registry.AddPrompt(forecaster, $"---\nversion: {forecaster}-1\n---\nYou are a forecaster.\n<!-- user -->\nForecast: {{{{QUESTION}}}}\n{{{{MARKET_NOTES?}}}}\n");
+        }
+
+        registry.AddPrompt("flow.aggregate", "---\nversion: flow.aggregate-1\n---\nYou combine forecasts.\n<!-- user -->\nQuestion: {{QUESTION}}\nForecasts:\n{{FORECAST_ALL}}\n");
+        registry.AddGuard(SpreadGuard);
+        foreach (var jobType in (string[])["flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian"])
+        {
+            registry.AddJobType(jobType);
+        }
         string[] prompts =
         [
             "flow.trade", "flow.size", "flow.risk", "flow.order", "flow.research", "flow.write", "flow.edit",
@@ -69,6 +89,15 @@ public sealed class FlowFixturePack : IPipelinePack
 
         return yaml.Replace(To, "on_veto: { end: vetoed }", StringComparison.Ordinal)
             .Replace(Id, "pipeline: " + VetoEnd + "\n", StringComparison.Ordinal);
+    }
+
+    private static string LeakYaml()
+    {
+        var yaml = Read(Forecast + ".pipeline.yaml");
+        const string Id = "pipeline: " + Forecast + "\n";
+        return yaml.Contains(Id, StringComparison.Ordinal)
+            ? yaml.Replace(Id, "pipeline: " + ForecastLeak + "\n", StringComparison.Ordinal)
+            : throw new InvalidOperationException("fixture-forecast no longer has the line fixture-forecast-leak replaces.");
     }
 
     private static string FailingBearYaml(string pipelineId, string onBranchFailure)
@@ -123,6 +152,68 @@ public sealed class FailingBearDesk : IStageHandler
         Task.FromResult(new StageHandlerResult(StageHandlerOutcome.Failed, "The bear desk is closed."));
 }
 
+/// <summary>FR-346: the <c>flow.forecast-spread</c> guard: the forecasts' probabilities may differ by at most 0.25.</summary>
+public sealed class ForecastSpreadGuard : IGuard
+{
+    public const double MaxSpread = 0.25;
+
+    public Task<GuardResult> EvaluateAsync(GuardContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var items = context.Facts.Get<AggregateListFact>()?.Items ?? [];
+        var probabilities = items
+            .Select(i => System.Text.Json.JsonDocument.Parse(i.Content).RootElement.GetProperty("probability").GetDouble())
+            .ToList();
+        if (probabilities.Count < 2)
+        {
+            return Task.FromResult(GuardResult.Pass);
+        }
+
+        var spread = probabilities.Max() - probabilities.Min();
+        return Task.FromResult(spread > MaxSpread
+            ? GuardResult.Fail(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"The forecasts spread {spread:0.00}, over {MaxSpread:0.00}."))
+            : GuardResult.Pass);
+    }
+}
+
+/// <summary>§4.65: a scripted context provider for <c>fixture-forecast-leak</c> that hands the contrarian branch the
+/// base-rate branch's stored forecast (the breach the runner must catch).</summary>
+public sealed class LeakingForecastContext(Tevrin.Engine.Runtime.Persistence.IEngineDbContext db) : IAgentContextProvider
+{
+    public string PipelineId => FlowFixturePack.ForecastLeak;
+
+    public async Task<IReadOnlyList<AgentContextSection>> GetContextAsync(AgentContextRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Branch != "forecaster-contrarian")
+        {
+            return [];
+        }
+
+        var runId = request.RunId;
+        var sibling = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
+            db.Artifacts.Where(a => a.PipelineRunId == runId && a.Type == "forecast" && a.Variant == "forecaster-base-rate"), cancellationToken);
+        return sibling is null ? [] : [new AgentContextSection("market-notes", "Desk notes: " + sibling.Content)];
+    }
+}
+
+/// <summary>A Fake responder that answers <paramref name="answer"/> and records every user message it was sent.</summary>
+public sealed class RecordingResponder(string agent, string answer) : IFakeAgentResponder
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
+
+    public string Agent => agent;
+
+    public IReadOnlyList<string> Prompts => [.. _prompts];
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _prompts.Enqueue(string.Join("\n", request.Messages.Select(m => m.Content)));
+        return answer;
+    }
+}
+
 /// <summary>A Fake responder answering <paramref name="answers"/> in order, then the last one again.</summary>
 public sealed class ScriptedResponder(string agent, params string[] answers) : IFakeAgentResponder
 {
@@ -149,6 +240,8 @@ public static class FixtureFlowApp
             s.AddSingleton(limit);
             s.AddPipelineGuard<PositionLimitGuard>(FlowFixturePack.PositionLimitGuard);
             s.AddPipelineStageHandler<FailingBearDesk>(FlowFixturePack.BearDeskHandler);
+            s.AddPipelineGuard<ForecastSpreadGuard>(FlowFixturePack.SpreadGuard);
+            s.AddScoped<IAgentContextProvider, LeakingForecastContext>();
             foreach (var responder in responders)
             {
                 s.AddSingleton(responder);

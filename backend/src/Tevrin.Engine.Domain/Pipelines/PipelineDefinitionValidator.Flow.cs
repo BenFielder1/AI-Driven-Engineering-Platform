@@ -288,6 +288,18 @@ public static partial class PipelineDefinitionValidator
                 return;
             }
 
+            // A fan-out stage's join has no route to read (its branches' outputs are many) and no resume path for an
+            // escalated branch yet.
+            if (stage.Routes.Count > 0)
+            {
+                Add(DefinitionErrorCodes.StageKind, path + ".routes", $"Fan-out stage '{stage.Id}' can't declare 'routes'.");
+            }
+
+            if (stage.OnInvalid is { Then: InvalidOutcome.Escalate })
+            {
+                Add(DefinitionErrorCodes.StageKind, path + ".on_invalid.then", $"Fan-out stage '{stage.Id}' can't use 'on_invalid.then: escalate'; use 'fail'.");
+            }
+
             if (fanOut.Count is { } count)
             {
                 if (count is < FanOutDefinition.MinBranches or > FanOutDefinition.MaxBranches)

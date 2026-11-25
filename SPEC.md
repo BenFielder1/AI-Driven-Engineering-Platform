@@ -331,7 +331,7 @@ A branch's prompt is built only from:
 - context providers, called with `branch` set;
 - the branch agent's own prompt.
 
-The runner fails a branch whose rendered input contains a sibling branch's output text: `FANOUT_ISOLATION_BROKEN`. Branches never see each other's outputs, even after a retry.
+The runner fails a branch whose rendered input contains a sibling branch's output text: `FANOUT_ISOLATION_BROKEN`. Only sibling outputs of at least 32 characters (trimmed) are compared, so short answers such as `yes` or `{}` don't trip it. Disagreement findings of an aggregate are stored on its stage execution (with veto findings). A fan-out stage may not declare `routes` or `on_invalid.then: escalate` (`DEF_STAGE_KIND`). Branches never see each other's outputs, even after a retry.
 
 ### 4.66 Revision cap
 

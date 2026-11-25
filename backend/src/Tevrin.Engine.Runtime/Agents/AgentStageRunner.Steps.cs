@@ -203,14 +203,27 @@ public sealed partial class AgentStageRunner
     /// A new version of the artifact: numbered project-wide (FR-58); only open drafts of the run's own subject are
     /// superseded (§4.10), never another subject's.
     /// </summary>
-    private async Task<Artifact> StoreAsync(PipelineRun run, ArtifactDefinition definition, string content, AgentRun agentRun, CancellationToken cancellationToken)
+    private async Task<Artifact> StoreAsync(
+        PipelineRun run, ArtifactDefinition definition, string content, AgentRun agentRun, string? variant, CancellationToken cancellationToken)
     {
-        var plan = ArtifactRules.NewDraft(await store.VersionsAsync(run.ProjectId, definition.Key, cancellationToken));
-        var drafts = await store.SubjectVersionsAsync(run, definition.Key, plan.SupersededVersions, cancellationToken);
-        foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
+        NewDraftPlan plan;
+        if (variant is null)
         {
-            draft.Status = ArtifactStatus.Superseded;
-            await hooks.OnArtifactSupersededAsync(run, draft, plan.Version, cancellationToken);
+            plan = ArtifactRules.NewDraft(await store.VersionsAsync(run.ProjectId, definition.Key, cancellationToken));
+            var drafts = await store.SubjectVersionsAsync(run, definition.Key, plan.SupersededVersions, cancellationToken);
+            foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
+            {
+                draft.Status = ArtifactStatus.Superseded;
+                await hooks.OnArtifactSupersededAsync(run, draft, plan.Version, cancellationToken);
+            }
+        }
+        else
+        {
+            // FR-345: a fan-out branch numbers its own variant's versions in the run, so concurrent branches never collide
+            // (the run-scope unique index includes the variant) and never supersede each other.
+            var own = (await store.RunVariantsAsync(run, definition.Key, cancellationToken))
+                .FirstOrDefault(a => string.Equals(a.Variant, variant, StringComparison.Ordinal));
+            plan = new NewDraftPlan((own?.Version ?? 0) + 1, own?.Version, []);
         }
 
         var now = time.GetUtcNow();
@@ -229,6 +242,7 @@ public sealed partial class AgentStageRunner
             ReleaseVersionId = AgentStageScope.ReleaseVersionOf(run),
             PipelineRunId = run.Id,
             AgentRunId = agentRun.Id,
+            Variant = variant,
             CreatedAt = now,
         };
         store.Add(artifact);

@@ -200,6 +200,10 @@ public sealed record AgentContextRequest(Guid RunId, Guid ProjectId, string Pipe
     /// sections that only fill these.
     /// </summary>
     public IReadOnlySet<string> SuppliedPlaceholders { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>FR-345, §4.65: the fan-out branch (variant label) the context is for; <c>null</c> outside a fan-out. A
+    /// provider must not return a sibling branch's output.</summary>
+    public string? Branch { get; init; }
 }
 
 /// <summary>One named block of context for the prompt.</summary>

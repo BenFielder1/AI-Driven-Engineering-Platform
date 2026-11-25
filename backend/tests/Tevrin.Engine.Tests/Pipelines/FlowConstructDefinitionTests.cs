@@ -238,6 +238,17 @@ public class FlowConstructDefinitionTests
             FlowErrors(FlowFixturePack.Veto, "{ guard: flow.position-limit }", "{ guard: flow.position-limit, agent: risk-manager }"));
 
     [Fact]
+    public void FR343_a_handler_declared_by_a_branch_stage_is_found_for_dispatch()
+    {
+        var yaml = Edit(
+            "            agent: { key: bear-analyst, prompt: flow.bear }\n            inputs: [ticker]\n            output: bear_case\n",
+            "            handler: flow.bear-desk\n",
+            FlowFixturePack.Yaml(FlowFixturePack.Parallel));
+
+        Assert.Equal("bear", StageHandlers.StageOf(PipelineDefinitionLoader.Parse(yaml).Definition!, "flow.bear-desk")?.Id);
+    }
+
+    [Fact]
     public void FR343_FR344_DEF_PARSE_a_branch_stage_may_not_declare_a_veto() =>
         Assert.Contains((DefinitionErrorCodes.Parse, "stages[0].parallel.branches[1][0].veto"),
             FlowErrors(
@@ -299,6 +310,27 @@ public class FlowConstructDefinitionTests
     public void FR345_DEF_FANOUT_AGENT_a_fan_out_agent_must_be_bound_by_the_stage() =>
         Assert.Equal([(DefinitionErrorCodes.FanOutAgent, "stages[0].fan_out.agents[2]")],
             FlowErrors(FlowFixturePack.Forecast, FanOutAgents, "fan_out: { agents: [forecaster-base-rate, forecaster-trend, forecaster-optimist] }"));
+
+    [Fact]
+    public void FR345_DEF_STAGE_KIND_a_fan_out_stage_declares_no_routes() =>
+        Assert.Contains((DefinitionErrorCodes.StageKind, "stages[0].routes"),
+            FlowErrors(FlowFixturePack.Forecast, FanOutAgents, FanOutAgents + "\n    routes: [forecast]"));
+
+    [Fact]
+    public void FR345_DEF_STAGE_KIND_a_fan_out_stage_does_not_escalate_an_invalid_output()
+    {
+        Assert.Equal([(DefinitionErrorCodes.StageKind, "stages[0].on_invalid.then")],
+            FlowErrors(FlowFixturePack.Forecast, FanOutAgents, FanOutAgents + "\n    validate: [{ guard: flow.forecast-spread }]\n    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: escalate }"));
+        Assert.Empty(FlowErrors(FlowFixturePack.Forecast, FanOutAgents, FanOutAgents + "\n    validate: [{ guard: flow.forecast-spread }]\n    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }"));
+    }
+
+    [Fact]
+    public void FR345_fixture_forecast_and_its_leak_copy_validate()
+    {
+        var yaml = FlowFixturePack.Yaml(FlowFixturePack.Forecast);
+        Assert.Empty(Errors(yaml, FlowFixturePack.Catalog));
+        Assert.Empty(Errors(Edit("pipeline: fixture-forecast\n", "pipeline: fixture-forecast-leak\n", yaml), FlowFixturePack.Catalog));
+    }
 
     [Fact]
     public void FR345_DEF_FANOUT_AGENT_the_stages_own_agent_is_not_a_binding() =>

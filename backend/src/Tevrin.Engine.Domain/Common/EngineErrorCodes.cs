@@ -45,4 +45,7 @@ public static class EngineErrorCodes
     public const string TriggerNotSupported = "TRIGGER_NOT_SUPPORTED";
     public const string WebhookSignatureInvalid = "WEBHOOK_SIGNATURE_INVALID";
     public const string WebhookReplay = "WEBHOOK_REPLAY";
+
+    /// <summary>FR-345, §4.65, §6 (job failure): a fan-out branch's rendered input held a sibling branch's output.</summary>
+    public const string FanoutIsolationBroken = "FANOUT_ISOLATION_BROKEN";
 }

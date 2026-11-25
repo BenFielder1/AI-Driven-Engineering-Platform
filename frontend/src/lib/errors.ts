@@ -126,6 +126,9 @@ export const errorMessages = {
   // §6 "(API only)": returned to webhook callers (FR-337, §4.72), never shown in the app. The copy is for completeness.
   WEBHOOK_SIGNATURE_INVALID: "The webhook signature is missing, invalid or stale.",
   WEBHOOK_REPLAY: "This webhook delivery was already received.",
+  // §6 job and run failure codes (not HTTP errors), shown on stage executions and in the timeline.
+  FANOUT_ISOLATION_BROKEN:
+    "A fan-out branch was stopped because its input contained another branch's output. Check the stage's context providers.",
   // Agent runs (shown on run details)
   MISSING_INPUT: "The agent was missing a required input.",
   INVALID_PLAN: "The agent produced an invalid plan.",

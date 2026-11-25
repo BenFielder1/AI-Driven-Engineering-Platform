@@ -37,6 +37,17 @@ public interface IAgentStageStore
     /// <summary>FR-310: the run subject's version of <paramref name="key"/> that agent run <paramref name="agentRunId"/> produced, or <c>null</c>.</summary>
     Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// FR-345, FR-346: the newest version of each variant of <paramref name="key"/> this run stored (superseded ones left
+    /// out), by variant label. Fan-out branches write these; isolation (§4.65) and aggregation read them.
+    /// </summary>
+    Task<IReadOnlyList<Artifact>> RunVariantsAsync(PipelineRun run, string key, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([]);
+
+    /// <summary>FR-346: the newest version (no variant, not superseded) of each of <paramref name="keys"/> this run stored.</summary>
+    Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([]);
+
     void Add(AgentRun agentRun);
 
     void Add(Artifact artifact);
@@ -99,7 +110,7 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
 
         var latest = await db.Artifacts.AsNoTracking()
             .Where(AgentStageScope.InSubject(run))
-            .Where(a => own.Contains(a.Type) && a.Status == ArtifactStatus.Locked)
+            .Where(a => own.Contains(a.Type) && a.Status == ArtifactStatus.Locked && a.Variant == null)
             .GroupBy(a => a.Type)
             .Select(g => g.OrderByDescending(a => a.Version).First())
             .ToListAsync(cancellationToken);
@@ -115,7 +126,7 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
     public async Task<IReadOnlyList<Artifact>> SubjectVersionsAsync(PipelineRun run, string key, IReadOnlyCollection<int> versions, CancellationToken cancellationToken) =>
         versions.Count == 0
             ? []
-            : await db.Artifacts.Where(AgentStageScope.InSubject(run)).Where(a => a.Type == key && versions.Contains(a.Version)).ToListAsync(cancellationToken);
+            : await db.Artifacts.Where(AgentStageScope.InSubject(run)).Where(a => a.Type == key && a.Variant == null && versions.Contains(a.Version)).ToListAsync(cancellationToken);
 
     public Task<ApprovalGate?> PendingGateAsync(PipelineRun run, string type, CancellationToken cancellationToken)
     {
@@ -128,6 +139,27 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
 
     public Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken) =>
         db.Artifacts.Where(AgentStageScope.InSubject(run)).FirstOrDefaultAsync(a => a.Type == key && a.AgentRunId == agentRunId, cancellationToken);
+
+    public async Task<IReadOnlyList<Artifact>> RunVariantsAsync(PipelineRun run, string key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        var rows = await db.Artifacts.AsNoTracking()
+            .Where(a => a.PipelineRunId == runId && a.Type == key && a.Variant != null && a.Status != ArtifactStatus.Superseded)
+            .ToListAsync(cancellationToken);
+        return [.. rows.GroupBy(a => a.Variant!, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!).OrderBy(a => a.CreatedAt).ThenBy(a => a.Variant, StringComparer.Ordinal)];
+    }
+
+    public async Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(keys);
+        var runId = run.Id;
+        var rows = await db.Artifacts.AsNoTracking()
+            .Where(a => a.PipelineRunId == runId && keys.Contains(a.Type) && a.Variant == null && a.Status != ArtifactStatus.Superseded)
+            .ToListAsync(cancellationToken);
+        return [.. rows.GroupBy(a => a.Type, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!)];
+    }
 
     public void Add(AgentRun agentRun) => db.AgentRuns.Add(agentRun);
 
