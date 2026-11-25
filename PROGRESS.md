@@ -32,10 +32,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-336 | Schedule trigger (cron, timezone, skip when active) | 3.2, 4.71 | backend + data | M66 | done | c9b6a15 + 88a87d0, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300) |
 | FR-337 | Webhook trigger (signature, replay, rotation, deliveries) | 3.2, 4.72 | backend + data | M66 | done | c9b6a15 + 88a87d0, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300) |
 | FR-338 | `Tevrin.Pack.Coach` project + architecture tests + test project | 3.3 | backend | M67 | done | 38d9c65, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45475257880) |
-| FR-339 | `impulse-coach` pipeline definition | 3.3 | backend | M67 | todo | — |
+| FR-339 | `impulse-coach` pipeline definition | 3.3 | backend | M67 | done | 38d9c65 + e13bbc7 + 07f4ade, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959) |
 | FR-340 | `velocity.load-rules` guard (R1–R5) | 3.3, 4.63 | backend | M67 | done | 38d9c65, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45475257880) |
-| FR-341 | Coach uses default agent policy; budget/audit hooks apply to every pipeline | 3.3 | backend | M67 | todo | — |
-| FR-342 | Impulse coaching pack docs guide | 3.3 | docs | M67 | todo | — |
+| FR-341 | Coach uses default agent policy; budget/audit hooks apply to every pipeline | 3.3 | backend | M67 | done | e13bbc7 + 2968049, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959) |
+| FR-342 | Impulse coaching pack docs guide | 3.3 | docs | M67 | done | 07f4ade, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959) |
 | FR-343 | Parallel stages (`fixture-parallel`) | 3.4, 4.64 | backend | M68 | todo | — |
 | FR-344 | Veto (`fixture-veto`) | 3.4 | backend | M68 | todo | — |
 | FR-345 | Fan-out with isolated context (`fixture-forecast`) | 3.4, 4.65 | backend | M68 | todo | — |
@@ -75,11 +75,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] a. Run control, definition fields, `waiting_on_input`, runs without a subject, trigger tables, error codes (FR-330, FR-334) — 7a4f6da + fix 50ccb98 ([CI 45394797913](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45394797913))
   - [x] b. `stage.run` driver; start, cancel, rollback, retry and input endpoints; engine gate decisions; `fixture-linear` (FR-331–FR-333, FR-335) — 63c8601 ([CI 45412232128](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128))
   - [x] c. Schedules and webhooks (FR-336, FR-337) — c9b6a15 + test fix 88a87d0 ([CI 45452701300](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300))
-- [ ] M67 Coach pack — FR-338–FR-342, FR-352
+- [x] M67 Coach pack — FR-338–FR-342, FR-352
   - [x] a. Source-of-truth artifacts pinned per run, `fixture-cv` (FR-352) — 9372e8b ([CI 45467772497](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45467772497))
   - [x] b1. `Tevrin.Pack.Coach`: definition, schemas, prompts, `coach.velocity-load-rules` guard, `triggers:` list, architecture tests, test project (FR-338–FR-340) — 38d9c65 ([CI 45475257880](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45475257880))
-  - [ ] b2. Token budget and audit hooks for every pipeline, pack registration, Fake outputs, worked-example integration tests (FR-341, FR-339 acceptance)
-  - [ ] c. Pipeline tab render check (Vitest) and the Impulse coaching pack guide (FR-339 acceptance, FR-342)
+  - [x] b2. Token budget and audit hooks for every pipeline, pack registration, Fake outputs, worked-example integration tests (FR-341, FR-339 acceptance) — e13bbc7 + fix 2968049 ([CI 45578882959](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959))
+  - [x] c. Pipeline tab render check (Vitest) and the Impulse coaching pack guide (FR-339 acceptance, FR-342) — 07f4ade ([CI 45578882959](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959))
 - [ ] M68 Flow constructs — FR-343–FR-349
 - [ ] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
 - [ ] M70 Scale and conversation — FR-355–FR-357
