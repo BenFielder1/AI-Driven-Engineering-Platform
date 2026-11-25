@@ -136,6 +136,8 @@ public sealed record DecidePipelineGateRequest
 {
     public const int CommentMaxLength = 4000;
 
+    public const int ChoiceMaxLength = 16;
+
     [MaxLength(CommentMaxLength)]
     public string? Comment { get; init; }
 
@@ -143,6 +145,10 @@ public sealed record DecidePipelineGateRequest
 
     [Range(1, int.MaxValue)]
     public int? TargetCheckpoint { get; init; }
+
+    /// <summary>FR-349: the chosen variant (v1…vn) when approving a <c>variant_select</c> gate; ignored by other gates.</summary>
+    [MaxLength(ChoiceMaxLength)]
+    public string? Choice { get; init; }
 }
 
 /// <summary>FR-302: a pending gate in the inbox, with its project and pipeline. <c>canDecide</c> is whether the caller

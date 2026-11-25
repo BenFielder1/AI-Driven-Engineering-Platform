@@ -30,10 +30,17 @@ public static class FanOutRules
     /// <summary>The placeholder suffix of an aggregate's list input: <c>{{&lt;KEY&gt;_ALL}}</c>.</summary>
     public const string AllSuffix = "_ALL";
 
-    /// <summary>FR-345: the branches of <paramref name="stage"/>'s fan-out, in declaration order (empty without one).</summary>
+    /// <summary>FR-345: the branches of <paramref name="stage"/>'s fan-out, in declaration order (empty without one); FR-349:
+    /// a <c>variants</c> stage's v1…vn.</summary>
     public static IReadOnlyList<FanOutBranch> Branches(StageDefinition stage)
     {
         ArgumentNullException.ThrowIfNull(stage);
+        if (stage.Variants is { Count: var variants })
+        {
+            // FR-349: variants are a count fan-out of the stage's own agent, labelled v1…vn.
+            return [.. Enumerable.Range(1, variants).Select(i => new FanOutBranch(VariantRules.Label(i), null))];
+        }
+
         return stage.FanOut switch
         {
             null => [],
@@ -54,7 +61,7 @@ public static class FanOutRules
     {
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(stageExecution);
-        return stage.FanOut is not null
+        return (stage.FanOut is not null || stage.Variants is not null)
             && string.Equals(stageExecution.StageId, stage.Id, StringComparison.Ordinal)
             && BranchOf(stage, stageExecution.Branch) is not null;
     }

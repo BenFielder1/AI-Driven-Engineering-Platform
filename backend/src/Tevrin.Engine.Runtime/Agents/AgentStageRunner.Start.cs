@@ -105,6 +105,12 @@ public sealed partial class AgentStageRunner
             values[placeholder] = FanOutRules.RenderList(items);
         }
 
+        // FR-349, §4.67: a branch's prompt context holds its own label as {{VARIANT}} (v1…vn for a variants stage).
+        if (request.Variant is { } variant)
+        {
+            values[VariantRules.LabelPlaceholder] = variant;
+        }
+
         foreach (var (name, value) in request.PromptValues ?? new Dictionary<string, string?>())
         {
             values[name] = value;

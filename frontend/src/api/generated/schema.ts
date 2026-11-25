@@ -4574,6 +4574,8 @@ export interface components {
             decision?: null | components["schemas"]["EscalationDecision"];
             /** Format: int32 */
             targetCheckpoint?: null | number;
+            /** @description FR-349: the chosen variant (v1…vn) when approving a `variant_select` gate; ignored by other gates. */
+            choice?: null | string;
         };
         /**
          * @description A file a step declares it creates or modifies (FR-29). `protected` marks a protected path (§4.6: .git/, .aide/, CI

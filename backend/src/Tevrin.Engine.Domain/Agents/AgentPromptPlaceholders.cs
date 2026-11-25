@@ -49,6 +49,12 @@ public static class AgentPromptPlaceholders
             known.UnionWith(stage.Inputs.Select(Pipelines.FanOutRules.AllPlaceholder));
         }
 
+        if (stage.Variants is not null || stage.FanOut is not null)
+        {
+            // FR-349: a branch's prompt gets its own label as {{VARIANT}}.
+            known.Add(Pipelines.VariantRules.LabelPlaceholder);
+        }
+
         var problems = new List<string>();
         foreach (var name in parsed.Value.RequiredInputs)
         {

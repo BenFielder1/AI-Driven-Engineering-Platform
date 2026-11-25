@@ -11,7 +11,8 @@ namespace Tevrin.IntegrationTests.Pipelines;
 /// FR-344, FR-347, FR-348 (M68): the test pack <c>flow</c> with <c>fixture-veto</c> (trader → sizer, vetoed by the
 /// position-limit guard and the risk manager, back to the proposal → executor) and <c>fixture-editorial</c> (research →
 /// write → edit, the editor routing back; 3 revisions, then an escalation), and FR-343 <c>fixture-parallel</c> (bull and
-/// bear analysts in a parallel group, then the decision), read from the engine tests' fixture files.
+/// bear analysts in a parallel group, then the decision), FR-345, FR-346 <c>fixture-forecast</c> and FR-349
+/// <c>fixture-variants</c>, read from the engine tests' fixture files.
 /// </summary>
 public sealed class FlowFixturePack : IPipelinePack
 {
@@ -38,6 +39,9 @@ public sealed class FlowFixturePack : IPipelinePack
     public const string ForecastLeak = "fixture-forecast-leak";
     public const string SpreadGuard = "flow.forecast-spread";
 
+    /// <summary>FR-349: three headline variants picked at a <c>variant_select</c> gate, then two tagline variants a judge picks.</summary>
+    public const string Variants = "fixture-variants";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
@@ -51,6 +55,11 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddDefinition(ParallelContinue + ".pipeline.yaml", FailingBearYaml(ParallelContinue, "continue"));
         registry.AddDefinition(Forecast + ".pipeline.yaml", Read(Forecast + ".pipeline.yaml"));
         registry.AddDefinition(ForecastLeak + ".pipeline.yaml", LeakYaml());
+        registry.AddDefinition(Variants + ".pipeline.yaml", Read(Variants + ".pipeline.yaml"));
+        registry.AddPrompt("flow.headline", "---\nversion: flow.headline-1\n---\nYou write headlines.\n<!-- user -->\nProduct: {{PRODUCT}}\nWrite variant {{VARIANT}}.\n");
+        registry.AddPrompt("flow.tagline", "---\nversion: flow.tagline-1\n---\nYou write taglines.\n<!-- user -->\nProduct: {{PRODUCT}}\nHeadline: {{HEADLINE}}\nWrite variant {{VARIANT}}.\n");
+        registry.AddPrompt("flow.judge", "---\nversion: flow.judge-1\n---\nYou pick the best tagline.\n<!-- user -->\nTaglines:\n{{TAGLINE_ALL?}}\n");
+        registry.AddJobType("flow.judge");
         foreach (var forecaster in (string[])["flow.forecast", "flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian"])
         {
             registry.AddPrompt(forecaster, $"---\nversion: {forecaster}-1\n---\nYou are a forecaster.\n<!-- user -->\nForecast: {{{{QUESTION}}}}\n{{{{MARKET_NOTES?}}}}\n");

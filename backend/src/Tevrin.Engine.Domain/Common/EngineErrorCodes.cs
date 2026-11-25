@@ -48,4 +48,8 @@ public static class EngineErrorCodes
 
     /// <summary>FR-345, §4.65, §6 (job failure): a fan-out branch's rendered input held a sibling branch's output.</summary>
     public const string FanoutIsolationBroken = "FANOUT_ISOLATION_BROKEN";
+
+    /// <summary>FR-349, §4.67, §6: a variant choice outside <c>v1…vn</c> (a job failure for an agent selector; 400 on a
+    /// <c>variant_select</c> gate's approve).</summary>
+    public const string VariantChoiceInvalid = "VARIANT_CHOICE_INVALID";
 }

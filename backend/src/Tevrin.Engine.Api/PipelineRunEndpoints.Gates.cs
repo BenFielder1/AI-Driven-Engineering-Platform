@@ -24,7 +24,10 @@ public static partial class PipelineRunEndpoints
             async (run, decision) => control.IsHostControlled(run)
                 ? await decisions.ApproveAsync(run.ProjectId, gateId, decision, cancellationToken)
                 : await control.ApproveGateAsync(
-                    (await control.FindAsync(run.Id, cancellationToken))!, gateId, new EngineGateDecision(runAccess.UserId, decision.Comment), cancellationToken),
+                    (await control.FindAsync(run.Id, cancellationToken))!,
+                    gateId,
+                    new EngineGateDecision(runAccess.UserId, decision.Comment) { Choice = request?.Choice },
+                    cancellationToken),
             cancellationToken);
 
     private static Task<Results<Ok<PipelineGateDto>, ProblemHttpResult>> RejectGate(

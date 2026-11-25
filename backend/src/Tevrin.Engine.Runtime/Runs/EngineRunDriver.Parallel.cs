@@ -258,7 +258,7 @@ public sealed partial class EngineRunDriver
         }
     }
 
-    private static JobFailedException Moved(DbUpdateConcurrencyException ex) =>
+    private static JobFailedException Moved(DbUpdateException ex) =>
         new("The run moved while a parallel branch was saving; the job retries.", ex);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} entered parallel group {StageId} ({BranchCount} branches)")]

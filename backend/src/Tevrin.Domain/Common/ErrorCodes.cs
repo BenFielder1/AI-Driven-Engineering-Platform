@@ -415,6 +415,10 @@ public static class ErrorCodes
     /// branch's output.</summary>
     public const string FanoutIsolationBroken = "FANOUT_ISOLATION_BROKEN";
 
+    /// <summary>FR-349, §4.67, §6: a variant choice outside <c>v1…vn</c>. An agent selector's fails its job (not HTTP); a
+    /// <c>variant_select</c> gate's approve with one is refused (400).</summary>
+    public const string VariantChoiceInvalid = "VARIANT_CHOICE_INVALID";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
@@ -519,6 +523,7 @@ public static class ErrorCodes
         [TriggerNotSupported] = 409,
         [WebhookSignatureInvalid] = 401,
         [WebhookReplay] = 409,
+        [VariantChoiceInvalid] = 400,
     };
 
     /// <summary>Every code that an endpoint can return, with its HTTP status (SPEC §6).</summary>

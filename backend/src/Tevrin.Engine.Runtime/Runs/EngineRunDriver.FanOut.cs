@@ -124,7 +124,8 @@ public sealed partial class EngineRunDriver
         await SaveBranchMoveAsync(cancellationToken);
     }
 
-    /// <summary>FR-345: when every branch has completed, the stage's transition runs (saved there; true). Else false.</summary>
+    /// <summary>FR-345: when every branch has completed, the stage's transition runs (saved there; true). Else false.
+    /// FR-349: a variants stage selects first (<see cref="SelectVariantAsync"/>).</summary>
     private async Task<bool> TryJoinFanOutAsync(
         JobExecution job,
         PipelineRun run,
@@ -140,6 +141,12 @@ public sealed partial class EngineRunDriver
         }
 
         LogJoined(logger, run.Id, stage.Id, 0);
+        if (stage.Variants is not null)
+        {
+            // FR-349: the variants' selection (a gate or a selector agent), then the promotion and the transition.
+            return await SelectVariantAsync(job, run, stage, fanOutEntry, definition, cancellationToken);
+        }
+
         try
         {
             await TransitionAsync(job, run, stage, fanOutEntry, definition, output: null, cancellationToken);

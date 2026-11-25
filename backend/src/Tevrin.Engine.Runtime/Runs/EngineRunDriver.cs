@@ -104,7 +104,7 @@ public sealed partial class EngineRunDriver(
         // FR-343: inside a parallel group the run's current stage is the group; each branch stage has its own execution
         // (Branch set) and its own stage.run job. The group's own execution enters (or resumes) the branches.
         var group = current.Parallel;
-        if (current.FanOut is not null)
+        if (current.FanOut is not null || current.Variants is not null)
         {
             // FR-345: a fan-out stage's own execution enters its branches; each branch execution runs one agent.
             await DriveFanOutAsync(job, run, current, execution!, definition, payload.Retry, cancellationToken);

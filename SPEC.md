@@ -468,6 +468,7 @@ Gate decisions for the new gate types use the existing gate endpoints. A `varian
 
 | Code | Status | Meaning | User-facing copy |
 | --- | --- | --- | --- |
+| `VARIANT_CHOICE_INVALID` | 400 | A `variant_select` approve (or a selector agent) chose a label outside v1…vn | "That isn't one of the stage's variants. Pick one of v1 to vn." |
 | `RUN_CONTROLLED_BY_HOST` | 409 | This pipeline's runs are started and moved by its own pages | "This pipeline is run from its own pages, not from here." |
 | `RUN_ALREADY_ACTIVE` | 409 | The project already has an active run of this pipeline | "This project already has a run in progress for this pipeline." |
 | `RUN_NOT_ACTIVE` | 409 | The run has finished | "This run has already finished." |

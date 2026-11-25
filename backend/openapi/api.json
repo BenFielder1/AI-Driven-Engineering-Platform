@@ -20436,6 +20436,14 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "choice": {
+            "maxLength": 16,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-349: the chosen variant (v1…vn) when approving a `variant_select` gate; ignored by other gates."
           }
         },
         "description": "Approve or reject a gate through the engine (FR-301): the same fields and limits as the project gate endpoints."

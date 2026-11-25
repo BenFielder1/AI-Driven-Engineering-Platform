@@ -15,7 +15,11 @@ using Tevrin.Engine.Runtime.Pipelines;
 namespace Tevrin.Engine.Runtime.Runs;
 
 /// <summary>A gate decision on an engine-controlled run (FR-332).</summary>
-public sealed record EngineGateDecision(Guid? UserId, string? Comment);
+public sealed record EngineGateDecision(Guid? UserId, string? Comment)
+{
+    /// <summary>FR-349: the chosen variant (<c>v1…vn</c>) when approving a <c>variant_select</c> gate; ignored by other gates.</summary>
+    public string? Choice { get; init; }
+}
 
 /// <summary>
 /// FR-332, FR-333, FR-335: cancel, roll back, retry, submit an input and decide gates of engine-controlled runs. Every
@@ -235,8 +239,23 @@ public sealed class EngineRunControl(
             return Result.Failure<ApprovalGate>(refused);
         }
 
+        if (gate!.Type == EngineGates.VariantSelect)
+        {
+            // FR-349, §4.67: the decider's choice must be one of the variants the gate offers; it's recorded on the payload,
+            // where the driver reads it to promote that variant.
+            if (decision.Choice is not { } choice || !VariantRules.PayloadLabels(gate.Payload).Contains(choice, StringComparer.Ordinal))
+            {
+                return Result.Failure<ApprovalGate>(new DomainError(
+                    EngineErrorCodes.VariantChoiceInvalid,
+                    $"choice must be one of {string.Join(", ", VariantRules.PayloadLabels(gate.Payload))}.")
+                { Field = "choice" });
+            }
+
+            gate.Payload = VariantRules.WithChoice(gate.Payload, choice);
+        }
+
         var now = time.GetUtcNow();
-        Decide(gate!, GateStatus.Approved, decision, now);
+        Decide(gate, GateStatus.Approved, decision, now);
         if (definition!.Stages.FirstOrDefault(s => s.Gate?.Type == gate!.Type)?.Gate?.Approves is { } approves)
         {
             var draft = await db.Artifacts

@@ -129,6 +129,7 @@ export const errorMessages = {
   // §6 job and run failure codes (not HTTP errors), shown on stage executions and in the timeline.
   FANOUT_ISOLATION_BROKEN:
     "A fan-out branch was stopped because its input contained another branch's output. Check the stage's context providers.",
+  VARIANT_CHOICE_INVALID: "That isn't one of the stage's variants. Pick one of v1 to vn.",
   // Agent runs (shown on run details)
   MISSING_INPUT: "The agent was missing a required input.",
   INVALID_PLAN: "The agent produced an invalid plan.",
