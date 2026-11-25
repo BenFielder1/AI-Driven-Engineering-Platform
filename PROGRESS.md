@@ -31,9 +31,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-335 | Submit an input; `waiting_on_input` | 3.2 | backend + data | M66 | done | 63c8601, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45412232128) |
 | FR-336 | Schedule trigger (cron, timezone, skip when active) | 3.2, 4.71 | backend + data | M66 | done | c9b6a15 + 88a87d0, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300) |
 | FR-337 | Webhook trigger (signature, replay, rotation, deliveries) | 3.2, 4.72 | backend + data | M66 | done | c9b6a15 + 88a87d0, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300) |
-| FR-338 | `Tevrin.Pack.Coach` project + architecture tests + test project | 3.3 | backend | M67 | todo | — |
+| FR-338 | `Tevrin.Pack.Coach` project + architecture tests + test project | 3.3 | backend | M67 | done | 38d9c65, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45475257880) |
 | FR-339 | `impulse-coach` pipeline definition | 3.3 | backend | M67 | todo | — |
-| FR-340 | `velocity.load-rules` guard (R1–R5) | 3.3, 4.63 | backend | M67 | todo | — |
+| FR-340 | `velocity.load-rules` guard (R1–R5) | 3.3, 4.63 | backend | M67 | done | 38d9c65, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45475257880) |
 | FR-341 | Coach uses default agent policy; budget/audit hooks apply to every pipeline | 3.3 | backend | M67 | todo | — |
 | FR-342 | Impulse coaching pack docs guide | 3.3 | docs | M67 | todo | — |
 | FR-343 | Parallel stages (`fixture-parallel`) | 3.4, 4.64 | backend | M68 | todo | — |
@@ -77,7 +77,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] c. Schedules and webhooks (FR-336, FR-337) — c9b6a15 + test fix 88a87d0 ([CI 45452701300](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45452701300))
 - [ ] M67 Coach pack — FR-338–FR-342, FR-352
   - [x] a. Source-of-truth artifacts pinned per run, `fixture-cv` (FR-352) — 9372e8b ([CI 45467772497](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45467772497))
-  - [ ] b1. `Tevrin.Pack.Coach`: definition, schemas, prompts, `velocity.load-rules` guard, architecture tests, test project (FR-338–FR-340)
+  - [x] b1. `Tevrin.Pack.Coach`: definition, schemas, prompts, `coach.velocity-load-rules` guard, `triggers:` list, architecture tests, test project (FR-338–FR-340) — 38d9c65 ([CI 45475257880](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45475257880))
   - [ ] b2. Token budget and audit hooks for every pipeline, pack registration, Fake outputs, worked-example integration tests (FR-341, FR-339 acceptance)
   - [ ] c. Pipeline tab render check (Vitest) and the Impulse coaching pack guide (FR-339 acceptance, FR-342)
 - [ ] M68 Flow constructs — FR-343–FR-349
@@ -111,6 +111,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 
 ## Known issues
 - An SDLC rollback is refused (`ROLLBACK_BLOCKED`) while any agent run in the project is in progress, including an engine run's agent (M66): conservative, SDLC behaviour unchanged; revisit when engine and SDLC runs commonly share a project.
+- Non-SDLC agent runs (coach, fixtures) record `ARTIFACT_CREATED`/`GATE_CREATED` and token use (FR-341), but not `RUN_STARTED`/`RUN_COMPLETED` events: the engine hook interface has no slot for them. Their payloads carry ids and counts only, never content (M67).
 - Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.
 
 ## Manual checks (Ben)

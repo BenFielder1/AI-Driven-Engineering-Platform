@@ -29,7 +29,7 @@ public static class SdlcAgentExtensionRegistration
         services.AddScoped<ISdlcAgentRunData, SdlcAgentRunData>();
         services.AddScoped<SdlcPlanChecks>();
         services.AddScoped<SdlcAgentStageHooks>();
-        services.AddScoped<IAgentStageHooks>(sp => sp.GetRequiredService<SdlcAgentStageHooks>());
+        services.AddScoped<IAgentStageHooks, PipelineAgentStageHooks>(); // FR-341: every pipeline; SDLC runs go to SdlcAgentStageHooks
         services.AddScoped<SdlcAgentExtension>();
         services.AddScoped<AgentStageExtension>(sp => sp.GetRequiredService<SdlcAgentExtension>());
         services.AddSingleton<IPromptSource, SdlcPromptSource>();

@@ -170,6 +170,7 @@ builder.Services.AddSdlcJobHandlers();
 // Pipeline definitions (FR-275–FR-278, FR-290): the SDLC pack, its guards and providers. Loaded, validated and
 // health-checked only; lifecycle decisions still go through the SDLC state machine (M58).
 builder.Services.AddSdlcPipeline();
+builder.Services.AddCoachPipeline(); // FR-338–FR-341: the Impulse coaching pack
 
 // Artifacts: versions, approval, cascade, integrity, diff (FR-16–FR-21).
 builder.Services.AddScoped<ArtifactIntegrityGuard>();

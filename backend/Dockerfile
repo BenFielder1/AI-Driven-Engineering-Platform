@@ -20,6 +20,7 @@ COPY src/Tevrin.Engine.Domain/Tevrin.Engine.Domain.csproj src/Tevrin.Engine.Doma
 COPY src/Tevrin.Engine.Runtime/Tevrin.Engine.Runtime.csproj src/Tevrin.Engine.Runtime/
 COPY src/Tevrin.Engine.Api/Tevrin.Engine.Api.csproj src/Tevrin.Engine.Api/
 COPY src/Tevrin.Pack.Sdlc/Tevrin.Pack.Sdlc.csproj src/Tevrin.Pack.Sdlc/
+COPY src/Tevrin.Pack.Coach/Tevrin.Pack.Coach.csproj src/Tevrin.Pack.Coach/
 RUN dotnet tool restore
 RUN RID="linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')" \
  && dotnet restore src/Tevrin.Api/Tevrin.Api.csproj \

@@ -14,6 +14,7 @@
     <!-- FR-262: Tevrin.{Api,Domain,Infrastructure} is the SDLC implementation and host, on the engine and the SDLC pack. -->
     <ProjectReference Include="..\Tevrin.Engine.Api\Tevrin.Engine.Api.csproj" />
     <ProjectReference Include="..\Tevrin.Pack.Sdlc\Tevrin.Pack.Sdlc.csproj" />
+    <ProjectReference Include="..\Tevrin.Pack.Coach\Tevrin.Pack.Coach.csproj" />
   </ItemGroup>
 
   <ItemGroup>
