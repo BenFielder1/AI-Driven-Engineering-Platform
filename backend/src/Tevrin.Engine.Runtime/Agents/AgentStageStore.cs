@@ -20,7 +20,8 @@ public interface IAgentStageStore
 
     /// <summary>FR-351, §4.75: the newest not-deleted feedback entries for (pipeline, agent key, the run's project), at most
     /// <paramref name="max"/>, for <see cref="FeedbackInjectionRules.Select"/>.</summary>
-    Task<IReadOnlyList<FeedbackEntry>> FeedbackAsync(PipelineRun run, string pipelineId, string agentKey, int max, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FeedbackEntry>> FeedbackAsync(PipelineRun run, string pipelineId, string agentKey, int max, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<FeedbackEntry>>([]);
 
     /// <summary>The highest locked version of each of <paramref name="keys"/> in the run's subject (a key without one is
     /// left out). The caller checks integrity.</summary>
@@ -52,6 +53,10 @@ public interface IAgentStageStore
     /// <summary>FR-346: the newest version (no variant, not superseded) of each of <paramref name="keys"/> this run stored.</summary>
     Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Artifact>>([]);
+
+    /// <summary>FR-354: the run's outcome scores (FR-353) as <c>(metric, score)</c>, oldest observation first.</summary>
+    Task<IReadOnlyList<(string Metric, double Score)>> RunOutcomeScoresAsync(PipelineRun run, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<(string Metric, double Score)>>([]);
 
     void Add(AgentRun agentRun);
 
@@ -164,6 +169,18 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
             .Where(a => a.PipelineRunId == runId && a.Type == key && a.Variant != null && a.Status != ArtifactStatus.Superseded)
             .ToListAsync(cancellationToken);
         return [.. rows.GroupBy(a => a.Variant!, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!).OrderBy(a => a.CreatedAt).ThenBy(a => a.Variant, StringComparer.Ordinal)];
+    }
+
+    public async Task<IReadOnlyList<(string Metric, double Score)>> RunOutcomeScoresAsync(PipelineRun run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        var rows = await db.OutcomeScores.AsNoTracking()
+            .Where(s => s.PipelineRunId == runId)
+            .OrderBy(s => s.ObservedAt).ThenBy(s => s.Id)
+            .Select(s => new { s.Metric, s.Score })
+            .ToListAsync(cancellationToken);
+        return [.. rows.Select(r => (r.Metric, r.Score))];
     }
 
     public async Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
