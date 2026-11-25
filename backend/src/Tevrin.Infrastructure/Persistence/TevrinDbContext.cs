@@ -72,6 +72,10 @@ public sealed class TevrinDbContext(DbContextOptions<TevrinDbContext> options)
 
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
 
+    public DbSet<AgentFeedback> AgentFeedback => Set<AgentFeedback>();
+
+    public DbSet<OutcomeScore> OutcomeScores => Set<OutcomeScore>();
+
     public DbSet<ExecutionStep> ExecutionSteps => Set<ExecutionStep>();
 
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();

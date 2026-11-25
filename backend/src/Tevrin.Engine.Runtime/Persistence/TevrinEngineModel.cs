@@ -41,13 +41,15 @@ public static class TevrinEngineModel
         MapEnum<ApprovalLinkDecision>(configurationBuilder);
         MapEnum<GenericRunStatus>(configurationBuilder);
         MapEnum<ArtifactScope>(configurationBuilder);
+        MapEnum<AgentFeedbackSource>(configurationBuilder);
+        MapEnum<OutcomeScoreKind>(configurationBuilder);
         return configurationBuilder;
     }
 
     /// <summary>The engine's tables: <c>events</c>, <c>jobs</c>, <c>notifications</c>, <c>notification_deliveries</c>,
     /// <c>approval_links</c>, <c>artifacts</c>, <c>approval_gates</c>, <c>pipeline_definitions</c>, <c>pipeline_runs</c>,
-    /// <c>agent_runs</c>, <c>stage_executions</c>, <c>pipeline_schedules</c>, <c>pipeline_webhooks</c> and
-    /// <c>webhook_deliveries</c>.</summary>
+    /// <c>agent_runs</c>, <c>stage_executions</c>, <c>pipeline_schedules</c>, <c>pipeline_webhooks</c>,
+    /// <c>webhook_deliveries</c>, <c>agent_feedback</c> and <c>outcome_scores</c>.</summary>
     public static ModelBuilder ApplyTevrinEngineModel(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -256,6 +258,10 @@ public static class TevrinEngineModel
             b.Property(r => r.Input).HasColumnType("text");
             b.Property(r => r.InputTruncated).HasDefaultValue(false).IsRequired();
 
+            // FR-350, FR-351 (M69): additive and nullable; rows recorded before 0.8.0 have neither.
+            b.Property(r => r.ValidatorFindings).HasColumnType("jsonb");
+            b.PrimitiveCollection(r => r.FeedbackIds).HasColumnType("uuid[]");
+
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
 
             // §8: the run timeline reads by run in time order (FR-300).
@@ -403,6 +409,51 @@ public static class TevrinEngineModel
             XminRowVersion(b.Property(w => w.RowVersion));
 
             b.HasIndex(w => w.ProjectId);
+        });
+
+        builder.Entity<AgentFeedback>(b =>
+        {
+            b.ToTable("agent_feedback");
+            b.HasKey(f => f.Id);
+            b.Property(f => f.Id).ValueGeneratedNever();
+            b.Property(f => f.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(f => f.AgentKey).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(f => f.Text).HasMaxLength(AgentFeedback.TextMaxLength).IsRequired();
+
+            // FR-351: an entry outlives the run and agent run it came from.
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(f => f.RunId).OnDelete(DeleteBehavior.SetNull);
+            b.HasOne<AgentRun>().WithMany().HasForeignKey(f => f.AgentRunId).OnDelete(DeleteBehavior.SetNull);
+
+            // §5, §4.75: injection reads an agent key's entries newest first.
+            b.HasIndex(f => new { f.ProjectId, f.PipelineId, f.AgentKey, f.CreatedAt })
+                .IsDescending(false, false, false, true);
+            b.HasIndex(f => f.RunId);
+            b.HasIndex(f => f.AgentRunId);
+        });
+
+        builder.Entity<OutcomeScore>(b =>
+        {
+            b.ToTable("outcome_scores", t => t.HasCheckConstraint(
+                "ck_outcome_scores_one_target",
+                "(agent_run_id IS NULL) <> (artifact_id IS NULL)"));
+            b.HasKey(o => o.Id);
+            b.Property(o => o.Id).ValueGeneratedNever();
+            b.Property(o => o.Metric).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(o => o.Source).HasMaxLength(200).IsRequired();
+
+            // FR-353: scores go with their run; a target is never deleted on its own (it goes with the run's project).
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(o => o.PipelineRunId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<AgentRun>().WithMany().HasForeignKey(o => o.AgentRunId).OnDelete(DeleteBehavior.NoAction);
+            b.HasOne<Artifact>().WithMany().HasForeignKey(o => o.ArtifactId).OnDelete(DeleteBehavior.NoAction);
+
+            // FR-353: listed per run and target.
+            b.HasIndex(o => new { o.PipelineRunId, o.ObservedAt });
+            b.HasIndex(o => o.PipelineRunId);
+            b.HasIndex(o => o.ArtifactId);
+
+            // FR-353, FR-298: the prompt comparison's mean per metric joins agent_runs (agent key, prompt version) on
+            // agent_run_id and groups by metric.
+            b.HasIndex(o => new { o.AgentRunId, o.Metric });
         });
 
         builder.Entity<WebhookDelivery>(b =>

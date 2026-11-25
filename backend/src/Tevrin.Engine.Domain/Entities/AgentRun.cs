@@ -77,6 +77,14 @@ public sealed class AgentRun
     /// <summary>FR-297: <see cref="Input"/> was cut at the cap.</summary>
     public bool InputTruncated { get; set; }
 
+    /// <summary>FR-350: the validator findings on this attempt's output (JSON array of
+    /// <c>{ path?, claim?, reason, severity }</c>); <c>null</c> when the stage has no validator.</summary>
+    public string? ValidatorFindings { get; set; }
+
+    /// <summary>FR-351: the agent feedback entries injected into this run's prompt (<c>agent_feedback</c> ids, newest
+    /// first); <c>null</c> when the stage doesn't inject feedback.</summary>
+    public IReadOnlyList<Guid>? FeedbackIds { get; set; }
+
     /// <summary>FR-297: milliseconds from the call to the first streamed token of the last attempt; null when the provider
     /// didn't stream (or before 0.7.0).</summary>
     public long? LatencyMs { get; set; }

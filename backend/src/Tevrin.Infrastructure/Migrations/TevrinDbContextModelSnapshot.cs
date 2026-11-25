@@ -2640,6 +2640,79 @@ namespace Tevrin.Infrastructure.Migrations
                     b.ToTable("user_notification_preferences", (string)null);
                 });
 
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.AgentFeedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AgentKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("agent_key");
+
+                    b.Property<Guid?>("AgentRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_run_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("PipelineId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("pipeline_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id")
+                        .HasName("pk_agent_feedback");
+
+                    b.HasIndex("AgentRunId")
+                        .HasDatabaseName("ix_agent_feedback_agent_run_id");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_agent_feedback_created_by");
+
+                    b.HasIndex("RunId")
+                        .HasDatabaseName("ix_agent_feedback_run_id");
+
+                    b.HasIndex("ProjectId", "PipelineId", "AgentKey", "CreatedAt")
+                        .IsDescending(false, false, false, true)
+                        .HasDatabaseName("ix_agent_feedback_project_id_pipeline_id_agent_key_created_at");
+
+                    b.ToTable("agent_feedback", (string)null);
+                });
+
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.AgentRun", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2689,6 +2762,10 @@ namespace Tevrin.Infrastructure.Migrations
                     b.Property<string>("Error")
                         .HasColumnType("text")
                         .HasColumnName("error");
+
+                    b.PrimitiveCollection<Guid[]>("FeedbackIds")
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("feedback_ids");
 
                     b.Property<string>("Input")
                         .HasColumnType("text")
@@ -2791,6 +2868,10 @@ namespace Tevrin.Infrastructure.Migrations
                     b.Property<string>("UserFeedback")
                         .HasColumnType("text")
                         .HasColumnName("user_feedback");
+
+                    b.Property<string>("ValidatorFindings")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("validator_findings");
 
                     b.HasKey("Id")
                         .HasName("pk_agent_runs");
@@ -3387,6 +3468,90 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasDatabaseName("ix_notification_deliveries_status_next_attempt_at");
 
                     b.ToTable("notification_deliveries", (string)null);
+                });
+
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.OutcomeScore", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_run_id");
+
+                    b.Property<Guid?>("ArtifactId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("artifact_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("metric");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.Property<Guid>("PipelineRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pipeline_run_id");
+
+                    b.Property<double?>("Prediction")
+                        .HasColumnType("double precision")
+                        .HasColumnName("prediction");
+
+                    b.Property<double>("Score")
+                        .HasColumnType("double precision")
+                        .HasColumnName("score");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("source");
+
+                    b.Property<double>("Value")
+                        .HasColumnType("double precision")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_outcome_scores");
+
+                    b.HasIndex("ArtifactId")
+                        .HasDatabaseName("ix_outcome_scores_artifact_id");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_outcome_scores_created_by");
+
+                    b.HasIndex("PipelineRunId")
+                        .HasDatabaseName("ix_outcome_scores_pipeline_run_id");
+
+                    b.HasIndex("AgentRunId", "Metric")
+                        .HasDatabaseName("ix_outcome_scores_agent_run_id_metric");
+
+                    b.HasIndex("PipelineRunId", "ObservedAt")
+                        .HasDatabaseName("ix_outcome_scores_pipeline_run_id_observed_at");
+
+                    b.ToTable("outcome_scores", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_outcome_scores_one_target", "(agent_run_id IS NULL) <> (artifact_id IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.PipelineDefinitionRecord", b =>
@@ -4473,6 +4638,34 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasConstraintName("fk_user_notification_preferences_users_user_id");
                 });
 
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.AgentFeedback", b =>
+                {
+                    b.HasOne("Tevrin.Engine.Domain.Entities.AgentRun", null)
+                        .WithMany()
+                        .HasForeignKey("AgentRunId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_agent_feedback_agent_runs_agent_run_id");
+
+                    b.HasOne("Tevrin.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_agent_feedback_users_created_by");
+
+                    b.HasOne("Tevrin.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_agent_feedback_projects_project_id");
+
+                    b.HasOne("Tevrin.Engine.Domain.Entities.PipelineRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_agent_feedback_pipeline_runs_run_id");
+                });
+
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.AgentRun", b =>
                 {
                     b.HasOne("Tevrin.Domain.Entities.LlmCredential", null)
@@ -4632,6 +4825,34 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("fk_notification_deliveries_projects_project_id");
+                });
+
+            modelBuilder.Entity("Tevrin.Engine.Domain.Entities.OutcomeScore", b =>
+                {
+                    b.HasOne("Tevrin.Engine.Domain.Entities.AgentRun", null)
+                        .WithMany()
+                        .HasForeignKey("AgentRunId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_outcome_scores_agent_runs_agent_run_id");
+
+                    b.HasOne("Tevrin.Engine.Domain.Entities.Artifact", null)
+                        .WithMany()
+                        .HasForeignKey("ArtifactId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("fk_outcome_scores_artifacts_artifact_id");
+
+                    b.HasOne("Tevrin.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_outcome_scores_users_created_by");
+
+                    b.HasOne("Tevrin.Engine.Domain.Entities.PipelineRun", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_outcome_scores_pipeline_runs_pipeline_run_id");
                 });
 
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.PipelineRun", b =>

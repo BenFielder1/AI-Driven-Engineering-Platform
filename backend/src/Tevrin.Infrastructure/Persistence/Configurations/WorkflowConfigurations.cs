@@ -68,6 +68,25 @@ internal sealed class PipelineWebhookConfiguration : IEntityTypeConfiguration<Pi
     }
 }
 
+/// <summary>FR-351: <c>agent_feedback</c> is configured by the engine (<see cref="TevrinEngineModel"/>); an entry goes with
+/// its project, and keeps its text after its author is deleted.</summary>
+internal sealed class AgentFeedbackConfiguration : IEntityTypeConfiguration<AgentFeedback>
+{
+    public void Configure(EntityTypeBuilder<AgentFeedback> builder)
+    {
+        builder.HasOne<Project>().WithMany().HasForeignKey(f => f.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(f => f.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+/// <summary>FR-353: <c>outcome_scores</c> is configured by the engine (<see cref="TevrinEngineModel"/>); a score keeps its
+/// value after the user who posted it is deleted.</summary>
+internal sealed class OutcomeScoreConfiguration : IEntityTypeConfiguration<OutcomeScore>
+{
+    public void Configure(EntityTypeBuilder<OutcomeScore> builder) =>
+        builder.HasOne<AppUser>().WithMany().HasForeignKey(o => o.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+}
+
 internal sealed class ExecutionStepConfiguration : IEntityTypeConfiguration<ExecutionStep>
 {
     public void Configure(EntityTypeBuilder<ExecutionStep> builder)
