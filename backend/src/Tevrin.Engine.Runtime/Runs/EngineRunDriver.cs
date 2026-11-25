@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
@@ -19,6 +20,11 @@ namespace Tevrin.Engine.Runtime.Runs;
 /// <summary>FR-332: the payload of a <c>stage.run</c> job: the run and the stage execution (entry) it drives.</summary>
 public sealed record StageRunPayload(Guid RunId, Guid StageExecutionId)
 {
+    /// <summary>FR-333, FR-343: queued by a retry. A parallel group's job then also resumes branches whose last job failed
+    /// or was dead-lettered; otherwise (an input, a gate or an escalation decision) only the others. Omitted when false.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Retry { get; init; }
+
     /// <summary>Reads a stored payload (camelCase JSON); <c>null</c> when it isn't one.</summary>
     public static StageRunPayload? Parse(string json)
     {
@@ -92,10 +98,62 @@ public sealed partial class EngineRunDriver(
         }
 
         var definition = resolved.Definition;
-        var stage = definition.FindStage(run.CurrentStage)
+        var current = definition.FindStage(run.CurrentStage)
             ?? throw new JobFailedException($"Stage '{run.CurrentStage}' is not in the run's definition.", transient: false, EngineErrorCodes.DefinitionUnavailable);
 
-        var facts = await EntryFactsAsync(run, stage, execution!, definition, cancellationToken);
+        // FR-343: inside a parallel group the run's current stage is the group; each branch stage has its own execution
+        // (Branch set) and its own stage.run job. The group's own execution enters (or resumes) the branches.
+        var group = current.Parallel;
+        if (execution!.Branch is not null && (group is null || !RunDriverRules.InGroup(group, execution)))
+        {
+            LogStale(logger, run.Id, payload.StageExecutionId, "the branch is not in the run's current group");
+            return;
+        }
+
+        if (group is not null && execution.Branch is null)
+        {
+            await DriveGroupAsync(job, run, execution, group, definition, payload.Retry, cancellationToken);
+            return;
+        }
+
+        var stage = execution.Branch is null ? current : definition.FindAnyStage(execution.StageId)!;
+        string? output;
+        try
+        {
+            (var done, output) = await RunStageAsync(job, run, stage, execution, definition, cancellationToken);
+            if (!done)
+            {
+                return;
+            }
+        }
+        catch (JobFailedException ex) when (execution.Branch is not null && !ex.Transient && RunDriverRules.BranchFailureEndsBranch(group!))
+        {
+            // Known limit: only a permanent failure ends the branch here. A transient one that uses up its retries is
+            // dead-lettered by the worker, outside the driver, so under continue that branch stays open until a manual
+            // retry (FR-333), and the join waits for it.
+            // FR-343, §4.64 on_branch_failure: continue: the branch ends failed (marked) and the join is checked; the job
+            // still records the failure.
+            await BranchFailedAsync(run, execution, group!, definition, cancellationToken);
+            throw;
+        }
+
+        if (execution.Branch is not null)
+        {
+            await BranchStageDoneAsync(job, run, execution, group!, definition, cancellationToken);
+            return;
+        }
+
+        await TransitionAsync(job, run, stage, execution, definition, output, cancellationToken);
+    }
+
+    /// <summary>
+    /// §4.62 steps 2–4 for <paramref name="stage"/>: false when the job stops here (waiting on input, a gate, an
+    /// escalation or a handler, or a manual stop); true, with an agent stage's output text, when the stage's work is done.
+    /// </summary>
+    private async Task<(bool Done, string? Output)> RunStageAsync(
+        JobExecution job, PipelineRun run, StageDefinition stage, StageExecution execution, PipelineDefinition definition, CancellationToken cancellationToken)
+    {
+        var facts = await EntryFactsAsync(run, stage, execution, definition, cancellationToken);
         var step = RunDriverRules.Plan(stage, facts);
         LogStep(logger, run.Id, stage.Id, step.GetType().Name);
         string? output = null;
@@ -108,7 +166,7 @@ public sealed partial class EngineRunDriver(
                     await db.SaveChangesAsync(cancellationToken);
                 }
 
-                return;
+                return (false, null);
 
             case DriverStep.FailStage fail:
                 throw new JobFailedException(
@@ -128,11 +186,11 @@ public sealed partial class EngineRunDriver(
                     CreatedAt = time.GetUtcNow(),
                 });
                 await db.SaveChangesAsync(cancellationToken);
-                return;
+                return (false, null);
 
             case DriverStep.WaitOnGate:
             case DriverStep.StopManual:
-                return;
+                return (false, null);
 
             case DriverStep.RunAgent:
                 var result = await agents.RunAsync(
@@ -146,7 +204,7 @@ public sealed partial class EngineRunDriver(
                 if (result.End != AgentStageEnd.Stored)
                 {
                     // Escalated: the escalation gate is pending; its decision re-queues the driver.
-                    return;
+                    return (false, null);
                 }
 
                 output = OutputText(result.Last);
@@ -163,7 +221,7 @@ public sealed partial class EngineRunDriver(
                 handled.ThrowIfFailed(handler.Handler);
                 if (handled.Outcome == StageHandlerOutcome.Waiting)
                 {
-                    return;
+                    return (false, null);
                 }
 
                 break;
@@ -175,13 +233,26 @@ public sealed partial class EngineRunDriver(
                 throw new JobFailedException($"Stage {stage.Id} has a kind the run driver can't run yet.", transient: false, EngineErrorCodes.DefinitionUnavailable);
         }
 
+        return (true, output);
+    }
+
+    /// <summary>§4.62 steps 5–6 for a top-level stage whose work is done: the veto, then a route, else the next stage.</summary>
+    private async Task TransitionAsync(
+        JobExecution job,
+        PipelineRun run,
+        StageDefinition stage,
+        StageExecution execution,
+        PipelineDefinition definition,
+        string? output,
+        CancellationToken cancellationToken)
+    {
         // §4.62 step 5: the veto, then the transition (a route, else next).
         if (stage.Veto.Count > 0)
         {
             var findings = await VetoFindingsAsync(job, run, stage, cancellationToken);
             if (findings.Count > 0)
             {
-                await VetoAsync(run, execution!, definition, findings, cancellationToken);
+                await VetoAsync(run, execution, definition, findings, cancellationToken);
                 return;
             }
         }
@@ -572,10 +643,10 @@ public static class EngineRunMoves
     }
 
     /// <summary>Queues <c>stage.run</c> for <paramref name="stageExecutionId"/> of <paramref name="run"/> (in the caller's save).</summary>
-    public static Job QueueDriver(JobEnqueuer jobs, PipelineRun run, Guid stageExecutionId, DateTimeOffset now)
+    public static Job QueueDriver(JobEnqueuer jobs, PipelineRun run, Guid stageExecutionId, DateTimeOffset now, bool retry = false)
     {
         ArgumentNullException.ThrowIfNull(jobs);
         ArgumentNullException.ThrowIfNull(run);
-        return jobs.Enqueue(EngineJobTypes.StageRun, new StageRunPayload(run.Id, stageExecutionId), run.ProjectId, now);
+        return jobs.Enqueue(EngineJobTypes.StageRun, new StageRunPayload(run.Id, stageExecutionId) { Retry = retry }, run.ProjectId, now);
     }
 }

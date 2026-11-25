@@ -90,7 +90,7 @@ public sealed partial class AgentStageRunner(
         }
 
         var definition = loaded.Definition;
-        var defined = definition.FindStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
+        var defined = definition.FindAnyStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
 
         // D-0.7.0-42: the agent the request names (default: the primary), as a view of the stage with its binding.
         var stage = defined.ForAgent(request.AgentKey) ?? throw Permanent(request.AgentKey is null

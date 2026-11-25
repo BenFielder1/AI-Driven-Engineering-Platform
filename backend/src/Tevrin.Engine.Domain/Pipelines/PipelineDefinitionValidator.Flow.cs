@@ -103,7 +103,8 @@ public static partial class PipelineDefinitionValidator
         }
 
         /// <summary>FR-343: at least two non-empty branches of ordinary stages, ids unique across the pipeline, and no branch
-        /// stage reading another branch's output (<see cref="DefinitionErrorCodes.BranchInput"/>).</summary>
+        /// stage reading another branch's output, and no two branches producing one artifact (both
+        /// <see cref="DefinitionErrorCodes.BranchInput"/>).</summary>
         private void ValidateParallel(StageDefinition group, string path, HashSet<string> seen)
         {
             if (group.Parallel is not { } parallel)
@@ -124,11 +125,18 @@ public static partial class PipelineDefinitionValidator
                     Add(DefinitionErrorCodes.Parse, $"{path}.parallel.branches[{b}]", "A branch needs at least one stage.");
                 }
 
-                foreach (var stage in parallel.Branches[b])
+                for (var k = 0; k < parallel.Branches[b].Count; k++)
                 {
-                    foreach (var output in Outputs(stage))
+                    foreach (var output in Outputs(parallel.Branches[b][k]))
                     {
-                        producedBy.TryAdd(output, b);
+                        // Two branches writing one artifact would race on its versions: refused like a cross-branch read.
+                        if (!producedBy.TryAdd(output, b) && producedBy[output] != b)
+                        {
+                            Add(
+                                DefinitionErrorCodes.BranchInput,
+                                BranchStagePath(path, b, k),
+                                $"Artifact '{output}' is already produced by branch {producedBy[output]}; parallel branches can't share an output.");
+                        }
                     }
                 }
             }
@@ -199,7 +207,7 @@ public static partial class PipelineDefinitionValidator
             {
                 (stage.Parallel is not null, "parallel"), (stage.OnSuccess is not null, "on_success"), (stage.OnReject is not null, "on_reject"),
                 (stage.Loop is not null, "loop"), (stage.Routes.Count > 0, "routes"), (stage.OnVeto?.To is not null, "on_veto.to"),
-                (stage.Aggregate is not null, "aggregate"), (stage.Gate is not null, "gate"),
+                (stage.Aggregate is not null, "aggregate"), (stage.Gate is not null, "gate"), (stage.Veto.Count > 0, "veto"),
             };
             foreach (var (_, key) in notAllowed.Where(n => n.Item1))
             {

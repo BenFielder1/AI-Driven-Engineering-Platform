@@ -94,6 +94,10 @@ public sealed record PipelineDefinition
         return index < 0 ? null : Stages[index];
     }
 
+    /// <summary>FR-343: stage <paramref name="stageId"/> at the top level or in a parallel group's branch, or <c>null</c>.</summary>
+    public StageDefinition? FindAnyStage(string? stageId) =>
+        FindStage(stageId) ?? AllStages.FirstOrDefault(s => string.Equals(s.Id, stageId, StringComparison.Ordinal));
+
     /// <summary>Artifact <paramref name="key"/>, or <c>null</c>.</summary>
     public ArtifactDefinition? FindArtifact(string? key) =>
         Artifacts.FirstOrDefault(a => string.Equals(a.Key, key, StringComparison.Ordinal));

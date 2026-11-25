@@ -80,7 +80,7 @@ public sealed class EngineRunControl(
         }
 
         var targetStage = await db.StageExecutions.AsNoTracking()
-            .Where(e => e.PipelineRunId == run.Id && e.Checkpoint == targetCheckpoint)
+            .Where(e => e.PipelineRunId == run.Id && e.Checkpoint == targetCheckpoint && e.Branch == null)
             .OrderByDescending(e => e.EnteredAt).ThenByDescending(e => e.Id)
             .Select(e => e.StageId)
             .FirstOrDefaultAsync(cancellationToken);
@@ -146,7 +146,7 @@ public sealed class EngineRunControl(
             return Result.Failure<PipelineRun>(new DomainError(EngineErrorCodes.Conflict, "The run has no stage to retry."));
         }
 
-        EngineRunMoves.QueueDriver(jobs, run, execution.Id, time.GetUtcNow());
+        EngineRunMoves.QueueDriver(jobs, run, execution.Id, time.GetUtcNow(), retry: true);
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success(run);
     }
@@ -193,10 +193,20 @@ public sealed class EngineRunControl(
             run.Status = resumed;
         }
 
-        if (await OpenExecutionAsync(run, cancellationToken) is { } execution
-            && (await DriverJobsAsync(run, [JobStatus.Queued, JobStatus.Running], cancellationToken)).Count == 0)
+        // FR-343: in a parallel group a sibling branch's job is usually running; the group's own job is queued anyway (it
+        // skips busy branches and resumes the one waiting on this input).
+        if (await OpenExecutionAsync(run, cancellationToken) is { } execution)
         {
-            EngineRunMoves.QueueDriver(jobs, run, execution.Id, now);
+            var active = (await DriverJobsAsync(run, [JobStatus.Queued, JobStatus.Running], cancellationToken))
+                .Select(j => StageRunPayload.Parse(j.Payload))
+                .ToList();
+            if (RunDriverRules.ResumeOnInput(
+                inGroup: definition.FindStage(run.CurrentStage)?.Parallel is not null,
+                anyActive: active.Count > 0,
+                groupJobQueued: active.Any(a => a?.StageExecutionId == execution.Id)))
+            {
+                EngineRunMoves.QueueDriver(jobs, run, execution.Id, now);
+            }
         }
 
         try
@@ -352,9 +362,11 @@ public sealed class EngineRunControl(
             : (null, new DomainError(EngineErrorCodes.DefinitionUnavailable, "This run uses a pipeline definition this version of Tevrin can't run."));
     }
 
+    /// <summary>The run's open execution of its current stage; inside a parallel group (FR-343), the group's own execution
+    /// (not a branch's), whose job resumes every open branch.</summary>
     private Task<StageExecution?> OpenExecutionAsync(PipelineRun run, CancellationToken cancellationToken) =>
         db.StageExecutions
-            .Where(e => e.PipelineRunId == run.Id && e.ExitedAt == null)
+            .Where(e => e.PipelineRunId == run.Id && e.ExitedAt == null && e.Branch == null)
             .OrderByDescending(e => e.EnteredAt).ThenByDescending(e => e.Id)
             .FirstOrDefaultAsync(cancellationToken);
 

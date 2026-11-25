@@ -37,11 +37,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-341 | Coach uses default agent policy; budget/audit hooks apply to every pipeline | 3.3 | backend | M67 | done | e13bbc7 + 2968049, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959) |
 | FR-342 | Impulse coaching pack docs guide | 3.3 | docs | M67 | done | 07f4ade, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959) |
 | FR-343 | Parallel stages (`fixture-parallel`) | 3.4, 4.64 | backend | M68 | todo | — |
-| FR-344 | Veto (`fixture-veto`) | 3.4 | backend | M68 | todo | — |
+| FR-344 | Veto (`fixture-veto`) | 3.4 | backend | M68 | done | ccf1b19, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135) |
 | FR-345 | Fan-out with isolated context (`fixture-forecast`) | 3.4, 4.65 | backend | M68 | todo | — |
 | FR-346 | Aggregation stage | 3.4 | backend | M68 | todo | — |
-| FR-347 | Route back to an earlier stage (`fixture-editorial`) | 3.4 | backend | M68 | todo | — |
-| FR-348 | Revision cap across the run | 3.4, 4.66 | backend | M68 | todo | — |
+| FR-347 | Route back to an earlier stage (`fixture-editorial`) | 3.4 | backend | M68 | done | ccf1b19, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135) |
+| FR-348 | Revision cap across the run | 3.4, 4.66 | backend | M68 | done | ccf1b19, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135) |
 | FR-349 | Multiple output variants | 3.4, 4.67 | backend | M68 | todo | — |
 | FR-350 | Validator agent (`fixture-factcheck`) | 3.5 | backend | M69 | todo | — |
 | FR-351 | Agent feedback store (`fixture-postmortem`) | 3.5, 4.75 | backend + data | M69 | todo | — |
@@ -81,9 +81,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] b2. Token budget and audit hooks for every pipeline, pack registration, Fake outputs, worked-example integration tests (FR-341, FR-339 acceptance) — e13bbc7 + fix 2968049 ([CI 45578882959](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959))
   - [x] c. Pipeline tab render check (Vitest) and the Impulse coaching pack guide (FR-339 acceptance, FR-342) — 07f4ade ([CI 45578882959](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45578882959))
 - [ ] M68 Flow constructs — FR-343–FR-349
-  - [ ] a. Definition syntax, validator and hash for parallel, veto, fan-out, aggregate, routes, limits and variants; fixtures (FR-343–FR-349)
-  - [ ] b. Data: `pipeline_runs.revisions`/`outcome`, branch, variant and veto columns, `variant_select` gates with payload
-  - [ ] c. Driver: parallel, veto, routes, revision cap; `AllStages` in the resolver, cascade, handlers, run views and DTO mapper; duplicate cross-branch producers (FR-343, FR-344, FR-347, FR-348)
+  - [x] a. Definition syntax, validator and hash for parallel, veto, fan-out, aggregate, routes, limits and variants; fixtures (FR-343–FR-349) — 46e1adf ([CI 45608493696](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45608493696))
+  - [x] b. Data: `pipeline_runs.revisions`/`outcome`, branch, variant and veto columns, `variant_select` gates with payload — 81944dc ([CI 45616618135](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135))
+  - [ ] c. Driver: parallel (c2), veto, routes, revision cap (c1 ccf1b19, [CI 45616618135](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135)); `AllStages` in the resolver, cascade, handlers, run views and DTO mapper; duplicate cross-branch producers (FR-343, FR-344, FR-347, FR-348)
   - [ ] d. Driver: fan-out with isolation, aggregate with disagreement, variants with gate or agent selection (FR-345, FR-346, FR-349)
 - [ ] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
 - [ ] M70 Scale and conversation — FR-355–FR-357
@@ -117,6 +117,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 ## Known issues
 - An SDLC rollback is refused (`ROLLBACK_BLOCKED`) while any agent run in the project is in progress, including an engine run's agent (M66): conservative, SDLC behaviour unchanged; revisit when engine and SDLC runs commonly share a project.
 - Non-SDLC agent runs (coach, fixtures) record `ARTIFACT_CREATED`/`GATE_CREATED` and token use (FR-341), but not `RUN_STARTED`/`RUN_COMPLETED` events: the engine hook interface has no slot for them. Their payloads carry ids and counts only, never content (M67).
+- Parallel groups with `on_branch_failure: continue`: a branch whose job is dead-lettered after its transient retries waits for a manual retry instead of being marked failed (M68).
 - Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.
 
 ## Manual checks (Ben)

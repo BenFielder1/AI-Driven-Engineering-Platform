@@ -42,6 +42,36 @@ public static class StageExecutionWriter
         return execution;
     }
 
+    /// <summary>
+    /// FR-343: opens an execution of branch stage <paramref name="stageId"/> in branch <paramref name="branch"/> of the
+    /// run's current parallel group. Other open executions (the group's and sibling branches') stay open.
+    /// </summary>
+    public static async Task<StageExecution> EnterBranchAsync(
+        IEngineDbContext db,
+        Guid pipelineRunId,
+        string stageId,
+        string branch,
+        int checkpoint,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentException.ThrowIfNullOrEmpty(stageId);
+        ArgumentException.ThrowIfNullOrEmpty(branch);
+        var rows = await RowsAsync(db, pipelineRunId, cancellationToken);
+        var execution = new StageExecution
+        {
+            PipelineRunId = pipelineRunId,
+            StageId = stageId,
+            Branch = branch,
+            Iteration = rows.Count(r => string.Equals(r.StageId, stageId, StringComparison.Ordinal)) + 1,
+            Checkpoint = checkpoint,
+            EnteredAt = at,
+        };
+        db.StageExecutions.Add(execution);
+        return execution;
+    }
+
     /// <summary>Closes run <paramref name="pipelineRunId"/>'s open execution, if any, with the run's final
     /// <paramref name="status"/> as its outcome.</summary>
     public static async Task EndAsync(

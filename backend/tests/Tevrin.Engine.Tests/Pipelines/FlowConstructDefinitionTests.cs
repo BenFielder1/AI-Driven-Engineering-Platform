@@ -130,6 +130,12 @@ public class FlowConstructDefinitionTests
             FlowErrors(FlowFixturePack.Parallel, "            inputs: [ticker]\n            output: bear_case", "            inputs: [ticker, bull_case]\n            output: bear_case"));
 
     [Fact]
+    public void FR343_DEF_BRANCH_INPUT_two_branches_produce_the_same_artifact() =>
+        Assert.Contains(
+            (DefinitionErrorCodes.BranchInput, "stages[0].parallel.branches[1][0]"),
+            FlowErrors(FlowFixturePack.Parallel, "            inputs: [ticker]\n            output: bear_case", "            inputs: [ticker]\n            output: bull_case"));
+
+    [Fact]
     public void FR343_a_branch_stage_may_read_an_earlier_stage_of_its_own_branch() =>
         Assert.Contains("inputs: [ticker, bull_case]", FlowFixturePack.Yaml(FlowFixturePack.Parallel), StringComparison.Ordinal);
 
@@ -230,6 +236,14 @@ public class FlowConstructDefinitionTests
     public void FR344_DEF_PARSE_a_veto_entry_is_a_guard_or_an_agent() =>
         Assert.Contains((DefinitionErrorCodes.Parse, "stages[1].veto[0]"),
             FlowErrors(FlowFixturePack.Veto, "{ guard: flow.position-limit }", "{ guard: flow.position-limit, agent: risk-manager }"));
+
+    [Fact]
+    public void FR343_FR344_DEF_PARSE_a_branch_stage_may_not_declare_a_veto() =>
+        Assert.Contains((DefinitionErrorCodes.Parse, "stages[0].parallel.branches[1][0].veto"),
+            FlowErrors(
+                FlowFixturePack.Parallel,
+                "            output: bear_case\n",
+                "            output: bear_case\n            veto:\n              - { guard: flow.position-limit }\n            on_veto: { end: vetoed }\n"));
 
     [Fact]
     public void FR344_DEF_PARSE_a_veto_needs_on_veto() =>

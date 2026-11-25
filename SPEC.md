@@ -320,7 +320,7 @@ After `max_attempts: 3`, the result is `then: escalate`: one `escalation` gate. 
 
 ### 4.64 Parallel join
 
-The group is complete when every branch's last stage is complete (`join: all`). A failed branch, with the default `on_branch_failure: fail`, fails the group: the other branches' running jobs finish, but no further stages start. With `continue`, the join completes with the failed branches marked, and downstream stages see only the successful outputs.
+The group is complete when every branch's last stage is complete (`join: all`). A failed branch, with the default `on_branch_failure: fail`, fails the group: the other branches' running jobs finish, but no further stages start. With `continue`, the join completes with the failed branches marked, and downstream stages see only the successful outputs. Branch stages may not declare `veto`. A branch failure recorded in the same instant as a sibling's stage completion may let that sibling start its next stage. An input submitted while the run is inside a group resumes the waiting branch.
 
 Example: branch A finishes at t+3 and branch B at t+7, so the join is at t+7. If A fails at t+2, the group fails at t+2, B's current stage finishes, and B's next stage doesn't start.
 

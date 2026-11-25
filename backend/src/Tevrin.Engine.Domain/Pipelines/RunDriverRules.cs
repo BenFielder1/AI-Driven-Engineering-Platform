@@ -165,6 +165,7 @@ public static partial class RunDriverRules
     /// <summary>
     /// §4.62 step 1: whether a <c>stage.run</c> delivery for <paramref name="stageExecution"/> has nothing to do: the run is
     /// final, the stage execution is unknown, already finished, or no longer the run's current stage (idempotent on redelivery).
+    /// A branch execution (FR-343) is checked against the run's current group by <see cref="InGroup"/> once the definition is known.
     /// </summary>
     public static bool IsStale(PipelineRun run, StageExecution? stageExecution)
     {
@@ -173,7 +174,7 @@ public static partial class RunDriverRules
             || stageExecution is null
             || stageExecution.PipelineRunId != run.Id
             || stageExecution.ExitedAt is not null
-            || !string.Equals(stageExecution.StageId, run.CurrentStage, StringComparison.Ordinal);
+            || (stageExecution.Branch is null && !string.Equals(stageExecution.StageId, run.CurrentStage, StringComparison.Ordinal));
     }
 
     /// <summary>
