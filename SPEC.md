@@ -337,7 +337,7 @@ The runner fails a branch whose rendered input contains a sibling branch's outpu
 
 Every backward transition adds 1 to `run.revisions`: a loop, `on_reject`, a route to an earlier stage, or a veto `to:`. A transition that would make `revisions > limits.revisions` is refused, and `then` applies.
 
-Example: `revisions: 2`. Route to `research` (1), then route to `write` (2), then another route would make 3 → refused, `then: escalate`. Per-loop `max_iterations` still applies on its own.
+Example: `revisions: 2`. Route to `research` (1), then route to `write` (2), then another route would make 3 → refused, `then: escalate`. Per-loop `max_iterations` still applies on its own. Approving the escalation re-runs the stage; a further backward transition is refused again, so every revision past the cap needs a decision. A route is read from the output's top-level `route` field; an invalid or missing route fails the stage with `VALIDATION`. A veto agent answers `{"findings":[…]}` or `{"approve":true}`.
 
 ### 4.67 Variants
 

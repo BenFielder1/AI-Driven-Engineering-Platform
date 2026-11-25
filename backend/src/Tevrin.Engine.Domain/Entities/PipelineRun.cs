@@ -152,6 +152,10 @@ public static class PipelineTransitionKinds
     public const string Fallback = "fallback";
     public const string StatusChange = "status_change";
     public const string Noop = "noop";
+
+    /// <summary>FR-347, FR-344 (0.8.0): an engine run going back to an earlier stage by a <c>route</c> or a veto
+    /// <c>to:</c> (stored on stage executions only; engine runs write no <c>state_transitions</c>).</summary>
+    public const string Route = "route";
 }
 
 /// <summary>FR-352: the project-scope artifact version a run pinned (<c>pipeline_runs.pinned_artifacts</c> values).</summary>

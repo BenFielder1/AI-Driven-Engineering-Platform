@@ -275,7 +275,9 @@ public sealed class EngineRunControl(
         switch (outcome)
         {
             case GateRejection.Reenter reenter:
-                await EngineRunMoves.EnterAsync(db, jobs, run, reenter.State, PipelineTransitionKinds.Loop, now, cancellationToken);
+                // FR-348: on_reject is a backward transition, counted against limits.revisions.
+                var move = RunDriverRules.Revise(definition, reenter.State, run.Revisions);
+                await EngineRunMoves.BackAsync(db, jobs, run, definition, move, PipelineTransitionKinds.Loop, now, cancellationToken);
                 break;
 
             case GateRejection.FailRun:
@@ -357,31 +359,10 @@ public sealed class EngineRunControl(
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>Cancels the run's pending gates and its queued <c>stage.run</c> jobs.</summary>
-    private async Task CancelPendingAsync(PipelineRun run, DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        foreach (var gate in await db.ApprovalGates.Where(g => g.PipelineRunId == run.Id && g.Status == GateStatus.Pending).ToListAsync(cancellationToken))
-        {
-            gate.Status = GateStatus.Cancelled;
-            gate.DecidedAt = now;
-        }
-
-        foreach (var job in await DriverJobsAsync(run, [JobStatus.Queued], cancellationToken))
-        {
-            job.Status = JobStatus.Cancelled;
-            job.CompletedAt = now;
-        }
-    }
+    private Task CancelPendingAsync(PipelineRun run, DateTimeOffset now, CancellationToken cancellationToken) =>
+        EngineRunMoves.CancelPendingAsync(db, run, now, cancellationToken);
 
     /// <summary>The run's tracked <c>stage.run</c> jobs in <paramref name="statuses"/> (saved and added in this unit of work).</summary>
-    private async Task<List<Job>> DriverJobsAsync(PipelineRun run, IReadOnlyCollection<JobStatus> statuses, CancellationToken cancellationToken)
-    {
-        var projectId = run.ProjectId;
-        var stored = await db.Jobs
-            .Where(j => j.ProjectId == projectId && j.Type == EngineJobTypes.StageRun && statuses.Contains(j.Status))
-            .ToListAsync(cancellationToken);
-        var added = db.ChangeTracker.Entries<Job>()
-            .Where(e => e.State == EntityState.Added && e.Entity.Type == EngineJobTypes.StageRun && statuses.Contains(e.Entity.Status))
-            .Select(e => e.Entity);
-        return [.. stored.Union(added).Where(j => StageRunPayload.Parse(j.Payload)?.RunId == run.Id)];
-    }
+    private Task<List<Job>> DriverJobsAsync(PipelineRun run, IReadOnlyCollection<JobStatus> statuses, CancellationToken cancellationToken) =>
+        EngineRunMoves.DriverJobsAsync(db, run, statuses, cancellationToken);
 }

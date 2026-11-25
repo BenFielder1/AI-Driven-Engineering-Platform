@@ -94,13 +94,73 @@ public abstract record GateRejection
     public sealed record FailRun(string Reason) : GateRejection;
 }
 
+/// <summary>FR-348, §4.66: whether one more backward transition fits <c>limits.revisions</c>.</summary>
+public abstract record RevisionCheck
+{
+    private RevisionCheck()
+    {
+    }
+
+    /// <summary>Allowed: the run's count becomes <paramref name="Revisions"/>.</summary>
+    public sealed record Allowed(int Revisions) : RevisionCheck;
+
+    /// <summary>Refused: <paramref name="Then"/> applies (escalate or fail).</summary>
+    public sealed record Refused(InvalidOutcome Then, string Reason) : RevisionCheck;
+}
+
+/// <summary>FR-347, FR-344, FR-348: a backward move to an earlier stage.</summary>
+public abstract record BackwardMove
+{
+    private BackwardMove()
+    {
+    }
+
+    /// <summary>Re-enter <paramref name="State"/>'s stage (a <c>loop</c>); the run's revisions become
+    /// <paramref name="Revisions"/>.</summary>
+    public sealed record Reenter(RunState State, int Revisions) : BackwardMove;
+
+    /// <summary>The revision cap refuses the move: <paramref name="Then"/> applies.</summary>
+    public sealed record Refused(InvalidOutcome Then, string Reason) : BackwardMove;
+}
+
+/// <summary>FR-347: what a stage's <c>route</c> value does.</summary>
+public abstract record RouteChoice
+{
+    private RouteChoice()
+    {
+    }
+
+    /// <summary><c>continue</c> (or a stage without routes): move on normally.</summary>
+    public sealed record Proceed : RouteChoice;
+
+    /// <summary>Go back to the earlier stage <paramref name="Stage"/>.</summary>
+    public sealed record Back(string Stage) : RouteChoice;
+
+    /// <summary>Not <c>continue</c> or a declared route: the stage fails (<c>VALIDATION</c>).</summary>
+    public sealed record Invalid(string Reason) : RouteChoice;
+}
+
+/// <summary>FR-344: where a vetoed stage goes.</summary>
+public abstract record VetoNext
+{
+    private VetoNext()
+    {
+    }
+
+    /// <summary><c>on_veto: { to }</c>: the backward move (or its refusal by the revision cap).</summary>
+    public sealed record Move(BackwardMove Back) : VetoNext;
+
+    /// <summary><c>on_veto: { end: vetoed }</c>: the run ends <c>completed</c> with outcome <c>vetoed</c>.</summary>
+    public sealed record EndVetoed(string PackStatus) : VetoNext;
+}
+
 /// <summary>
 /// FR-332, §4.62: the run driver's pure decisions. The driver moves an engine-controlled run (<c>RunControl.Engine</c>)
 /// one stage at a time: steps 2–4 are <see cref="Plan"/>, step 5 is <see cref="After"/>, gate rejections are
 /// <see cref="OnGateRejected"/>. Loops whose <c>on</c> names an outcome are not taken by the driver: no stage kind it runs
 /// today reports an outcome, so a stage with a loop advances along <c>on_success</c> or the next stage.
 /// </summary>
-public static class RunDriverRules
+public static partial class RunDriverRules
 {
     /// <summary>
     /// §4.62 step 1: whether a <c>stage.run</c> delivery for <paramref name="stageExecution"/> has nothing to do: the run is
@@ -235,6 +295,227 @@ public static class RunDriverRules
     {
         ArgumentNullException.ThrowIfNull(definition);
         return definition.Statuses.FirstOrDefault(s => s.Generic == status)?.Name ?? status.ToWire();
+    }
+
+    /// <summary>
+    /// FR-348, §4.66: one more backward transition (a loop, <c>on_reject</c>, a route to an earlier stage or a veto
+    /// <c>to:</c>) when the run has made <paramref name="revisions"/>. Without <c>limits</c> it is always allowed; with them,
+    /// the transition that would make the count exceed <c>limits.revisions</c> is refused and <c>then</c> applies.
+    /// </summary>
+    public static RevisionCheck CountRevision(PipelineDefinition definition, int revisions)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        var next = revisions + 1;
+        if (definition.Limits is { } limits && next > limits.Revisions)
+        {
+            return new RevisionCheck.Refused(
+                limits.Then,
+                $"The run has made {revisions} revision(s), its limit of {limits.Revisions}: another backward transition is refused.");
+        }
+
+        return new RevisionCheck.Allowed(next);
+    }
+
+    /// <summary>
+    /// FR-347, FR-344, FR-348: a backward move of the run from <paramref name="state"/> to the earlier stage
+    /// <paramref name="target"/> (a <c>loop</c>: checkpoint unchanged, one more entry of the target), checked against
+    /// <c>limits.revisions</c>.
+    /// </summary>
+    public static BackwardMove Back(PipelineDefinition definition, RunState state, string target, int revisions)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(state);
+        var stage = definition.FindStage(target)
+            ?? throw new ArgumentOutOfRangeException(nameof(target), target, "The target stage is not in the definition.");
+        return Revise(definition, new RunState(stage.Id, stage.Status, state.Checkpoint, Entered(state.Iterations, stage.Id)), revisions);
+    }
+
+    /// <summary>FR-348: re-entering <paramref name="reentered"/> (already worked out, e.g. by <see cref="OnGateRejected"/>)
+    /// as one more backward transition, checked against <c>limits.revisions</c>.</summary>
+    public static BackwardMove Revise(PipelineDefinition definition, RunState reentered, int revisions) =>
+        CountRevision(definition, revisions) switch
+        {
+            RevisionCheck.Allowed allowed => new BackwardMove.Reenter(reentered, allowed.Revisions),
+            RevisionCheck.Refused refused => new BackwardMove.Refused(refused.Then, refused.Reason),
+            _ => throw new InvalidOperationException("Unknown revision check."),
+        };
+
+    /// <summary>
+    /// FR-347: what <paramref name="stage"/>'s <c>route</c> value does. A stage without <c>routes</c> always continues; with
+    /// them, <c>continue</c> continues, one of its routes goes back to that stage, and anything else (including no value)
+    /// is invalid.
+    /// </summary>
+    public static RouteChoice Route(StageDefinition stage, string? route)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        if (stage.Routes.Count == 0)
+        {
+            return new RouteChoice.Proceed();
+        }
+
+        if (string.Equals(route, ContinueRoute, StringComparison.Ordinal))
+        {
+            return new RouteChoice.Proceed();
+        }
+
+        if (route is not null && stage.Routes.Contains(route, StringComparer.Ordinal))
+        {
+            return new RouteChoice.Back(route);
+        }
+
+        return new RouteChoice.Invalid(
+            $"The {stage.Id} output's route '{route ?? "(none)"}' is not '{ContinueRoute}' or one of: {string.Join(", ", stage.Routes)}.");
+    }
+
+    /// <summary>FR-347: the <c>route</c> value that proceeds normally.</summary>
+    public const string ContinueRoute = "continue";
+
+    /// <summary>
+    /// FR-347: the <c>route</c> field of a stage's output: a JSON object's top-level <c>route</c> string, or, for other
+    /// content (markdown), the first line of the form <c>route: &lt;value&gt;</c>. <c>null</c> when there is none.
+    /// </summary>
+    public static string? ReadRoute(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        if (TryParseObject(content) is { } json)
+        {
+            return json.TryGetPropertyValue("route", out var value) && value is System.Text.Json.Nodes.JsonValue v
+                && v.TryGetValue<string>(out var s) ? s.Trim() : null;
+        }
+
+        // Only a line that is exactly `route: <id>` (lower case, at column 0); the last one wins, so prose isn't read.
+        string? found = null;
+        foreach (var line in content.Split('\n'))
+        {
+            var match = RouteLine().Match(line.TrimEnd('\r'));
+            if (match.Success)
+            {
+                found = match.Groups[1].Value;
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// FR-344: what a veto agent said. Its output is a JSON object: <c>{ "findings": ["…"] }</c> (any finding is a veto) or
+    /// <c>{ "approve": true }</c> / an empty <c>findings</c> (approval). Anything else is unreadable (<c>null</c>), which
+    /// fails the stage.
+    /// </summary>
+    public static IReadOnlyList<string>? ReadVetoFindings(string? content)
+    {
+        if (TryParseObject(content) is not { } json)
+        {
+            return null;
+        }
+
+        if (json.TryGetPropertyValue("findings", out var findings) && findings is System.Text.Json.Nodes.JsonArray array)
+        {
+            var list = new List<string>();
+            foreach (var item in array)
+            {
+                switch (item)
+                {
+                    case System.Text.Json.Nodes.JsonValue value when value.TryGetValue<string>(out var text):
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            list.Add(text.Trim());
+                        }
+
+                        break;
+                    case null:
+                        break;
+                    default:
+                        list.Add(item.ToJsonString());
+                        break;
+                }
+            }
+
+            return list;
+        }
+
+        return json.TryGetPropertyValue("approve", out var approve) && approve is System.Text.Json.Nodes.JsonValue a
+            && a.TryGetValue<bool>(out var approved) && approved ? [] : null;
+    }
+
+    /// <summary>
+    /// FR-344: where a vetoed stage goes. <c>on_veto: { to }</c> goes back to that stage (checked against
+    /// <c>limits.revisions</c>); <c>on_veto: { end: vetoed }</c> (or none) ends the run <c>completed</c>, outcome
+    /// <c>vetoed</c>.
+    /// </summary>
+    public static VetoNext OnVetoed(PipelineDefinition definition, RunState state, int revisions)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(state);
+        var stage = definition.FindStage(state.Stage)
+            ?? throw new ArgumentOutOfRangeException(nameof(state), state.Stage, "The run's stage is not in its definition.");
+        return stage.OnVeto?.To is { } to
+            ? new VetoNext.Move(Back(definition, state, to, revisions))
+            : new VetoNext.EndVetoed(CompletedStatus(definition));
+    }
+
+    /// <summary>
+    /// FR-347, FR-344, FR-332: the artifacts a backward move to <paramref name="targetStage"/> invalidates: everything that
+    /// depends on the outputs of the target (and its branch stages), not those outputs themselves (they get new versions
+    /// when the target runs again), in the definition's artifact order.
+    /// </summary>
+    public static IReadOnlyList<string> InvalidatedOnBack(PipelineDefinition definition, string targetStage)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        var target = definition.FindStage(targetStage)
+            ?? throw new ArgumentOutOfRangeException(nameof(targetStage), targetStage, "The target stage is not in the definition.");
+        var outputs = target.WithBranchStages().Select(s => s.Output).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var found = outputs.SelectMany(o => DefinitionCascade.Downstream(o, definition))
+            .Where(k => !outputs.Contains(k))
+            .ToHashSet(StringComparer.Ordinal);
+        var declared = definition.Artifacts.Select(a => a.Key).Where(found.Contains).ToList();
+        return [.. declared, .. found.Except(declared, StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^route: ([A-Za-z0-9_\-]+)\s*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex RouteLine();
+
+    /// <summary>FR-344: the run outcome of a run a veto ended.</summary>
+    public const string VetoedOutcome = OnVetoDefinition.Vetoed;
+
+    private static System.Text.Json.Nodes.JsonObject? TryParseObject(string? content)
+    {
+        var trimmed = content?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return null;
+        }
+
+        // Tolerate a fenced JSON block.
+        if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            var start = trimmed.IndexOf('\n', StringComparison.Ordinal);
+            var end = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+            if (start < 0 || end <= start)
+            {
+                return null;
+            }
+
+            trimmed = trimmed[(start + 1)..end].Trim();
+        }
+
+        if (!trimmed.StartsWith('{'))
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Text.Json.Nodes.JsonNode.Parse(trimmed) as System.Text.Json.Nodes.JsonObject;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     private static Dictionary<string, int> Entered(IReadOnlyDictionary<string, int> iterations, string stage)

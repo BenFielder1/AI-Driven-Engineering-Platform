@@ -115,12 +115,15 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
             }
         }
 
-        foreach (var stage in definition.Stages)
+        // FR-343: parallel branch stages too; FR-344, FR-346: veto and disagreement guards.
+        foreach (var stage in definition.AllStages)
         {
             var guards = stage.Requires.OfType<GuardRequirement>().Select(r => r.Guard)
                 .Concat(stage.Validate.Select(v => v.Guard))
                 .Concat(stage.Loop?.Requires.OfType<GuardRequirement>().Select(r => r.Guard) ?? [])
-                .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard)); // D-0.7.0-44: the bindings' own checks
+                .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard)) // D-0.7.0-44: the bindings' own checks
+                .Concat(stage.Veto.Select(v => v.Guard).OfType<string>())
+                .Concat(stage.Aggregate?.DisagreementGuard is { } disagreement ? [disagreement] : []);
             foreach (var guard in guards)
             {
                 Check(PipelineComponentKind.Guard, "guard", guard);

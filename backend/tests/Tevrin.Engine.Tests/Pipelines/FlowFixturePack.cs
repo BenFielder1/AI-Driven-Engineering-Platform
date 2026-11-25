@@ -39,7 +39,7 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         JobTypes = JobTypes,
     };
 
-    /// <summary>The guard and job type namespace (<c>flow.    public string Id => pipelineId;lt;name    public string Id => pipelineId;gt;</c>).</summary>
+    /// <summary>The guard and job type namespace (<c>flow.&lt;name&gt;</c>).</summary>
     public string Id => "flow";
 
     /// <summary>The fixture's YAML.</summary>

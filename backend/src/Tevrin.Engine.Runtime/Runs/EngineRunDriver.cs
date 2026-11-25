@@ -98,6 +98,7 @@ public sealed partial class EngineRunDriver(
         var facts = await EntryFactsAsync(run, stage, execution!, definition, cancellationToken);
         var step = RunDriverRules.Plan(stage, facts);
         LogStep(logger, run.Id, stage.Id, step.GetType().Name);
+        string? output = null;
         switch (step)
         {
             case DriverStep.WaitOnInput:
@@ -148,6 +149,7 @@ public sealed partial class EngineRunDriver(
                     return;
                 }
 
+                output = OutputText(result.Last);
                 break;
 
             case DriverStep.RunHandler handler:
@@ -173,8 +175,143 @@ public sealed partial class EngineRunDriver(
                 throw new JobFailedException($"Stage {stage.Id} has a kind the run driver can't run yet.", transient: false, EngineErrorCodes.DefinitionUnavailable);
         }
 
+        // §4.62 step 5: the veto, then the transition (a route, else next).
+        if (stage.Veto.Count > 0)
+        {
+            var findings = await VetoFindingsAsync(job, run, stage, cancellationToken);
+            if (findings.Count > 0)
+            {
+                await VetoAsync(run, execution!, definition, findings, cancellationToken);
+                return;
+            }
+        }
+
+        switch (RunDriverRules.Route(stage, RunDriverRules.ReadRoute(output)))
+        {
+            case RouteChoice.Invalid invalid:
+                throw new JobFailedException(invalid.Reason, transient: false, EngineErrorCodes.Validation);
+
+            case RouteChoice.Back to:
+                LogRoute(logger, run.Id, stage.Id, to.Stage);
+                await BackAsync(run, definition, RunDriverRules.Back(definition, State(run), to.Stage, run.Revisions), cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+                return;
+        }
+
         await MoveOnAsync(run, definition, cancellationToken);
     }
+
+    private static RunState State(PipelineRun run) => new(run.CurrentStage, run.PackStatus, run.Checkpoint, run.Iterations);
+
+    /// <summary>FR-347: the text an agent stage's last attempt produced: its stored artifact, else the run's output text.</summary>
+    private static string? OutputText(AgentStageOutcome outcome)
+    {
+        if (outcome.Artifact is { } artifact)
+        {
+            return artifact.Content;
+        }
+
+        if (string.IsNullOrEmpty(outcome.AgentRun.Output))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(outcome.AgentRun.Output);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String
+                ? text.GetString()
+                : outcome.AgentRun.Output;
+        }
+        catch (JsonException)
+        {
+            return outcome.AgentRun.Output;
+        }
+    }
+
+    /// <summary>
+    /// FR-344: every <c>veto</c> entry of <paramref name="stage"/>, in order: a guard's reasons when it isn't met, and a veto
+    /// agent's findings (its own agent run, id derived from the job, so a redelivery reuses it). An unreadable veto agent
+    /// output fails the stage (<c>VALIDATION</c>).
+    /// </summary>
+    private async Task<IReadOnlyList<string>> VetoFindingsAsync(JobExecution job, PipelineRun run, StageDefinition stage, CancellationToken cancellationToken)
+    {
+        var findings = new List<string>();
+        foreach (var veto in stage.Veto)
+        {
+            if (veto.Guard is { } name)
+            {
+                var guard = services.GetPipelineGuard(name)
+                    ?? throw new JobFailedException($"Guard '{name}' is not bound.", transient: false, EngineErrorCodes.DefinitionUnavailable);
+                var result = await guard.EvaluateAsync(new GuardContext(run.Id, run.ProjectId, stage.Id, run.ApprovalMode, FactBag.Empty), cancellationToken);
+                if (!result.Ok)
+                {
+                    findings.AddRange(result.Reasons.Count == 0 ? [$"{name} vetoed the stage."] : result.Reasons.Select(r => $"{name}: {r}"));
+                }
+
+                continue;
+            }
+
+            var agentKey = veto.Agent!;
+            var vetoRun = await agents.RunAsync(
+                new AgentStageRequest(run.Id, stage.Id, JobTriggers.StageEntered)
+                {
+                    AgentKey = agentKey,
+                    AgentRunId = AgentRunRules.RunId(job.Id, VetoRunKey(agentKey)),
+                    JobAttempt = job.Attempt,
+                },
+                cancellationToken);
+            vetoRun.ThrowIfFailed();
+            if (vetoRun.End != AgentStageEnd.Stored)
+            {
+                throw new JobFailedException($"The {agentKey} veto of {stage.Id} did not finish.", transient: false, EngineErrorCodes.Validation);
+            }
+
+            var said = RunDriverRules.ReadVetoFindings(OutputText(vetoRun.Last))
+                ?? throw new JobFailedException(
+                    $"The {agentKey} veto of {stage.Id} must answer {{ \"findings\": [...] }} or {{ \"approve\": true }}.",
+                    transient: false,
+                    EngineErrorCodes.Validation);
+            findings.AddRange(said.Select(f => $"{agentKey}: {f}"));
+        }
+
+        return findings;
+    }
+
+    /// <summary>FR-344: the run key of a veto agent's run (FR-310).</summary>
+    public static string VetoRunKey(string agentKey) => "veto-" + agentKey;
+
+    /// <summary>FR-344: store the findings on the stage execution, then <c>on_veto</c>: back to its target, or end
+    /// <c>completed</c> with outcome <c>vetoed</c> (one save).</summary>
+    private async Task VetoAsync(
+        PipelineRun run, StageExecution execution, PipelineDefinition definition, IReadOnlyList<string> findings, CancellationToken cancellationToken)
+    {
+        LogVetoed(logger, run.Id, run.CurrentStage, findings.Count);
+        execution.VetoFindings = JsonSerializer.Serialize(findings);
+        switch (RunDriverRules.OnVetoed(definition, State(run), run.Revisions))
+        {
+            case VetoNext.Move move:
+                await BackAsync(run, definition, move.Back, cancellationToken);
+                break;
+
+            case VetoNext.EndVetoed end:
+                var now = time.GetUtcNow();
+                run.PackStatus = end.PackStatus;
+                run.Status = GenericRunStatus.Completed;
+                run.Outcome = RunDriverRules.VetoedOutcome;
+                run.CompletedAt = now;
+                await StageExecutionWriter.EndAsync(db, run.Id, GenericRunStatus.Completed, now, cancellationToken);
+                LogCompleted(logger, run.Id);
+                break;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>FR-347, FR-344, FR-348: a backward move (in the caller's save).</summary>
+    private Task BackAsync(PipelineRun run, PipelineDefinition definition, BackwardMove move, CancellationToken cancellationToken) =>
+        EngineRunMoves.BackAsync(db, jobs, run, definition, move, PipelineTransitionKinds.Route, time.GetUtcNow(), cancellationToken);
 
     /// <summary>§4.62 steps 5–6: advance and queue the driver, or complete the run (one save; the run's xmin guards it).</summary>
     private async Task MoveOnAsync(PipelineRun run, PipelineDefinition definition, CancellationToken cancellationToken)
@@ -262,6 +399,12 @@ public sealed partial class EngineRunDriver(
     [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId}: {Step}")]
     private static partial void LogStep(ILogger logger, Guid pipelineRunId, string stageId, string step);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId} routes back to {Target}")]
+    private static partial void LogRoute(ILogger logger, Guid pipelineRunId, string stageId, string target);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId} vetoed ({FindingCount} findings)")]
+    private static partial void LogVetoed(ILogger logger, Guid pipelineRunId, string stageId, int findingCount);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} completed")]
     private static partial void LogCompleted(ILogger logger, Guid pipelineRunId);
 }
@@ -293,6 +436,126 @@ public static class EngineRunMoves
         var execution = await StageExecutionWriter.EnterAsync(db, run.Id, state.Stage, state.Checkpoint, kind, now, cancellationToken);
         QueueDriver(jobs, run, execution.Id, now);
         return execution;
+    }
+
+    /// <summary>
+    /// FR-348, §4.66: applies a backward move in the caller's save. Allowed: the run's revisions are counted and it
+    /// re-enters the target by <paramref name="kind"/>. Refused by <c>limits.revisions</c>: <c>then: escalate</c> raises
+    /// a pending <c>escalation</c> gate on the run (approving it re-queues the driver on the same stage; rejecting it fails
+    /// the run), <c>then: fail</c> fails the run.
+    /// </summary>
+    public static async Task BackAsync(
+        IEngineDbContext db,
+        JobEnqueuer jobs,
+        PipelineRun run,
+        PipelineDefinition definition,
+        BackwardMove move,
+        string kind,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(definition);
+        switch (move)
+        {
+            case BackwardMove.Reenter reenter:
+                run.Revisions = reenter.Revisions;
+                await InvalidateDownstreamAsync(db, run, definition, reenter.State.Stage, cancellationToken);
+                await EnterAsync(db, jobs, run, reenter.State, kind, now, cancellationToken);
+                break;
+
+            case BackwardMove.Refused { Then: InvalidOutcome.Escalate }:
+                Touch(db, run);
+                if (!await db.ApprovalGates.AnyAsync(
+                    g => g.PipelineRunId == run.Id && g.Type == EngineGates.Escalation && g.Status == GateStatus.Pending, cancellationToken))
+                {
+                    db.ApprovalGates.Add(new ApprovalGate
+                    {
+                        ProjectId = run.ProjectId,
+                        ReleaseVersionId = run.SubjectId,
+                        PipelineRunId = run.Id,
+                        Type = EngineGates.Escalation,
+                        Status = GateStatus.Pending,
+                        CreatedAt = now,
+                    });
+                }
+
+                break;
+
+            case BackwardMove.Refused:
+                run.Status = GenericRunStatus.Failed;
+                run.PackStatus = RunDriverRules.FinalStatus(definition, GenericRunStatus.Failed);
+                run.CompletedAt = now;
+                await StageExecutionWriter.EndAsync(db, run.Id, GenericRunStatus.Failed, now, cancellationToken);
+                await CancelPendingAsync(db, run, now, cancellationToken);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// FR-347, FR-344, FR-332: the cascade of a backward move to <paramref name="targetStage"/>: the run's artifacts that
+    /// depend on the target's outputs (<see cref="RunDriverRules.InvalidatedOnBack"/>) and aren't already final
+    /// (invalidated, superseded or rejected) are marked <c>invalidated</c>, in the caller's save. Pinned project-scope
+    /// artifacts are never touched.
+    /// </summary>
+    public static async Task InvalidateDownstreamAsync(
+        IEngineDbContext db, PipelineRun run, PipelineDefinition definition, string targetStage, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(definition);
+        var keys = RunDriverRules.InvalidatedOnBack(definition, targetStage)
+            .Where(k => !run.PinnedArtifacts.ContainsKey(k))
+            .ToList();
+        if (keys.Count == 0)
+        {
+            return;
+        }
+
+        var stale = await db.Artifacts
+            .Where(AgentStageScope.InSubject(run))
+            .Where(a => keys.Contains(a.Type)
+                && a.Status != ArtifactStatus.Invalidated && a.Status != ArtifactStatus.Superseded && a.Status != ArtifactStatus.Rejected)
+            .ToListAsync(cancellationToken);
+        foreach (var artifact in stale)
+        {
+            artifact.Status = ArtifactStatus.Invalidated;
+        }
+    }
+
+    /// <summary>Cancels the run's pending gates and its queued <c>stage.run</c> jobs (stored or added in this save).</summary>
+    public static async Task CancelPendingAsync(IEngineDbContext db, PipelineRun run, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(run);
+        foreach (var gate in await db.ApprovalGates.Where(g => g.PipelineRunId == run.Id && g.Status == GateStatus.Pending).ToListAsync(cancellationToken))
+        {
+            gate.Status = GateStatus.Cancelled;
+            gate.DecidedAt = now;
+        }
+
+        foreach (var job in await DriverJobsAsync(db, run, [JobStatus.Queued], cancellationToken))
+        {
+            job.Status = JobStatus.Cancelled;
+            job.CompletedAt = now;
+        }
+    }
+
+    /// <summary>The run's <c>stage.run</c> jobs in <paramref name="statuses"/>, stored or added in this save.</summary>
+    public static async Task<List<Job>> DriverJobsAsync(
+        IEngineDbContext db, PipelineRun run, IReadOnlyCollection<JobStatus> statuses, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(run);
+        var projectId = run.ProjectId;
+        var stored = await db.Jobs
+            .Where(j => j.ProjectId == projectId && j.Type == EngineJobTypes.StageRun && statuses.Contains(j.Status))
+            .ToListAsync(cancellationToken);
+        var added = db.ChangeTracker.Entries<Job>()
+            .Where(e => e.State == EntityState.Added && e.Entity.Type == EngineJobTypes.StageRun && statuses.Contains(e.Entity.Status))
+            .Select(e => e.Entity);
+        return [.. stored.Union(added).Where(j => StageRunPayload.Parse(j.Payload)?.RunId == run.Id)];
     }
 
     /// <summary>
