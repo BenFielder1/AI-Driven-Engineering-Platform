@@ -190,17 +190,21 @@ public sealed class MapDriverTests(TevrinApiFactory factory)
         var log = new QaLog();
         await using var app = FixtureFlowApp.Create(factory, new PositionLimit(), log);
         using var fixture = await ProjectApi.FixtureAsync(app);
-        var runId = await StartAsync(fixture, FlowFixturePack.QaFail, Transcripts(12, 2));
+        var runId = await StartAsync(fixture, FlowFixturePack.QaFail, Transcripts(30, 2));
 
         await DriveAsync(app, fixture.Project.Id, runId);
 
-        // Item 2 fails at once: at most the first window and the items queued before the failure (up to 9) ran.
+        // Item 2 fails. The first window's 8 jobs share a creation time, so which of 0–7 run before item 2 varies: each that
+        // ends first queues the next item (at most 7 of them, items 8–14). Once the failure is recorded nothing more is queued.
         Assert.Equal(GenericRunStatus.Active, (await RunAsync(app, runId)).Status);
         Assert.Equal([2], (await ItemsAsync(app, runId)).Where(i => i.Outcome == BranchOutcomes.Failed).Select(i => i.ItemIndex!.Value));
-        Assert.DoesNotContain(log.Scored, i => i > 9);
+        Assert.DoesNotContain(log.Scored, i => i > 14);
         Assert.Empty(log.Tallies);
         var failed = Assert.Single(await DriverJobsAsync(app, fixture.Project.Id, JobStatus.Failed));
         Assert.StartsWith("VALIDATION: Transcript 2 is unreadable.", failed.LastError, StringComparison.Ordinal);
+        var queuedAfter = await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
+            .CountAsync(j => j.ProjectId == fixture.Project.Id && j.Type == EngineJobTypes.StageRun && j.CreatedAt > failed.CompletedAt, Ct));
+        Assert.Equal(0, queuedAfter);
 
         // FR-333: a retry reopens the failed item (and starts the items never run); it fails again, so the stage stays failed.
         await ProjectApi.ReadAsync<PipelineRunDto>(await fixture.Contributor.Client.PostAsync($"/api/pipeline-runs/{runId}/retry", null, Ct));

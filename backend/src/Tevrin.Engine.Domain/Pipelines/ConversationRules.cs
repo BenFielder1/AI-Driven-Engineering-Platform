@@ -151,6 +151,17 @@ public static class ConversationRules
     }
 
     /// <summary>
+    /// The input keys among <paramref name="keys"/> whose placeholder is one a participant's prompt reserves
+    /// (<c>transcript</c> → <c>{{TRANSCRIPT}}</c>, <c>role</c> → <c>{{ROLE}}</c>); the validator refuses them on a conversation
+    /// stage and its participants' bindings. (The runner fills the reserved values last, so they would win.)
+    /// </summary>
+    public static IReadOnlyList<string> ReservedInputs(IEnumerable<string> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        return [.. keys.Where(k => AgentPromptPlaceholders.Of(k) is AgentPromptPlaceholders.Transcript or AgentPromptPlaceholders.Role)];
+    }
+
+    /// <summary>
     /// The placeholders the engine fills for agent <paramref name="agentKey"/> of conversation stage
     /// <paramref name="stage"/>: a participant gets <c>{{TRANSCRIPT}}</c>, <c>{{ROLE}}</c> and the stage's own inputs.
     /// Empty for other agents and stages.

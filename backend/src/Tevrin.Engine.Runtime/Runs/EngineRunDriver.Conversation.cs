@@ -32,8 +32,12 @@ public sealed partial class EngineRunDriver
         JobExecution job, PipelineRun run, StageDefinition stage, StageExecution execution, PipelineDefinition definition, CancellationToken cancellationToken)
     {
         var conversation = stage.Conversation!;
-        var turns = await AcceptedTurnsAsync(run, stage, execution, cancellationToken);
         var ownRunId = AgentRunRules.RunId(job.Id, TurnRunKey);
+
+        // Turns belong to this execution only: their agent run ids derive from its own jobs, so a job of an earlier entry
+        // (a rollback or loop-back raced it) never counts as one of this entry's turns.
+        var entryRunIds = await TurnRunIdsAsync(run, execution, cancellationToken);
+        var turns = await AcceptedTurnsAsync(run, stage, entryRunIds, cancellationToken);
         var own = await db.AgentRuns.AsNoTracking()
             .Where(r => r.Id == ownRunId)
             .Select(r => new { r.TurnIndex })
@@ -56,11 +60,11 @@ public sealed partial class EngineRunDriver
 
             if (turns.Count == 0)
             {
-                // The first turn runs the stage's entry: inputs, requirements and the gate, as for any stage.
-                var facts = await EntryFactsAsync(run, stage, execution, definition, cancellationToken);
-                if (RunDriverRules.Plan(stage, facts) is not DriverStep.RunConversation)
+                // The first turn runs the stage's entry: inputs, requirements and the gate, as for any stage (planned once:
+                // RunStageAsync reports a conversation as ready, and stops on anything else).
+                var (ready, _) = await RunStageAsync(job, run, stage, execution, definition, cancellationToken);
+                if (!ready)
                 {
-                    await RunStageAsync(job, run, stage, execution, definition, cancellationToken);
                     return;
                 }
             }
@@ -74,7 +78,7 @@ public sealed partial class EngineRunDriver
             turn = turns.Count + 1;
         }
 
-        if (await LaterTurnStartedAsync(run, stage, execution, turn, cancellationToken))
+        if (await LaterTurnStartedAsync(run, stage, entryRunIds, turn, cancellationToken))
         {
             LogStale(logger, run.Id, execution.Id, "a later turn of the conversation has started");
             return;
@@ -188,11 +192,11 @@ public sealed partial class EngineRunDriver
     /// run that wasn't rejected (an escalated or retried attempt doesn't count), up to the first missing turn.
     /// </summary>
     private async Task<List<ConversationTurn>> AcceptedTurnsAsync(
-        PipelineRun run, StageDefinition stage, StageExecution execution, CancellationToken cancellationToken)
+        PipelineRun run, StageDefinition stage, Guid[] entryRunIds, CancellationToken cancellationToken)
     {
-        var (runId, stageId, since) = (run.Id, stage.Id, execution.EnteredAt);
+        var (runId, stageId) = (run.Id, stage.Id);
         var rows = await db.AgentRuns.AsNoTracking()
-            .Where(r => r.PipelineRunId == runId && r.Stage == stageId && r.TurnIndex != null && r.CreatedAt >= since
+            .Where(r => r.PipelineRunId == runId && r.Stage == stageId && r.TurnIndex != null && entryRunIds.Contains(r.Id)
                 && r.Status == AgentRunStatus.Succeeded && r.Error == null)
             .Select(r => new { r.Id, r.TurnIndex, r.TurnRole, r.Agent, r.Output, r.CreatedAt })
             .ToListAsync(cancellationToken);
@@ -208,11 +212,30 @@ public sealed partial class EngineRunDriver
     }
 
     /// <summary>Whether a turn after <paramref name="turn"/> of the current entry has an agent run (this job is stale).</summary>
-    private Task<bool> LaterTurnStartedAsync(PipelineRun run, StageDefinition stage, StageExecution execution, int turn, CancellationToken cancellationToken)
+    private Task<bool> LaterTurnStartedAsync(PipelineRun run, StageDefinition stage, Guid[] entryRunIds, int turn, CancellationToken cancellationToken)
     {
-        var (runId, stageId, since) = (run.Id, stage.Id, execution.EnteredAt);
+        var (runId, stageId) = (run.Id, stage.Id);
         return db.AgentRuns.AnyAsync(
-            r => r.PipelineRunId == runId && r.Stage == stageId && r.TurnIndex > turn && r.CreatedAt >= since, cancellationToken);
+            r => r.PipelineRunId == runId && r.Stage == stageId && r.TurnIndex > turn && entryRunIds.Contains(r.Id), cancellationToken);
+    }
+
+    /// <summary>The agent run ids a turn of stage execution <paramref name="entry"/> can have (<see cref="TurnRunIds"/> of its jobs).</summary>
+    private async Task<Guid[]> TurnRunIdsAsync(PipelineRun run, StageExecution entry, CancellationToken cancellationToken) =>
+        TurnRunIds((await MapJobsAsync(run, [entry.Id], cancellationToken)).Select(j => j.JobId));
+
+    /// <summary>
+    /// FR-356: every agent run id a conversation turn started by one of <paramref name="jobIds"/> (the <c>stage.run</c> jobs of
+    /// one stage execution) can have: the turn's run (<see cref="TurnRunKey"/>) and its validation retries, up to the most
+    /// attempts a definition allows. Turns are scoped to their execution by these ids, without a column for it.
+    /// </summary>
+    public static Guid[] TurnRunIds(IEnumerable<Guid> jobIds)
+    {
+        ArgumentNullException.ThrowIfNull(jobIds);
+        return [.. jobIds.SelectMany(jobId =>
+        {
+            var first = AgentRunRules.RunId(jobId, TurnRunKey);
+            return Enumerable.Range(1, PipelineDefinitionValidator.MaxAttempts).Select(a => AgentStageRunIds.ForAttempt(first, a)!.Value);
+        })];
     }
 
     private Task<bool> RunHasPendingGateAsync(PipelineRun run, CancellationToken cancellationToken)

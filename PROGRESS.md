@@ -139,6 +139,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Map job reads filter `jobs.payload->>'stageExecutionId'` with no expression index yet; add one in a later migration if map stages get large or job history grows (M70c).
 - The map item isolation check loads every sibling output of the current map entry on each item start (O(n²) rows at `max_items` 1000); push the probe into SQL if large maps get slow (M70c review).
 - Conversation (M70d review minors, left as is): a redelivered escalated turn job after approval raises a fresh escalation (same as plain stages); the stop guard re-runs on already-checked turns at each new turn job.
+- A map stage plans its entry twice (`EnterMapAsync`): an input arriving in between fails the job with a misleading `DEFINITION_UNAVAILABLE`; the run stays active and a manual retry recovers. Use the one-plan pattern from the conversation turn 1 (M70d re-review).
 - Integration shards: `rest` hit its 22-min step timeout in M69 and was split (5d048d7, `pipelines-projects`); watch shard times as tests grow.
 
 ## Manual checks (Ben)

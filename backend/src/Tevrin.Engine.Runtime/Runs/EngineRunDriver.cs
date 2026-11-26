@@ -269,6 +269,10 @@ public sealed partial class EngineRunDriver(
             case DriverStep.PassApproval:
                 break;
 
+            case DriverStep.RunConversation:
+                // FR-356: the entry passed; the conversation's own driver runs its turns (only it plans a conversation stage).
+                break;
+
             default:
                 throw new JobFailedException($"Stage {stage.Id} has a kind the run driver can't run yet.", transient: false, EngineErrorCodes.DefinitionUnavailable);
         }

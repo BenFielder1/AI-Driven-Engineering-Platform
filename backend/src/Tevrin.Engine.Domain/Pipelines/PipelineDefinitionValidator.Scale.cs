@@ -186,6 +186,30 @@ public static partial class PipelineDefinitionValidator
                 }
             }
 
+            // FR-356: a participant's {{TRANSCRIPT}} and {{ROLE}} are the engine's; an input keyed to the same placeholder
+            // (transcript, role) would be silently replaced, so it is refused, on the stage or on a participant's binding.
+            foreach (var key in ConversationRules.ReservedInputs(stage.Inputs))
+            {
+                Add(DefinitionErrorCodes.ConversationParticipants, path + ".inputs",
+                    $"Input '{key}' fills a placeholder the conversation reserves for its participants ({{{{TRANSCRIPT}}}}, {{{{ROLE}}}}).");
+            }
+
+            for (var b = 0; b < stage.Agents.Count; b++)
+            {
+                var binding = stage.Agents[b];
+                if (!agents.Contains(binding.Key))
+                {
+                    continue;
+                }
+
+                // A binding's inputs default to the stage's, which are reported once above.
+                foreach (var key in ConversationRules.ReservedInputs(binding.Inputs.Except(stage.Inputs, StringComparer.Ordinal)))
+                {
+                    Add(DefinitionErrorCodes.ConversationParticipants, $"{path}.agents[{b}].inputs",
+                        $"Input '{key}' fills a placeholder the conversation reserves for its participants ({{{{TRANSCRIPT}}}}, {{{{ROLE}}}}).");
+                }
+            }
+
             if (string.IsNullOrEmpty(conversation.Opener) || !roles.Contains(conversation.Opener))
             {
                 Add(DefinitionErrorCodes.ConversationParticipants, at + ".opener", string.IsNullOrEmpty(conversation.Opener)

@@ -242,4 +242,50 @@ public class ConversationRulesTests
 
         Assert.Equal([(DefinitionErrorCodes.UnknownPrompt, "stages[0].agents[2].prompt")], DefinitionYaml.Errors(yaml, catalog));
     }
+
+    /// <summary><c>fixture-callsim</c> with an input artifact <c>role</c> declared, then <paramref name="find"/> replaced.</summary>
+    private static string WithRoleInput(string find, string replace)
+    {
+        const string Transcript = "  transcript: { title: Transcript, format: json, approval: auto_lock, cascade: none }\n";
+        var yaml = DefinitionYaml.Edit(
+            Transcript,
+            Transcript + "  role:       { title: Role, format: markdown, approval: auto_lock, cascade: none, input: true }\n",
+            FlowFixturePack.Yaml(FlowFixturePack.CallSim));
+        return DefinitionYaml.Edit(find, replace, yaml);
+    }
+
+    [Fact]
+    public void FR356_an_input_filling_a_reserved_TRANSCRIPT_or_ROLE_placeholder_is_refused_on_the_stage_and_on_a_participant()
+    {
+        Assert.Equal(
+            [(DefinitionErrorCodes.ConversationParticipants, "stages[0].inputs")],
+            DefinitionYaml.Errors(WithRoleInput("    inputs: [scenario]\n", "    inputs: [scenario, role]\n"), FlowFixturePack.Catalog));
+        Assert.Equal(
+            [(DefinitionErrorCodes.ConversationParticipants, "stages[0].agents[1].inputs")],
+            DefinitionYaml.Errors(
+                WithRoleInput("prompt: flow.callsim-support }", "prompt: flow.callsim-support, inputs: [role] }"),
+                FlowFixturePack.Catalog));
+
+        // The output named transcript isn't an input: the fixture validates and keeps its pinned hash.
+        Assert.Empty(DefinitionYaml.Errors(FlowFixturePack.Yaml(FlowFixturePack.CallSim), FlowFixturePack.Catalog));
+        Assert.Equal(
+            ScaleConstructDefinitionTests.CallSimHash,
+            DefinitionHash.Compute(PipelineDefinitionLoader.Parse(FlowFixturePack.Yaml(FlowFixturePack.CallSim)).Definition!));
+        Assert.Equal(["Transcript", "role"], ConversationRules.ReservedInputs(["Transcript", "scenario", "role"]));
+    }
+
+    [Fact]
+    public void FR356_turn_run_ids_derive_from_the_executions_own_jobs_with_every_retry_attempt()
+    {
+        Guid[] jobs = [Guid.CreateVersion7(), Guid.CreateVersion7()];
+
+        var ids = Runtime.Runs.EngineRunDriver.TurnRunIds(jobs);
+
+        Assert.Equal(2 * PipelineDefinitionValidator.MaxAttempts, ids.Distinct().Count());
+        var first = AgentRunRules.RunId(jobs[0], Runtime.Runs.EngineRunDriver.TurnRunKey);
+        Assert.Contains(first, ids);
+        Assert.Contains(Runtime.Agents.AgentStageRunIds.ForAttempt(first, PipelineDefinitionValidator.MaxAttempts)!.Value, ids);
+        Assert.DoesNotContain(AgentRunRules.RunId(Guid.CreateVersion7(), Runtime.Runs.EngineRunDriver.TurnRunKey), ids);
+        Assert.Empty(Runtime.Runs.EngineRunDriver.TurnRunIds([]));
+    }
 }

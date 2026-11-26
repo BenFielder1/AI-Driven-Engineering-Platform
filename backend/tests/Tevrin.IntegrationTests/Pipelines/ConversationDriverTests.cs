@@ -256,4 +256,71 @@ public sealed class ConversationDriverTests(TevrinApiFactory factory)
         var executions = await ProjectApi.WithDbAsync(app, db => db.StageExecutions.AsNoTracking().Where(e => e.PipelineRunId == runId).ToListAsync(Ct));
         Assert.All(executions, e => Assert.NotNull(e.ExitedAt));
     }
+
+    [Fact]
+    public async Task FR356_turn_runs_of_another_entrys_jobs_are_not_this_entrys_turns()
+    {
+        var customer = Customer("My router keeps dropping.", "Yes, it works now.");
+        var support = Support("Have you restarted it?", "Great. Goodbye!");
+        await using var app = FixtureFlowApp.Create(factory, new PositionLimit(), customer, support);
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var runId = await StartAsync(fixture);
+        await RunNextAsync(app, fixture.Project.Id);
+
+        // A straggler from an earlier entry (a rollback or loop-back raced its job) records turns 1 and 5 in this stage,
+        // after this entry began, under ids no job of this entry derives: they must neither replace turn 1 nor make the
+        // next turn's job stale.
+        await ProjectApi.WithDbAsync(app, async db =>
+        {
+            var original = await db.AgentRuns.AsNoTracking().SingleAsync(r => r.PipelineRunId == runId && r.TurnIndex == 1, Ct);
+            foreach (var turn in (int[])[1, 5])
+            {
+                var straggler = new AgentRun();
+                db.Entry(straggler).CurrentValues.SetValues(original);
+                straggler.Id = Guid.CreateVersion7();
+                straggler.TurnIndex = turn;
+                straggler.Output = original.Output!.Replace("My router keeps dropping.", "A straggler reply.", StringComparison.Ordinal);
+                straggler.CreatedAt = original.CreatedAt.AddSeconds(1);
+                db.AgentRuns.Add(straggler);
+            }
+
+            await db.SaveChangesAsync(Ct);
+        });
+
+        Assert.Equal(3, await DriveAsync(app, fixture.Project.Id));
+
+        Assert.Equal(GenericRunStatus.Completed, (await RunAsync(app, runId)).Status);
+        Assert.Equal((2, 2), (customer.Prompts.Count, support.Prompts.Count));
+        var transcript = Assert.Single(await TranscriptsAsync(app, runId)).Content;
+        Assert.Contains("My router keeps dropping.", transcript, StringComparison.Ordinal);
+        Assert.DoesNotContain("straggler", transcript, StringComparison.Ordinal);
+        Assert.All(support.Prompts, p => Assert.DoesNotContain("straggler", p, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FR356_a_conversation_waiting_on_its_input_runs_its_first_turn_once_the_input_is_submitted()
+    {
+        var customer = Customer("My router keeps dropping.");
+        var support = Support("Goodbye!");
+        await using var app = FixtureFlowApp.Create(factory, new PositionLimit(), customer, support);
+        using var fixture = await ProjectApi.FixtureAsync(app);
+        var run = await ProjectApi.ReadAsync<PipelineRunDto>(
+            await fixture.Contributor.Client.PostAsJsonAsync(
+                $"{fixture.Path}/pipeline-runs", new { pipelineId = FlowFixturePack.CallSim, approvalMode = "advisory" }, Ct),
+            HttpStatusCode.Created);
+
+        await DriveAsync(app, fixture.Project.Id);
+        Assert.Equal(GenericRunStatus.WaitingOnInput, (await RunAsync(app, run.Id)).Status);
+        Assert.Empty(customer.Prompts);
+
+        // The entry is planned once: with the input present it reaches the conversation, which runs its turns.
+        await ProjectApi.ReadAsync<PipelineArtifactVersionDto>(
+            await fixture.Contributor.Client.PostAsJsonAsync($"/api/pipeline-runs/{run.Id}/inputs/scenario", Scenario, Ct), HttpStatusCode.Created);
+        Assert.Equal(2, await DriveAsync(app, fixture.Project.Id));
+
+        Assert.Equal(GenericRunStatus.Completed, (await RunAsync(app, run.Id)).Status);
+        Assert.Contains(Scenario, Assert.Single(customer.Prompts), StringComparison.Ordinal);
+        Assert.Empty(await ProjectApi.WithDbAsync(app, db => db.Jobs.AsNoTracking()
+            .Where(j => j.ProjectId == fixture.Project.Id && j.Status == JobStatus.Failed).ToListAsync(Ct)));
+    }
 }
