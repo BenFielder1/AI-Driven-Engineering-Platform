@@ -69,11 +69,26 @@ public interface IPackRegistry
     /// <summary>An <see cref="IGuard"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>).</summary>
     void AddGuard(string name);
 
-    /// <summary>An <see cref="IStageHandler"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>).</summary>
-    void AddStageHandler(string name);
+    /// <summary>An <see cref="IStageHandler"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>), not external.</summary>
+    void AddStageHandler(string name) => AddStageHandler(name, external: false);
 
-    /// <summary>An <see cref="IAgentTool"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>).</summary>
-    void AddTool(string name);
+    /// <summary>
+    /// An <see cref="IStageHandler"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>). FR-360 (0.8.0): <paramref name="external"/>
+    /// marks a handler that sends, publishes, submits or pays outside Tevrin; it runs only after an approved
+    /// <c>external_action</c> gate. Declared in code, so no definition or hash changes.
+    /// </summary>
+    void AddStageHandler(string name, bool external);
+
+    /// <summary>An <see cref="IAgentTool"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>) registered without a tier: it gets
+    /// <see cref="ToolTierRules.DefaultRegisteredTier"/> (<c>write</c>) and isn't external.</summary>
+    void AddTool(string name) => AddTool(name, ToolTierRules.DefaultRegisteredTier, external: false);
+
+    /// <summary>
+    /// An <see cref="IAgentTool"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>) with its FR-358 <paramref name="tier"/> (0.8.0);
+    /// FR-360: <paramref name="external"/> marks a tool that acts outside Tevrin (it runs only after an approved
+    /// <c>external_action</c> gate). Declared in code, so no definition or hash changes.
+    /// </summary>
+    void AddTool(string name, ToolTier tier, bool external = false);
 
     /// <summary>A job type the pack handles (its job handler is registered in the host's DI).</summary>
     void AddJobType(string jobType);

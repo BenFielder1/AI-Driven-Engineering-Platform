@@ -449,6 +449,8 @@ public static partial class PipelineDefinitionValidator
                     {
                         Add(DefinitionErrorCodes.UnknownTool, $"{path}.agent.tools[{t}]", $"No pack registered tool '{tool}'.");
                     }
+
+                    CheckToolTier(tool, stage.ToolPolicy, $"{path}.agent.tools[{t}]"); // FR-358
                 }
 
                 CheckJobType(agent.JobType, path + ".agent.job_type");

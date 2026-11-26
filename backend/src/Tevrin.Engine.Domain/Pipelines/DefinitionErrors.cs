@@ -47,6 +47,10 @@ public static class DefinitionErrorCodes
     /// <summary>FR-344, FR-347 (0.8.0): a <c>routes:</c> entry or <c>on_veto.to</c> that isn't an earlier stage.</summary>
     public const string RouteTarget = "DEF_ROUTE_TARGET";
 
+    /// <summary>FR-358 (0.8.0): a tool an agent stage or binding lists whose registered tier is above its
+    /// <c>tool_policy.max_tier</c> (default <c>write</c>).</summary>
+    public const string ToolTier = "DEF_TOOL_TIER";
+
     /// <summary>FR-345 (0.8.0, also FR-344 and FR-349 agent references, and FR-355/FR-356 map, reduce and conversation
     /// agents): an agent key the stage doesn't bind in <c>agents:</c>.</summary>
     public const string FanOutAgent = "DEF_FANOUT_AGENT";
@@ -70,8 +74,8 @@ public static class DefinitionErrorCodes
     [
         Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
         UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
-        UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput, BranchInput, RouteTarget, FanOutAgent,
-        FollowUpStage, MapSource, ConversationParticipants,
+        UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput, BranchInput, RouteTarget, ToolTier,
+        FanOutAgent, FollowUpStage, MapSource, ConversationParticipants,
     ];
 
     /// <summary>

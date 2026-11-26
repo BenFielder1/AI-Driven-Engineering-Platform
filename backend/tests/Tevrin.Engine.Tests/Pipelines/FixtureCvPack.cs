@@ -12,6 +12,13 @@ public sealed class FixtureCvPack : IPipelinePack
     public const string ScorePrompt = "cv.score";
     public const string TailorPrompt = "cv.tailor";
 
+    /// <summary>
+    /// FR-360 (M71): the "submit application" handler, registered <c>external: true</c>. It's in the pack only, not yet a
+    /// stage of <c>fixture-cv.pipeline.yaml</c>: a new stage changes the definition and the integration tests' copy of the
+    /// pack (which doesn't register the handler) would then refuse the fixture. The runner step adds the stage to both.
+    /// </summary>
+    public const string SubmitApplicationHandler = "fixture-cv.submit-application";
+
     public const string ScoreTemplate = """
             ---
             version: cs1
@@ -40,5 +47,6 @@ public sealed class FixtureCvPack : IPipelinePack
         registry.AddDefinition("fixture-cv.pipeline.yaml", Fixtures.Read("fixture-cv.pipeline.yaml"));
         registry.AddPrompt(ScorePrompt, ScoreTemplate);
         registry.AddPrompt(TailorPrompt, TailorTemplate);
+        registry.AddStageHandler(SubmitApplicationHandler, external: true);
     }
 }

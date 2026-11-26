@@ -175,6 +175,8 @@ public static class DefinitionHash
             obj["agent"] = a;
         }
 
+        AddToolPolicy(obj, s.ToolPolicy);
+
         // D-0.7.0-42: omitted when empty, so a definition without secondary agents hashes as before.
         if (s.Agents.Count > 0)
         {
@@ -404,7 +406,18 @@ public static class DefinitionHash
             obj["on_invalid"] = OnInvalid(onInvalid);
         }
 
+        AddToolPolicy(obj, b.ToolPolicy);
         return obj;
+    }
+
+    /// <summary>FR-358 (0.8.0): <c>tool_policy</c> only when it isn't the default (<c>max_tier: write</c>), so a definition
+    /// without one, or writing the default out, hashes as before.</summary>
+    private static void AddToolPolicy(Obj obj, ToolPolicyDefinition? policy)
+    {
+        if (!ToolTierRules.IsDefault(policy))
+        {
+            obj["tool_policy"] = new Obj { ["max_tier"] = ToolTierRules.MaxTierOf(policy).ToWire() };
+        }
     }
 
     private static List<object?> Requirements(IReadOnlyList<StageRequirement> requires) =>

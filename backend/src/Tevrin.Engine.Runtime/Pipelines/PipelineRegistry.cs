@@ -119,6 +119,32 @@ public sealed class PipelineRegistry
             _ => p.Tools,
         }).Contains(name));
 
+    /// <summary>
+    /// FR-358: the tier the packs registered <paramref name="tool"/> with; <see cref="ToolTierRules.DefaultRegisteredTier"/>
+    /// for a tool registered without one or bound only in DI; <c>null</c> when nothing registers it. For the runner's
+    /// call-time check, which also covers runs pinned before a pack re-tiered a tool.
+    /// </summary>
+    public ToolTier? ToolTierOf(string tool)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        if (!Registers(PipelineComponentKind.Tool, tool))
+        {
+            return null;
+        }
+
+        return Packs.Select(p => p.ToolTiers.TryGetValue(tool, out var tier) ? tier : (ToolTier?)null).Max()
+            ?? ToolTierRules.DefaultRegisteredTier;
+    }
+
+    /// <summary>FR-360: whether a pack registered handler or tool <paramref name="name"/> with <c>external: true</c>.</summary>
+    public bool IsExternal(PipelineComponentKind kind, string name) =>
+        kind switch
+        {
+            PipelineComponentKind.StageHandler => Packs.Any(p => p.ExternalHandlers.Contains(name)),
+            PipelineComponentKind.Tool => Packs.Any(p => p.ExternalTools.Contains(name)),
+            _ => false,
+        };
+
     /// <summary>The DI implementation type bound to <paramref name="name"/>, or <c>null</c>.</summary>
     public Type? ImplementationOf(PipelineComponentKind kind, string name) =>
         Components.FirstOrDefault(c => c.Kind == kind && c.Name == name)?.ImplementationType;
@@ -140,6 +166,7 @@ public sealed class PipelineRegistry
             Guards = Names(p => p.Guards, PipelineComponentKind.Guard),
             Handlers = Names(p => p.Handlers, PipelineComponentKind.StageHandler),
             Tools = Names(p => p.Tools, PipelineComponentKind.Tool),
+            ToolTiers = ToolTiers(all),
             JobTypes = [.. all.SelectMany(p => p.JobTypes).Concat(jobTypes).Distinct(StringComparer.Ordinal)],
             Settings = [.. pack.Settings],
             Schemas = [.. pack.Schemas.Keys],
@@ -148,6 +175,18 @@ public sealed class PipelineRegistry
             Prompts = pack.Prompts.Count == 0 ? null : pack.Prompts,
             ContextNames = [.. pack.ContextNames],
         };
+    }
+
+    /// <summary>FR-358: every pack-registered tool's tier (the highest, if two packs name one tool).</summary>
+    private static Dictionary<string, ToolTier> ToolTiers(List<PackRegistration> all)
+    {
+        var tiers = new Dictionary<string, ToolTier>(StringComparer.Ordinal);
+        foreach (var (tool, tier) in all.SelectMany(p => p.ToolTiers))
+        {
+            tiers[tool] = tiers.TryGetValue(tool, out var earlier) && earlier > tier ? earlier : tier;
+        }
+
+        return tiers;
     }
 
     private static LoadedPipelineDefinition Load(PackDefinitionSource source, PackCatalog catalog)

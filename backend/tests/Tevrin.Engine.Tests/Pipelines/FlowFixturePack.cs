@@ -30,6 +30,16 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
     /// <summary>FR-357 (M70): a weekly report over the last 7 days of <c>fixture-qa</c> runs.</summary>
     public const string Trends = "fixture-trends";
 
+    /// <summary>FR-358, FR-359, FR-361 (M71): a webhook alert, an investigator with a read tool, then an executor whose
+    /// <c>tool_policy</c> allows the destructive <c>restart-pod</c>.</summary>
+    public const string OnCall = "fixture-oncall";
+
+    /// <summary>FR-358: the investigator's log reader, <c>read</c>.</summary>
+    public const string ReadLogsTool = "flow.read-logs";
+
+    /// <summary>FR-358, FR-359: the executor's pod restart, <c>destructive</c>.</summary>
+    public const string RestartPodTool = "flow.restart-pod";
+
     /// <summary>FR-356: a conversation stop guard (for the guard-stop edits; the fixture stops at a phrase).</summary>
     public const string CallResolvedGuard = "flow.call-resolved";
 
@@ -39,7 +49,7 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
     public const string PositionLimitGuard = "flow.position-limit";
     public const string ForecastSpreadGuard = "flow.forecast-spread";
 
-    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants, FactCheck, Postmortem, Qa, CallSim, Trends];
+    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants, FactCheck, Postmortem, Qa, CallSim, Trends, OnCall];
 
     public static IReadOnlyList<string> Prompts { get; } =
     [
@@ -51,6 +61,7 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         "flow.factwrite", "flow.fact-check",
         "flow.pm-work", "flow.pm-review", "flow.pm-grade",
         "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support", "flow.trends",
+        "flow.oncall-investigate", "flow.oncall-execute",
     ];
 
     public static IReadOnlyList<string> JobTypes { get; } =
@@ -65,7 +76,21 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         Guards = [PositionLimitGuard, ForecastSpreadGuard, CallResolvedGuard],
         Handlers = [QaTallyHandler],
         JobTypes = JobTypes,
+        Tools = [ReadLogsTool, RestartPodTool],
+        ToolTiers = new Dictionary<string, ToolTier>(StringComparer.Ordinal)
+        {
+            [ReadLogsTool] = ToolTier.Read,
+            [RestartPodTool] = ToolTier.Destructive,
+        },
     };
+
+    /// <summary>FR-358: the investigator reads the alert.</summary>
+    public const string OnCallInvestigatePrompt =
+        "---\nversion: flow.oncall-investigate-1\n---\nYou investigate production alerts.\n<!-- user -->\nAlert:\n{{ALERT}}\n";
+
+    /// <summary>FR-359: the executor reads the alert and the findings.</summary>
+    public const string OnCallExecutePrompt =
+        "---\nversion: flow.oncall-execute-1\n---\nYou remediate production incidents.\n<!-- user -->\nAlert:\n{{ALERT}}\nFindings:\n{{FINDINGS}}\n";
 
     /// <summary>FR-356: the customer simulator's persona prompt (the scenario, its role and the transcript so far).</summary>
     public const string CallSimCustomerPrompt =
@@ -100,7 +125,15 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         registry.AddPrompt("flow.callsim-support", CallSimSupportPrompt);
         // FR-357: the from_runs list placeholder.
         registry.AddPrompt("flow.trends", TrendsPrompt);
-        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check", "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support", "flow.trends"]))
+        // FR-358, FR-359: the on-call agents read their inputs.
+        registry.AddPrompt("flow.oncall-investigate", OnCallInvestigatePrompt);
+        registry.AddPrompt("flow.oncall-execute", OnCallExecutePrompt);
+        string[] own =
+        [
+            "flow.factwrite", "flow.fact-check", "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support",
+            "flow.trends", "flow.oncall-investigate", "flow.oncall-execute",
+        ];
+        foreach (var prompt in Prompts.Except(own))
         {
             registry.AddPrompt(prompt, $"""
                 ---
@@ -116,6 +149,10 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         registry.AddGuard(ForecastSpreadGuard);
         registry.AddGuard(CallResolvedGuard);
         registry.AddStageHandler(QaTallyHandler);
+
+        // FR-358: the on-call tools with their tiers.
+        registry.AddTool(ReadLogsTool, ToolTier.Read);
+        registry.AddTool(RestartPodTool, ToolTier.Destructive);
         foreach (var jobType in JobTypes)
         {
             registry.AddJobType(jobType);

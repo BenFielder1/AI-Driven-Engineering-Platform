@@ -43,10 +43,11 @@ public sealed class SdlcPack : IPipelinePack
             registry.AddGuard(guard);
         }
 
-        // FR-317: the repo tools (agent.tools) and the context sections the host's providers supply.
+        // FR-317: the repo tools (agent.tools) and the context sections the host's providers supply. FR-358: they only
+        // read the working copy, so they're 'read' (under every stage's default max_tier; the SDLC is unchanged).
         foreach (var tool in SdlcToolNames.All)
         {
-            registry.AddTool(tool);
+            registry.AddTool(tool, ToolTier.Read);
         }
 
         foreach (var name in SdlcContextNames.All)

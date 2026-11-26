@@ -18,6 +18,10 @@ public sealed record PackCatalog
 
     public IReadOnlyCollection<string> Tools { get; init; } = [];
 
+    /// <summary>FR-358 (0.8.0): each tool's registered tier; a tool missing here is
+    /// <see cref="ToolTierRules.DefaultRegisteredTier"/> (<see cref="ToolTierRules.TierOf"/>).</summary>
+    public IReadOnlyDictionary<string, ToolTier> ToolTiers { get; init; } = new Dictionary<string, ToolTier>(StringComparer.Ordinal);
+
     /// <summary>Pack job types (registered handlers); <see cref="EngineJobTypes.All"/> are added implicitly.</summary>
     public IReadOnlyCollection<string> JobTypes { get; init; } = [];
 

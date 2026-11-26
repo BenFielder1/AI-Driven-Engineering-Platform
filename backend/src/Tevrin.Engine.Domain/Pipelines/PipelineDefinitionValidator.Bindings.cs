@@ -93,6 +93,10 @@ public static partial class PipelineDefinitionValidator
                 {
                     Add(DefinitionErrorCodes.UnknownTool, $"{path}.tools[{t}]", $"No pack registered tool '{tool}'.");
                 }
+                else
+                {
+                    CheckToolTier(tool, binding.ToolPolicy, $"{path}.tools[{t}]"); // FR-358
+                }
             }
 
             // A duplicate key's prompt is checked at its first binding only (FR-350: a validator agent's prompt also gets

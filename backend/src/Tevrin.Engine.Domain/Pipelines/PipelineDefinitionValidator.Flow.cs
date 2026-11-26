@@ -59,6 +59,7 @@ public static partial class PipelineDefinitionValidator
             ValidateRoutes(stage, index, path);
             ValidateVariants(stage, path);
             ValidateFeedback(stage, path);
+            ValidateToolPolicy(stage, path);
             ValidateMap(stage, index, path);
             ValidateConversation(stage, index, path);
             ValidateFromRuns(stage, path);

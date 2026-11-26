@@ -446,6 +446,10 @@ public sealed record StageDefinition
     /// position); <see cref="Inputs"/> holds the plain artifact keys.</summary>
     public IReadOnlyList<RunsInputDefinition> FromRuns { get; init; } = [];
 
+    /// <summary>FR-358 (0.8.0): <c>tool_policy: { max_tier }</c> for the stage's agent, or <c>null</c> (<c>write</c>,
+    /// <see cref="ToolTierRules.DefaultMaxTier"/>). An <c>agents:</c> binding sets its own.</summary>
+    public ToolPolicyDefinition? ToolPolicy { get; init; }
+
     /// <summary>This stage, then (for a parallel group) every branch stage, branch by branch.</summary>
     public IEnumerable<StageDefinition> WithBranchStages() =>
         Parallel is null ? [this] : [this, .. Parallel.Branches.SelectMany(b => b).SelectMany(s => s.WithBranchStages())];

@@ -76,9 +76,12 @@ public static class PipelineDefinitionLoader
 
             // FR-355, FR-356 (0.8.0): map-reduce and conversation.
             "map", "reduce", "conversation",
+
+            // FR-358 (0.8.0): the agent's tool tier ceiling.
+            "tool_policy",
         ];
 
-        private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid"];
+        private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid", "tool_policy"];
 
         public PipelineDefinition Definition(YamlMapping map)
         {
@@ -276,6 +279,7 @@ public static class PipelineDefinitionLoader
                 Reduce = Reduce(obj),
                 Conversation = Conversation(obj),
                 FromRuns = fromRuns,
+                ToolPolicy = ToolPolicy(obj),
             };
         }
 
@@ -546,6 +550,18 @@ public static class PipelineDefinitionLoader
             return new FeedbackInjectionDefinition(obj.Bool("inject") ?? false, obj.Int("limit") ?? FeedbackInjectionRules.DefaultLimit);
         }
 
+        /// <summary>FR-358: <c>tool_policy: { max_tier: read | write | destructive }</c>; <c>max_tier</c> is required.</summary>
+        private ToolPolicyDefinition? ToolPolicy(Obj owner)
+        {
+            if (owner.Mapping("tool_policy") is not { } policy)
+            {
+                return null;
+            }
+
+            var obj = Object(policy.Map, policy.Path, ["max_tier"]);
+            return new ToolPolicyDefinition(obj.Enum<ToolTier>("max_tier", required: true) ?? ToolTierRules.DefaultMaxTier);
+        }
+
         /// <summary>FR-351: <c>writes_feedback: { agent, from }</c>.</summary>
         private WritesFeedbackDefinition? WritesFeedback(Obj stage)
         {
@@ -629,6 +645,9 @@ public static class PipelineDefinitionLoader
                     // D-0.7.0-44: the binding's own output checks.
                     Validate = Validations(obj),
                     OnInvalid = OnInvalid(obj),
+
+                    // FR-358: the binding's own tool tier ceiling.
+                    ToolPolicy = ToolPolicy(obj),
                 };
             }).OfType<AgentBindingDefinition>().ToList();
 
