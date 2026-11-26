@@ -43,11 +43,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-347 | Route back to an earlier stage (`fixture-editorial`) | 3.4 | backend | M68 | done | ccf1b19, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135) |
 | FR-348 | Revision cap across the run | 3.4, 4.66 | backend | M68 | done | ccf1b19, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135) |
 | FR-349 | Multiple output variants | 3.4, 4.67 | backend | M68 | done | 1c5bbb8, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45668753073) |
-| FR-350 | Validator agent (`fixture-factcheck`) | 3.5 | backend | M69 | todo | — |
-| FR-351 | Agent feedback store (`fixture-postmortem`) | 3.5, 4.75 | backend + data | M69 | todo | — |
+| FR-350 | Validator agent (`fixture-factcheck`) | 3.5 | backend | M69 | done | 328ea74 + 7a64b19, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789) |
+| FR-351 | Agent feedback store (`fixture-postmortem`) | 3.5, 4.75 | backend + data | M69 | done | 7a64b19 + 03d8a13, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789) |
 | FR-352 | Source-of-truth artifacts pinned per run (`fixture-cv`) | 3.5, 4.76 | backend + data | M67 | done | 9372e8b, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45467772497) |
-| FR-353 | External outcome scoring, Brier | 3.5, 4.74 | backend + data | M69 | todo | — |
-| FR-354 | Follow-up stages (delayed jobs) | 3.5, 4.70 | backend + data | M69 | todo | — |
+| FR-353 | External outcome scoring, Brier | 3.5, 4.74 | backend + data | M69 | done | 328ea74, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789) |
+| FR-354 | Follow-up stages (delayed jobs) | 3.5, 4.70 | backend + data | M69 | done | 3addd12, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789) |
 | FR-355 | Map-reduce (`fixture-qa`) | 3.6, 4.68 | backend + data | M70 | todo | — |
 | FR-356 | Conversation stage (`fixture-callsim`) | 3.6, 4.69 | backend | M70 | todo | — |
 | FR-357 | Windowed inputs over runs (`fixture-trends`) | 3.6 | backend | M70 | todo | — |
@@ -85,15 +85,22 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] b. Data: `pipeline_runs.revisions`/`outcome`, branch, variant and veto columns, `variant_select` gates with payload — 81944dc ([CI 45616618135](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45616618135))
   - [x] c. Driver: parallel (c2 ab601ee + fix 68818af), veto, routes, revision cap (c1 ccf1b19) (FR-343, FR-344, FR-347, FR-348) ([CI 45668753073](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45668753073))
   - [x] d. Driver: fan-out with isolation, aggregate with disagreement (d1 fe72383), variants with gate or agent selection (d2 1c5bbb8) (FR-345, FR-346, FR-349) ([CI 45668753073](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45668753073))
-- [ ] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
-  - [ ] a. Data: `agent_runs.validator_findings`/`feedback_ids`, `agent_feedback`, `outcome_scores`
-  - [ ] b. Validator agents (FR-350)
-  - [ ] c. Agent feedback store and injection (FR-351)
-  - [ ] d. Outcome scores, Brier, prompt-comparison means (FR-353)
-  - [ ] e. Follow-up stages (FR-354)
+- [x] M69 Quality and learning — FR-350, FR-351, FR-353, FR-354
+  - [x] a. Data: `agent_runs.validator_findings`/`feedback_ids`, `agent_feedback`, `outcome_scores` — c1da188
+  - [x] b. Validator agents (FR-350) — 328ea74
+  - [x] c. Agent feedback store and injection (FR-351) — 7a64b19 + fix 03d8a13
+  - [x] d. Outcome scores, Brier, prompt-comparison means (FR-353) — 328ea74
+  - [x] e. Follow-up stages (FR-354) — 3addd12 ([CI 45787248789](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789), after splitting the `rest` integration shard in 5d048d7: Pipelines, Stages and Projects now run as `pipelines-projects`)
 - [ ] M70 Scale and conversation — FR-355–FR-357
+  - [ ] a. Definition syntax, validator and hash for map/reduce, conversation and `from_runs`; fixtures `fixture-qa`, `fixture-callsim`, `fixture-trends` (D-0.8.0-23)
+  - M70a review minors for later steps: validator error paths `inputs[{j}]` skip `from_runs` entries (wrong YAML index); map/conversation stages read as `Manual` until c/d land; `from_runs` not yet in prompt placeholders or `AgentStageRunner` inputs; `DEF_MAP_SOURCE` checks list order, not reachability.
+  - [ ] b. Data: map item index on executions/agent runs/artifacts; error codes `MAP_TOO_MANY_ITEMS`
+  - [ ] c. Driver: map-reduce (FR-355)
+  - [ ] d. Driver: conversation (FR-356)
+  - [ ] e. `from_runs` input resolution (FR-357)
 - [ ] M71 Tools and safety — FR-358–FR-361
 - [ ] M72 Engine UI — FR-362–FR-366
+  - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (and `MAP_TOO_MANY_ITEMS`).
   - Carry-over from M69: show the follow-up label (`stage_executions.followup`) on timeline entries (additive DTO field), and the outcome scores and feedback (FR-365).
   - Carry-over from M68: expose `approval_gates.payload` (variant labels and artifact ids) on the engine gate DTO for the `variant_select` card.
   - Carry-over from M67: show an artifact's project scope and a run's pinned project artifacts (`pinnedArtifacts`, FR-352) in the run view; fill `{artifact}` in `SOURCE_ARTIFACT_MISSING` from the problem `reason`.
@@ -126,7 +133,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Non-SDLC agent runs (coach, fixtures) record `ARTIFACT_CREATED`/`GATE_CREATED` and token use (FR-341), but not `RUN_STARTED`/`RUN_COMPLETED` events: the engine hook interface has no slot for them. Their payloads carry ids and counts only, never content (M67).
 - Parallel groups with `on_branch_failure: continue`: a branch whose job is dead-lettered after its transient retries waits for a manual retry instead of being marked failed (M68).
 - A follow-up stage whose job is dead-lettered leaves its stage execution open (the reconcile skips follow-up rows); like the parallel `continue` case, it needs a job-ended hook (M69).
-- Integration test shard `rest` is slow (15–18 min); rebalancing is an open follow-up from 0.7.0.
+- Integration shards: `rest` hit its 22-min step timeout in M69 and was split (5d048d7, `pipelines-projects`); watch shard times as tests grow.
 
 ## Manual checks (Ben)
 - FR-327: run `docs/operations/rename-to-tevrin.md` steps 1–3 on preview **before the 0.8.0 build PR merges** (otherwise the preview deploy's drift check fails until they're done), and on production before publishing 0.8.0; step 4 after 0.8.0 runs there.

@@ -433,6 +433,19 @@ public sealed record StageDefinition
     /// <summary>FR-351 (0.8.0): <c>writes_feedback: { agent, from }</c>, or <c>null</c>.</summary>
     public WritesFeedbackDefinition? WritesFeedback { get; init; }
 
+    /// <summary>FR-355 (0.8.0): the stage's map over an artifact array, or <c>null</c>.</summary>
+    public MapDefinition? Map { get; init; }
+
+    /// <summary>FR-355 (0.8.0): the reduce step after <see cref="Map"/>, or <c>null</c>.</summary>
+    public ReduceDefinition? Reduce { get; init; }
+
+    /// <summary>FR-356 (0.8.0): the stage's turn-based conversation, or <c>null</c>.</summary>
+    public ConversationDefinition? Conversation { get; init; }
+
+    /// <summary>FR-357 (0.8.0): the <c>{ from_runs: … }</c> entries of <c>inputs:</c>, in order (each with its
+    /// position); <see cref="Inputs"/> holds the plain artifact keys.</summary>
+    public IReadOnlyList<RunsInputDefinition> FromRuns { get; init; } = [];
+
     /// <summary>This stage, then (for a parallel group) every branch stage, branch by branch.</summary>
     public IEnumerable<StageDefinition> WithBranchStages() =>
         Parallel is null ? [this] : [this, .. Parallel.Branches.SelectMany(b => b).SelectMany(s => s.WithBranchStages())];

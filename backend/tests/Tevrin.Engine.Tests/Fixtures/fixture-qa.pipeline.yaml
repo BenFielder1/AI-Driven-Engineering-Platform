@@ -1,0 +1,30 @@
+# Fixture pipeline (M70, FR-355, §4.68): a QA lab scoring call transcripts. The scorer runs once per transcript (map, at
+# most 8 at a time, failed items skipped up to 5%), and the summariser reduces every item score into one report.
+pipeline: fixture-qa
+version: 1
+title: Fixture QA
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [score]
+
+artifacts:
+  transcripts: { title: Transcripts, format: json, approval: auto_lock, cascade: none, input: true }
+  scores:      { title: Scores, format: json, approval: auto_lock, cascade: none }
+
+statuses:
+  scoring: { generic: active }
+
+stages:
+  - id: score
+    title: Score the transcripts
+    status: scoring
+    inputs: [transcripts]
+    output: scores
+    requires:
+      - { input: transcripts }
+    agents:
+      - { key: qa-scorer, job_type: flow.qa-score, prompt: flow.qa-score }
+      - { key: qa-summariser, job_type: flow.qa-summarise, prompt: flow.qa-summarise }
+    map: { over: transcripts.items, agent: qa-scorer, max_parallel: 8, max_items: 1000, on_item_failure: skip, max_failed: 5% }
+    reduce: { agent: qa-summariser }

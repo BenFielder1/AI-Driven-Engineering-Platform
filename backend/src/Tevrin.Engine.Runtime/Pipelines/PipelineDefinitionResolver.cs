@@ -123,14 +123,16 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
                 .Concat(stage.Loop?.Requires.OfType<GuardRequirement>().Select(r => r.Guard) ?? [])
                 .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard).OfType<string>()) // D-0.7.0-44: the bindings' own checks
                 .Concat(stage.Veto.Select(v => v.Guard).OfType<string>())
-                .Concat(stage.Aggregate?.DisagreementGuard is { } disagreement ? [disagreement] : []);
+                .Concat(stage.Aggregate?.DisagreementGuard is { } disagreement ? [disagreement] : [])
+                .Concat(stage.Conversation?.Stop?.Guard is { } stop ? [stop] : []); // FR-356: the conversation's stop guard
             foreach (var guard in guards)
             {
                 Check(PipelineComponentKind.Guard, "guard", guard);
             }
 
             // D-0.7.0-43: the primary handler, then the secondary ones.
-            foreach (var handler in stage.AllHandlers())
+            // FR-355: then the map and reduce handlers (their agents are bindings, whose tools follow).
+            foreach (var handler in stage.AllHandlers().Concat(stage.ConstructHandlers()))
             {
                 Check(PipelineComponentKind.StageHandler, "handler", handler);
             }

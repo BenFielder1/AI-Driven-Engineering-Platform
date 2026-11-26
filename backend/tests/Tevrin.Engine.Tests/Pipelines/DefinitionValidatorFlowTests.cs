@@ -83,5 +83,5 @@ public class DefinitionValidatorFlowTests
 
     [Fact]
     public void FR276_every_code_in_the_table_is_exercised() =>
-        Assert.Equal(23, DefinitionErrorCodes.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(25, DefinitionErrorCodes.All.Distinct(StringComparer.Ordinal).Count()); // FR-355, FR-356: DEF_MAP_SOURCE, DEF_CONVERSATION_PARTICIPANTS
 }

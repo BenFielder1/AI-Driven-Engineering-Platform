@@ -21,10 +21,25 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
     /// <summary>FR-351 (M69): a worker with its agent feedback injected, then a reviewer whose lessons become feedback.</summary>
     public const string Postmortem = "fixture-postmortem";
 
+    /// <summary>FR-355 (M70): a scorer mapped over 200 transcripts, then a summariser reducing the scores.</summary>
+    public const string Qa = "fixture-qa";
+
+    /// <summary>FR-356 (M70): customer and support simulators in a conversation that stops at a phrase.</summary>
+    public const string CallSim = "fixture-callsim";
+
+    /// <summary>FR-357 (M70): a weekly report over the last 7 days of <c>fixture-qa</c> runs.</summary>
+    public const string Trends = "fixture-trends";
+
+    /// <summary>FR-356: a conversation stop guard (for the guard-stop edits; the fixture stops at a phrase).</summary>
+    public const string CallResolvedGuard = "flow.call-resolved";
+
+    /// <summary>FR-355: a map or reduce handler (for the handler edits; the fixture uses agents).</summary>
+    public const string QaTallyHandler = "flow.qa-tally";
+
     public const string PositionLimitGuard = "flow.position-limit";
     public const string ForecastSpreadGuard = "flow.forecast-spread";
 
-    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants, FactCheck, Postmortem];
+    public static IReadOnlyList<string> All { get; } = [Parallel, Veto, Forecast, Editorial, Variants, FactCheck, Postmortem, Qa, CallSim, Trends];
 
     public static IReadOnlyList<string> Prompts { get; } =
     [
@@ -35,15 +50,20 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         "flow.headline", "flow.tagline", "flow.judge",
         "flow.factwrite", "flow.fact-check",
         "flow.pm-work", "flow.pm-review", "flow.pm-grade",
+        "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support", "flow.trends",
     ];
 
     public static IReadOnlyList<string> JobTypes { get; } =
-        ["flow.risk-review", "flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian", "flow.judge", "flow.fact-check"];
+        [
+            "flow.risk-review", "flow.forecast-base-rate", "flow.forecast-trend", "flow.forecast-contrarian", "flow.judge", "flow.fact-check",
+            "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support",
+        ];
 
     /// <summary>The catalog the fixtures validate against (prompts unchecked), for the invalid-case tests.</summary>
     public static PackCatalog Catalog { get; } = new()
     {
-        Guards = [PositionLimitGuard, ForecastSpreadGuard],
+        Guards = [PositionLimitGuard, ForecastSpreadGuard, CallResolvedGuard],
+        Handlers = [QaTallyHandler],
         JobTypes = JobTypes,
     };
 
@@ -74,6 +94,8 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
 
         registry.AddGuard(PositionLimitGuard);
         registry.AddGuard(ForecastSpreadGuard);
+        registry.AddGuard(CallResolvedGuard);
+        registry.AddStageHandler(QaTallyHandler);
         foreach (var jobType in JobTypes)
         {
             registry.AddJobType(jobType);

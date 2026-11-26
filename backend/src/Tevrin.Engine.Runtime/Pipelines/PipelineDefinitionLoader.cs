@@ -73,6 +73,9 @@ public static class PipelineDefinitionLoader
 
             // FR-343–FR-349 (0.8.0): the flow constructs.
             "parallel", "veto", "on_veto", "fan_out", "aggregate", "routes", "variants", "feedback", "writes_feedback",
+
+            // FR-355, FR-356 (0.8.0): map-reduce and conversation.
+            "map", "reduce", "conversation",
         ];
 
         private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid"];
@@ -237,7 +240,7 @@ public static class PipelineDefinitionLoader
                 return new StageDefinition { Id = string.Empty };
             }
 
-            var inputs = obj.StringList("inputs");
+            var (inputs, fromRuns) = Inputs(obj);
             var parallel = Parallel(obj, out var parallelId);
             return new StageDefinition
             {
@@ -269,6 +272,122 @@ public static class PipelineDefinitionLoader
                 Variants = Variants(obj),
                 Feedback = Feedback(obj),
                 WritesFeedback = WritesFeedback(obj),
+                Map = Map(obj),
+                Reduce = Reduce(obj),
+                Conversation = Conversation(obj),
+                FromRuns = fromRuns,
+            };
+        }
+
+        /// <summary>A stage's <c>inputs:</c>: artifact keys, and (FR-357) <c>{ from_runs: { pipeline, artifact, window, status } }</c>
+        /// entries, each kept with its position. <c>status</c> defaults to <c>completed</c>; the rest is checked by the validator.</summary>
+        private (List<string> Inputs, List<RunsInputDefinition> FromRuns) Inputs(Obj stage)
+        {
+            var keys = new List<string>();
+            var fromRuns = new List<RunsInputDefinition>();
+            var entries = stage.List("inputs", (node, path) => (Node: node, Path: path));
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var (node, path) = entries[i];
+                if (node is not YamlMapping map)
+                {
+                    keys.Add(Text(node, path) ?? string.Empty);
+                    continue;
+                }
+
+                var entry = Object(map, path, ["from_runs"]);
+                if (entry.Mapping("from_runs") is not { } runs)
+                {
+                    if (entry.Entries.Count > 0)
+                    {
+                        Error(Join(path, "from_runs"), "Expected a mapping.");
+                    }
+                    else
+                    {
+                        Error(path, "An input is an artifact key or '{ from_runs: { pipeline, artifact, window } }'.");
+                    }
+
+                    continue;
+                }
+
+                var obj = Object(runs.Map, runs.Path, ["pipeline", "artifact", "window", "status"]);
+                fromRuns.Add(new RunsInputDefinition(obj.String("pipeline"), obj.String("artifact"), obj.String("window"))
+                {
+                    Status = obj.Enum<GenericRunStatus>("status") ?? GenericRunStatus.Completed,
+                    Position = i,
+                });
+            }
+
+            return (keys, fromRuns);
+        }
+
+        /// <summary>FR-355: <c>map: { over, agent | handler, max_parallel, max_items, on_item_failure, max_failed }</c>, the
+        /// defaults filled (8, 1000, skip, 5%).</summary>
+        private MapDefinition? Map(Obj stage)
+        {
+            if (stage.Mapping("map") is not { } map)
+            {
+                return null;
+            }
+
+            var obj = Object(map.Map, map.Path, ["over", "agent", "handler", "max_parallel", "max_items", "on_item_failure", "max_failed"]);
+            var maxFailed = MapFailureLimit.Default;
+            if (obj.OptionalString("max_failed") is { } text)
+            {
+                if (MapFailureLimit.Parse(text) is { } parsed)
+                {
+                    maxFailed = parsed;
+                }
+                else
+                {
+                    Error(Join(map.Path, "max_failed"), $"'max_failed' must be a count (5) or a percentage (5%), not '{text}'.");
+                }
+            }
+
+            return new MapDefinition(obj.String("over"), obj.OptionalString("agent"), obj.OptionalString("handler"))
+            {
+                MaxParallel = obj.Int("max_parallel") ?? MapDefinition.DefaultMaxParallel,
+                MaxItems = obj.Int("max_items") ?? MapDefinition.DefaultMaxItems,
+                OnItemFailure = obj.Enum<MapItemFailure>("on_item_failure") ?? MapItemFailure.Skip,
+                MaxFailed = maxFailed,
+            };
+        }
+
+        /// <summary>FR-355: <c>reduce: { agent | handler }</c>.</summary>
+        private ReduceDefinition? Reduce(Obj stage)
+        {
+            if (stage.Mapping("reduce") is not { } reduce)
+            {
+                return null;
+            }
+
+            var obj = Object(reduce.Map, reduce.Path, ["agent", "handler"]);
+            return new ReduceDefinition(obj.OptionalString("agent"), obj.OptionalString("handler"));
+        }
+
+        /// <summary>FR-356: <c>conversation: { participants: [{ agent, role }…], opener, max_turns, stop: { guard } | { phrase } }</c>;
+        /// <c>max_turns</c> defaults to 20, <c>stop</c> is optional.</summary>
+        private ConversationDefinition? Conversation(Obj stage)
+        {
+            if (stage.Mapping("conversation") is not { } conversation)
+            {
+                return null;
+            }
+
+            var obj = Object(conversation.Map, conversation.Path, ["participants", "opener", "max_turns", "stop"]);
+            var participants = obj.List("participants", (node, path) =>
+                AsObject(node, path, ["agent", "role"]) is { } p ? new ConversationParticipant(p.String("agent"), p.String("role")) : null);
+            ConversationStop? stop = null;
+            if (obj.Mapping("stop") is { } stopMap)
+            {
+                var s = Object(stopMap.Map, stopMap.Path, ["guard", "phrase"]);
+                stop = new ConversationStop(s.OptionalString("guard"), s.OptionalString("phrase"));
+            }
+
+            return new ConversationDefinition([.. participants.OfType<ConversationParticipant>()], obj.String("opener"))
+            {
+                TurnLimit = obj.Int("max_turns") ?? ConversationDefinition.DefaultMaxTurns,
+                Stop = stop,
             };
         }
 

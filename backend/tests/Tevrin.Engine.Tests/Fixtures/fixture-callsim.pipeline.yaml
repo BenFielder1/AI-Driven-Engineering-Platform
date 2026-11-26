@@ -1,0 +1,35 @@
+# Fixture pipeline (M70, FR-356, §4.69): a simulated support call. The customer simulator opens, the support agent
+# simulator replies, and they alternate until a reply says "goodbye" or six turns have run. The transcript is the output.
+pipeline: fixture-callsim
+version: 1
+title: Fixture call simulation
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [call]
+
+artifacts:
+  scenario:   { title: Scenario, format: markdown, approval: auto_lock, cascade: none, input: true }
+  transcript: { title: Transcript, format: json, approval: auto_lock, cascade: none }
+
+statuses:
+  calling: { generic: active }
+
+stages:
+  - id: call
+    title: Simulate the call
+    status: calling
+    inputs: [scenario]
+    output: transcript
+    requires:
+      - { input: scenario }
+    agents:
+      - { key: customer-sim, job_type: flow.callsim-customer, prompt: flow.callsim-customer }
+      - { key: support-sim, job_type: flow.callsim-support, prompt: flow.callsim-support }
+    conversation:
+      participants:
+        - { agent: customer-sim, role: customer }
+        - { agent: support-sim, role: agent }
+      opener: customer
+      max_turns: 6
+      stop: { phrase: goodbye }

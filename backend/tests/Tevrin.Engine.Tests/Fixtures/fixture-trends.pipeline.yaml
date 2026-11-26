@@ -1,0 +1,26 @@
+# Fixture pipeline (M70, FR-357): a weekly trend report. A schedule fire (or a manual start) collects the final `scores`
+# of the project's fixture-qa runs completed in the last 7 days, newest first, and the analyst writes the trend report.
+pipeline: fixture-trends
+version: 1
+title: Fixture trends
+triggers:
+  - { kind: manual }
+  - { kind: schedule }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [report]
+
+artifacts:
+  trend_report: { title: Trend report, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  reporting: { generic: active }
+
+stages:
+  - id: report
+    title: Write the trend report
+    status: reporting
+    agent: { key: trend-analyst, prompt: flow.trends }
+    inputs:
+      - from_runs: { pipeline: fixture-qa, artifact: scores, window: 7d, status: completed }
+    output: trend_report

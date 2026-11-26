@@ -29,4 +29,12 @@ public static class StageHandlers
         ArgumentNullException.ThrowIfNull(stage);
         return stage.Handler is { } primary ? [primary, .. stage.Handlers] : stage.Handlers;
     }
+
+    /// <summary>FR-355: the handlers <paramref name="stage"/>'s <c>map</c> and <c>reduce</c> name, in that order (none when
+    /// they use agents).</summary>
+    public static IEnumerable<string> ConstructHandlers(this StageDefinition stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        return new[] { stage.Map?.Handler, stage.Reduce?.Handler }.OfType<string>();
+    }
 }

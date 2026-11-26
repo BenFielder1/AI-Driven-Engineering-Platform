@@ -59,15 +59,23 @@ public static partial class PipelineDefinitionValidator
             ValidateRoutes(stage, index, path);
             ValidateVariants(stage, path);
             ValidateFeedback(stage, path);
+            ValidateMap(stage, index, path);
+            ValidateConversation(stage, index, path);
+            ValidateFromRuns(stage, path);
             ValidateParallel(stage, path, seen);
         }
 
-        /// <summary>§4.49 amended: a stage is at most one of <c>parallel</c>, <c>fan_out</c> and <c>variants</c>; a parallel
+        /// <summary>§4.49 amended: a stage is at most one of <c>parallel</c>, <c>fan_out</c>, <c>map</c>, <c>conversation</c> and
+        /// <c>variants</c> (FR-355, FR-356 add the middle two); a parallel
         /// group has no agent or handler; <c>fan_out</c>, <c>variants</c> and <c>routes</c> need an agent stage, and
         /// <c>aggregate</c> an agent or handler stage (<see cref="DefinitionErrorCodes.StageKind"/>).</summary>
         private void ValidateConstructKinds(StageDefinition stage, string path)
         {
-            var constructs = new[] { (stage.Parallel is not null, "parallel"), (stage.FanOut is not null, "fan_out"), (stage.Variants is not null, "variants") }
+            var constructs = new[]
+                {
+                    (stage.Parallel is not null, "parallel"), (stage.FanOut is not null, "fan_out"), (stage.Map is not null, "map"),
+                    (stage.Conversation is not null, "conversation"), (stage.Variants is not null, "variants"),
+                }
                 .Where(c => c.Item1).Select(c => c.Item2).ToList();
             if (constructs.Count > 1)
             {
@@ -209,6 +217,9 @@ public static partial class PipelineDefinitionValidator
                 (stage.Parallel is not null, "parallel"), (stage.OnSuccess is not null, "on_success"), (stage.OnReject is not null, "on_reject"),
                 (stage.Loop is not null, "loop"), (stage.Routes.Count > 0, "routes"), (stage.OnVeto?.To is not null, "on_veto.to"),
                 (stage.Aggregate is not null, "aggregate"), (stage.Gate is not null, "gate"), (stage.Veto.Count > 0, "veto"),
+
+                // FR-355, FR-356: map-reduce and conversations run at the top level only.
+                (stage.Map is not null, "map"), (stage.Reduce is not null, "reduce"), (stage.Conversation is not null, "conversation"),
             };
             foreach (var (_, key) in notAllowed.Where(n => n.Item1))
             {

@@ -38,6 +38,17 @@ public static partial class PipelineDefinitionValidator
                         Add(DefinitionErrorCodes.UnknownHandler, path, $"No pack registered stage handler '{handler}'.");
                     }
                 }
+
+                // FR-355: a map or reduce handler is a handler name too (registration is checked with the map).
+                if (stage.Map?.Handler is { Length: > 0 } mapHandler && !names.Add(mapHandler))
+                {
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.map.handler", DuplicateHandler(mapHandler));
+                }
+
+                if (stage.Reduce?.Handler is { Length: > 0 } reduceHandler && !names.Add(reduceHandler))
+                {
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.reduce.handler", DuplicateHandler(reduceHandler));
+                }
             }
         }
 

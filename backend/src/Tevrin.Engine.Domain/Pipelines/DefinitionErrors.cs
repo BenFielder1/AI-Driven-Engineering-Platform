@@ -47,8 +47,8 @@ public static class DefinitionErrorCodes
     /// <summary>FR-344, FR-347 (0.8.0): a <c>routes:</c> entry or <c>on_veto.to</c> that isn't an earlier stage.</summary>
     public const string RouteTarget = "DEF_ROUTE_TARGET";
 
-    /// <summary>FR-345 (0.8.0, also FR-344 and FR-349 agent references): an agent key the stage doesn't bind in
-    /// <c>agents:</c>.</summary>
+    /// <summary>FR-345 (0.8.0, also FR-344 and FR-349 agent references, and FR-355/FR-356 map, reduce and conversation
+    /// agents): an agent key the stage doesn't bind in <c>agents:</c>.</summary>
     public const string FanOutAgent = "DEF_FANOUT_AGENT";
 
     /// <summary>FR-354 (0.8.0): a <c>followups:</c> entry whose stage isn't a top-level stage, is listed twice, is reached by
@@ -57,13 +57,21 @@ public static class DefinitionErrorCodes
     /// <c>n</c> &gt; 0.</summary>
     public const string FollowUpStage = "DEF_FOLLOWUP_STAGE";
 
+    /// <summary>FR-355 (0.8.0): a <c>map.over</c> that isn't <c>&lt;artifact key&gt;[.&lt;array path&gt;]</c> naming a JSON
+    /// artifact the stage can read (one of its inputs, or an output of an earlier stage).</summary>
+    public const string MapSource = "DEF_MAP_SOURCE";
+
+    /// <summary>FR-356 (0.8.0): a <c>conversation</c> without 2–6 participants, with a missing or repeated role or agent, or
+    /// whose <c>opener</c> isn't one of the roles.</summary>
+    public const string ConversationParticipants = "DEF_CONVERSATION_PARTICIPANTS";
+
     /// <summary>Every code, in §4.49 table order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
         UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
         UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput, BranchInput, RouteTarget, FanOutAgent,
-        FollowUpStage,
+        FollowUpStage, MapSource, ConversationParticipants,
     ];
 
     /// <summary>

@@ -163,7 +163,7 @@ public static class DefinitionHash
             ["id"] = s.Id,
             ["title"] = s.Title,
             ["status"] = s.Status,
-            ["inputs"] = Strings(s.Inputs),
+            ["inputs"] = Inputs(s),
             ["requires"] = Requirements(s.Requires),
             ["validate"] = s.Validate.Select(Validation).ToList(),
         };
@@ -306,6 +306,76 @@ public static class DefinitionHash
         if (s.WritesFeedback is { } writes)
         {
             obj["writes_feedback"] = new Obj { ["agent"] = writes.Agent, ["from"] = writes.From };
+        }
+
+        AddScaleConstructs(obj, s);
+    }
+
+    /// <summary>FR-357: the plain input keys, with each <c>{ from_runs: … }</c> entry back at its position (clamped to the
+    /// end), so a stage without one hashes as before.</summary>
+    private static List<object?> Inputs(StageDefinition s)
+    {
+        var list = Strings(s.Inputs);
+        foreach (var runs in s.FromRuns.OrderBy(r => r.Position))
+        {
+            var from = new Obj
+            {
+                ["pipeline"] = runs.Pipeline,
+                ["artifact"] = runs.Artifact,
+                ["window"] = runs.Window,
+                ["status"] = runs.Status.ToWire(),
+            };
+            list.Insert(Math.Clamp(runs.Position, 0, list.Count), new Obj { ["from_runs"] = from });
+        }
+
+        return list;
+    }
+
+    /// <summary>FR-355, FR-356 (0.8.0): map, reduce and conversation only when used, with their defaults filled, so a
+    /// definition without them hashes as before.</summary>
+    private static void AddScaleConstructs(Obj obj, StageDefinition s)
+    {
+        if (s.Map is { } map)
+        {
+            var m = new Obj
+            {
+                ["over"] = map.Over,
+                ["max_parallel"] = map.MaxParallel,
+                ["max_items"] = map.MaxItems,
+                ["on_item_failure"] = map.OnItemFailure.ToWire(),
+                ["max_failed"] = map.MaxFailed.IsPercent ? map.MaxFailed.ToWire() : map.MaxFailed.Value,
+            };
+            m.AddIfSet("agent", map.Agent);
+            m.AddIfSet("handler", map.Handler);
+            obj["map"] = m;
+        }
+
+        if (s.Reduce is { } reduce)
+        {
+            var r = new Obj();
+            r.AddIfSet("agent", reduce.Agent);
+            r.AddIfSet("handler", reduce.Handler);
+            obj["reduce"] = r;
+        }
+
+        if (s.Conversation is { } conversation)
+        {
+            var c = new Obj
+            {
+                ["participants"] = conversation.Participants
+                    .Select(p => (object?)new Obj { ["agent"] = p.Agent, ["role"] = p.Role }).ToList(),
+                ["opener"] = conversation.Opener,
+                ["max_turns"] = conversation.TurnLimit,
+            };
+            if (conversation.Stop is { } stop)
+            {
+                var st = new Obj();
+                st.AddIfSet("guard", stop.Guard);
+                st.AddIfSet("phrase", stop.Phrase);
+                c["stop"] = st;
+            }
+
+            obj["conversation"] = c;
         }
     }
 
