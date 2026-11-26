@@ -245,4 +245,24 @@ public class MapRulesTests
     public void FR355_an_item_that_ran_before_is_resumed_only_by_the_maps_own_job_without_a_pending_gate(
         JobStatus? lastJob, bool fromItemEnd, bool gatePending, bool retry, bool resumable) =>
         Assert.Equal(resumable, MapRules.Resumable(lastJob, fromItemEnd, gatePending, retry));
+    [Fact]
+    public void FR355_map_placeholders_validate_for_the_map_and_reduce_agents_only()
+    {
+        var catalog = FlowFixturePack.Catalog with
+        {
+            Prompts = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["flow.qa-score"] = "---\nversion: flow.qa-score-1\n---\nYou score calls.\n<!-- user -->\n{{MAP_INDEX}}: {{MAP_ITEM}}\n",
+                ["flow.qa-summarise"] = "---\nversion: flow.qa-summarise-1\n---\nYou summarise.\n<!-- user -->\n{{SCORES_ALL}}\n",
+            },
+        };
+        var yaml = FlowFixturePack.Yaml(FlowFixturePack.Qa);
+        var handlers = yaml.Replace("agent: qa-scorer, max_parallel", $"handler: {FlowFixturePack.QaTallyHandler}, max_parallel", StringComparison.Ordinal);
+
+        Assert.Empty(DefinitionYaml.Errors(yaml, catalog));
+
+        // A scorer binding left behind by a handler map no longer gets {{MAP_ITEM}}, so its prompt is refused (the
+        // definition never registers: the M70c CI failure of fixture-qa-handlers).
+        Assert.Equal([(DefinitionErrorCodes.UnknownPrompt, "stages[0].agents[0].prompt")], DefinitionYaml.Errors(handlers, catalog));
+    }
 }

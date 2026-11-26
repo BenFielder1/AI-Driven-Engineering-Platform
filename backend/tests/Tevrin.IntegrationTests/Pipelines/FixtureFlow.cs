@@ -143,7 +143,13 @@ public sealed class FlowFixturePack : IPipelinePack
     private static string QaHandlerYaml(string pipelineId, string onItemFailure)
     {
         var yaml = Read(Qa + ".pipeline.yaml");
-        string[] lines = ["pipeline: " + Qa + "\n", "agent: qa-scorer, max_parallel", "reduce: { agent: qa-summariser }", "on_item_failure: skip"];
+        // The scorer and summariser bindings go too: their prompts need {{MAP_ITEM}} and {{SCORES_ALL}}, which only the map's
+        // and reduce's own agents get, so the validator would refuse the definition (and it would never register).
+        string[] lines =
+        [
+            "pipeline: " + Qa + "\n", "agent: qa-scorer, max_parallel", "reduce: { agent: qa-summariser }", "on_item_failure: skip",
+            "    agents:\n      - { key: qa-scorer, job_type: flow.qa-score, prompt: flow.qa-score }\n      - { key: qa-summariser, job_type: flow.qa-summarise, prompt: flow.qa-summarise }\n",
+        ];
         if (lines.Any(l => !yaml.Contains(l, StringComparison.Ordinal)))
         {
             throw new InvalidOperationException("fixture-qa no longer has the lines its handler variants replace.");
@@ -152,7 +158,8 @@ public sealed class FlowFixturePack : IPipelinePack
         return yaml.Replace(lines[0], "pipeline: " + pipelineId + "\n", StringComparison.Ordinal)
             .Replace(lines[1], "handler: " + QaScoreHandler + ", max_parallel", StringComparison.Ordinal)
             .Replace(lines[2], "reduce: { handler: " + QaTallyHandler + " }", StringComparison.Ordinal)
-            .Replace(lines[3], onItemFailure, StringComparison.Ordinal);
+            .Replace(lines[3], onItemFailure, StringComparison.Ordinal)
+            .Replace(lines[4], string.Empty, StringComparison.Ordinal);
     }
 
     private static string QaEscalateYaml()
