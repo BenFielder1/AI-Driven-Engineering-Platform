@@ -134,6 +134,10 @@ export const errorMessages = {
     "The stage's validator agent didn't return a valid verdict, so the attempt failed. Check the validator's prompt and model.",
   MAP_TOO_MANY_ITEMS:
     "The map stage has more items than its max_items limit, so no item ran. Raise the limit or split the input.",
+  TOOL_STATE_TOO_LARGE:
+    "The agent's conversation grew past 1 MB while waiting for a tool approval, so the stage failed. Shorten its inputs or split the stage.",
+  EXTERNAL_ACTION_REJECTED:
+    "The external action was rejected, so nothing was sent and the stage failed.",
   // Agent runs (shown on run details)
   MISSING_INPUT: "The agent was missing a required input.",
   INVALID_PLAN: "The agent produced an invalid plan.",

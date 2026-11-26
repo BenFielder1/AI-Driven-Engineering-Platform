@@ -2869,6 +2869,10 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasColumnName("tool_calls")
                         .HasDefaultValueSql("'[]'::jsonb");
 
+                    b.Property<string>("ToolLoopState")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tool_loop_state");
+
                     b.Property<int?>("TurnIndex")
                         .HasColumnType("integer")
                         .HasColumnName("turn_index");

@@ -266,6 +266,9 @@ public static class TevrinEngineModel
             // FR-355, FR-356 (M70): additive and nullable; a map item's index, a conversation turn and its role.
             b.Property(r => r.TurnRole).HasMaxLength(IdMaxLength);
 
+            // FR-359, §4.73 (M71): additive and nullable; the saved tool loop of a destructive call awaiting its gate.
+            b.Property(r => r.ToolLoopState).HasColumnType("jsonb");
+
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
 
             // §8: the run timeline reads by run in time order (FR-300).

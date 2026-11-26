@@ -95,6 +95,11 @@ public sealed class AgentRun
     /// conversation.</summary>
     public string? TurnRole { get; set; }
 
+    /// <summary>FR-359, §4.73: the saved tool loop (messages so far and the pending destructive call) as redacted JSON, at
+    /// most 1 MB; null when no destructive call is waiting. The call's state (pending_approval, approved/denied, resumed)
+    /// is read from this and the run's <c>tool_approval</c> gate.</summary>
+    public string? ToolLoopState { get; set; }
+
     /// <summary>FR-297: milliseconds from the call to the first streamed token of the last attempt; null when the provider
     /// didn't stream (or before 0.7.0).</summary>
     public long? LatencyMs { get; set; }

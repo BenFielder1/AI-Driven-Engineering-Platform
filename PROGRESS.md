@@ -98,7 +98,13 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] c. Driver: map-reduce (FR-355), D-0.8.0-25 — 2c81628 + fix c08549f ([CI 45821499223](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45821499223))
   - [x] d. Driver: conversation (FR-356), D-0.8.0-26 — ab94bbb + fix ec16b5b ([CI 45830714380](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45830714380))
   - [x] e. `from_runs` input resolution (FR-357), D-0.8.0-27; FR-20 integrity filter on `from_runs` and FR-346 aggregate lists — 5ce5414 ([CI 45849216582](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582))
-- [ ] M71 Tools and safety — FR-358–FR-361
+- [ ] M71 Tools and safety — FR-358–FR-361 (security: destructive tools stay on fixtures)
+  - [ ] a1. Definition and registration: tool `tier`, handler/tool `external`, `tool_policy: { max_tier }`, `DEF_TOOL_TIER`; fixture `fixture-oncall` (FR-358, FR-359, FR-360 syntax)
+  - [x] a2. Data: `agent_runs.tool_loop_state` (jsonb); error codes `TOOL_STATE_TOO_LARGE`, `EXTERNAL_ACTION_REJECTED`. No other schema needed: the tool-call tier goes in each `agent_runs.tool_calls` element (`AgentToolCallRecord`, optional for old rows), gate `type` is a free string, and the §4.73 call state is derived from `tool_loop_state` + the run's `tool_approval` gate (cleared on resume)
+  - [ ] b. Runner: tier enforcement and recording at call time (FR-358)
+  - [ ] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73)
+  - [ ] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit
+  - [ ] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361)
 - [ ] M72 Engine UI — FR-362–FR-366
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
   - Carry-over from M70: show `turn_index`/`turn_role` and map `item_index` on timeline entries (additive DTO fields).

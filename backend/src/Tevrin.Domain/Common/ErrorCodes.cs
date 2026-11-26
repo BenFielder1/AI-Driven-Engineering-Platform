@@ -427,6 +427,14 @@ public static class ErrorCodes
     /// runs (a job failure, not HTTP).</summary>
     public const string MapTooManyItems = "MAP_TOO_MANY_ITEMS";
 
+    /// <summary>FR-359, §4.73, §6: a destructive tool call's saved tool loop state (redacted) would exceed 1 MB; the stage
+    /// fails (a job failure, not HTTP).</summary>
+    public const string ToolStateTooLarge = "TOOL_STATE_TOO_LARGE";
+
+    /// <summary>FR-360, §6: an <c>external_action</c> gate was rejected (or timed out) and the stage declares no
+    /// <c>on_reject</c>; the stage fails (a job failure, not HTTP).</summary>
+    public const string ExternalActionRejected = "EXTERNAL_ACTION_REJECTED";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {
