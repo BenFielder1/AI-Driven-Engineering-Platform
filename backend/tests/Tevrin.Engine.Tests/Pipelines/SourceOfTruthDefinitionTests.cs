@@ -108,8 +108,25 @@ public class SourceOfTruthDefinitionTests
         Assert.Empty(registry.Errors.Select(e => e.Error.ToString()));
         Assert.True(registry.TryGet(FixtureCvPack.PipelineId, out var loaded));
         Assert.Equal(RunControl.Engine, registry.RunControlOf(FixtureCvPack.PipelineId));
-        Assert.Equal(["score", "tailor"], loaded.Definition!.Stages.Select(s => s.Id));
+        // FR-360 (M71d): fixture-cv gained the external submit stage.
+        Assert.Equal(["score", "tailor", "submit"], loaded.Definition!.Stages.Select(s => s.Id));
         Assert.Equal(ArtifactScope.Project, loaded.Definition.FindArtifact("master_cv")!.Scope);
+    }
+
+    [Fact]
+    public void FR360_fixture_cv_submit_runs_the_external_handler_and_rejects_back_to_the_tailor_against_the_real_prompts()
+    {
+        // The pack's own prompts and handler registration (as the integration copy registers them): no silent 404s.
+        var registry = new PipelineRegistry([new FixtureCvPack()], [], Array.Empty<JobHandlerRegistration>());
+
+        Assert.Empty(registry.Errors.Select(e => e.Error.ToString()));
+        Assert.True(registry.TryGet(FixtureCvPack.PipelineId, out var loaded));
+        var submit = loaded.Definition!.FindStage("submit")!;
+        Assert.Equal(FixtureCvPack.SubmitApplicationHandler, submit.Handler);
+        Assert.True(registry.IsExternal(PipelineComponentKind.StageHandler, submit.Handler!));
+        Assert.Equal(new RejectTransition("tailor", IterationCap.Fixed(2)), submit.OnReject);
+        Assert.Null(submit.Gate);
+        Assert.Equal(["cv.score", "cv.tailor"], loaded.Definition.Stages.Where(s => s.Agent is not null).Select(s => s.Agent!.Prompt));
     }
 
     [Fact]

@@ -80,6 +80,15 @@ public sealed partial class SdlcStageHandlerJob(ISdlcRunPins pins, StageHandlerR
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(handler);
+
+        // FR-360: an external handler never runs ungated: the engine refuses it, and so does the direct fallback (fail
+        // closed). The SDLC registers no external handlers, so its jobs are unchanged.
+        if (handler is IExternalStageHandler || runner.IsExternal(handler.Name))
+        {
+            throw new JobFailedException(
+                $"Stage handler '{handler.Name}' is external; it runs only after an approved external_action gate.", transient: false, ErrorCodes.DefinitionUnavailable);
+        }
+
         if (job.ProjectId is { } projectId && await pins.FindAsync(projectId, cancellationToken) is { } pin)
         {
             var request = new StageHandlerRequest(pin.RunId, projectId, pin.DefinitionHash, handler.Name)

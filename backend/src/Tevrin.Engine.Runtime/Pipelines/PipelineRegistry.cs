@@ -178,6 +178,7 @@ public sealed class PipelineRegistry
             Handlers = Names(p => p.Handlers, PipelineComponentKind.StageHandler),
             Tools = Names(p => p.Tools, PipelineComponentKind.Tool),
             ToolTiers = ToolTiers(all),
+            ExternalTools = [.. all.SelectMany(p => p.ExternalTools).Distinct(StringComparer.Ordinal)],
             JobTypes = [.. all.SelectMany(p => p.JobTypes).Concat(jobTypes).Distinct(StringComparer.Ordinal)],
             Settings = [.. pack.Settings],
             Schemas = [.. pack.Schemas.Keys],

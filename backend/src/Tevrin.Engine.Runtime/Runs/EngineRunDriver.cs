@@ -252,19 +252,24 @@ public sealed partial class EngineRunDriver(
                 break;
 
             case DriverStep.RunHandler handler:
-                var dispatch = await handlers.RunAsync(
-                    new StageHandlerRequest(run.Id, run.ProjectId, run.DefinitionHash, handler.Handler)
-                    {
-                        // FR-346: the aggregate list; FR-357: the from_runs lists.
-                        Facts = await RunsInputs.WithFactAsync(
-                            new EngineAgentStageStore(db),
-                            run,
-                            stage,
-                            time.GetUtcNow(),
-                            await AggregateFactsAsync(run, stage, definition, FactBag.Empty.With(new StageJobFact(job)), cancellationToken),
-                            cancellationToken),
-                    },
-                    cancellationToken);
+                var handlerRequest = new StageHandlerRequest(run.Id, run.ProjectId, run.DefinitionHash, handler.Handler)
+                {
+                    // FR-346: the aggregate list; FR-357: the from_runs lists.
+                    Facts = await RunsInputs.WithFactAsync(
+                        new EngineAgentStageStore(db),
+                        run,
+                        stage,
+                        time.GetUtcNow(),
+                        await AggregateFactsAsync(run, stage, definition, FactBag.Empty.With(new StageJobFact(job)), cancellationToken),
+                        cancellationToken),
+                };
+                if (handlers.IsExternal(handler.Handler))
+                {
+                    // FR-360: an external handler sends only after an approved external_action gate raised just before it.
+                    return await RunExternalHandlerAsync(job, run, stage, execution, definition, handlerRequest, cancellationToken);
+                }
+
+                var dispatch = await handlers.RunAsync(handlerRequest, cancellationToken);
                 var handled = dispatch.RequireRan(handler.Handler);
                 handled.ThrowIfFailed(handler.Handler);
                 if (handled.Outcome == StageHandlerOutcome.Waiting)
@@ -483,9 +488,9 @@ public sealed partial class EngineRunDriver(
             .Where(g => g.PipelineRunId == run.Id)
             .Select(g => new { g.Type, g.Status, g.DecidedAt })
             .ToListAsync(cancellationToken);
-        // FR-359: a pending tool_approval belongs to the agent run waiting inside the stage, not to its entry, so it never
-        // fails the stage's own no_pending_gates requirement when the waiting job is delivered again.
-        var pending = gates.Where(g => g.Status == GateStatus.Pending && g.Type != EngineGates.ToolApproval).Select(g => g.Type).ToList();
+        // FR-359, FR-360: a pending tool_approval or external_action belongs to the job waiting inside the stage, not to its
+        // entry, so it never fails the stage's own no_pending_gates requirement when the waiting job is delivered again.
+        var pending = gates.Where(g => g.Status == GateStatus.Pending && !EngineGates.IsMidStage(g.Type)).Select(g => g.Type).ToList();
 
         var guards = new Dictionary<string, GuardResult>(StringComparer.Ordinal);
         foreach (var guard in stage.Requires.OfType<GuardRequirement>())
@@ -654,8 +659,9 @@ public static class EngineRunMoves
 
     /// <summary>
     /// Cancels the run's pending gates and its queued <c>stage.run</c> jobs (stored or added in this save). FR-359: an agent
-    /// run whose destructive call waited on one of those <c>tool_approval</c> gates, or on the run's other one (no gate yet),
-    /// ends cancelled with its saved loop cleared, so the call never runs.
+    /// run whose destructive call waited on one of those <c>tool_approval</c> gates (FR-360: or an external call on an
+    /// <c>external_action</c> one), or on the run's other one (no gate yet), ends cancelled with its saved loop cleared, so
+    /// the call never runs. An external handler's cancelled gate is never sent: its job reads the run as final.
     /// </summary>
     public static async Task CancelPendingAsync(IEngineDbContext db, PipelineRun run, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -668,7 +674,7 @@ public static class EngineRunMoves
             gate.DecidedAt = now;
         }
 
-        var gateIds = cancelled.Where(g => g.Type == EngineGates.ToolApproval).Select(g => g.Id).ToHashSet();
+        var gateIds = cancelled.Where(g => EngineGates.IsMidStage(g.Type)).Select(g => g.Id).ToHashSet();
         foreach (var waiting in await db.AgentRuns
             .Where(r => r.PipelineRunId == run.Id && r.Status == AgentRunStatus.Running && r.ToolLoopState != null)
             .ToListAsync(cancellationToken))
@@ -678,7 +684,7 @@ public static class EngineRunMoves
                 && (state.GateId is null || gateIds.Contains(state.GateId.Value)))
             {
                 waiting.Status = AgentRunStatus.Cancelled;
-                waiting.Error = "The run moved on while a destructive tool call waited for approval; the tool was not run.";
+                waiting.Error = "The run moved on while a tool call waited for approval; the tool was not run.";
                 waiting.ToolLoopState = null;
                 waiting.CompletedAt = now;
             }

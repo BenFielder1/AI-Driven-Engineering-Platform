@@ -1,6 +1,9 @@
 # Fixture pipeline (M67, FR-352, §4.76): an engine-controlled run of agent fit-scorer → agent cv-tailor, both reading the
 # project-scope master CV. A run pins the master CV's newest locked version when it starts, and both stages read that
 # version, even when a newer one is locked while the run is at the fit scorer.
+# FR-360 (M71d): then the external handler fixture-cv.submit-application submits the application. It sends nothing until
+# an Owner approves the external_action gate showing its payload; a rejection goes back to the tailor once
+# (on_reject, max_iterations 2 counts the first tailoring), then fails the stage with EXTERNAL_ACTION_REJECTED.
 pipeline: fixture-cv
 version: 1
 title: Fixture CV
@@ -18,6 +21,7 @@ artifacts:
 statuses:
   scoring:   { generic: active }
   tailoring: { generic: active }
+  submitting: { generic: active }
   tailored:  { generic: completed }
 
 stages:
@@ -36,3 +40,9 @@ stages:
     agent: { key: cv-tailor, prompt: cv.tailor }
     inputs: [master_cv, fit]
     output: tailored_cv
+
+  - id: submit
+    title: Submit application
+    status: submitting
+    handler: fixture-cv.submit-application
+    on_reject: { to: tailor, max_iterations: 2 }

@@ -57,8 +57,9 @@ public sealed class SourceOfTruthTests(TevrinApiFactory factory)
 
         await FixtureLinearApp.DriveAsync(app, fixture.Project.Id);
 
+        // FR-360 (M71d): fixture-cv now ends with the external submit stage, which waits on its external_action gate.
         var done = await GetRunAsync(fixture, run.Id);
-        Assert.Equal((GenericRunStatus.Completed, 2), (done.Status, done.AgentRuns));
+        Assert.Equal((GenericRunStatus.WaitingOnGate, "submit", 2), (done.Status, done.CurrentStage, done.AgentRuns));
         var agentRuns = await ProjectApi.WithDbAsync(app, db => db.AgentRuns.AsNoTracking().Where(r => r.PipelineRunId == run.Id).ToListAsync(Ct));
         Assert.Equal(["score", "tailor"], agentRuns.Select(r => r.Stage).Order());
         Assert.All(agentRuns, r => Assert.Equal((v2.Id, 2), r.InputArtifacts.Where(i => i.Type == MasterCv).Select(i => (i.ArtifactId, i.Version)).Single()));

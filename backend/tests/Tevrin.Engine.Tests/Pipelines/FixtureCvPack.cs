@@ -4,7 +4,8 @@ namespace Tevrin.Engine.Tests.Pipelines;
 
 /// <summary>
 /// FR-352 (M67): the <c>fixture-cv</c> pack: agent <c>score</c> (fit-scorer) → agent <c>tailor</c> (cv-tailor),
-/// engine-controlled, both reading the project-scope artifact <c>master_cv</c> (§4.76).
+/// engine-controlled, both reading the project-scope artifact <c>master_cv</c> (§4.76); FR-360 (M71d): then the external
+/// handler stage <c>submit</c>.
 /// </summary>
 public sealed class FixtureCvPack : IPipelinePack
 {
@@ -13,9 +14,8 @@ public sealed class FixtureCvPack : IPipelinePack
     public const string TailorPrompt = "cv.tailor";
 
     /// <summary>
-    /// FR-360 (M71): the "submit application" handler, registered <c>external: true</c>. It's in the pack only, not yet a
-    /// stage of <c>fixture-cv.pipeline.yaml</c>: a new stage changes the definition and the integration tests' copy of the
-    /// pack (which doesn't register the handler) would then refuse the fixture. The runner step adds the stage to both.
+    /// FR-360 (M71): the "submit application" handler of the <c>submit</c> stage, registered <c>external: true</c>, so it
+    /// sends only after an approved <c>external_action</c> gate. The integration tests' copy of the pack registers it too.
     /// </summary>
     public const string SubmitApplicationHandler = "fixture-cv.submit-application";
 

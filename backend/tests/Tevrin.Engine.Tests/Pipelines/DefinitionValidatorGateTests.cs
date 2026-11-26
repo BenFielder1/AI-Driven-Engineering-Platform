@@ -33,6 +33,15 @@ public class DefinitionValidatorGateTests
     }
 
     [Fact]
+    public void FR360_an_external_action_entry_gate_is_refused_so_approving_a_send_never_opens_a_stage()
+    {
+        var errors = PipelineDefinitionLoaderErrors(Edit("type: report_approval", "type: external_action"));
+        var error = Assert.Single(errors);
+        Assert.Equal((DefinitionErrorCodes.Parse, "stages[2].gate.type"), (error.Code, error.Path));
+        Assert.Contains("engine-owned", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FR282_no_pending_gates_except_names_a_gate_of_the_definition_or_escalation()
     {
         var known = Edit("{ artifact_locked: report }", "{ artifact_locked: report }\n      - { no_pending_gates: { except: [report_approval, escalation] } }");

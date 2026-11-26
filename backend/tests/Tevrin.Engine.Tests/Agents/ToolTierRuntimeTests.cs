@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Agents;
 using Tevrin.Engine.Runtime.Llm;
@@ -7,10 +8,10 @@ using Tevrin.Engine.Tests.Pipelines;
 namespace Tevrin.Engine.Tests.Agents;
 
 /// <summary>
-/// FR-358 runtime (M71b), FR-359 (M71c) and FR-360 until its gate lands: the runner offers only the listed tools whose tier
+/// FR-358 runtime (M71b), FR-359 (M71c) and FR-360 (M71d): the runner offers only the listed tools whose tier
 /// in the registry now is within the stage's <c>max_tier</c> (default <c>write</c>); a call to any other tool is an error
-/// result, logged without its arguments; an offered destructive tool suspends the loop for approval and an external one is
-/// refused, and neither runs from the model's call; every call records its tier.
+/// result, logged without its arguments; an offered destructive tool suspends the loop for a <c>tool_approval</c> gate and
+/// an external one for an <c>external_action</c> gate, and neither runs from the model's call; every call records its tier.
 /// </summary>
 public class ToolTierRuntimeTests
 {
@@ -181,17 +182,36 @@ public class ToolTierRuntimeTests
         Assert.Empty(log.Ran);
     }
 
-    [Fact]
-    public async Task FR360_an_external_tool_is_refused_and_never_runs_whatever_its_tier()
+    [Theory]
+    [InlineData(ToolTier.Read)]
+    [InlineData(ToolTier.Destructive)]
+    public async Task FR360_an_external_tool_suspends_for_an_external_action_gate_and_never_runs_whatever_its_tier(ToolTier tier)
     {
-        var (executor, log, logger) = Executor(ToolTier.Destructive, (TierToolsPack.Send, ToolTier.Read, true));
+        // M71d: M71b refused the call (ApprovalUnavailable); it now waits on its external_action gate.
+        var (executor, log, logger) = Executor(ToolTier.Destructive, (TierToolsPack.Send, tier, true));
 
-        var result = await executor.ExecuteAsync(Call("send"), Ct);
+        var suspended = await Assert.ThrowsAsync<LlmToolCallSuspendedException>(() => executor.ExecuteAsync(Call("send"), Ct));
 
-        Assert.Equal((AgentToolExecutor.ApprovalUnavailable("send"), true), (result.Content, result.IsError));
+        Assert.Contains(EngineGates.ExternalAction, suspended.Message, StringComparison.Ordinal);
         Assert.Empty(log.Ran);
-        Assert.Equal("read", Assert.Single(executor.Calls).Tier);
-        Assert.Contains("external_needs_approval", Assert.Single(logger.Entries).Message, StringComparison.Ordinal);
+        Assert.Empty(executor.Calls);
+        Assert.Contains(EngineGates.ExternalAction, Assert.Single(logger.Entries).Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"q\"", logger.Entries[0].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR360_the_approved_path_runs_an_external_tool_only_for_an_external_action_gate()
+    {
+        var (executor, log, _) = Executor(ToolTier.Write, (TierToolsPack.Send, ToolTier.Read, true));
+
+        var refused = executor.RefuseApproved(Call("send"), EngineGates.ToolApproval);
+        Assert.Equal((AgentToolExecutor.NotOffered("send"), true), (refused!.Content, refused.IsError));
+        Assert.Null(executor.RefuseApproved(Call("send"), EngineGates.ExternalAction));
+
+        var result = await executor.RunApprovedAsync(Call("send"), EngineGates.ExternalAction, Ct);
+
+        Assert.Equal(("ran send", false), (result.Content, result.IsError));
+        Assert.Equal(["send"], log.Ran);
     }
 
     [Fact]

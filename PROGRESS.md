@@ -104,13 +104,14 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - For b–e: link `fixture-oncall.pipeline.yaml` in the IntegrationTests csproj and register its prompts and tools (with tiers) in the integration `FlowFixturePack` copy (M70c 404 lesson). Pack-author docs: the tier is only as honest as the pack's registration (an unclassified tool is `write`).
   - [x] a2. Data: `agent_runs.tool_loop_state` (jsonb); error codes `TOOL_STATE_TOO_LARGE`, `EXTERNAL_ACTION_REJECTED`. No other schema needed: the tool-call tier goes in each `agent_runs.tool_calls` element (`AgentToolCallRecord`, optional for old rows), gate `type` is a free string, and the §4.73 call state is derived from `tool_loop_state` + the run's `tool_approval` gate (cleared on resume) — b67b366 ([CI 45867346886](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45867346886))
   - [x] b. Runner: tier enforcement and recording at call time (FR-358), D-0.8.0-29; destructive and external tools are refused (not run) until c/d; startup warning for DI-only tools with no tier — d4b7410 ([CI 45875442063](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45875442063))
-  - [x] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73), D-0.8.0-30
-  - [ ] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit
+  - [x] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73), D-0.8.0-30 — 3d410b2 ([CI 45885330729](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45885330729))
+  - [x] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit, D-0.8.0-31
   - [ ] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361)
 - [ ] M72 Engine UI — FR-362–FR-366
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
   - Carry-over from M70: show `turn_index`/`turn_role` and map `item_index` on timeline entries (additive DTO fields).
   - Carry-over from M69: show the follow-up label (`stage_executions.followup`) on timeline entries (additive DTO field), and the outcome scores and feedback (FR-365).
+  - **FR-360/FR-359 depend on this:** the gate DTO must show the `tool_approval` (tool, tier, redacted arguments, reason) and `external_action` (exact payload) payloads, Owner-facing, so an approver sees what will run or be sent (M71d review). Until then the build PR stays blocked.
   - Carry-over from M68: expose `approval_gates.payload` (variant labels and artifact ids) on the engine gate DTO for the `variant_select` card.
   - Carry-over from M67: show an artifact's project scope and a run's pinned project artifacts (`pinnedArtifacts`, FR-352) in the run view; fill `{artifact}` in `SOURCE_ARTIFACT_MISSING` from the problem `reason`.
 - [ ] M73 Release 0.8.0 — FR-367 (on Ben's confirmation)

@@ -196,6 +196,37 @@ public interface IStageHandler
     Task<StageHandlerResult> ExecuteAsync(StageHandlerContext context, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// FR-360 (0.8.0): exactly what an external handler will send (<see cref="Content"/>, e.g. a JSON body), as prepared before
+/// anything is sent. It is shown on the <c>external_action</c> gate and, once approved, handed back to
+/// <see cref="IExternalStageHandler.SendAsync"/> unchanged. It must not carry credentials (D-0.8.0-31).
+/// </summary>
+public sealed record ExternalActionPayload(string Content);
+
+/// <summary>
+/// FR-360 (0.8.0): the work of a code stage whose handler is registered <c>external: true</c> (it sends, publishes, submits
+/// or pays outside Tevrin). The engine never calls <see cref="IStageHandler.ExecuteAsync"/> on it. It first calls
+/// <see cref="PreparePayloadAsync"/>, which must not act outside Tevrin, and raises an <c>external_action</c> gate showing
+/// that payload. After an Owner approves it, the engine calls <see cref="SendAsync"/> once with the approved payload, which
+/// the handler sends as given (recomputing it would send something nobody approved). Credentials come from the
+/// handler's own configuration at send time.
+/// </summary>
+public interface IExternalStageHandler : IStageHandler
+{
+    /// <summary>What the handler would send for this stage, with no effect outside Tevrin.</summary>
+    Task<ExternalActionPayload> PreparePayloadAsync(StageHandlerContext context, CancellationToken cancellationToken);
+
+    /// <summary>Sends <paramref name="approved"/>, the payload an Owner approved, exactly as given.</summary>
+    Task<StageHandlerResult> SendAsync(StageHandlerContext context, ExternalActionPayload approved, CancellationToken cancellationToken);
+
+    /// <summary>Never used for an external handler: it runs only through its approved gate.</summary>
+    Task<StageHandlerResult> IStageHandler.ExecuteAsync(StageHandlerContext context, CancellationToken cancellationToken) =>
+        Task.FromResult(new StageHandlerResult(StageHandlerOutcome.Failed, "An external handler runs only after its external_action gate is approved.")
+        {
+            ErrorCode = Common.EngineErrorCodes.DefinitionUnavailable,
+        });
+}
+
 /// <summary>A tool's description for the model: name, what it does, and its arguments as a JSON Schema object.</summary>
 public sealed record ToolSpec(string Name, string Description, JsonElement InputSchema);
 

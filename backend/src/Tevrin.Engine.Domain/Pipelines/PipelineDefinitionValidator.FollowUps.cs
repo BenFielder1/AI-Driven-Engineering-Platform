@@ -63,7 +63,8 @@ public static partial class PipelineDefinitionValidator
         /// <summary>
         /// FR-354, FR-359: a follow-up runs on a completed run, whose gates can't be decided (<c>RUN_NOT_ACTIVE</c>), so its
         /// agent and its bindings may not allow destructive tools, which wait on a <c>tool_approval</c> gate
-        /// (<c>DEF_FOLLOWUP_STAGE</c> at the <c>tool_policy</c>).
+        /// (<c>DEF_FOLLOWUP_STAGE</c> at the <c>tool_policy</c>). FR-360: nor list external tools, which wait on an
+        /// <c>external_action</c> gate whatever the tier (<c>DEF_FOLLOWUP_STAGE</c> at the tool).
         /// </summary>
         private void CheckFollowUpToolPolicy(string stageId)
         {
@@ -81,6 +82,25 @@ public static partial class PipelineDefinitionValidator
                 {
                     Add(DefinitionErrorCodes.FollowUpStage, $"stages[{index}].agents[{j}].tool_policy",
                         $"Follow-up stage '{stageId}' runs after the run completed, so its agent '{stage.Agents[j].Key}' can't allow destructive tools.");
+                }
+
+                CheckFollowUpExternalTools(stageId, stage.Agents[j].Tools, $"stages[{index}].agents[{j}].tools");
+            }
+
+            if (stage.Agent is { } agent)
+            {
+                CheckFollowUpExternalTools(stageId, agent.Tools, $"stages[{index}].agent.tools");
+            }
+        }
+
+        private void CheckFollowUpExternalTools(string stageId, IReadOnlyList<string> tools, string path)
+        {
+            for (var t = 0; t < tools.Count; t++)
+            {
+                if (catalog.ExternalTools.Contains(tools[t], StringComparer.Ordinal))
+                {
+                    Add(DefinitionErrorCodes.FollowUpStage, $"{path}[{t}]",
+                        $"Follow-up stage '{stageId}' runs after the run completed, so it can't list the external tool '{tools[t]}' (its external_action gate couldn't be decided).");
                 }
             }
         }

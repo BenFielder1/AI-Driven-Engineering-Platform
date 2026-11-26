@@ -8,7 +8,7 @@ using Tevrin.Engine.Runtime.Pipelines;
 namespace Tevrin.Engine.Tests.Agents;
 
 /// <summary>
-/// FR-358–FR-360 (M71b): a pack registering only tools, one per tier rule, each recording into <see cref="ToolRunLog"/>
+/// FR-358–FR-360 (M71b, M71d): a pack registering only tools, one per tier rule, each recording into <see cref="ToolRunLog"/>
 /// when it runs, so a test can prove a refused tool never ran. <see cref="Peek"/> is <c>write</c>: a pinned definition
 /// that listed it under <c>max_tier: read</c> stands for a run pinned before the pack raised its tier.
 /// </summary>
@@ -19,6 +19,9 @@ internal sealed class TierToolsPack : IPipelinePack
     public const string Wipe = "tiers.wipe";
     public const string Send = "tiers.send";
 
+    /// <summary>FR-360: external and destructive (it pays): one <c>external_action</c> gate, not two.</summary>
+    public const string Pay = "tiers.pay";
+
     public string Id => "tiers";
 
     public void Register(IPackRegistry registry)
@@ -28,6 +31,7 @@ internal sealed class TierToolsPack : IPipelinePack
         registry.AddTool(Peek, ToolTier.Write);
         registry.AddTool(Wipe, ToolTier.Destructive);
         registry.AddTool(Send, ToolTier.Read, external: true);
+        registry.AddTool(Pay, ToolTier.Destructive, external: true);
     }
 
     /// <summary>Registers the pack, its tools and the shared <paramref name="log"/>.</summary>
@@ -39,6 +43,7 @@ internal sealed class TierToolsPack : IPipelinePack
         services.AddPipelineTool<PeekTool>(Peek);
         services.AddPipelineTool<WipeTool>(Wipe);
         services.AddPipelineTool<SendTool>(Send);
+        services.AddPipelineTool<PayTool>(Pay);
     }
 }
 
@@ -81,6 +86,8 @@ internal sealed class PeekTool(ToolRunLog log) : RecordingTool("peek", log);
 internal sealed class WipeTool(ToolRunLog log) : RecordingTool("wipe", log);
 
 internal sealed class SendTool(ToolRunLog log) : RecordingTool("send", log);
+
+internal sealed class PayTool(ToolRunLog log) : RecordingTool("pay", log);
 
 /// <summary>A logger keeping each formatted message, to check what a refusal logs.</summary>
 internal sealed class ListLogger : ILogger

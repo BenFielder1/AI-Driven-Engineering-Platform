@@ -263,10 +263,10 @@ public sealed class EngineRunControl(
             return Result.Failure<ApprovalGate>(refused);
         }
 
-        if (gate!.Type == EngineGates.ToolApproval)
+        if (EngineGates.IsMidStage(gate!.Type))
         {
-            // FR-359: only the waiting job runs the tool (once); nothing else moves.
-            return await DecideToolApprovalAsync(run, gate, GateStatus.Approved, decision, cancellationToken);
+            // FR-359, FR-360: only the waiting job runs the tool or sends the external action (once); nothing else moves.
+            return await DecideMidStageAsync(run, gate, GateStatus.Approved, decision, cancellationToken);
         }
 
         if (gate.Type == EngineGates.VariantSelect)
@@ -323,10 +323,11 @@ public sealed class EngineRunControl(
             return Result.Failure<ApprovalGate>(refused);
         }
 
-        if (gate!.Type == EngineGates.ToolApproval)
+        if (EngineGates.IsMidStage(gate!.Type))
         {
-            // FR-359: a rejected tool call is a tool result (the denial), not a rejected stage: the run goes on.
-            return await DecideToolApprovalAsync(run, gate, GateStatus.Rejected, decision, cancellationToken);
+            // FR-359: a rejected tool call is a tool result (the denial), not a rejected stage: the run goes on. FR-360: the
+            // waiting job applies a rejected external handler's on_reject, or fails its stage (EXTERNAL_ACTION_REJECTED).
+            return await DecideMidStageAsync(run, gate, GateStatus.Rejected, decision, cancellationToken);
         }
 
         var now = time.GetUtcNow();
@@ -361,11 +362,12 @@ public sealed class EngineRunControl(
     /// <summary>
     /// FR-359, §4.73: records the decision on a <c>tool_approval</c> gate and wakes the run's waiting <c>stage.run</c> job
     /// (it was deferred to the gate's timer), whose next delivery runs the tool once or sends the denial and resumes the
-    /// loop. No new driver job is queued: only the job holding the saved loop may run the call. The run's row is written
+    /// loop. FR-360: the same for an <c>external_action</c> gate, whose waiting job sends the approved payload once, or
+    /// applies the rejection. No new driver job is queued: only the waiting job may run the call. The run's row is written
     /// too, so a concurrent move of the run fails this save with <c>CONFLICT</c>, as the gate's own token does a concurrent
     /// decision or timer.
     /// </summary>
-    private async Task<Result<ApprovalGate>> DecideToolApprovalAsync(
+    private async Task<Result<ApprovalGate>> DecideMidStageAsync(
         PipelineRun run, ApprovalGate gate, GateStatus status, EngineGateDecision decision, CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();

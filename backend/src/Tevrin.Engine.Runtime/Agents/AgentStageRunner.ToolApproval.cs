@@ -15,7 +15,9 @@ namespace Tevrin.Engine.Runtime.Agents;
 /// saves the loop (redacted, capped) on the agent run, raises a <c>tool_approval</c> gate and defers the job. Every later
 /// delivery of the same job (same agent run id, FR-310) reads the saved loop before anything else and makes no model call
 /// until the gate is decided; then the tool runs at most once (approve) or the model gets the denial (reject, or the
-/// gate's 24-hour timer), and the loop resumes from the saved messages.
+/// gate's 24-hour timer), and the loop resumes from the saved messages. FR-360: a call to an offered external tool takes the
+/// same path with an <c>external_action</c> gate (<see cref="ToolLoopStates.GateTypeOf"/>), destructive or not; on reject
+/// the model gets the denial too (D-0.8.0-31).
 /// </summary>
 public sealed partial class AgentStageRunner
 {
@@ -32,7 +34,7 @@ public sealed partial class AgentStageRunner
         var agentRun = attempt.AgentRun!;
         var snapshot = suspended.Snapshot!;
         var tool = executor.ListedTool(snapshot.Waiting.Name)
-            ?? throw new InvalidOperationException("Only a listed destructive tool suspends the tool loop.");
+            ?? throw new InvalidOperationException("Only a listed destructive or external tool suspends the tool loop.");
         ToolLoopState? state = null;
         string? json = null;
         if (RawLength(request, snapshot) <= 2L * ToolApprovalRules.MaxStateBytes)
@@ -54,7 +56,7 @@ public sealed partial class AgentStageRunner
             LogToolStateTooLarge(logger, attempt.Run.Id, attempt.Stage.Id, tool.Name);
             var failure = new AgentStageFailure(
                 EngineErrorCodes.ToolStateTooLarge,
-                $"The tool loop of {attempt.Stage.Id} can't be saved within the 1 MB cap, so the destructive tool '{tool.Name}' was not run.");
+                $"The tool loop of {attempt.Stage.Id} can't be saved within the 1 MB cap, so the {(tool.External ? "external" : "destructive")} tool '{tool.Name}' was not run.");
             await EndFailedCallAsync(attempt, extension, new AgentRunFailureDecision(failure));
             return Failed(failure);
         }
@@ -66,22 +68,23 @@ public sealed partial class AgentStageRunner
     }
 
     /// <summary>
-    /// FR-359 step 2–3: raises the call's <c>tool_approval</c> gate with its payload and saves it with the state (and the
-    /// run's row, so a concurrent cancel or rollback fails this save), then returns the deferral until the gate's timer.
-    /// While the run's other <c>tool_approval</c> is pending (one per run), the state is saved without a gate and the job
-    /// tries again in <see cref="GateQueuedRetry"/>.
+    /// FR-359 step 2–3: raises the call's <c>tool_approval</c> gate (FR-360: <c>external_action</c> for an external tool)
+    /// with its payload and saves it with the state (and the run's row, so a concurrent cancel or rollback fails this save),
+    /// then returns the deferral until the gate's timer. While the run's other gate of that type is pending (one per run),
+    /// the state is saved without a gate and the job tries again in <see cref="GateQueuedRetry"/>.
     /// </summary>
     private async Task<JobDeferredException> RaiseToolGateAsync(AgentAttempt attempt, ToolLoopState state)
     {
         var (run, agentRun) = (attempt.Run, attempt.AgentRun!);
         var now = time.GetUtcNow();
+        var gateType = ToolLoopStates.GateTypeOf(state);
         store.Touch(run);
-        if (await store.PendingGateAsync(run, EngineGates.ToolApproval, CancellationToken.None) is { } other)
+        if (await store.PendingGateAsync(run, gateType, CancellationToken.None) is { } other)
         {
             agentRun.ToolLoopState = ToolLoopStates.Serialize(state with { GateId = null });
             await store.SaveChangesAsync(CancellationToken.None);
-            LogToolGateQueued(logger, run.Id, attempt.Stage.Id, agentRun.Id, other.Id);
-            return new JobDeferredException($"A tool call waits for the run's pending tool_approval gate {other.Id}.", now + GateQueuedRetry);
+            LogToolGateQueued(logger, run.Id, attempt.Stage.Id, agentRun.Id, gateType, other.Id);
+            return new JobDeferredException($"A tool call waits for the run's pending {gateType} gate {other.Id}.", now + GateQueuedRetry);
         }
 
         var gate = new ApprovalGate
@@ -89,17 +92,20 @@ public sealed partial class AgentStageRunner
             ProjectId = run.ProjectId,
             ReleaseVersionId = AgentStageScope.ReleaseVersionOf(run),
             PipelineRunId = run.Id,
-            Type = EngineGates.ToolApproval,
+            Type = gateType,
             Status = GateStatus.Pending,
             CreatedAt = now,
             Payload = ToolLoopStates.GatePayload(state, agentRun.Id),
         };
         store.Add(gate);
         agentRun.ToolLoopState = ToolLoopStates.Serialize(state with { GateId = gate.Id });
-        await hooks.OnGateCreatedAsync(run, gate, $"The destructive tool {state.Pending.Tool} needs approval.", CancellationToken.None);
+        var summary = gateType == EngineGates.ExternalAction
+            ? $"The external tool {state.Pending.Tool} needs approval before it acts outside Tevrin."
+            : $"The destructive tool {state.Pending.Tool} needs approval.";
+        await hooks.OnGateCreatedAsync(run, gate, summary, CancellationToken.None);
         await store.SaveChangesAsync(CancellationToken.None);
-        LogToolGateRaised(logger, run.Id, attempt.Stage.Id, agentRun.Id, gate.Id, state.Pending.Tool);
-        return new JobDeferredException($"Waiting on tool_approval gate {gate.Id}.", ToolApprovalRules.WakeAt(now, now));
+        LogToolGateRaised(logger, run.Id, attempt.Stage.Id, agentRun.Id, gateType, gate.Id, state.Pending.Tool);
+        return new JobDeferredException($"Waiting on {gateType} gate {gate.Id}.", ToolApprovalRules.WakeAt(now, now));
     }
 
     /// <summary>
@@ -121,10 +127,11 @@ public sealed partial class AgentStageRunner
             throw Permanent($"The saved tool loop of agent run {saved.Id} can't be read; its call was not run.");
         }
 
-        // Defence in depth: only this call's own tool_approval gate counts; anything else closes the call. A claim already on
-        // the gate (ranAt) means the call was claimed, whatever the saved phase says.
+        // Defence in depth: only this call's own gate (of the type its tool waits on) counts; anything else closes the call. A
+        // claim already on the gate (ranAt) means the call was claimed, whatever the saved phase says.
+        var gateType = ToolLoopStates.GateTypeOf(state);
         var gate = state.GateId is { } gateId ? await store.FindGateAsync(run, gateId, cancellationToken) : null;
-        if (gate is not null && (gate.Type != EngineGates.ToolApproval || ToolLoopStates.AgentRunOf(gate.Payload) != saved.Id))
+        if (gate is not null && (gate.Type != gateType || ToolLoopStates.AgentRunOf(gate.Payload) != saved.Id))
         {
             LogToolGateMismatch(logger, run.Id, saved.Id, gate.Id);
             gate = null;
@@ -139,11 +146,11 @@ public sealed partial class AgentStageRunner
                 throw await RaiseToolGateAsync(attempt, state);
 
             case ToolApprovalStep.Wait:
-                throw new JobDeferredException($"Waiting on tool_approval gate {gate!.Id}.", ToolApprovalRules.WakeAt(now, gate.CreatedAt));
+                throw new JobDeferredException($"Waiting on {gateType} gate {gate!.Id}.", ToolApprovalRules.WakeAt(now, gate.CreatedAt));
 
             case ToolApprovalStep.Closed:
-                await EndSavedCallAsync(saved, AgentRunStatus.Cancelled, "The tool_approval gate was closed; the tool was not run.", now);
-                throw new JobFailedException("The tool_approval gate was closed; the tool was not run.", transient: false, EngineErrorCodes.RunNotActive);
+                await EndSavedCallAsync(saved, AgentRunStatus.Cancelled, $"The {gateType} gate was closed; the tool was not run.", now);
+                throw new JobFailedException($"The {gateType} gate was closed; the tool was not run.", transient: false, EngineErrorCodes.RunNotActive);
         }
 
         // The call is decided. The key and the host's options come first, so a run that can't go on never runs the tool.
@@ -202,7 +209,7 @@ public sealed partial class AgentStageRunner
             default:
                 // The tool's checks as they stand now (still offered, the session's limit) come before the claim, so a
                 // refused call is never claimed and its gate never says it ran.
-                if (executor.RefuseApproved(call) is { } refused)
+                if (executor.RefuseApproved(call, gateType) is { } refused)
                 {
                     decided = refused;
                     break;
@@ -215,8 +222,8 @@ public sealed partial class AgentStageRunner
                 gate!.Payload = ToolLoopStates.WithRanAt(gate.Payload, now);
                 store.Touch(run);
                 await store.SaveChangesAsync(CancellationToken.None);
-                LogToolRunning(logger, run.Id, gate.Id, state.Pending.Tool);
-                decided = await executor.RunApprovedAsync(call, cancellationToken);
+                LogToolRunning(logger, run.Id, gateType, gate.Id, state.Pending.Tool);
+                decided = await executor.RunApprovedAsync(call, gateType, cancellationToken);
                 break;
         }
 
@@ -281,23 +288,23 @@ public sealed partial class AgentStageRunner
         return request.System.Length + request.Messages.Sum(m => (long)m.Content.Length) + snapshot.Exchanges.Sum(Of) + Of(snapshot.Current);
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId}: agent run {AgentRunId} waits on tool_approval gate {GateId} for {Tool}")]
-    private static partial void LogToolGateRaised(ILogger logger, Guid pipelineRunId, string stageId, Guid agentRunId, Guid gateId, string tool);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId}: agent run {AgentRunId} waits on {GateType} gate {GateId} for {Tool}")]
+    private static partial void LogToolGateRaised(ILogger logger, Guid pipelineRunId, string stageId, Guid agentRunId, string gateType, Guid gateId, string tool);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId}: agent run {AgentRunId} waits for the run's pending tool_approval gate {GateId}")]
-    private static partial void LogToolGateQueued(ILogger logger, Guid pipelineRunId, string stageId, Guid agentRunId, Guid gateId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId}: agent run {AgentRunId} waits for the run's pending {GateType} gate {GateId}")]
+    private static partial void LogToolGateQueued(ILogger logger, Guid pipelineRunId, string stageId, Guid agentRunId, string gateType, Guid gateId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId} stage {StageId}: agent run {AgentRunId} saved tool call: {Step}")]
     private static partial void LogToolApprovalStep(ILogger logger, Guid pipelineRunId, string stageId, Guid agentRunId, ToolApprovalStep step);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline run {PipelineRunId}: agent run {AgentRunId}'s saved call names gate {GateId}, which is not its tool_approval gate; the call is closed")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline run {PipelineRunId}: agent run {AgentRunId}'s saved call names gate {GateId}, which is not its approval gate; the call is closed")]
     private static partial void LogToolGateMismatch(ILogger logger, Guid pipelineRunId, Guid agentRunId, Guid gateId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId}: tool_approval gate {GateId} had no decision within its timer; rejected")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Pipeline run {PipelineRunId}: tool call gate {GateId} had no decision within its timer; rejected")]
     private static partial void LogToolGateTimedOut(ILogger logger, Guid pipelineRunId, Guid gateId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline run {PipelineRunId}: approved tool_approval gate {GateId} claimed; running {Tool} once")]
-    private static partial void LogToolRunning(ILogger logger, Guid pipelineRunId, Guid gateId, string tool);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline run {PipelineRunId}: approved {GateType} gate {GateId} claimed; running {Tool} once")]
+    private static partial void LogToolRunning(ILogger logger, Guid pipelineRunId, string gateType, Guid gateId, string tool);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline run {PipelineRunId} stage {StageId}: TOOL_STATE_TOO_LARGE; {Tool} was not run")]
     private static partial void LogToolStateTooLarge(ILogger logger, Guid pipelineRunId, string stageId, string tool);

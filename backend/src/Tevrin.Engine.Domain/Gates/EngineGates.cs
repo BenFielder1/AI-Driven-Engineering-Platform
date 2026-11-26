@@ -19,6 +19,20 @@ public static class EngineGates
     /// </summary>
     public const string ToolApproval = "tool_approval";
 
+    /// <summary>
+    /// FR-360: a handler or tool registered <c>external: true</c> waits on a human just before it sends, publishes, submits
+    /// or pays outside Tevrin. The payload holds exactly what will be sent; only an Owner decides it, and no approval mode
+    /// skips it. A tool that is both external and destructive gets this gate only (D-0.8.0-31).
+    /// </summary>
+    public const string ExternalAction = "external_action";
+
     /// <summary>Whether <paramref name="type"/> is raised by the engine itself, never as a stage's entry gate.</summary>
-    public static bool IsEngineRaised(string? type) => type is Escalation or ToolApproval;
+    public static bool IsEngineRaised(string? type) => type is Escalation or ToolApproval or ExternalAction;
+
+    /// <summary>
+    /// FR-359, FR-360: whether <paramref name="type"/> is decided while a job waits on it in the middle of a stage
+    /// (<c>tool_approval</c>, <c>external_action</c>): the decision only wakes that job, and the gate never counts as the
+    /// stage's entry gate or as one of its pending requirements.
+    /// </summary>
+    public static bool IsMidStage(string? type) => type is ToolApproval or ExternalAction;
 }

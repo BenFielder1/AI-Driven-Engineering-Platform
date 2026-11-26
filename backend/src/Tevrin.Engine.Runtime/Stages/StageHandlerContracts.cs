@@ -37,6 +37,13 @@ public abstract record StageHandlerDispatch
     public sealed record Unavailable(string Missing) : StageHandlerDispatch;
 }
 
+/// <summary>
+/// FR-360: what <see cref="StageHandlerRunner.PrepareExternalAsync"/> did: <see cref="Dispatch"/> is
+/// <see cref="StageHandlerDispatch.Ran"/> (with <see cref="Payload"/>) when the handler prepared its payload, otherwise
+/// why it couldn't run (<see cref="StageHandlerDispatchExtensions.RequireRan"/> maps that to the job layer).
+/// </summary>
+public sealed record ExternalPreparation(StageHandlerDispatch Dispatch, ExternalActionPayload? Payload);
+
 /// <summary>D-0.7.0-43: mapping a dispatch to the job layer.</summary>
 public static class StageHandlerDispatchExtensions
 {

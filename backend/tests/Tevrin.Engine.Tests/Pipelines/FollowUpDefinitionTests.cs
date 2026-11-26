@@ -53,6 +53,20 @@ public class FollowUpDefinitionTests
     }
 
     [Fact]
+    public void FR354_FR360_a_followup_stage_may_not_list_an_external_tool_because_its_gate_could_not_be_decided()
+    {
+        const string Grader = "    agent: { key: grader, prompt: flow.pm-grade }\n";
+        var yaml = Edit(Grader, "    agent: { key: grader, prompt: flow.pm-grade, tools: [flow.post] }\n", Yaml);
+        var tools = FlowFixturePack.Catalog with { Tools = [.. FlowFixturePack.Catalog.Tools, "flow.post"] };
+
+        var external = Errors(yaml, tools with { ExternalTools = ["flow.post"] });
+        var plain = Errors(yaml, tools);
+
+        Assert.Single(external, e => e.Code == DefinitionErrorCodes.FollowUpStage && e.Path.EndsWith("].agent.tools[0]", StringComparison.Ordinal));
+        Assert.DoesNotContain(plain, e => e.Code == DefinitionErrorCodes.FollowUpStage);
+    }
+
+    [Fact]
     public void FR354_the_main_flow_skips_the_followup_stage()
     {
         var definition = Load(Yaml);

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Gates;
 using Tevrin.Engine.Runtime.Llm;
 
 namespace Tevrin.Engine.Runtime.Agents;
@@ -36,6 +37,13 @@ public sealed record ToolLoopState
 
     /// <summary>The <c>tool_approval</c> gate; <c>null</c> until it is raised (the run's other one was pending).</summary>
     public Guid? GateId { get; init; }
+
+    /// <summary>
+    /// FR-360: the gate type the call waits on: <c>external_action</c> for an external tool (destructive or not);
+    /// <c>null</c> (left out of the JSON, as in states saved before it) for <c>tool_approval</c>
+    /// (<see cref="ToolLoopStates.GateTypeOf"/>).
+    /// </summary>
+    public string? GateType { get; init; }
 
     /// <summary>FR-359: the job that saved the call (it alone resumes it); a job that ends without succeeding closes it.</summary>
     public Guid? JobId { get; init; }
@@ -98,7 +106,16 @@ public static class ToolLoopStates
             Turn = snapshot.Turn,
             Pending = new SavedToolCall(waiting.Id, tool.Name, waiting.Name, ToolTierWire(tool), arguments, reason is null ? null : R(reason)),
             Calls = calls,
+            GateType = tool.External ? EngineGates.ExternalAction : null,
         };
+    }
+
+    /// <summary>FR-359, FR-360: the gate type a saved call waits on (<see cref="ToolLoopState.GateType"/>, else
+    /// <c>tool_approval</c>).</summary>
+    public static string GateTypeOf(ToolLoopState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        return state.GateType ?? EngineGates.ToolApproval;
     }
 
     private static string ToolTierWire(StageTool tool) => tool.Tier?.ToWire() ?? "unregistered";
@@ -164,7 +181,8 @@ public static class ToolLoopStates
 
     /// <summary>
     /// FR-359: the <c>tool_approval</c> gate payload: <c>{ tool, tier, arguments, reason, agentRunId }</c>, from the
-    /// redacted state.
+    /// redacted state. FR-360: an external tool's <c>external_action</c> gate has the same payload; its
+    /// <c>arguments</c> are exactly what the tool will be called with.
     /// </summary>
     public static string GatePayload(ToolLoopState state, Guid agentRunId)
     {
