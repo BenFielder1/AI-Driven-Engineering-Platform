@@ -42,14 +42,24 @@ internal sealed class TierToolsPack : IPipelinePack
     }
 }
 
-/// <summary>The names of the tools that ran, in order.</summary>
+/// <summary>The names of the tools that ran, in order, and the arguments each got (FR-359: a callback sees each run).</summary>
 internal sealed class ToolRunLog
 {
     private readonly ConcurrentQueue<string> _ran = new();
+    private readonly ConcurrentQueue<string> _arguments = new();
 
     public IReadOnlyList<string> Ran => [.. _ran];
 
-    public void Add(string tool) => _ran.Enqueue(tool);
+    public IReadOnlyList<string> Arguments => [.. _arguments];
+
+    public Action<string>? OnRun { get; set; }
+
+    public void Add(string tool, string arguments = "")
+    {
+        OnRun?.Invoke(tool);
+        _ran.Enqueue(tool);
+        _arguments.Enqueue(arguments);
+    }
 }
 
 /// <summary>A tool that records that it ran and answers <c>ran &lt;name&gt;</c>.</summary>
@@ -59,7 +69,7 @@ internal abstract class RecordingTool(string name, ToolRunLog log) : IAgentTool
 
     public Task<ToolResult> InvokeAsync(JsonElement args, CancellationToken cancellationToken)
     {
-        log.Add(Spec.Name);
+        log.Add(Spec.Name, args.GetRawText());
         return Task.FromResult(new ToolResult("ran " + Spec.Name));
     }
 }

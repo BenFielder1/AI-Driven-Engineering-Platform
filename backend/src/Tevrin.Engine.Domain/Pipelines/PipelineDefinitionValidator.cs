@@ -567,10 +567,11 @@ public static partial class PipelineDefinitionValidator
             {
                 Add(DefinitionErrorCodes.Parse, path + ".gate.type", "'type' is required.");
             }
-            else if (gate.Type == EngineGates.Escalation)
+            else if (EngineGates.IsEngineRaised(gate.Type))
             {
+                // FR-359: a tool_approval decision must never count as a stage's entry approval.
                 Add(DefinitionErrorCodes.Parse, path + ".gate.type",
-                    $"'{EngineGates.Escalation}' gates are engine-owned and never guard entry to a stage; use another gate type.");
+                    $"'{gate.Type}' gates are engine-owned and never guard entry to a stage; use another gate type.");
             }
             else
             {

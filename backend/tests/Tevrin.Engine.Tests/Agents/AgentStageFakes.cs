@@ -58,6 +58,9 @@ internal sealed class InMemoryAgentStageStore : IAgentStageStore
     public Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken) =>
         Task.FromResult(AgentRuns.FirstOrDefault(r => r.Id == agentRunId));
 
+    public Task<ApprovalGate?> FindGateAsync(PipelineRun run, Guid gateId, CancellationToken cancellationToken) =>
+        Task.FromResult(Gates.FirstOrDefault(g => g.Id == gateId && g.PipelineRunId == run.Id));
+
     public Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken)
     {
         var inSubject = AgentStageScope.InSubject(run).Compile();
@@ -102,6 +105,11 @@ internal sealed class InMemoryAgentStageStore : IAgentStageStore
             .Where(a => a.PipelineRunId == run.Id && a.Type == key && a.Variant is not null && a.Status != ArtifactStatus.Superseded)
             .GroupBy(a => a.Variant!, StringComparer.Ordinal)
             .Select(g => g.MaxBy(a => a.Version)!)]);
+
+    /// <summary>FR-359: the runs a save was asked to write (their concurrency token guards it in the database store).</summary>
+    public List<Guid> Touched { get; } = [];
+
+    public void Touch(PipelineRun run) => Touched.Add(run.Id);
 
     public void Add(AgentRun agentRun) => AgentRuns.Add(agentRun);
 

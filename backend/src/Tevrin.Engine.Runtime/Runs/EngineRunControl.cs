@@ -263,7 +263,13 @@ public sealed class EngineRunControl(
             return Result.Failure<ApprovalGate>(refused);
         }
 
-        if (gate!.Type == EngineGates.VariantSelect)
+        if (gate!.Type == EngineGates.ToolApproval)
+        {
+            // FR-359: only the waiting job runs the tool (once); nothing else moves.
+            return await DecideToolApprovalAsync(run, gate, GateStatus.Approved, decision, cancellationToken);
+        }
+
+        if (gate.Type == EngineGates.VariantSelect)
         {
             // FR-349, §4.67: the decider's choice must be one of the variants the gate offers; it's recorded on the payload,
             // where the driver reads it to promote that variant.
@@ -317,8 +323,14 @@ public sealed class EngineRunControl(
             return Result.Failure<ApprovalGate>(refused);
         }
 
+        if (gate!.Type == EngineGates.ToolApproval)
+        {
+            // FR-359: a rejected tool call is a tool result (the denial), not a rejected stage: the run goes on.
+            return await DecideToolApprovalAsync(run, gate, GateStatus.Rejected, decision, cancellationToken);
+        }
+
         var now = time.GetUtcNow();
-        Decide(gate!, GateStatus.Rejected, decision, now);
+        Decide(gate, GateStatus.Rejected, decision, now);
         var state = new RunState(run.CurrentStage, run.PackStatus, run.Checkpoint, run.Iterations);
         var stage = definition!.FindStage(run.CurrentStage);
         var cap = stage?.OnReject?.MaxIterations is { } limit ? await CapAsync(run, limit, cancellationToken) : null;
@@ -340,6 +352,31 @@ public sealed class EngineRunControl(
                 await StageExecutionWriter.EndAsync(db, run.Id, GenericRunStatus.Failed, now, cancellationToken);
                 await CancelPendingAsync(run, now, cancellationToken);
                 break;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success(gate);
+    }
+
+    /// <summary>
+    /// FR-359, §4.73: records the decision on a <c>tool_approval</c> gate and wakes the run's waiting <c>stage.run</c> job
+    /// (it was deferred to the gate's timer), whose next delivery runs the tool once or sends the denial and resumes the
+    /// loop. No new driver job is queued: only the job holding the saved loop may run the call. The run's row is written
+    /// too, so a concurrent move of the run fails this save with <c>CONFLICT</c>, as the gate's own token does a concurrent
+    /// decision or timer.
+    /// </summary>
+    private async Task<Result<ApprovalGate>> DecideToolApprovalAsync(
+        PipelineRun run, ApprovalGate gate, GateStatus status, EngineGateDecision decision, CancellationToken cancellationToken)
+    {
+        var now = time.GetUtcNow();
+        Decide(gate, status, decision, now);
+        EngineRunMoves.Touch(db, run);
+        foreach (var job in await DriverJobsAsync(run, [JobStatus.Queued], cancellationToken))
+        {
+            if (job.RunAfter > now)
+            {
+                job.RunAfter = now;
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

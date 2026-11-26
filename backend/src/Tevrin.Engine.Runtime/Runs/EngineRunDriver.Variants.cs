@@ -113,6 +113,7 @@ public sealed partial class EngineRunDriver
                 AgentKey = selector,
                 AgentRunId = AgentRunRules.RunId(job.Id, VariantRules.SelectRunKey(selector)),
                 JobAttempt = job.Attempt,
+                JobId = job.Id,
                 PromptValues = new Dictionary<string, string?>(StringComparer.Ordinal)
                 {
                     [FanOutRules.AllPlaceholder(output)] = FanOutRules.RenderList(items),

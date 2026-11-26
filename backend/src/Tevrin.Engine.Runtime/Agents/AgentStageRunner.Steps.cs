@@ -38,9 +38,19 @@ public sealed partial class AgentStageRunner
     /// <see cref="AgentRunPolicy.CommitRunSeparately"/> or for a run under the caller's id, where the run is left
     /// <c>running</c> for the queue's retry (as 0.6.1). After the answer, the token hook gets
     /// <see cref="CancellationToken.None"/>: the call was paid for.
+    /// <para>
+    /// FR-359: a destructive call stops the loop: its turns so far are recorded, the loop's state saved and the gate raised
+    /// (<see cref="SuspendAsync"/>), and the job deferred. <paramref name="resume"/> continues a saved loop.
+    /// </para>
     /// </summary>
     private async Task<LlmToolLoopResult> CallAsync(
-        AgentAttempt attempt, AgentStageExtension extension, LlmRequest request, AgentToolExecutor? executor, AgentCallOptions options, CancellationToken cancellationToken)
+        AgentAttempt attempt,
+        AgentStageExtension extension,
+        LlmRequest request,
+        AgentToolExecutor? executor,
+        AgentCallOptions options,
+        CancellationToken cancellationToken,
+        LlmToolLoopResume? resume = null)
     {
         var (agentRun, resolved) = (attempt.AgentRun!, attempt.Llm!);
         using var firstToken = LlmFirstTokenProbe.Start(time);
@@ -59,7 +69,15 @@ public sealed partial class AgentStageRunner
         {
             // FR-317: the host's tools, else the stage's; an executor with no tools (AgentToolExecutor.None) is a plain call.
             var tools = options.Tools ?? executor;
-            answer = await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, tools is { Definitions.Count: 0 } ? null : tools, cancellationToken, OnTurn);
+            answer = resume is null
+                ? await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, tools is { Definitions.Count: 0 } ? null : tools, cancellationToken, OnTurn)
+                : await LlmToolLoop.ResumeAsync(llm.ProviderFor(resolved.Provider), request, executor!, resume, cancellationToken, OnTurn);
+        }
+        catch (LlmToolLoopSuspendedException ex) when (options.Tools is null && executor is not null && ex.Snapshot is not null)
+        {
+            // FR-359: the paid turns are recorded first; the destructive call is saved, never run.
+            await RecordCallAsync(attempt, started, firstToken, executor, options, ex.Tokens);
+            throw await SuspendAsync(attempt, extension, request, executor, ex);
         }
         catch (LlmToolLoopStoppedException ex)
         {

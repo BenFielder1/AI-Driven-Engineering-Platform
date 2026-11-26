@@ -15,7 +15,8 @@ namespace Tevrin.IntegrationTests.Pipelines;
 /// <summary>
 /// FR-358 runtime (M71b) end to end on the Fake provider, with <c>fixture-oncall</c>: the investigator's <c>read</c> tool
 /// runs and its call records tier <c>read</c>; the executor's destructive <c>restart-pod</c> is offered (its stage sets
-/// <c>max_tier: destructive</c>) but refused, never run, until the <c>tool_approval</c> gate lands (FR-359, M71c).
+/// <c>max_tier: destructive</c>) and waits on a <c>tool_approval</c> gate, never run from the model's call (FR-359,
+/// <see cref="ToolApprovalTests"/>).
 /// </summary>
 [Collection(ApiTestGroup.Name)]
 public sealed class ToolTierTests(TevrinApiFactory factory)
@@ -56,7 +57,7 @@ public sealed class ToolTierTests(TevrinApiFactory factory)
     }
 
     [Fact]
-    public async Task FR358_FR359_read_logs_runs_with_tier_read_and_restart_pod_is_refused_and_never_runs()
+    public async Task FR358_FR359_read_logs_runs_with_tier_read_and_restart_pod_waits_on_its_gate_and_never_runs()
     {
         await using var app = App(factory);
         using var fixture = await ProjectApi.FixtureAsync(app);
@@ -74,7 +75,12 @@ public sealed class ToolTierTests(TevrinApiFactory factory)
         var investigator = Assert.Single(agentRuns, r => r.Agent == "investigator");
         var executor = Assert.Single(agentRuns, r => r.Agent == "executor");
         Assert.Equal([(ReadLogsTool.ToolName, "read", false)], Calls(investigator.ToolCalls));
-        Assert.Equal([(RestartPodTool.ToolName, "destructive", true)], Calls(executor.ToolCalls));
+
+        // The destructive call isn't recorded until its gate is decided; the run waits on the gate.
+        Assert.Empty(Calls(executor.ToolCalls));
+        Assert.NotNull(executor.ToolLoopState);
+        var gate = await ProjectApi.WithDbAsync(app, db => db.ApprovalGates.AsNoTracking().SingleAsync(g => g.PipelineRunId == run.Id, Ct));
+        Assert.Equal((EngineGates.ToolApproval, GateStatus.Pending), (gate.Type, gate.Status));
 
         // The destructive tool never ran, even in autonomous mode; only the investigator's read did.
         Assert.Equal([ReadLogsTool.ToolName], log.Ran);

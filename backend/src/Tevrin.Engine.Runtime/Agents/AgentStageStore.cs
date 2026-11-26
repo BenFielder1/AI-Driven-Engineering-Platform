@@ -40,6 +40,13 @@ public interface IAgentStageStore
     /// <summary>FR-310: the agent run with <paramref name="agentRunId"/>, tracked, or <c>null</c> (the runner refuses one of another pipeline run or stage).</summary>
     Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// FR-359: gate <paramref name="gateId"/> of <paramref name="run"/>, tracked, whatever its status, or <c>null</c>. A store
+    /// that doesn't hold engine gates finds none, so a saved destructive call is never run there.
+    /// </summary>
+    Task<ApprovalGate?> FindGateAsync(PipelineRun run, Guid gateId, CancellationToken cancellationToken) =>
+        Task.FromResult<ApprovalGate?>(null);
+
     /// <summary>FR-310: the run subject's version of <paramref name="key"/> that agent run <paramref name="agentRunId"/> produced, or <c>null</c>.</summary>
     Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken);
 
@@ -79,6 +86,14 @@ public interface IAgentStageStore
     /// </summary>
     Task<IReadOnlyList<RunsInputCandidate>> RunsOutputsAsync(PipelineRun run, RunsInputDefinition input, DateTimeOffset since, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<RunsInputCandidate>>([]);
+
+    /// <summary>
+    /// FR-359: the next save also writes <paramref name="run"/>'s row, so it fails on the run's concurrency token if the run
+    /// was moved (cancelled, rolled back) since it was read. Default: nothing (a store without one).
+    /// </summary>
+    void Touch(PipelineRun run)
+    {
+    }
 
     void Add(AgentRun agentRun);
 
@@ -180,6 +195,12 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
     public Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken) =>
         db.AgentRuns.FirstOrDefaultAsync(r => r.Id == agentRunId, cancellationToken);
 
+    public Task<ApprovalGate?> FindGateAsync(PipelineRun run, Guid gateId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return db.ApprovalGates.FirstOrDefaultAsync(g => g.Id == gateId && g.PipelineRunId == run.Id, cancellationToken);
+    }
+
     public Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken) =>
         db.Artifacts.Where(AgentStageScope.InSubject(run)).FirstOrDefaultAsync(a => a.Type == key && a.AgentRunId == agentRunId, cancellationToken);
 
@@ -272,6 +293,8 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
             ContentHash = r.Final.ContentHash,
         })];
     }
+
+    public void Touch(PipelineRun run) => Runs.EngineRunMoves.Touch(db, run);
 
     public void Add(AgentRun agentRun) => db.AgentRuns.Add(agentRun);
 

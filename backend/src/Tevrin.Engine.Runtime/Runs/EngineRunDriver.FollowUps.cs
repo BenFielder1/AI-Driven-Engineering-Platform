@@ -70,6 +70,7 @@ public sealed partial class EngineRunDriver
             {
                 AgentRunId = AgentRunRules.RunId(job.Id, AgentRunKey),
                 JobAttempt = job.Attempt,
+                JobId = job.Id,
                 Variant = payload.FollowUp,
             },
             cancellationToken);

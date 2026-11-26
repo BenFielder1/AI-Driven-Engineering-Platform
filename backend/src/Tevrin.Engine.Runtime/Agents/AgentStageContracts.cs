@@ -32,6 +32,12 @@ public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigge
     /// </summary>
     public int? JobAttempt { get; init; }
 
+    /// <summary>
+    /// FR-359: the job running this stage, or <c>null</c> when the caller doesn't say. A saved destructive call records it,
+    /// so a job that ends without succeeding closes its call (<see cref="Runs.ToolApprovalJobEndedHook"/>).
+    /// </summary>
+    public Guid? JobId { get; init; }
+
     /// <summary>FR-314: whether feedback goes into a template without <c>{{FEEDBACK}}</c> under the engine's heading (default <c>true</c>).</summary>
     public bool AppendFeedback { get; init; } = true;
 

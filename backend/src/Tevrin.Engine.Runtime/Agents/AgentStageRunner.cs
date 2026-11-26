@@ -48,6 +48,12 @@ public sealed partial class AgentStageRunner(
             activity?.SetTag(EngineTelemetry.OutcomeTag, outcome.Valid ? "valid" : "invalid");
             return outcome;
         }
+        catch (JobDeferredException)
+        {
+            // FR-359: the attempt waits on a tool_approval gate; not an error.
+            activity?.SetTag(EngineTelemetry.OutcomeTag, "waiting");
+            throw;
+        }
         catch (JobFailedException ex)
         {
             // An error span is described by its error code, or else the exception type, never the message (NFR-SEC).
@@ -74,7 +80,7 @@ public sealed partial class AgentStageRunner(
             observer?.Completed(outcome);
             return outcome;
         }
-        catch (Exception ex) when (observer is not null)
+        catch (Exception ex) when (observer is not null && ex is not JobDeferredException)
         {
             observer.Failed(ex);
             throw;
@@ -151,6 +157,13 @@ public sealed partial class AgentStageRunner(
         var separate = extension.Policy.CommitRunSeparately;
         var attempt = new AgentAttempt(request, run, loaded.PackId, definition, stage, agent, existing);
 
+        // FR-359, §4.73: a run holding a saved destructive call goes on from it, before anything else: while its gate is
+        // pending this re-defers the job with no model call and nothing saved.
+        if (existing is { Status: AgentRunStatus.Running, ToolLoopState: not null })
+        {
+            return await ContinueToolLoopAsync(attempt, extension, existing, cancellationToken);
+        }
+
         // 1. FR-316: the host's pre-run check.
         if (await extension.CheckBeforeRunAsync(attempt, cancellationToken) is { } refusal)
         {
@@ -212,7 +225,8 @@ public sealed partial class AgentStageRunner(
 
         // FR-312: what the host prepares just before the call (after the run, with its attempt, is saved).
         options = await extension.PrepareCallAsync(attempt, options, cancellationToken);
-        // FR-358: the stage's tools within its max_tier are offered; destructive and external ones are refused when called.
+        // FR-358: the stage's tools within its max_tier are offered; FR-359: a destructive one stops the loop for approval,
+        // and an external one is refused when called (FR-360, until its gate).
         var executor = prepared.Tools.Count > 0 ? AgentToolExecutor.ForStage(prepared.Tools, prepared.MaxTier, options.ToolSession, logger) : null;
 
         var llmRequest = new LlmRequest

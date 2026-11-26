@@ -103,8 +103,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - **Blocker for the build PR until c and d land:** from a1 a `max_tier: destructive` stage validates, but the runner doesn't gate destructive or external calls yet (`PipelineRegistry.ToolTierOf`/`IsExternal` are unused). No product pack registers such tools.
   - For b–e: link `fixture-oncall.pipeline.yaml` in the IntegrationTests csproj and register its prompts and tools (with tiers) in the integration `FlowFixturePack` copy (M70c 404 lesson). Pack-author docs: the tier is only as honest as the pack's registration (an unclassified tool is `write`).
   - [x] a2. Data: `agent_runs.tool_loop_state` (jsonb); error codes `TOOL_STATE_TOO_LARGE`, `EXTERNAL_ACTION_REJECTED`. No other schema needed: the tool-call tier goes in each `agent_runs.tool_calls` element (`AgentToolCallRecord`, optional for old rows), gate `type` is a free string, and the §4.73 call state is derived from `tool_loop_state` + the run's `tool_approval` gate (cleared on resume) — b67b366 ([CI 45867346886](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45867346886))
-  - [x] b. Runner: tier enforcement and recording at call time (FR-358), D-0.8.0-29; destructive and external tools are refused (not run) until c/d; startup warning for DI-only tools with no tier
-  - [ ] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73)
+  - [x] b. Runner: tier enforcement and recording at call time (FR-358), D-0.8.0-29; destructive and external tools are refused (not run) until c/d; startup warning for DI-only tools with no tier — d4b7410 ([CI 45875442063](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45875442063))
+  - [x] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73), D-0.8.0-30
   - [ ] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit
   - [ ] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361)
 - [ ] M72 Engine UI — FR-362–FR-366
@@ -149,6 +149,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Conversation (M70d review minors, left as is): a redelivered escalated turn job after approval raises a fresh escalation (same as plain stages); the stop guard re-runs on already-checked turns at each new turn job.
 - A map stage plans its entry twice (`EnterMapAsync`): an input arriving in between fails the job with a misleading `DEFINITION_UNAVAILABLE`; the run stays active and a manual retry recovers. Use the one-plan pattern from the conversation turn 1 (M70d re-review).
 - No index on `pipeline_runs(project_id, pipeline_id, status, completed_at)` for `from_runs`; add one in a later migration if it gets slow. Conversation stop guards don't get `RunsInputFact`. A map item handler on a stage with `from_runs` reloads the lists per item (up to 1,000 identical queries); load once per map entry if that combination is used (M70e).
+- Tool approval (M71c review minors, left as is): if the last attempt is dead-lettered by lease expiry while the old worker still runs an approved, claimed tool, the hook fails the run and the old worker may later save it `Succeeded` (`agent_runs` has no xmin); the tool still runs once. Runs pinned to definitions from before `DEF_FOLLOWUP_STAGE` refuses destructive follow-ups can raise an undecidable gate; the 24 h timer rejects it. A waiting gate costs one model-free delivery every 2 minutes. The denial names the reviewer by user id, not name.
 - Integration shards: `rest` hit its 22-min step timeout in M69 and was split (5d048d7, `pipelines-projects`); watch shard times as tests grow.
 
 ## Manual checks (Ben)

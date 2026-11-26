@@ -21,6 +21,9 @@ public static class EngineRunServiceCollectionExtensions
         services.TryAddScoped<AgentFeedbackEntries>();
         services.AddJobHandler<StageRunJobHandler>(EngineJobTypes.StageRun);
 
+        // FR-359: a stage.run job that ends without succeeding closes the destructive calls it saved.
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IJobEndedHook, ToolApprovalJobEndedHook>());
+
         // FR-336, FR-337: schedule and webhook triggers (the host registers Triggers.IProjectApprovalModes).
         services.TryAddScoped<Triggers.PipelineSchedules>();
         services.TryAddScoped<Triggers.PipelineWebhooks>();

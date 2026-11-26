@@ -95,6 +95,7 @@ public sealed partial class EngineRunDriver
             {
                 AgentRunId = AgentRunRules.RunId(job.Id, AgentRunKey),
                 JobAttempt = job.Attempt,
+                JobId = job.Id,
                 AgentKey = branch.AgentKey,
                 Variant = branch.Label,
             },

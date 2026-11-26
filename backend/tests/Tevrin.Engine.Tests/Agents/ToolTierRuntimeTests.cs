@@ -7,10 +7,10 @@ using Tevrin.Engine.Tests.Pipelines;
 namespace Tevrin.Engine.Tests.Agents;
 
 /// <summary>
-/// FR-358 runtime (M71b), FR-359 and FR-360 until their gates land: the runner offers only the listed tools whose tier in
-/// the registry now is within the stage's <c>max_tier</c> (default <c>write</c>); a call to any other tool is an error
-/// result, logged without its arguments; an offered destructive or external tool is refused and never runs; every call
-/// records its tier.
+/// FR-358 runtime (M71b), FR-359 (M71c) and FR-360 until its gate lands: the runner offers only the listed tools whose tier
+/// in the registry now is within the stage's <c>max_tier</c> (default <c>write</c>); a call to any other tool is an error
+/// result, logged without its arguments; an offered destructive tool suspends the loop for approval and an external one is
+/// refused, and neither runs from the model's call; every call records its tier.
 /// </summary>
 public class ToolTierRuntimeTests
 {
@@ -139,18 +139,46 @@ public class ToolTierRuntimeTests
     }
 
     [Fact]
-    public async Task FR359_an_offered_destructive_tool_is_refused_until_its_gate_exists_and_never_runs()
+    public async Task FR359_a_call_to_an_offered_destructive_tool_suspends_the_loop_and_never_runs()
     {
         var (executor, log, logger) = Executor(ToolTier.Destructive, (TierToolsPack.Wipe, ToolTier.Destructive, false));
 
-        var result = await executor.ExecuteAsync(Call("wipe"), Ct);
+        var suspended = await Assert.ThrowsAsync<LlmToolCallSuspendedException>(() => executor.ExecuteAsync(Call("wipe", $$"""{"q":"{{Secret}}"}"""), Ct));
 
         Assert.Equal(["wipe"], executor.Definitions.Select(d => d.Name));
-        Assert.Equal((AgentToolExecutor.ApprovalUnavailable("wipe"), true), (result.Content, result.IsError));
+        Assert.Equal("call-1", suspended.Call!.Id);
         Assert.Empty(log.Ran);
+        Assert.Empty(executor.Calls);
         Assert.False(executor.LimitReached);
-        Assert.Equal(("destructive", true), (Assert.Single(executor.Calls).Tier, executor.Calls[0].IsError));
-        Assert.Contains("destructive_needs_approval", Assert.Single(logger.Entries).Message, StringComparison.Ordinal);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Contains("waits on approval", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(Secret, entry.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FR359_an_approved_destructive_call_runs_once_through_the_approved_path_and_records_its_tier()
+    {
+        var (executor, log, _) = Executor(ToolTier.Destructive, (TierToolsPack.Wipe, ToolTier.Destructive, false));
+
+        var result = await executor.ExecuteApprovedAsync(Call("wipe"), Ct);
+
+        Assert.Equal(("ran wipe", false), (result.Content, result.IsError));
+        Assert.Equal(["wipe"], log.Ran);
+        Assert.Equal(("destructive", false), (Assert.Single(executor.Calls).Tier, executor.Calls[0].IsError));
+    }
+
+    [Theory]
+    [InlineData(ToolTier.Write, ToolTier.Destructive, false)]
+    [InlineData(ToolTier.Destructive, ToolTier.Write, false)]
+    [InlineData(ToolTier.Destructive, ToolTier.Destructive, true)]
+    public async Task FR359_the_approved_path_refuses_a_tool_that_is_not_an_offered_non_external_destructive_one_now(ToolTier maxTier, ToolTier tier, bool external)
+    {
+        var (executor, log, _) = Executor(maxTier, (TierToolsPack.Wipe, tier, external));
+
+        var result = await executor.ExecuteApprovedAsync(Call("wipe"), Ct);
+
+        Assert.Equal((AgentToolExecutor.NotOffered("wipe"), true), (result.Content, result.IsError));
+        Assert.Empty(log.Ran);
     }
 
     [Fact]

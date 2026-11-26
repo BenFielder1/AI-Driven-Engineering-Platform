@@ -37,8 +37,11 @@ public sealed record StageTool(string Name, IAgentTool Tool, ToolTier? Tier, boo
 /// <para>
 /// FR-358 (<see cref="ForStage"/>, the runner's executor): only the listed tools whose current tier is within the stage's
 /// <c>max_tier</c> are offered, and only offered <c>read</c>/<c>write</c> tools that aren't external ever run. A call to
-/// any other tool is refused with an error result and logged (never with its arguments); a destructive or external tool
-/// waits on an approval gate (FR-359, FR-360), which isn't built yet, so it is refused too.
+/// any other tool is refused with an error result and logged (never with its arguments). FR-359: a call to an offered
+/// destructive tool is never run here: it suspends the tool loop (<see cref="LlmToolCallSuspendedException"/>), and the
+/// runner saves the loop and raises a <c>tool_approval</c> gate; once the gate is approved the runner runs it once through
+/// <see cref="ExecuteApprovedAsync"/>. An external tool waits on an <c>external_action</c> gate (FR-360), which isn't
+/// built yet, so it is refused.
 /// </para>
 /// </summary>
 public sealed partial class AgentToolExecutor : ILlmToolExecutor
@@ -97,7 +100,8 @@ public sealed partial class AgentToolExecutor : ILlmToolExecutor
     /// <summary>
     /// FR-358: the executor of one stage's call. <paramref name="listed"/> are the tools the stage or binding lists, each
     /// with its tier in the registry now; those within <paramref name="maxTier"/> are offered, the rest refused when
-    /// called. Offered destructive or external tools are refused as <see cref="ApprovalUnavailable"/> (FR-359, FR-360).
+    /// called. An offered destructive tool suspends the loop (FR-359); an external one is refused as
+    /// <see cref="ApprovalUnavailable"/> (FR-360).
     /// </summary>
     public static AgentToolExecutor ForStage(IEnumerable<StageTool> listed, ToolTier maxTier, AgentToolSession? session = null, ILogger? logger = null)
     {
@@ -128,6 +132,21 @@ public sealed partial class AgentToolExecutor : ILlmToolExecutor
     {
         ArgumentNullException.ThrowIfNull(toolCall);
         ToolResult result;
+        if (AwaitsApproval(toolCall) is { } waiting)
+        {
+            if (LimitReached)
+            {
+                // FR-359: at the session's limit no gate is raised for a call that couldn't run anyway.
+                _refused = true;
+                Record(toolCall, isError: true);
+                return new LlmToolResult(toolCall.Id, LimitRefusal(toolCall).Content, IsError: true);
+            }
+
+            // FR-359: never run, and not recorded yet: the runner records it once the gate is decided.
+            LogAwaitingApproval(_logger, waiting.Name, _maxTier.ToWire());
+            throw new LlmToolCallSuspendedException($"The tool '{waiting.Name}' waits on a tool_approval gate.", toolCall);
+        }
+
         if (TierRefusal(toolCall) is { } tierRefusal)
         {
             // FR-358–FR-360: never run; not counted against the session's limit (the tool loop's turn cap still applies).
@@ -154,6 +173,109 @@ public sealed partial class AgentToolExecutor : ILlmToolExecutor
 
         Record(toolCall, result.IsError);
         return new LlmToolResult(toolCall.Id, result.Content, result.IsError);
+    }
+
+    /// <summary>
+    /// FR-359: the listed tool a call to <paramref name="modelName"/> resolves to (its registered name and tier), or
+    /// <c>null</c> when the stage doesn't list it (or the executor has no tier policy).
+    /// </summary>
+    public StageTool? ListedTool(string modelName)
+    {
+        ArgumentNullException.ThrowIfNull(modelName);
+        return _listed is not null && _listed.TryGetValue(modelName, out var tool) ? tool : null;
+    }
+
+    /// <summary>FR-359: an offered destructive, non-external tool the call names: it suspends the loop instead of running.</summary>
+    private StageTool? AwaitsApproval(LlmToolCall toolCall) =>
+        ListedTool(toolCall.Name) is { } tool && IsApprovable(tool) ? tool : null;
+
+    /// <summary>FR-359: whether <paramref name="tool"/> is offered here and waits on a <c>tool_approval</c> gate.</summary>
+    private bool IsApprovable(StageTool tool) =>
+        !tool.External && tool.Tier == ToolTier.Destructive && ToolTierRules.VerdictOf(_maxTier, tool.Tier, tool.External) == ToolCallVerdict.NeedsApproval;
+
+    /// <summary>
+    /// FR-359: restores the calls an earlier delivery of this agent run recorded before the loop stopped, so the run's
+    /// <c>tool_calls</c> keep them. Only before the first call.
+    /// </summary>
+    public void Restore(IEnumerable<AgentToolCallRecord> calls)
+    {
+        ArgumentNullException.ThrowIfNull(calls);
+        if (_calls.Count > 0)
+        {
+            throw new InvalidOperationException("Calls can only be restored before the first call.");
+        }
+
+        _calls.AddRange(calls);
+    }
+
+    /// <summary>The session's refusal of a call at its limit (its own text, else a generic one).</summary>
+    private ToolResult LimitRefusal(LlmToolCall toolCall) =>
+        _session.BeforeCall(toolCall) is { } refusal
+            ? refusal with { IsError = true }
+            : new ToolResult($"The tool call limit is reached; '{toolCall.Name}' was not run.", IsError: true);
+
+    /// <summary>
+    /// FR-359: the checks an approved destructive call must pass before the runner claims it, as they stand now: the tool
+    /// is still listed, offered under the stage's <c>max_tier</c>, destructive and not external, and the session doesn't
+    /// refuse it. A refusal is recorded and returned (the call is never claimed or run); <c>null</c>: run it with
+    /// <see cref="RunApprovedAsync"/>.
+    /// </summary>
+    public LlmToolResult? RefuseApproved(LlmToolCall toolCall)
+    {
+        ArgumentNullException.ThrowIfNull(toolCall);
+        ToolResult refused;
+        if (ListedTool(toolCall.Name) is not { } tool || !IsApprovable(tool))
+        {
+            LogRefused(_logger, Shorten(toolCall.Name, MaxLoggedToolNameLength), "approved_tool_not_offered", ListedTool(toolCall.Name)?.Tier?.ToWire() ?? "unregistered", _maxTier.ToWire());
+            refused = new ToolResult(NotOffered(toolCall.Name), IsError: true);
+        }
+        else if (_session.BeforeCall(toolCall) is { } refusal)
+        {
+            _refused = true;
+            refused = refusal with { IsError = true };
+        }
+        else
+        {
+            return null;
+        }
+
+        Record(toolCall, isError: true);
+        return new LlmToolResult(toolCall.Id, refused.Content, IsError: true);
+    }
+
+    /// <summary>FR-359: runs an approved destructive call that passed <see cref="RefuseApproved"/> (and was claimed), once.</summary>
+    public async Task<LlmToolResult> RunApprovedAsync(LlmToolCall toolCall, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(toolCall);
+        var tool = ListedTool(toolCall.Name) is { } listed && IsApprovable(listed)
+            ? listed
+            : throw new InvalidOperationException("Only a call that passed RefuseApproved runs.");
+        ToolResult result;
+        try
+        {
+            result = _session.AfterCall(toolCall, await InvokeToolAsync(tool.Tool, toolCall, cancellationToken));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Record(toolCall, isError: true);
+            throw;
+        }
+
+        Record(toolCall, result.IsError);
+        return new LlmToolResult(toolCall.Id, result.Content, result.IsError);
+    }
+
+    /// <summary>FR-359: <see cref="RefuseApproved"/>, then <see cref="RunApprovedAsync"/> (for callers that claim nothing).</summary>
+    public async Task<LlmToolResult> ExecuteApprovedAsync(LlmToolCall toolCall, CancellationToken cancellationToken) =>
+        RefuseApproved(toolCall) ?? await RunApprovedAsync(toolCall, cancellationToken);
+
+    /// <summary>FR-359: records a call that was decided without running (denied, or claimed before) with its result text.</summary>
+    public LlmToolResult RecordUnrun(LlmToolCall toolCall, string content)
+    {
+        ArgumentNullException.ThrowIfNull(toolCall);
+        ArgumentNullException.ThrowIfNull(content);
+        Record(toolCall, isError: true);
+        return new LlmToolResult(toolCall.Id, content, IsError: true);
     }
 
     private void Record(LlmToolCall toolCall, bool isError) =>
@@ -194,13 +316,16 @@ public sealed partial class AgentToolExecutor : ILlmToolExecutor
     /// <summary>FR-358: the error result of a call to a listed tool above the stage's <c>max_tier</c> (or no longer registered).</summary>
     public static string NotOffered(string tool) => $"The tool '{tool}' is not offered to this stage.";
 
-    /// <summary>FR-359, FR-360: the error result of a call to an offered destructive or external tool until its approval
-    /// gate is built (M71c, M71d); the tool is never run.</summary>
+    /// <summary>FR-360: the error result of a call to an offered external tool until its approval gate is built (M71d); the
+    /// tool is never run.</summary>
     public static string ApprovalUnavailable(string tool) => $"The tool '{tool}' requires approval, which is not available yet; it was not run.";
 
     // NFR-SEC: the tool's registered name (from the pack, not the model), the reason and the tiers; never the arguments.
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent tool call refused: {Tool} ({Reason}; tier {Tier}, stage max tier {MaxTier})")]
     private static partial void LogRefused(ILogger logger, string tool, string reason, string tier, string maxTier);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Agent tool call waits on approval: {Tool} (destructive; stage max tier {MaxTier})")]
+    private static partial void LogAwaitingApproval(ILogger logger, string tool, string maxTier);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent tool call refused: {Tool} (not_listed; stage max tier {MaxTier})")]
     private static partial void LogUnlisted(ILogger logger, string tool, string maxTier);
@@ -241,6 +366,11 @@ public sealed partial class AgentToolExecutor : ILlmToolExecutor
             return _session.UnknownTool(toolCall);
         }
 
+        return await InvokeToolAsync(tool, toolCall, cancellationToken);
+    }
+
+    private async Task<ToolResult> InvokeToolAsync(IAgentTool tool, LlmToolCall toolCall, CancellationToken cancellationToken)
+    {
         try
         {
             if (tool is IRawArgumentsAgentTool raw)

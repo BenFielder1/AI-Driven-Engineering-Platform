@@ -92,6 +92,7 @@ public sealed partial class EngineRunDriver
                 AgentKey = speaker.Agent,
                 AgentRunId = ownRunId,
                 JobAttempt = job.Attempt,
+                JobId = job.Id,
                 TurnIndex = turn,
                 TurnRole = speaker.Role,
                 PromptValues = new Dictionary<string, string?>(StringComparer.Ordinal)

@@ -34,6 +34,10 @@ public static partial class PipelineDefinitionValidator
                         $"{path}.stage",
                         $"Follow-up stage '{followUp.Stage}' must be an agent stage with an output and no gate, parallel, fan_out, variants, veto or escalation.");
                 }
+                else
+                {
+                    CheckFollowUpToolPolicy(followUp.Stage);
+                }
 
                 if (followUp.After.Count == 0)
                 {
@@ -52,6 +56,31 @@ public static partial class PipelineDefinitionValidator
                     {
                         Add(DefinitionErrorCodes.FollowUpStage, $"{path}.after[{j}]", $"Duration '{after}' is listed more than once.");
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// FR-354, FR-359: a follow-up runs on a completed run, whose gates can't be decided (<c>RUN_NOT_ACTIVE</c>), so its
+        /// agent and its bindings may not allow destructive tools, which wait on a <c>tool_approval</c> gate
+        /// (<c>DEF_FOLLOWUP_STAGE</c> at the <c>tool_policy</c>).
+        /// </summary>
+        private void CheckFollowUpToolPolicy(string stageId)
+        {
+            var index = definition.IndexOfStage(stageId);
+            var stage = definition.Stages[index];
+            if (stage.ToolPolicy is { MaxTier: ToolTier.Destructive })
+            {
+                Add(DefinitionErrorCodes.FollowUpStage, $"stages[{index}].tool_policy",
+                    $"Follow-up stage '{stageId}' runs after the run completed, so it can't allow destructive tools (their tool_approval gate couldn't be decided).");
+            }
+
+            for (var j = 0; j < stage.Agents.Count; j++)
+            {
+                if (stage.Agents[j].ToolPolicy is { MaxTier: ToolTier.Destructive })
+                {
+                    Add(DefinitionErrorCodes.FollowUpStage, $"stages[{index}].agents[{j}].tool_policy",
+                        $"Follow-up stage '{stageId}' runs after the run completed, so its agent '{stage.Agents[j].Key}' can't allow destructive tools.");
                 }
             }
         }

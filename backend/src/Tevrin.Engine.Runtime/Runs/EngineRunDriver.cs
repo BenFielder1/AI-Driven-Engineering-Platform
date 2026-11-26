@@ -238,6 +238,7 @@ public sealed partial class EngineRunDriver(
                     {
                         AgentRunId = AgentRunRules.RunId(job.Id, AgentRunKey),
                         JobAttempt = job.Attempt,
+                        JobId = job.Id,
                     },
                     cancellationToken);
                 result.ThrowIfFailed();
@@ -382,6 +383,7 @@ public sealed partial class EngineRunDriver(
                     AgentKey = agentKey,
                     AgentRunId = AgentRunRules.RunId(job.Id, VetoRunKey(agentKey)),
                     JobAttempt = job.Attempt,
+                    JobId = job.Id,
                 },
                 cancellationToken);
             vetoRun.ThrowIfFailed();
@@ -481,7 +483,9 @@ public sealed partial class EngineRunDriver(
             .Where(g => g.PipelineRunId == run.Id)
             .Select(g => new { g.Type, g.Status, g.DecidedAt })
             .ToListAsync(cancellationToken);
-        var pending = gates.Where(g => g.Status == GateStatus.Pending).Select(g => g.Type).ToList();
+        // FR-359: a pending tool_approval belongs to the agent run waiting inside the stage, not to its entry, so it never
+        // fails the stage's own no_pending_gates requirement when the waiting job is delivered again.
+        var pending = gates.Where(g => g.Status == GateStatus.Pending && g.Type != EngineGates.ToolApproval).Select(g => g.Type).ToList();
 
         var guards = new Dictionary<string, GuardResult>(StringComparer.Ordinal);
         foreach (var guard in stage.Requires.OfType<GuardRequirement>())
@@ -648,15 +652,36 @@ public static class EngineRunMoves
         }
     }
 
-    /// <summary>Cancels the run's pending gates and its queued <c>stage.run</c> jobs (stored or added in this save).</summary>
+    /// <summary>
+    /// Cancels the run's pending gates and its queued <c>stage.run</c> jobs (stored or added in this save). FR-359: an agent
+    /// run whose destructive call waited on one of those <c>tool_approval</c> gates, or on the run's other one (no gate yet),
+    /// ends cancelled with its saved loop cleared, so the call never runs.
+    /// </summary>
     public static async Task CancelPendingAsync(IEngineDbContext db, PipelineRun run, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(run);
-        foreach (var gate in await db.ApprovalGates.Where(g => g.PipelineRunId == run.Id && g.Status == GateStatus.Pending).ToListAsync(cancellationToken))
+        var cancelled = await db.ApprovalGates.Where(g => g.PipelineRunId == run.Id && g.Status == GateStatus.Pending).ToListAsync(cancellationToken);
+        foreach (var gate in cancelled)
         {
             gate.Status = GateStatus.Cancelled;
             gate.DecidedAt = now;
+        }
+
+        var gateIds = cancelled.Where(g => g.Type == EngineGates.ToolApproval).Select(g => g.Id).ToHashSet();
+        foreach (var waiting in await db.AgentRuns
+            .Where(r => r.PipelineRunId == run.Id && r.Status == AgentRunStatus.Running && r.ToolLoopState != null)
+            .ToListAsync(cancellationToken))
+        {
+            // A claimed (approved) call isn't waiting any more; it belongs to its running job.
+            if (ToolLoopStates.Read(waiting.ToolLoopState) is { Phase: ToolApprovalPhase.PendingApproval } state
+                && (state.GateId is null || gateIds.Contains(state.GateId.Value)))
+            {
+                waiting.Status = AgentRunStatus.Cancelled;
+                waiting.Error = "The run moved on while a destructive tool call waited for approval; the tool was not run.";
+                waiting.ToolLoopState = null;
+                waiting.CompletedAt = now;
+            }
         }
 
         foreach (var job in await DriverJobsAsync(db, run, [JobStatus.Queued], cancellationToken))

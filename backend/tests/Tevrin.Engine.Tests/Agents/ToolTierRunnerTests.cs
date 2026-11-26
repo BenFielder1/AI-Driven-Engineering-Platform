@@ -12,7 +12,8 @@ namespace Tevrin.Engine.Tests.Agents;
 
 /// <summary>
 /// FR-358 runtime (M71b) through the runner: the stage's tools are checked against the registry when the stage runs, not
-/// only when the definition was validated, and a destructive or external tool never runs while its gate isn't built.
+/// only when the definition was validated; an external tool never runs while its gate isn't built (FR-360), and a
+/// destructive one waits on its <c>tool_approval</c> gate (FR-359, <see cref="ToolApprovalRunnerTests"/>).
 /// </summary>
 public class ToolTierRunnerTests
 {
@@ -47,12 +48,12 @@ public class ToolTierRunnerTests
     }
 
     [Fact]
-    public async Task FR359_FR360_the_runner_refuses_destructive_external_and_unlisted_tools_and_never_runs_them()
+    public async Task FR360_the_runner_refuses_external_and_unlisted_tools_and_never_runs_them()
     {
         var log = new ToolRunLog();
         var script = new FakeToolScript("drafter",
         [
-            new FakeToolCall("scan", "{}"), new FakeToolCall("wipe", "{}"), new FakeToolCall("send", "{}"), new FakeToolCall("ghost", "{}"),
+            new FakeToolCall("scan", "{}"), new FakeToolCall("send", "{}"), new FakeToolCall("ghost", "{}"),
         ]);
         using var harness = new AgentStageHarness(
             [new ScriptedResponder("drafter", AgentStageHarness.ValidDraft)],
@@ -65,7 +66,7 @@ public class ToolTierRunnerTests
         Assert.Equal(AgentStageEnd.Stored, result.End);
         Assert.Equal(["scan"], log.Ran);
         Assert.Equal(
-            [("scan", "read", false), ("wipe", "destructive", true), ("send", "read", true), ("ghost", null, true)],
+            [("scan", "read", false), ("send", "read", true), ("ghost", null, true)],
             Calls(harness.Store.AgentRuns[0].ToolCalls));
     }
 

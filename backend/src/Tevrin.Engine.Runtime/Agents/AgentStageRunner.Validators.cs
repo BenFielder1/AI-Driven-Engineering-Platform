@@ -43,6 +43,7 @@ public sealed partial class AgentStageRunner
                     AgentKey = key,
                     AgentRunId = AgentRunRules.RunId(agentRun.Id, ValidatorAgentRules.RunKey(key)),
                     JobAttempt = attempt.Request.JobAttempt,
+                    JobId = attempt.Request.JobId,
                     PromptValues = values,
                 },
                 cancellationToken);

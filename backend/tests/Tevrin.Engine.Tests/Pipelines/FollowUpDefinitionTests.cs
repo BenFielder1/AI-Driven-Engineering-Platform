@@ -36,6 +36,23 @@ public class FollowUpDefinitionTests
     }
 
     [Fact]
+    public void FR354_FR359_a_followup_stage_may_not_allow_destructive_tools_because_its_gate_could_not_be_decided()
+    {
+        const string Grader = "    agent: { key: grader, prompt: flow.pm-grade }\n";
+        Assert.Contains(Grader, Yaml, StringComparison.Ordinal);
+
+        var primary = PostmortemErrors(Grader, Grader + "    tool_policy: { max_tier: destructive }\n");
+        var write = PostmortemErrors(Grader, Grader + "    tool_policy: { max_tier: write }\n");
+        var binding = PostmortemErrors(
+            Grader,
+            Grader + "    agents:\n      - { key: helper, job_type: flow.judge, prompt: flow.judge, tool_policy: { max_tier: destructive } }\n");
+
+        Assert.Single(primary, e => e.Code == DefinitionErrorCodes.FollowUpStage && e.Path.EndsWith("].tool_policy", StringComparison.Ordinal));
+        Assert.Contains(binding, e => e.Code == DefinitionErrorCodes.FollowUpStage && e.Path.EndsWith(".agents[0].tool_policy", StringComparison.Ordinal));
+        Assert.DoesNotContain(write, e => e.Code == DefinitionErrorCodes.FollowUpStage);
+    }
+
+    [Fact]
     public void FR354_the_main_flow_skips_the_followup_stage()
     {
         var definition = Load(Yaml);

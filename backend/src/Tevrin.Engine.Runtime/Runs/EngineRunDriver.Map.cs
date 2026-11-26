@@ -148,6 +148,7 @@ public sealed partial class EngineRunDriver
                     AgentKey = agentKey,
                     AgentRunId = AgentRunRules.RunId(job.Id, AgentRunKey),
                     JobAttempt = job.Attempt,
+                    JobId = job.Id,
                     ItemIndex = index,
                     ItemsSince = item.EnteredAt,
                     PromptValues = new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -293,6 +294,7 @@ public sealed partial class EngineRunDriver
                         AgentKey = agentKey,
                         AgentRunId = AgentRunRules.RunId(job.Id, ReduceRunKey),
                         JobAttempt = job.Attempt,
+                        JobId = job.Id,
                         Reduce = true,
                         PromptValues = new Dictionary<string, string?>(StringComparer.Ordinal)
                         {
