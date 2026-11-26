@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
@@ -28,6 +29,8 @@ public sealed partial class AgentStageRunner(
     IEnumerable<IAgentContextProvider> contextProviders,
     IEnumerable<AgentStageExtension> extensions,
     IServiceProvider services,
+    PipelineRegistryHost registryHost,
+    ILogger<AgentStageRunner> logger,
     TimeProvider time)
 {
     /// <summary>The longest provider error stored on a run (as the SDLC's runner).</summary>
@@ -209,7 +212,8 @@ public sealed partial class AgentStageRunner(
 
         // FR-312: what the host prepares just before the call (after the run, with its attempt, is saved).
         options = await extension.PrepareCallAsync(attempt, options, cancellationToken);
-        var executor = prepared.Tools.Count > 0 ? new AgentToolExecutor(prepared.Tools, options.ToolSession) : null;
+        // FR-358: the stage's tools within its max_tier are offered; destructive and external ones are refused when called.
+        var executor = prepared.Tools.Count > 0 ? AgentToolExecutor.ForStage(prepared.Tools, prepared.MaxTier, options.ToolSession, logger) : null;
 
         var llmRequest = new LlmRequest
         {

@@ -96,11 +96,29 @@ public sealed class FlowFixturePack : IPipelinePack
     public const string TrendsRecapPrompt =
         "---\nversion: flow.trends-recap-1\n---\nYou recap trend reports.\n<!-- user -->\nEarlier reports:\n{{TREND_REPORT_RUNS?}}\n";
 
+    /// <summary>FR-358, FR-359 (M71): an investigator with the read tool <see cref="ReadLogsTool"/>, then an executor whose
+    /// <c>tool_policy</c> allows the destructive <see cref="RestartPodTool"/>.</summary>
+    public const string OnCall = "fixture-oncall";
+    public const string ReadLogsTool = "flow.read-logs";
+    public const string RestartPodTool = "flow.restart-pod";
+
+    /// <summary>FR-358: the on-call prompts (the same as the engine tests', which check that they validate).</summary>
+    public const string OnCallInvestigatePrompt =
+        "---\nversion: flow.oncall-investigate-1\n---\nYou investigate production alerts.\n<!-- user -->\nAlert:\n{{ALERT}}\n";
+
+    public const string OnCallExecutePrompt =
+        "---\nversion: flow.oncall-execute-1\n---\nYou remediate production incidents.\n<!-- user -->\nAlert:\n{{ALERT}}\nFindings:\n{{FINDINGS}}\n";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
+        registry.AddDefinition(OnCall + ".pipeline.yaml", Read(OnCall + ".pipeline.yaml"));
+        registry.AddPrompt("flow.oncall-investigate", OnCallInvestigatePrompt);
+        registry.AddPrompt("flow.oncall-execute", OnCallExecutePrompt);
+        registry.AddTool(ReadLogsTool, ToolTier.Read);
+        registry.AddTool(RestartPodTool, ToolTier.Destructive);
         registry.AddDefinition(Veto + ".pipeline.yaml", Read(Veto + ".pipeline.yaml"));
         registry.AddDefinition(Editorial + ".pipeline.yaml", Read(Editorial + ".pipeline.yaml"));
         registry.AddDefinition(VetoEnd + ".pipeline.yaml", VetoEndYaml());
@@ -556,6 +574,40 @@ public sealed class TrendTally(TrendLog log) : IStageHandler
     }
 }
 
+/// <summary>FR-358, FR-359: the on-call tools that ran, by tool name, in order.</summary>
+public sealed class OnCallLog
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _ran = new();
+
+    public IReadOnlyList<string> Ran => [.. _ran];
+
+    public void Add(string tool) => _ran.Enqueue(tool);
+}
+
+/// <summary>A <c>fixture-oncall</c> tool that records in <see cref="OnCallLog"/> that it ran.</summary>
+public abstract class OnCallTool(string name, OnCallLog log) : IAgentTool
+{
+    public ToolSpec Spec { get; } = new(name, "A fixture on-call tool.", System.Text.Json.JsonDocument.Parse("""{"type":"object"}""").RootElement);
+
+    public Task<ToolResult> InvokeAsync(System.Text.Json.JsonElement args, CancellationToken cancellationToken)
+    {
+        log.Add(Spec.Name);
+        return Task.FromResult(new ToolResult("ran " + Spec.Name));
+    }
+}
+
+/// <summary>FR-358: <c>flow.read-logs</c>, <c>read</c>.</summary>
+public sealed class ReadLogsTool(OnCallLog log) : OnCallTool(ReadLogsTool.ToolName, log)
+{
+    public const string ToolName = "read_logs";
+}
+
+/// <summary>FR-358, FR-359: <c>flow.restart-pod</c>, <c>destructive</c>: it must never run without an approved gate.</summary>
+public sealed class RestartPodTool(OnCallLog log) : OnCallTool(RestartPodTool.ToolName, log)
+{
+    public const string ToolName = "restart_pod";
+}
+
 /// <summary>The API with the <c>flow</c> pack registered; its <c>stage.run</c> jobs are driven with <see cref="FixtureLinearApp"/>.</summary>
 public static class FixtureFlowApp
 {
@@ -579,6 +631,9 @@ public static class FixtureFlowApp
             s.AddPipelineGuard<CallResolvedGuard>(FlowFixturePack.CallResolvedGuard);
             s.AddSingleton<TrendLog>();
             s.AddPipelineStageHandler<TrendTally>(FlowFixturePack.TrendTallyHandler);
+            s.AddSingleton<OnCallLog>();
+            s.AddPipelineTool<ReadLogsTool>(FlowFixturePack.ReadLogsTool);
+            s.AddPipelineTool<RestartPodTool>(FlowFixturePack.RestartPodTool);
             foreach (var responder in responders)
             {
                 s.AddSingleton(responder);

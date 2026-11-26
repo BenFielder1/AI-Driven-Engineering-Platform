@@ -49,4 +49,37 @@ public static class ToolTierRules
 
     /// <summary>Whether <paramref name="policy"/> is absent or the default, so the canonical JSON leaves it out.</summary>
     public static bool IsDefault(ToolPolicyDefinition? policy) => MaxTierOf(policy) == DefaultMaxTier;
+
+    /// <summary>
+    /// FR-358, D-0.8.0-28: whether a listed tool is offered to the model under <paramref name="maxTier"/>, given its tier
+    /// in the registry now (<c>null</c>: nothing registers it, so it is never offered). Checked at call time, so a run
+    /// pinned before a pack raised a tool's tier doesn't offer it above the ceiling.
+    /// </summary>
+    public static bool IsOffered(ToolTier maxTier, ToolTier? currentTier) => currentTier is { } tier && Allows(maxTier, tier);
+
+    /// <summary>
+    /// FR-358–FR-360 (§4.73): whether an offered tool runs as soon as the model calls it: only <c>read</c> and
+    /// <c>write</c> tools that aren't external. A destructive tool waits on a <c>tool_approval</c> gate (FR-359) and an
+    /// external one on an <c>external_action</c> gate (FR-360), in every approval mode.
+    /// </summary>
+    public static bool RunsWithoutApproval(ToolTier tier, bool external) => tier != ToolTier.Destructive && !external;
+
+    /// <summary>FR-358–FR-360: what the runner does with a model's call to a tool the stage lists.</summary>
+    public static ToolCallVerdict VerdictOf(ToolTier maxTier, ToolTier? currentTier, bool external) =>
+        !IsOffered(maxTier, currentTier) ? ToolCallVerdict.NotOffered
+        : RunsWithoutApproval(currentTier!.Value, external) ? ToolCallVerdict.Run
+        : ToolCallVerdict.NeedsApproval;
+}
+
+/// <summary>FR-358–FR-360: the runner's answer to a call to a listed tool (<see cref="ToolTierRules.VerdictOf"/>).</summary>
+public enum ToolCallVerdict
+{
+    /// <summary>The tool runs now.</summary>
+    Run,
+
+    /// <summary>Not offered to this stage (above its <c>max_tier</c>, or not registered): an error result, never run.</summary>
+    NotOffered,
+
+    /// <summary>Offered, but destructive or external: it runs only after an approved gate (FR-359, FR-360).</summary>
+    NeedsApproval,
 }

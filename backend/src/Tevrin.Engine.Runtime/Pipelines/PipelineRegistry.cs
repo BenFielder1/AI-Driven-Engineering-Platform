@@ -136,6 +136,17 @@ public sealed class PipelineRegistry
             ?? ToolTierRules.DefaultRegisteredTier;
     }
 
+    /// <summary>
+    /// FR-358, D-0.8.0-28: the tools bound in DI (<c>AddPipelineTool</c>) that no pack registers with <c>AddTool</c>, so
+    /// they have no registered tier and count as <see cref="ToolTierRules.DefaultRegisteredTier"/> (<c>write</c>), running
+    /// without approval. Distinct, in binding order; the startup logs a warning for each.
+    /// </summary>
+    public IReadOnlyList<string> UnclassifiedTools =>
+        [.. Components
+            .Where(c => c.Kind == PipelineComponentKind.Tool && !Packs.Any(p => p.ToolTiers.ContainsKey(c.Name)))
+            .Select(c => c.Name)
+            .Distinct(StringComparer.Ordinal)];
+
     /// <summary>FR-360: whether a pack registered handler or tool <paramref name="name"/> with <c>external: true</c>.</summary>
     public bool IsExternal(PipelineComponentKind kind, string name) =>
         kind switch

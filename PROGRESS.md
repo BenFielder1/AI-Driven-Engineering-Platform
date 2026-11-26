@@ -99,11 +99,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] d. Driver: conversation (FR-356), D-0.8.0-26 — ab94bbb + fix ec16b5b ([CI 45830714380](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45830714380))
   - [x] e. `from_runs` input resolution (FR-357), D-0.8.0-27; FR-20 integrity filter on `from_runs` and FR-346 aggregate lists — 5ce5414 ([CI 45849216582](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582))
 - [ ] M71 Tools and safety — FR-358–FR-361 (security: destructive tools stay on fixtures)
-  - [x] a1. Definition and registration: tool `tier`, handler/tool `external`, `tool_policy: { max_tier }`, `DEF_TOOL_TIER`; fixture `fixture-oncall` (FR-358, FR-359, FR-360 syntax), D-0.8.0-28
+  - [x] a1. Definition and registration: tool `tier`, handler/tool `external`, `tool_policy: { max_tier }`, `DEF_TOOL_TIER`; fixture `fixture-oncall` (FR-358, FR-359, FR-360 syntax), D-0.8.0-28 — 93fbd35 ([CI 45871148485](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45871148485))
   - **Blocker for the build PR until c and d land:** from a1 a `max_tier: destructive` stage validates, but the runner doesn't gate destructive or external calls yet (`PipelineRegistry.ToolTierOf`/`IsExternal` are unused). No product pack registers such tools.
   - For b–e: link `fixture-oncall.pipeline.yaml` in the IntegrationTests csproj and register its prompts and tools (with tiers) in the integration `FlowFixturePack` copy (M70c 404 lesson). Pack-author docs: the tier is only as honest as the pack's registration (an unclassified tool is `write`).
   - [x] a2. Data: `agent_runs.tool_loop_state` (jsonb); error codes `TOOL_STATE_TOO_LARGE`, `EXTERNAL_ACTION_REJECTED`. No other schema needed: the tool-call tier goes in each `agent_runs.tool_calls` element (`AgentToolCallRecord`, optional for old rows), gate `type` is a free string, and the §4.73 call state is derived from `tool_loop_state` + the run's `tool_approval` gate (cleared on resume) — b67b366 ([CI 45867346886](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45867346886))
-  - [ ] b. Runner: tier enforcement and recording at call time (FR-358)
+  - [x] b. Runner: tier enforcement and recording at call time (FR-358), D-0.8.0-29; destructive and external tools are refused (not run) until c/d; startup warning for DI-only tools with no tier
   - [ ] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73)
   - [ ] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit
   - [ ] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361)

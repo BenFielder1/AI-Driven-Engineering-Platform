@@ -44,6 +44,29 @@ public class PipelineRegistryHostTests
     }
 
     [Fact]
+    public async Task FR358_startup_warns_about_each_DI_only_tool_with_no_registered_tier_and_keeps_it_write()
+    {
+        var logger = new CapturingLogger();
+        var services = new ServiceCollection();
+        services.AddPipelineRegistry();
+        services.AddPipelinePack(new FixturePack());
+        services.AddPipelineTool<EchoTool>(FixturePack.LookupTool);
+        services.AddPipelineTool<EchoTool>("host.echo");
+        services.AddSingleton<ILogger<PipelineRegistryStartup>>(logger);
+        using var provider = services.BuildServiceProvider();
+        var startup = Assert.IsType<PipelineRegistryStartup>(Assert.Single(provider.GetServices<IHostedService>()));
+
+        await startup.StartAsync(TestContext.Current.CancellationToken);
+
+        var registry = provider.GetRequiredService<PipelineRegistry>();
+        Assert.Equal(["host.echo"], registry.UnclassifiedTools);
+        Assert.Equal(ToolTier.Write, registry.ToolTierOf("host.echo"));
+        var warning = Assert.Single(logger.Entries, e => e.Level == LogLevel.Warning);
+        Assert.Contains("host.echo", warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(FixturePack.LookupTool, warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FR290_startup_logs_a_build_failure_at_error_without_stopping_the_app()
     {
         var logger = new CapturingLogger();

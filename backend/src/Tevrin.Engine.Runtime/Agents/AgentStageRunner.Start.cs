@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
@@ -12,8 +13,11 @@ namespace Tevrin.Engine.Runtime.Agents;
 
 public sealed partial class AgentStageRunner
 {
-    /// <summary>The rendered prompt of an attempt and the stage's tools (the executor is built with the host's options).</summary>
-    private sealed record PreparedCall(string System, string User, IReadOnlyList<IAgentTool> Tools);
+    /// <summary>
+    /// The rendered prompt of an attempt, the tools the stage lists (each with its tier now, FR-358) and its
+    /// <c>max_tier</c> (the executor is built with the host's options).
+    /// </summary>
+    private sealed record PreparedCall(string System, string User, IReadOnlyList<StageTool> Tools, ToolTier MaxTier);
 
     /// <summary>
     /// Step 3 (FR-310, FR-312): continues a run left <c>running</c> (its provider and model, with the key resolved again),
@@ -176,9 +180,36 @@ public sealed partial class AgentStageRunner
 
         var user = AgentStagePrompt.UserMessage(template, prompt, request.AppendFeedback ? request.Feedback : null);
         await CheckIsolationAsync(attempt, string.Join('\n', prompt.System, user), cancellationToken);
-        var tools = agent.Tools.Select(name => services.GetPipelineTool(name) ?? throw Permanent($"Tool '{name}' is not bound.")).ToList();
-        return new PreparedCall(prompt.System, user, tools);
+        return new PreparedCall(prompt.System, user, StageTools(attempt), ToolTierRules.MaxTierOf(stage.ToolPolicy));
     }
+
+    /// <summary>
+    /// FR-358, D-0.8.0-28: the tools the stage (or binding) lists, each bound from DI and with its tier and <c>external</c>
+    /// flag in the registry now, not as when the run was pinned: a pack that raised a tool's tier since is obeyed. Without a
+    /// registry no tier is known, so nothing is offered.
+    /// </summary>
+    private List<StageTool> StageTools(AgentAttempt attempt)
+    {
+        var registry = registryHost.Registry;
+        var maxTier = ToolTierRules.MaxTierOf(attempt.Stage.ToolPolicy);
+        var tools = new List<StageTool>(attempt.Agent.Tools.Count);
+        foreach (var name in attempt.Agent.Tools)
+        {
+            var tool = services.GetPipelineTool(name) ?? throw Permanent($"Tool '{name}' is not bound.");
+            var tier = registry?.ToolTierOf(name);
+            if (!ToolTierRules.IsOffered(maxTier, tier))
+            {
+                LogToolNotOffered(logger, attempt.Run.Id, attempt.Stage.Id, attempt.Agent.Key, name, tier?.ToWire() ?? "unregistered", maxTier.ToWire());
+            }
+
+            tools.Add(new StageTool(name, tool, tier, registry?.IsExternal(PipelineComponentKind.Tool, name) ?? false));
+        }
+
+        return tools;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline run {PipelineRunId} stage {StageId} agent {AgentKey}: tool {Tool} (tier {Tier}) is not offered under max tier {MaxTier}")]
+    private static partial void LogToolNotOffered(ILogger logger, Guid pipelineRunId, string stageId, string agentKey, string tool, string tier, string maxTier);
 
     /// <summary>
     /// §4.65: a fan-out branch's rendered input must hold no sibling branch's output (any stored version, so a retry is
