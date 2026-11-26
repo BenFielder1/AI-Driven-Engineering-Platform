@@ -80,7 +80,10 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         // FR-350: real placeholders, so a registry refusing them fails here as the integration host would.
         registry.AddPrompt("flow.factwrite", "---\nversion: flow.factwrite-1\n---\nYou write articles.\n<!-- user -->\nTopic: {{TOPIC}}\n");
         registry.AddPrompt("flow.fact-check", "---\nversion: flow.fact-check-1\n---\nYou check facts.\n<!-- user -->\nArticle:\n{{OUTPUT}}\n");
-        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check"]))
+        // FR-355: the map's item agent reads its element and index, the reduce agent every item output.
+        registry.AddPrompt("flow.qa-score", "---\nversion: flow.qa-score-1\n---\nYou score calls.\n<!-- user -->\nTranscript {{MAP_INDEX}}:\n{{MAP_ITEM}}\n");
+        registry.AddPrompt("flow.qa-summarise", "---\nversion: flow.qa-summarise-1\n---\nYou summarise scores.\n<!-- user -->\nScores:\n{{SCORES_ALL}}\n");
+        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check", "flow.qa-score", "flow.qa-summarise"]))
         {
             registry.AddPrompt(prompt, $"""
                 ---

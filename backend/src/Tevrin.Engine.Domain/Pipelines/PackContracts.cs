@@ -169,6 +169,10 @@ public sealed record StageHandlerResult(StageHandlerOutcome Outcome, string? Mes
     /// <summary>D-0.7.0-43: a <see cref="StageHandlerOutcome.Failed"/> result's error code (the job fails with it);
     /// <c>null</c> means <c>VALIDATION</c>.</summary>
     public string? ErrorCode { get; init; }
+
+    /// <summary>FR-355: a completed map item or reduce handler's output, stored as a version of the map stage's
+    /// <c>output</c> (an item's with its index); <c>null</c> stores nothing. Other handlers' outputs are ignored.</summary>
+    public string? Output { get; init; }
 }
 
 /// <summary>FR-280: the work of a code stage (<c>handler: &lt;pack&gt;.&lt;name&gt;</c>).</summary>

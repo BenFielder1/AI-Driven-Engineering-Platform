@@ -109,6 +109,19 @@ public sealed partial class AgentStageRunner(
             stage = stage with { Inputs = defined.Inputs, Output = defined.Output, Validate = defined.Validate, OnInvalid = defined.OnInvalid };
         }
 
+        if (request.ItemIndex is not null || request.Reduce)
+        {
+            // FR-355: a map item, or the reduce step, reads the stage's declared inputs and stores the stage's own output
+            // (an item with its index); the binding gives only the agent (prompt, tools, job type) and its own checks.
+            var role = MapRules.RoleOf(defined, request.AgentKey, request.ItemIndex);
+            if (role == MapAgentRole.None || (role == MapAgentRole.Item) == request.Reduce)
+            {
+                throw Permanent($"Stage '{defined.Id}' has no map {(request.Reduce ? "reduce" : "item")} agent '{request.AgentKey}'.");
+            }
+
+            stage = stage with { Inputs = defined.Inputs, Output = defined.Output };
+        }
+
         var agent = stage.Agent!;
         activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
         var existing = request.AgentRunId is { } runId ? await store.FindAgentRunAsync(runId, cancellationToken) : null;

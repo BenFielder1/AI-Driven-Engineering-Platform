@@ -50,6 +50,19 @@ public interface IAgentStageStore
     Task<IReadOnlyList<Artifact>> RunVariantsAsync(PipelineRun run, string key, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Artifact>>([]);
 
+    /// <summary>
+    /// FR-355: the newest version of each map item of <paramref name="key"/> this run stored since
+    /// <paramref name="since"/> (the current map entry; superseded ones left out), in item index order. The isolation check
+    /// (§4.65) and the reduce list read them.
+    /// </summary>
+    Task<IReadOnlyList<Artifact>> RunItemsAsync(PipelineRun run, string key, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([]);
+
+    /// <summary>FR-355: the highest version of map item <paramref name="itemIndex"/> of <paramref name="key"/> in this run (any
+    /// status), or <c>null</c>: the item's next output is numbered after it.</summary>
+    Task<int?> MaxItemVersionAsync(PipelineRun run, string key, int itemIndex, CancellationToken cancellationToken) =>
+        Task.FromResult<int?>(null);
+
     /// <summary>FR-346: the newest version (no variant, not superseded) of each of <paramref name="keys"/> this run stored.</summary>
     Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Artifact>>([]);
@@ -131,7 +144,7 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
 
         var latest = await db.Artifacts.AsNoTracking()
             .Where(AgentStageScope.InSubject(run))
-            .Where(a => own.Contains(a.Type) && a.Status == ArtifactStatus.Locked && a.Variant == null)
+            .Where(a => own.Contains(a.Type) && a.Status == ArtifactStatus.Locked && a.Variant == null && a.ItemIndex == null)
             .GroupBy(a => a.Type)
             .Select(g => g.OrderByDescending(a => a.Version).First())
             .ToListAsync(cancellationToken);
@@ -140,14 +153,14 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
 
     public async Task<IReadOnlyList<ArtifactVersion>> VersionsAsync(Guid projectId, string key, CancellationToken cancellationToken) =>
         await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == key)
+            .Where(a => a.ProjectId == projectId && a.Type == key && a.ItemIndex == null)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Artifact>> SubjectVersionsAsync(PipelineRun run, string key, IReadOnlyCollection<int> versions, CancellationToken cancellationToken) =>
         versions.Count == 0
             ? []
-            : await db.Artifacts.Where(AgentStageScope.InSubject(run)).Where(a => a.Type == key && a.Variant == null && versions.Contains(a.Version)).ToListAsync(cancellationToken);
+            : await db.Artifacts.Where(AgentStageScope.InSubject(run)).Where(a => a.Type == key && a.Variant == null && a.ItemIndex == null && versions.Contains(a.Version)).ToListAsync(cancellationToken);
 
     public Task<ApprovalGate?> PendingGateAsync(PipelineRun run, string type, CancellationToken cancellationToken)
     {
@@ -171,6 +184,25 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
         return [.. rows.GroupBy(a => a.Variant!, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!).OrderBy(a => a.CreatedAt).ThenBy(a => a.Variant, StringComparer.Ordinal)];
     }
 
+    public async Task<IReadOnlyList<Artifact>> RunItemsAsync(PipelineRun run, string key, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        var rows = await db.Artifacts.AsNoTracking()
+            .Where(a => a.PipelineRunId == runId && a.Type == key && a.ItemIndex != null && a.CreatedAt >= since && a.Status != ArtifactStatus.Superseded)
+            .ToListAsync(cancellationToken);
+        return [.. rows.GroupBy(a => a.ItemIndex!.Value).Select(g => g.MaxBy(a => a.Version)!).OrderBy(a => a.ItemIndex)];
+    }
+
+    public Task<int?> MaxItemVersionAsync(PipelineRun run, string key, int itemIndex, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        return db.Artifacts
+            .Where(a => a.PipelineRunId == runId && a.Type == key && a.ItemIndex == itemIndex)
+            .MaxAsync(a => (int?)a.Version, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<(string Metric, double Score)>> RunOutcomeScoresAsync(PipelineRun run, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -189,7 +221,7 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
         ArgumentNullException.ThrowIfNull(keys);
         var runId = run.Id;
         var rows = await db.Artifacts.AsNoTracking()
-            .Where(a => a.PipelineRunId == runId && keys.Contains(a.Type) && a.Variant == null && a.Status != ArtifactStatus.Superseded)
+            .Where(a => a.PipelineRunId == runId && keys.Contains(a.Type) && a.Variant == null && a.ItemIndex == null && a.Status != ArtifactStatus.Superseded)
             .ToListAsync(cancellationToken);
         return [.. rows.GroupBy(a => a.Type, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!)];
     }

@@ -48,6 +48,21 @@ public sealed class FlowFixturePack : IPipelinePack
     /// <summary>FR-351: a worker with its agent feedback injected, then a reviewer whose lessons become worker feedback.</summary>
     public const string Postmortem = "fixture-postmortem";
 
+    /// <summary>FR-355: a scorer mapped over transcripts (at most 8 at a time, 5% may fail), then a summariser.</summary>
+    public const string Qa = "fixture-qa";
+
+    /// <summary>FR-355: <c>fixture-qa</c> with a handler scoring each item and a handler tallying the scores.</summary>
+    public const string QaHandlers = "fixture-qa-handlers";
+
+    /// <summary>FR-355: <see cref="QaHandlers"/> with <c>on_item_failure: fail</c>.</summary>
+    public const string QaFail = "fixture-qa-fail";
+    public const string QaScoreHandler = "flow.qa-score-item";
+
+    /// <summary>FR-355: <c>fixture-qa</c> whose scorer escalates an output the score guard refuses (a zero score).</summary>
+    public const string QaEscalate = "fixture-qa-escalate";
+    public const string QaScoreGuard = "flow.qa-score-valid";
+    public const string QaTallyHandler = "flow.qa-tally";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
@@ -64,6 +79,17 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddDefinition(Variants + ".pipeline.yaml", Read(Variants + ".pipeline.yaml"));
         registry.AddDefinition(FactCheck + ".pipeline.yaml", Read(FactCheck + ".pipeline.yaml"));
         registry.AddDefinition(Postmortem + ".pipeline.yaml", Read(Postmortem + ".pipeline.yaml"));
+        registry.AddDefinition(Qa + ".pipeline.yaml", Read(Qa + ".pipeline.yaml"));
+        registry.AddDefinition(QaHandlers + ".pipeline.yaml", QaHandlerYaml(QaHandlers, "on_item_failure: skip"));
+        registry.AddDefinition(QaFail + ".pipeline.yaml", QaHandlerYaml(QaFail, "on_item_failure: fail"));
+        registry.AddDefinition(QaEscalate + ".pipeline.yaml", QaEscalateYaml());
+        registry.AddGuard(QaScoreGuard);
+        registry.AddPrompt("flow.qa-score", "---\nversion: flow.qa-score-1\n---\nYou score calls.\n<!-- user -->\nTranscript {{MAP_INDEX}}:\n{{MAP_ITEM}}\n");
+        registry.AddPrompt("flow.qa-summarise", "---\nversion: flow.qa-summarise-1\n---\nYou summarise scores.\n<!-- user -->\nScores:\n{{SCORES_ALL}}\n");
+        registry.AddJobType("flow.qa-score");
+        registry.AddJobType("flow.qa-summarise");
+        registry.AddStageHandler(QaScoreHandler);
+        registry.AddStageHandler(QaTallyHandler);
         registry.AddPrompt("flow.pm-work", "---\nversion: flow.pm-work-1\n---\nYou do tasks.\n<!-- user -->\nTask: {{TASK}}\nLessons from earlier runs:\n{{AGENT_FEEDBACK?}}\n");
         registry.AddPrompt("flow.pm-review", "---\nversion: flow.pm-review-1\n---\nYou write postmortems.\n<!-- user -->\nResult: {{RESULT}}\n");
         registry.AddPrompt("flow.pm-grade", "---\nversion: flow.pm-grade-1\n---\nYou grade results.\n<!-- user -->\nResult: {{RESULT}}\nPostmortem: {{POSTMORTEM}}\nOutcome scores:\n{{OUTCOME_SCORES}}\nLabel: {{VARIANT}}\n");
@@ -112,6 +138,37 @@ public sealed class FlowFixturePack : IPipelinePack
 
         return yaml.Replace(To, "on_veto: { end: vetoed }", StringComparison.Ordinal)
             .Replace(Id, "pipeline: " + VetoEnd + "\n", StringComparison.Ordinal);
+    }
+
+    private static string QaHandlerYaml(string pipelineId, string onItemFailure)
+    {
+        var yaml = Read(Qa + ".pipeline.yaml");
+        string[] lines = ["pipeline: " + Qa + "\n", "agent: qa-scorer, max_parallel", "reduce: { agent: qa-summariser }", "on_item_failure: skip"];
+        if (lines.Any(l => !yaml.Contains(l, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("fixture-qa no longer has the lines its handler variants replace.");
+        }
+
+        return yaml.Replace(lines[0], "pipeline: " + pipelineId + "\n", StringComparison.Ordinal)
+            .Replace(lines[1], "handler: " + QaScoreHandler + ", max_parallel", StringComparison.Ordinal)
+            .Replace(lines[2], "reduce: { handler: " + QaTallyHandler + " }", StringComparison.Ordinal)
+            .Replace(lines[3], onItemFailure, StringComparison.Ordinal);
+    }
+
+    private static string QaEscalateYaml()
+    {
+        var yaml = Read(Qa + ".pipeline.yaml");
+        string[] lines = ["pipeline: " + Qa + "\n", "prompt: flow.qa-score }"];
+        if (lines.Any(l => !yaml.Contains(l, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("fixture-qa no longer has the lines fixture-qa-escalate replaces.");
+        }
+
+        return yaml.Replace(lines[0], "pipeline: " + QaEscalate + "\n", StringComparison.Ordinal)
+            .Replace(
+                lines[1],
+                "prompt: flow.qa-score, validate: [{ guard: " + QaScoreGuard + " }], on_invalid: { retry_with_feedback: true, max_attempts: 1, then: escalate } }",
+                StringComparison.Ordinal);
     }
 
     private static string LeakYaml()
@@ -253,10 +310,96 @@ public sealed class ScriptedResponder(string agent, params string[] answers) : I
     }
 }
 
+/// <summary>FR-355: what the <c>fixture-qa</c> handlers saw: the items scored and the lists tallied.</summary>
+public sealed class QaLog
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<int> _scored = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<IReadOnlyList<AggregateItem>> _tallies = new();
+
+    public IReadOnlyList<int> Scored => [.. _scored];
+
+    public IReadOnlyList<IReadOnlyList<AggregateItem>> Tallies => [.. _tallies];
+
+    public void Score(int index) => _scored.Enqueue(index);
+
+    public void Tally(IReadOnlyList<AggregateItem> items) => _tallies.Enqueue(items);
+}
+
+/// <summary>FR-355: the <c>flow.qa-score-item</c> handler: it scores one transcript, and fails one marked <c>"fail": true</c>.</summary>
+public sealed class QaScoreItem(QaLog log) : IStageHandler
+{
+    public Task<StageHandlerResult> ExecuteAsync(StageHandlerContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var item = context.Facts.Get<MapItemFact>() ?? throw new InvalidOperationException("No map item.");
+        log.Score(item.Index);
+        using var doc = System.Text.Json.JsonDocument.Parse(item.Item);
+        if (doc.RootElement.TryGetProperty("fail", out var fail) && fail.GetBoolean())
+        {
+            return Task.FromResult(new StageHandlerResult(StageHandlerOutcome.Failed, $"Transcript {item.Index} is unreadable."));
+        }
+
+        var output = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{{\"item\": {item.Index}, \"score\": 4}}");
+        return Task.FromResult(new StageHandlerResult(StageHandlerOutcome.Completed) { Output = output });
+    }
+}
+
+/// <summary>FR-355: the <c>flow.qa-score-valid</c> guard: a zero score is refused (so the scorer escalates).</summary>
+public sealed class QaScoreGuard : IGuard
+{
+    public Task<GuardResult> EvaluateAsync(GuardContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var output = context.Facts.Get<StageOutputFact>()?.Content ?? string.Empty;
+        return Task.FromResult(output.Contains("\"score\": 0", StringComparison.Ordinal) ? GuardResult.Fail("A zero score needs a person.") : GuardResult.Pass);
+    }
+}
+
+/// <summary>FR-355: a Fake scorer: a zero score for transcript <see cref="ZeroFor"/> on its first call, else 4; counts the
+/// calls per transcript.</summary>
+public sealed class QaScorer(int zeroFor) : IFakeAgentResponder
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, int> _calls = new();
+
+    public string Agent => "qa-scorer";
+
+    public int ZeroFor => zeroFor;
+
+    public int CallsFor(int index) => _calls.GetValueOrDefault(index);
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var prompt = string.Join('\n', request.Messages.Select(m => m.Content));
+        var marker = "Transcript ";
+        var start = prompt.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+        var index = int.Parse(prompt[start..prompt.IndexOf(':', start)], System.Globalization.CultureInfo.InvariantCulture);
+        var calls = _calls.AddOrUpdate(index, 1, (_, n) => n + 1);
+        return index == zeroFor && calls == 1 ? "{\"score\": 0}" : "{\"score\": 4}";
+    }
+}
+
+/// <summary>FR-355: the <c>flow.qa-tally</c> reduce handler: it counts the item scores it gets.</summary>
+public sealed class QaTally(QaLog log) : IStageHandler
+{
+    public Task<StageHandlerResult> ExecuteAsync(StageHandlerContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var items = context.Facts.Get<AggregateListFact>()?.Items ?? [];
+        log.Tally(items);
+        var output = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{{\"count\": {items.Count}}}");
+        return Task.FromResult(new StageHandlerResult(StageHandlerOutcome.Completed) { Output = output });
+    }
+}
+
 /// <summary>The API with the <c>flow</c> pack registered; its <c>stage.run</c> jobs are driven with <see cref="FixtureLinearApp"/>.</summary>
 public static class FixtureFlowApp
 {
     public static WebApplicationFactory<Program> Create(TevrinApiFactory factory, PositionLimit limit, params IFakeAgentResponder[] responders) =>
+        Create(factory, limit, qaLog: null, responders);
+
+    /// <summary>As above, with the <c>fixture-qa</c> handlers recording into <paramref name="qaLog"/>.</summary>
+    public static WebApplicationFactory<Program> Create(TevrinApiFactory factory, PositionLimit limit, QaLog? qaLog, params IFakeAgentResponder[] responders) =>
         factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
         {
             s.AddPipelinePack(new FlowFixturePack());
@@ -265,6 +408,10 @@ public static class FixtureFlowApp
             s.AddPipelineStageHandler<FailingBearDesk>(FlowFixturePack.BearDeskHandler);
             s.AddPipelineGuard<ForecastSpreadGuard>(FlowFixturePack.SpreadGuard);
             s.AddScoped<IAgentContextProvider, LeakingForecastContext>();
+            s.AddSingleton(qaLog ?? new QaLog());
+            s.AddPipelineStageHandler<QaScoreItem>(FlowFixturePack.QaScoreHandler);
+            s.AddPipelineStageHandler<QaTally>(FlowFixturePack.QaTallyHandler);
+            s.AddPipelineGuard<QaScoreGuard>(FlowFixturePack.QaScoreGuard);
             foreach (var responder in responders)
             {
                 s.AddSingleton(responder);

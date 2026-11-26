@@ -406,10 +406,11 @@ public sealed class EngineRunControl(
     }
 
     /// <summary>The run's open execution of its current stage; inside a parallel group (FR-343), the group's own execution
-    /// (not a branch's), whose job resumes every open branch.</summary>
+    /// (not a branch's), whose job resumes every open branch; in a map stage (FR-355), the map's own execution (not an
+    /// item's), whose job resumes the items.</summary>
     private Task<StageExecution?> OpenExecutionAsync(PipelineRun run, CancellationToken cancellationToken) =>
         db.StageExecutions
-            .Where(e => e.PipelineRunId == run.Id && e.ExitedAt == null && e.Branch == null)
+            .Where(e => e.PipelineRunId == run.Id && e.ExitedAt == null && e.Branch == null && e.ParentExecutionId == null)
             .OrderByDescending(e => e.EnteredAt).ThenByDescending(e => e.Id)
             .FirstOrDefaultAsync(cancellationToken);
 

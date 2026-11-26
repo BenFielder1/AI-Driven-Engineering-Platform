@@ -94,8 +94,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - [ ] M70 Scale and conversation — FR-355–FR-357
   - [x] a. Definition syntax, validator and hash for map/reduce, conversation and `from_runs`; fixtures `fixture-qa`, `fixture-callsim`, `fixture-trends` (D-0.8.0-23) — 0f53d58 ([CI 45789843317](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45789843317))
   - M70a review minors for later steps: validator error paths `inputs[{j}]` skip `from_runs` entries (wrong YAML index); map/conversation stages read as `Manual` until c/d land; `from_runs` not yet in prompt placeholders or `AgentStageRunner` inputs; `DEF_MAP_SOURCE` checks list order, not reachability.
-  - [x] b. Data: `stage_executions.parent_execution_id`, `item_index` on agent runs and artifacts, `agent_runs.turn_index`/`turn_role`; `MAP_TOO_MANY_ITEMS` (D-0.8.0-24). Review minor for c: a child execution must always have an `item_index` (the unique index treats null as distinct)
-  - [ ] c. Driver: map-reduce (FR-355)
+  - [x] b. Data: `stage_executions.parent_execution_id`, `item_index` on agent runs and artifacts, `agent_runs.turn_index`/`turn_role`; `MAP_TOO_MANY_ITEMS` (D-0.8.0-24). Review minor for c: a child execution must always have an `item_index` (the unique index treats null as distinct) — 8f4349c ([CI 45793183265](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45793183265))
+  - [x] c. Driver: map-reduce (FR-355), D-0.8.0-25
   - [ ] d. Driver: conversation (FR-356)
   - [ ] e. `from_runs` input resolution (FR-357)
 - [ ] M71 Tools and safety — FR-358–FR-361
@@ -133,6 +133,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Non-SDLC agent runs (coach, fixtures) record `ARTIFACT_CREATED`/`GATE_CREATED` and token use (FR-341), but not `RUN_STARTED`/`RUN_COMPLETED` events: the engine hook interface has no slot for them. Their payloads carry ids and counts only, never content (M67).
 - Parallel groups with `on_branch_failure: continue`: a branch whose job is dead-lettered after its transient retries waits for a manual retry instead of being marked failed (M68).
 - A follow-up stage whose job is dead-lettered leaves its stage execution open (the reconcile skips follow-up rows); like the parallel `continue` case, it needs a job-ended hook (M69).
+- A map item whose job is dead-lettered after its transient retries stays open: it doesn't count toward `max_failed`, and the map waits for a manual retry (same job-ended-hook gap as parallel `continue` and follow-ups) (M70).
+- Map item and fan-out variant artifacts on a run **with a subject** would collide on `ix_artifacts_project_id_type_version` (no `item_index`/`variant`). Not reachable: engine-started runs have no subject, and the SDLC has no map stage (M70c review).
+- Map job reads filter `jobs.payload->>'stageExecutionId'` with no expression index yet; add one in a later migration if map stages get large or job history grows (M70c).
+- The map item isolation check loads every sibling output of the current map entry on each item start (O(n²) rows at `max_items` 1000); push the probe into SQL if large maps get slow (M70c review).
 - Integration shards: `rest` hit its 22-min step timeout in M69 and was split (5d048d7, `pipelines-projects`); watch shard times as tests grow.
 
 ## Manual checks (Ben)

@@ -51,6 +51,22 @@ public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigge
     /// </summary>
     public string? Variant { get; init; }
 
+    /// <summary>
+    /// FR-355: the 0-based map item this attempt works on, or <c>null</c>. <see cref="AgentKey"/> is then the map's agent:
+    /// it reads the stage's declared inputs (its element comes in <see cref="PromptValues"/>), its output is stored as the
+    /// stage's own artifact with this item index (one collection), its agent run records the index, and the rendered
+    /// prompt must hold no other item's output (§4.65).
+    /// </summary>
+    public int? ItemIndex { get; init; }
+
+    /// <summary>FR-355: when the current map entry's items were opened; the isolation check compares only outputs stored
+    /// since (an earlier entry's outputs aren't siblings). Set with <see cref="ItemIndex"/>.</summary>
+    public DateTimeOffset? ItemsSince { get; init; }
+
+    /// <summary>FR-355: this attempt is the map stage's <c>reduce</c> agent (<see cref="AgentKey"/>): it reads the stage's
+    /// inputs and stores the stage's own output (the item outputs come in <see cref="PromptValues"/>).</summary>
+    public bool Reduce { get; init; }
+
     /// <summary>Whatever the host passes to its own <see cref="AgentStageExtension"/> (the engine never reads it).</summary>
     public object? HostState { get; init; }
 }

@@ -34,7 +34,8 @@ public static class StageExecutionWriter
         {
             PipelineRunId = pipelineRunId,
             StageId = stageId,
-            Iteration = rows.Count(r => string.Equals(r.StageId, stageId, StringComparison.Ordinal)) + 1,
+            // FR-355: a map's item executions aren't entries into the stage.
+            Iteration = rows.Count(r => r.ParentExecutionId is null && string.Equals(r.StageId, stageId, StringComparison.Ordinal)) + 1,
             Checkpoint = checkpoint,
             EnteredAt = at,
         };
@@ -73,6 +74,36 @@ public static class StageExecutionWriter
         };
         db.StageExecutions.Add(execution);
         return execution;
+    }
+
+    /// <summary>
+    /// FR-355, D-0.8.0-24: opens one item execution per element of map stage execution <paramref name="mapEntry"/> (item
+    /// indexes 0…<paramref name="count"/>-1, each pointing at the map's execution, in the map's stage and iteration), in
+    /// index order. The map's own execution stays open.
+    /// </summary>
+    public static IReadOnlyList<StageExecution> EnterItems(IEngineDbContext db, StageExecution mapEntry, int count, int checkpoint, DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(mapEntry);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        var items = new List<StageExecution>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var item = new StageExecution
+            {
+                PipelineRunId = mapEntry.PipelineRunId,
+                StageId = mapEntry.StageId,
+                Iteration = mapEntry.Iteration,
+                Checkpoint = checkpoint,
+                EnteredAt = at,
+                ItemIndex = index,
+                ParentExecutionId = mapEntry.Id,
+            };
+            db.StageExecutions.Add(item);
+            items.Add(item);
+        }
+
+        return items;
     }
 
     /// <summary>

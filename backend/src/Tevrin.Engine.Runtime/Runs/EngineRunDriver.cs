@@ -119,6 +119,13 @@ public sealed partial class EngineRunDriver(
         // FR-343: inside a parallel group the run's current stage is the group; each branch stage has its own execution
         // (Branch set) and its own stage.run job. The group's own execution enters (or resumes) the branches.
         var group = current.Parallel;
+        if (current.Map is not null)
+        {
+            // FR-355: a map stage's own execution opens its items; each item execution runs one element.
+            await DriveMapAsync(job, run, current, execution!, definition, payload.Retry, cancellationToken);
+            return;
+        }
+
         if (current.FanOut is not null || current.Variants is not null)
         {
             // FR-345: a fan-out stage's own execution enters its branches; each branch execution runs one agent.
@@ -254,6 +261,10 @@ public sealed partial class EngineRunDriver(
 
             case DriverStep.PassApproval:
                 break;
+
+            case DriverStep.Unsupported unsupported:
+                throw new JobFailedException(
+                    $"Stage {stage.Id} is a {unsupported.Construct} stage, which the run driver can't run yet.", transient: false, EngineErrorCodes.DefinitionUnavailable);
 
             default:
                 throw new JobFailedException($"Stage {stage.Id} has a kind the run driver can't run yet.", transient: false, EngineErrorCodes.DefinitionUnavailable);

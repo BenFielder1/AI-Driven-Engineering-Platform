@@ -64,6 +64,13 @@ public abstract record DriverStep
 
     /// <summary>A manual stage without a gate: its work happens through pack endpoints, so the driver stops.</summary>
     public sealed record StopManual : DriverStep;
+
+    /// <summary>FR-355: a map stage: open its items (or go on with them) and reduce once they're done.</summary>
+    public sealed record RunMap(MapDefinition Map) : DriverStep;
+
+    /// <summary>A construct the driver doesn't run yet (<paramref name="Construct"/>, e.g. <c>conversation</c>): the stage
+    /// fails with <c>DEFINITION_UNAVAILABLE</c> rather than stopping as a manual stage would.</summary>
+    public sealed record Unsupported(string Construct) : DriverStep;
 }
 
 /// <summary>FR-332, §4.62 steps 5–6: where the run goes after its stage's work is done.</summary>
@@ -201,6 +208,17 @@ public static partial class RunDriverRules
                 return new DriverStep.RaiseGate(stage.Gate!.Type);
             case EntryGateState.Pending:
                 return new DriverStep.WaitOnGate(stage.Gate!.Type);
+        }
+
+        // FR-355, FR-356: map and conversation stages have no agent or handler of their own (their kind reads manual).
+        if (stage.Map is { } map)
+        {
+            return new DriverStep.RunMap(map);
+        }
+
+        if (stage.Conversation is not null)
+        {
+            return new DriverStep.Unsupported("conversation");
         }
 
         return stage.Kind switch

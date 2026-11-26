@@ -40,6 +40,9 @@ public sealed partial class AgentStageRunner
             agentRun.Id = id;
         }
 
+        // FR-355: a map item's run records its index.
+        agentRun.ItemIndex = attempt.Request.ItemIndex;
+
         attempt.AgentRun = agentRun;
         var metadata = await extension.DescribeRunAsync(attempt, cancellationToken);
         agentRun.CatalogVersion = metadata.CatalogVersion;
@@ -169,6 +172,22 @@ public sealed partial class AgentStageRunner
     /// </summary>
     private async Task CheckIsolationAsync(AgentAttempt attempt, string rendered, CancellationToken cancellationToken)
     {
+        if (attempt.Request.ItemIndex is { } index && attempt.Stage.Output is { } itemKey)
+        {
+            // FR-355, §4.65: map items are isolated as fan-out branches are: no other item's output in the input.
+            var own = MapRules.ItemLabel(index);
+            var since = attempt.Request.ItemsSince ?? DateTimeOffset.MinValue;
+            var others = (await store.RunItemsAsync(attempt.Run, itemKey, since, cancellationToken))
+                .Select(a => new AggregateItem(MapRules.ItemLabel(a.ItemIndex!.Value), a.Content));
+            if (FanOutRules.IsolationBreach(rendered, own, others) is { } leakedItem)
+            {
+                throw new JobFailedException(
+                    $"Map item {index} of {attempt.Stage.Id} was given {leakedItem}'s output.", transient: false, EngineErrorCodes.FanoutIsolationBroken);
+            }
+
+            return;
+        }
+
         if (attempt.Request.Variant is not { } label || attempt.Stage.Output is not { } key || FollowUpRules.IsLabel(label))
         {
             return;

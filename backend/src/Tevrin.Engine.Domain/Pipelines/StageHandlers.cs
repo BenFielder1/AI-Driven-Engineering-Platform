@@ -15,12 +15,14 @@ public static class StageHandlers
         return definition.AllStages.FirstOrDefault(s => s.Declares(handler));
     }
 
-    /// <summary>Whether <paramref name="stage"/> declares <paramref name="handler"/> as its <c>handler:</c> or in <c>handlers:</c>.</summary>
+    /// <summary>Whether <paramref name="stage"/> declares <paramref name="handler"/> as its <c>handler:</c>, in <c>handlers:</c>,
+    /// or (FR-355) as its <c>map</c> or <c>reduce</c> handler.</summary>
     public static bool Declares(this StageDefinition stage, string handler)
     {
         ArgumentNullException.ThrowIfNull(stage);
         return string.Equals(stage.Handler, handler, StringComparison.Ordinal)
-            || stage.Handlers.Contains(handler, StringComparer.Ordinal);
+            || stage.Handlers.Contains(handler, StringComparer.Ordinal)
+            || stage.ConstructHandlers().Contains(handler, StringComparer.Ordinal);
     }
 
     /// <summary>Every handler name <paramref name="stage"/> declares: its <c>handler:</c>, then its <c>handlers:</c>.</summary>

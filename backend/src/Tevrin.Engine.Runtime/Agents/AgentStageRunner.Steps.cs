@@ -207,10 +207,17 @@ public sealed partial class AgentStageRunner
     /// superseded (§4.10), never another subject's.
     /// </summary>
     private async Task<Artifact> StoreAsync(
-        PipelineRun run, ArtifactDefinition definition, string content, AgentRun agentRun, string? variant, CancellationToken cancellationToken)
+        PipelineRun run, ArtifactDefinition definition, string content, AgentRun agentRun, string? variant, int? itemIndex, CancellationToken cancellationToken)
     {
         NewDraftPlan plan;
-        if (variant is null)
+        if (itemIndex is { } index)
+        {
+            // FR-355: a map item numbers its own index's versions in the run (one collection; the run-scope unique index
+            // includes the item index), so concurrent items never collide or supersede each other.
+            var latest = await store.MaxItemVersionAsync(run, definition.Key, index, cancellationToken);
+            plan = new NewDraftPlan((latest ?? 0) + 1, latest, []);
+        }
+        else if (variant is null)
         {
             plan = ArtifactRules.NewDraft(await store.VersionsAsync(run.ProjectId, definition.Key, cancellationToken));
             var drafts = await store.SubjectVersionsAsync(run, definition.Key, plan.SupersededVersions, cancellationToken);
@@ -246,6 +253,7 @@ public sealed partial class AgentStageRunner
             PipelineRunId = run.Id,
             AgentRunId = agentRun.Id,
             Variant = variant,
+            ItemIndex = itemIndex,
             CreatedAt = now,
         };
         store.Add(artifact);

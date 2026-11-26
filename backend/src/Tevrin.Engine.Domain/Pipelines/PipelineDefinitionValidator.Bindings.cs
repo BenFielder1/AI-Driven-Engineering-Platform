@@ -99,7 +99,14 @@ public static partial class PipelineDefinitionValidator
             // {{OUTPUT}} and the stage output's own placeholder, the output under validation).
             if (keyValid && stage.ForAgent(binding.Key) is { Agent: { } agent } view)
             {
-                CheckPrompt(view, agent, path, ValidatorPlaceholders(stage, binding.Key));
+                // FR-355: a map's item agent also gets {{MAP_ITEM}} and {{MAP_INDEX}}, its reduce agent {{<OUTPUT>_ALL}}.
+                IReadOnlyCollection<string>? supplied = ValidatorPlaceholders(stage, binding.Key);
+                if (MapRules.SuppliedPlaceholders(stage, binding.Key) is { Count: > 0 } map)
+                {
+                    supplied = [.. supplied ?? [], .. map];
+                }
+
+                CheckPrompt(view, agent, path, supplied);
 
                 // D-0.7.0-44: the binding's own validate: and on_invalid:, checked as a stage's.
                 ValidateGuards(view, path);

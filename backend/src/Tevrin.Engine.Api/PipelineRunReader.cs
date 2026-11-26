@@ -126,8 +126,9 @@ public sealed class PipelineRunReader(
             return [];
         }
 
+        // FR-355: a map's item executions aren't entries into its stage.
         var executions = await db.StageExecutions.AsNoTracking()
-            .Where(e => e.PipelineRunId == run.Id)
+            .Where(e => e.PipelineRunId == run.Id && e.ParentExecutionId == null)
             .Select(e => new StageEntry(e.StageId, e.EnteredAt, e.ExitedAt))
             .ToListAsync(cancellationToken);
         var moves = await transitions.ListAsync(run.Id, TimelineWindow.All, cancellationToken);
