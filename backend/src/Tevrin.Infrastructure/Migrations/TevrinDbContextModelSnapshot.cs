@@ -2786,6 +2786,10 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("input_truncated");
 
+                    b.Property<int?>("ItemIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_index");
+
                     b.Property<long?>("LatencyMs")
                         .HasColumnType("bigint")
                         .HasColumnName("latency_ms");
@@ -2864,6 +2868,15 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("tool_calls")
                         .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<int?>("TurnIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("turn_index");
+
+                    b.Property<string>("TurnRole")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("turn_role");
 
                     b.Property<string>("UserFeedback")
                         .HasColumnType("text")
@@ -3109,6 +3122,10 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by_user_id");
 
+                    b.Property<int?>("ItemIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_index");
+
                     b.Property<int?>("ParentVersion")
                         .HasColumnType("integer")
                         .HasColumnName("parent_version");
@@ -3200,12 +3217,12 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasDatabaseName("ix_artifacts_project_id_type_version")
                         .HasFilter("release_version_id IS NOT NULL");
 
-                    b.HasIndex(new[] { "PipelineRunId", "Type", "Version", "Variant" }, "ux_artifacts_pipeline_run_id_type_version")
+                    b.HasIndex(new[] { "PipelineRunId", "Type", "Version", "Variant", "ItemIndex" }, "ux_artifacts_pipeline_run_id_type_version")
                         .IsUnique()
                         .HasDatabaseName("ux_artifacts_pipeline_run_id_type_version")
                         .HasFilter("release_version_id IS NULL AND scope = 'run'");
 
-                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex(new[] { "PipelineRunId", "Type", "Version", "Variant" }, "ux_artifacts_pipeline_run_id_type_version"), false);
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex(new[] { "PipelineRunId", "Type", "Version", "Variant", "ItemIndex" }, "ux_artifacts_pipeline_run_id_type_version"), false);
 
                     b.HasIndex(new[] { "ProjectId", "Type", "Version" }, "ux_artifacts_project_id_type_version_project_scope")
                         .IsUnique()
@@ -3864,6 +3881,10 @@ namespace Tevrin.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("outcome");
 
+                    b.Property<Guid?>("ParentExecutionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_execution_id");
+
                     b.Property<Guid>("PipelineRunId")
                         .HasColumnType("uuid")
                         .HasColumnName("pipeline_run_id");
@@ -3891,6 +3912,11 @@ namespace Tevrin.Infrastructure.Migrations
 
                     b.HasIndex("PipelineRunId", "StageId", "Branch", "ItemIndex")
                         .HasDatabaseName("ix_stage_executions_pipeline_run_id_stage_id_branch_item_index");
+
+                    b.HasIndex(new[] { "ParentExecutionId", "ItemIndex" }, "ux_stage_executions_parent_execution_id_item_index")
+                        .IsUnique()
+                        .HasDatabaseName("ux_stage_executions_parent_execution_id_item_index")
+                        .HasFilter("parent_execution_id IS NOT NULL");
 
                     b.ToTable("stage_executions", (string)null);
                 });
@@ -4911,6 +4937,12 @@ namespace Tevrin.Infrastructure.Migrations
 
             modelBuilder.Entity("Tevrin.Engine.Domain.Entities.StageExecution", b =>
                 {
+                    b.HasOne("Tevrin.Engine.Domain.Entities.StageExecution", null)
+                        .WithMany()
+                        .HasForeignKey("ParentExecutionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_stage_executions_stage_executions_parent_execution_id");
+
                     b.HasOne("Tevrin.Engine.Domain.Entities.PipelineRun", null)
                         .WithMany()
                         .HasForeignKey("PipelineRunId")

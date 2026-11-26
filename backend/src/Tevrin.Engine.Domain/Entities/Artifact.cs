@@ -49,6 +49,9 @@ public sealed class Artifact
     /// <summary>FR-343–FR-349, §5: the variant label when a stage produces variants of one version; null otherwise.</summary>
     public string? Variant { get; init; }
 
+    /// <summary>FR-355, §5: the 0-based map item index of one output in a map stage's artifact collection; null otherwise.</summary>
+    public int? ItemIndex { get; init; }
+
     public Guid? CreatedByUserId { get; init; }
 
     public Guid? AgentRunId { get; init; }

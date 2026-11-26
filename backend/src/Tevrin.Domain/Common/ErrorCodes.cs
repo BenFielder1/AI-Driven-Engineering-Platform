@@ -423,6 +423,10 @@ public static class ErrorCodes
     /// job (not HTTP).</summary>
     public const string ValidatorInvalidOutput = "VALIDATOR_INVALID_OUTPUT";
 
+    /// <summary>FR-355, §4.68, §6: a map stage's source has more than <c>max_items</c> elements; the stage fails and no item
+    /// runs (a job failure, not HTTP).</summary>
+    public const string MapTooManyItems = "MAP_TOO_MANY_ITEMS";
+
     /// <summary>Execution Guardian violation codes (§4.6, D18).</summary>
     public static class Guardian
     {

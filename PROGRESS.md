@@ -92,15 +92,15 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] d. Outcome scores, Brier, prompt-comparison means (FR-353) — 328ea74
   - [x] e. Follow-up stages (FR-354) — 3addd12 ([CI 45787248789](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789), after splitting the `rest` integration shard in 5d048d7: Pipelines, Stages and Projects now run as `pipelines-projects`)
 - [ ] M70 Scale and conversation — FR-355–FR-357
-  - [ ] a. Definition syntax, validator and hash for map/reduce, conversation and `from_runs`; fixtures `fixture-qa`, `fixture-callsim`, `fixture-trends` (D-0.8.0-23)
+  - [x] a. Definition syntax, validator and hash for map/reduce, conversation and `from_runs`; fixtures `fixture-qa`, `fixture-callsim`, `fixture-trends` (D-0.8.0-23) — 0f53d58 ([CI 45789843317](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45789843317))
   - M70a review minors for later steps: validator error paths `inputs[{j}]` skip `from_runs` entries (wrong YAML index); map/conversation stages read as `Manual` until c/d land; `from_runs` not yet in prompt placeholders or `AgentStageRunner` inputs; `DEF_MAP_SOURCE` checks list order, not reachability.
-  - [ ] b. Data: map item index on executions/agent runs/artifacts; error codes `MAP_TOO_MANY_ITEMS`
+  - [x] b. Data: `stage_executions.parent_execution_id`, `item_index` on agent runs and artifacts, `agent_runs.turn_index`/`turn_role`; `MAP_TOO_MANY_ITEMS` (D-0.8.0-24). Review minor for c: a child execution must always have an `item_index` (the unique index treats null as distinct)
   - [ ] c. Driver: map-reduce (FR-355)
   - [ ] d. Driver: conversation (FR-356)
   - [ ] e. `from_runs` input resolution (FR-357)
 - [ ] M71 Tools and safety — FR-358–FR-361
 - [ ] M72 Engine UI — FR-362–FR-366
-  - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (and `MAP_TOO_MANY_ITEMS`).
+  - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
   - Carry-over from M69: show the follow-up label (`stage_executions.followup`) on timeline entries (additive DTO field), and the outcome scores and feedback (FR-365).
   - Carry-over from M68: expose `approval_gates.payload` (variant labels and artifact ids) on the engine gate DTO for the `variant_select` card.
   - Carry-over from M67: show an artifact's project scope and a run's pinned project artifacts (`pinnedArtifacts`, FR-352) in the run view; fill `{artifact}` in `SOURCE_ARTIFACT_MISSING` from the problem `reason`.

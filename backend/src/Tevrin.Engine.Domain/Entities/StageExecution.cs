@@ -30,8 +30,12 @@ public sealed class StageExecution
     /// <summary>FR-343–FR-349, §5: the parallel branch this execution ran in; null outside a branch.</summary>
     public string? Branch { get; init; }
 
-    /// <summary>§5: the for-each item index (M70); null outside a for-each.</summary>
+    /// <summary>FR-355, §4.68, §5: the 0-based map item index of an item execution; null outside a map.</summary>
     public int? ItemIndex { get; init; }
+
+    /// <summary>FR-355: the map stage's own execution an item execution belongs to (one per item, unique with
+    /// <see cref="ItemIndex"/>); null for every other execution.</summary>
+    public Guid? ParentExecutionId { get; init; }
 
     /// <summary>FR-343–FR-349, §5: the variant label this execution produced; null otherwise.</summary>
     public string? Variant { get; init; }

@@ -132,6 +132,8 @@ export const errorMessages = {
   VARIANT_CHOICE_INVALID: "That isn't one of the stage's variants. Pick one of v1 to vn.",
   VALIDATOR_INVALID_OUTPUT:
     "The stage's validator agent didn't return a valid verdict, so the attempt failed. Check the validator's prompt and model.",
+  MAP_TOO_MANY_ITEMS:
+    "The map stage has more items than its max_items limit, so no item ran. Raise the limit or split the input.",
   // Agent runs (shown on run details)
   MISSING_INPUT: "The agent was missing a required input.",
   INVALID_PLAN: "The agent produced an invalid plan.",

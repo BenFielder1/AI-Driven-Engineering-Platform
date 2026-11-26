@@ -85,6 +85,16 @@ public sealed class AgentRun
     /// first); <c>null</c> when the stage doesn't inject feedback.</summary>
     public IReadOnlyList<Guid>? FeedbackIds { get; set; }
 
+    /// <summary>FR-355: the 0-based map item index the run worked on; null outside a map.</summary>
+    public int? ItemIndex { get; set; }
+
+    /// <summary>FR-356, §4.69: the 1-based conversation turn this run produced; null outside a conversation.</summary>
+    public int? TurnIndex { get; set; }
+
+    /// <summary>FR-356: the participant role that spoke this turn (the definition's <c>role</c>); null outside a
+    /// conversation.</summary>
+    public string? TurnRole { get; set; }
+
     /// <summary>FR-297: milliseconds from the call to the first streamed token of the last attempt; null when the provider
     /// didn't stream (or before 0.7.0).</summary>
     public long? LatencyMs { get; set; }

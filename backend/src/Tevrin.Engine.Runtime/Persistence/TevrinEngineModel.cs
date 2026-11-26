@@ -155,8 +155,9 @@ public static class TevrinEngineModel
                 .IsUnique()
                 .HasFilter("release_version_id IS NOT NULL");
             // FR-343–FR-349: variants of one version coexist; NULLS NOT DISTINCT so two rows without a variant still collide.
+            // FR-355, §5: so do a map stage's item outputs (one collection, one row per item index).
             b.Property(a => a.Variant).HasMaxLength(IdMaxLength);
-            b.HasIndex(a => new { a.PipelineRunId, a.Type, a.Version, a.Variant }, "ux_artifacts_pipeline_run_id_type_version")
+            b.HasIndex(a => new { a.PipelineRunId, a.Type, a.Version, a.Variant, a.ItemIndex }, "ux_artifacts_pipeline_run_id_type_version")
                 .IsUnique()
                 .AreNullsDistinct(false)
                 .HasFilter("release_version_id IS NULL AND scope = 'run'")
@@ -262,6 +263,9 @@ public static class TevrinEngineModel
             b.Property(r => r.ValidatorFindings).HasColumnType("jsonb");
             b.PrimitiveCollection(r => r.FeedbackIds).HasColumnType("uuid[]");
 
+            // FR-355, FR-356 (M70): additive and nullable; a map item's index, a conversation turn and its role.
+            b.Property(r => r.TurnRole).HasMaxLength(IdMaxLength);
+
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
 
             // §8: the run timeline reads by run in time order (FR-300).
@@ -293,6 +297,14 @@ public static class TevrinEngineModel
             // FR-354: the follow-up label (followup:<duration>), null for the main flow.
             b.Property(e => e.FollowUp).HasColumnName("followup").HasMaxLength(IdMaxLength);
             b.HasIndex(e => new { e.PipelineRunId, e.StageId, e.Branch, e.ItemIndex });
+
+            // FR-355: a map item execution points at its map stage's own execution. One row per (parent, item) keeps the
+            // driver idempotent, and the index serves the done/failed/total counts (grouped by outcome).
+            b.HasOne<StageExecution>().WithMany().HasForeignKey(e => e.ParentExecutionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(e => new { e.ParentExecutionId, e.ItemIndex }, "ux_stage_executions_parent_execution_id_item_index")
+                .IsUnique()
+                .HasFilter("parent_execution_id IS NOT NULL")
+                .HasDatabaseName("ux_stage_executions_parent_execution_id_item_index");
 
             // A run's timings go with the run (and the run with its project).
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(e => e.PipelineRunId).OnDelete(DeleteBehavior.Cascade);
