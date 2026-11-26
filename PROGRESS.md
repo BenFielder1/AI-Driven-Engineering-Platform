@@ -48,9 +48,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-352 | Source-of-truth artifacts pinned per run (`fixture-cv`) | 3.5, 4.76 | backend + data | M67 | done | 9372e8b, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45467772497) |
 | FR-353 | External outcome scoring, Brier | 3.5, 4.74 | backend + data | M69 | done | 328ea74, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789) |
 | FR-354 | Follow-up stages (delayed jobs) | 3.5, 4.70 | backend + data | M69 | done | 3addd12, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789) |
-| FR-355 | Map-reduce (`fixture-qa`) | 3.6, 4.68 | backend + data | M70 | todo | — |
-| FR-356 | Conversation stage (`fixture-callsim`) | 3.6, 4.69 | backend | M70 | todo | — |
-| FR-357 | Windowed inputs over runs (`fixture-trends`) | 3.6 | backend | M70 | todo | — |
+| FR-355 | Map-reduce (`fixture-qa`) | 3.6, 4.68 | backend + data | M70 | done | 0f53d58 + 8f4349c + 2c81628 + c08549f, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582) |
+| FR-356 | Conversation stage (`fixture-callsim`) | 3.6, 4.69 | backend | M70 | done | 0f53d58 + 8f4349c + ab94bbb + ec16b5b, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582) |
+| FR-357 | Windowed inputs over runs (`fixture-trends`) | 3.6 | backend | M70 | done | 0f53d58 + 5ce5414, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582) |
 | FR-358 | Tool permission tiers | 3.7 | backend | M71 | todo | — |
 | FR-359 | Mid-stage approval for destructive tools (`fixture-oncall`) | 3.7, 4.73 | backend + data | M71 | todo | — |
 | FR-360 | Human gate before an external action | 3.7 | backend | M71 | todo | — |
@@ -91,13 +91,13 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] c. Agent feedback store and injection (FR-351) — 7a64b19 + fix 03d8a13
   - [x] d. Outcome scores, Brier, prompt-comparison means (FR-353) — 328ea74
   - [x] e. Follow-up stages (FR-354) — 3addd12 ([CI 45787248789](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45787248789), after splitting the `rest` integration shard in 5d048d7: Pipelines, Stages and Projects now run as `pipelines-projects`)
-- [ ] M70 Scale and conversation — FR-355–FR-357
+- [x] M70 Scale and conversation — FR-355–FR-357
   - [x] a. Definition syntax, validator and hash for map/reduce, conversation and `from_runs`; fixtures `fixture-qa`, `fixture-callsim`, `fixture-trends` (D-0.8.0-23) — 0f53d58 ([CI 45789843317](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45789843317))
   - M70a review minors for later steps: validator error paths `inputs[{j}]` skip `from_runs` entries (wrong YAML index); map/conversation stages read as `Manual` until c/d land; `from_runs` not yet in prompt placeholders or `AgentStageRunner` inputs; `DEF_MAP_SOURCE` checks list order, not reachability.
   - [x] b. Data: `stage_executions.parent_execution_id`, `item_index` on agent runs and artifacts, `agent_runs.turn_index`/`turn_role`; `MAP_TOO_MANY_ITEMS` (D-0.8.0-24). Review minor for c: a child execution must always have an `item_index` (the unique index treats null as distinct) — 8f4349c ([CI 45793183265](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45793183265))
   - [x] c. Driver: map-reduce (FR-355), D-0.8.0-25 — 2c81628 + fix c08549f ([CI 45821499223](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45821499223))
   - [x] d. Driver: conversation (FR-356), D-0.8.0-26 — ab94bbb + fix ec16b5b ([CI 45830714380](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45830714380))
-  - [x] e. `from_runs` input resolution (FR-357), D-0.8.0-27; FR-20 integrity filter on `from_runs` and FR-346 aggregate lists
+  - [x] e. `from_runs` input resolution (FR-357), D-0.8.0-27; FR-20 integrity filter on `from_runs` and FR-346 aggregate lists — 5ce5414 ([CI 45849216582](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582))
 - [ ] M71 Tools and safety — FR-358–FR-361
 - [ ] M72 Engine UI — FR-362–FR-366
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
