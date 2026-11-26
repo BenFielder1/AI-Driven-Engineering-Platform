@@ -95,12 +95,13 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] a. Definition syntax, validator and hash for map/reduce, conversation and `from_runs`; fixtures `fixture-qa`, `fixture-callsim`, `fixture-trends` (D-0.8.0-23) — 0f53d58 ([CI 45789843317](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45789843317))
   - M70a review minors for later steps: validator error paths `inputs[{j}]` skip `from_runs` entries (wrong YAML index); map/conversation stages read as `Manual` until c/d land; `from_runs` not yet in prompt placeholders or `AgentStageRunner` inputs; `DEF_MAP_SOURCE` checks list order, not reachability.
   - [x] b. Data: `stage_executions.parent_execution_id`, `item_index` on agent runs and artifacts, `agent_runs.turn_index`/`turn_role`; `MAP_TOO_MANY_ITEMS` (D-0.8.0-24). Review minor for c: a child execution must always have an `item_index` (the unique index treats null as distinct) — 8f4349c ([CI 45793183265](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45793183265))
-  - [x] c. Driver: map-reduce (FR-355), D-0.8.0-25
-  - [ ] d. Driver: conversation (FR-356)
+  - [x] c. Driver: map-reduce (FR-355), D-0.8.0-25 — 2c81628 + fix c08549f ([CI 45821499223](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45821499223))
+  - [x] d. Driver: conversation (FR-356), D-0.8.0-26
   - [ ] e. `from_runs` input resolution (FR-357)
 - [ ] M71 Tools and safety — FR-358–FR-361
 - [ ] M72 Engine UI — FR-362–FR-366
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
+  - Carry-over from M70: show `turn_index`/`turn_role` and map `item_index` on timeline entries (additive DTO fields).
   - Carry-over from M69: show the follow-up label (`stage_executions.followup`) on timeline entries (additive DTO field), and the outcome scores and feedback (FR-365).
   - Carry-over from M68: expose `approval_gates.payload` (variant labels and artifact ids) on the engine gate DTO for the `variant_select` card.
   - Carry-over from M67: show an artifact's project scope and a run's pinned project artifacts (`pinnedArtifacts`, FR-352) in the run view; fill `{artifact}` in `SOURCE_ARTIFACT_MISSING` from the problem `reason`.
@@ -137,6 +138,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Map item and fan-out variant artifacts on a run **with a subject** would collide on `ix_artifacts_project_id_type_version` (no `item_index`/`variant`). Not reachable: engine-started runs have no subject, and the SDLC has no map stage (M70c review).
 - Map job reads filter `jobs.payload->>'stageExecutionId'` with no expression index yet; add one in a later migration if map stages get large or job history grows (M70c).
 - The map item isolation check loads every sibling output of the current map entry on each item start (O(n²) rows at `max_items` 1000); push the probe into SQL if large maps get slow (M70c review).
+- Conversation (M70d review minors, left as is): a redelivered escalated turn job after approval raises a fresh escalation (same as plain stages); the stop guard re-runs on already-checked turns at each new turn job.
 - Integration shards: `rest` hit its 22-min step timeout in M69 and was split (5d048d7, `pipelines-projects`); watch shard times as tests grow.
 
 ## Manual checks (Ben)

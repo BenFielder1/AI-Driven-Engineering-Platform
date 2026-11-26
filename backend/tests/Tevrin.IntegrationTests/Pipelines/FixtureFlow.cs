@@ -63,6 +63,20 @@ public sealed class FlowFixturePack : IPipelinePack
     public const string QaScoreGuard = "flow.qa-score-valid";
     public const string QaTallyHandler = "flow.qa-tally";
 
+    /// <summary>FR-356: a customer simulator and a support agent simulator talk until a reply says "goodbye" (6 turns at most).</summary>
+    public const string CallSim = "fixture-callsim";
+
+    /// <summary>FR-356: <c>fixture-callsim</c> stopped by the <see cref="CallResolvedGuard"/> instead of the phrase.</summary>
+    public const string CallSimGuard = "fixture-callsim-guard";
+    public const string CallResolvedGuard = "flow.call-resolved";
+
+    /// <summary>FR-356: the persona prompts (the same as the engine tests', which check that they validate).</summary>
+    public const string CallSimCustomerPrompt =
+        "---\nversion: flow.callsim-customer-1\n---\nYou are a customer calling support.\n<!-- user -->\nScenario: {{SCENARIO}}\nYou are the {{ROLE}}.\nThe call so far:\n{{TRANSCRIPT}}\n";
+
+    public const string CallSimSupportPrompt =
+        "---\nversion: flow.callsim-support-1\n---\nYou are a support agent.\n<!-- user -->\nScenario: {{SCENARIO}}\nYou are the {{ROLE}}.\nThe call so far:\n{{TRANSCRIPT}}\n";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
@@ -84,6 +98,13 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddDefinition(QaFail + ".pipeline.yaml", QaHandlerYaml(QaFail, "on_item_failure: fail"));
         registry.AddDefinition(QaEscalate + ".pipeline.yaml", QaEscalateYaml());
         registry.AddGuard(QaScoreGuard);
+        registry.AddDefinition(CallSim + ".pipeline.yaml", Read(CallSim + ".pipeline.yaml"));
+        registry.AddDefinition(CallSimGuard + ".pipeline.yaml", CallSimGuardYaml());
+        registry.AddPrompt("flow.callsim-customer", CallSimCustomerPrompt);
+        registry.AddPrompt("flow.callsim-support", CallSimSupportPrompt);
+        registry.AddJobType("flow.callsim-customer");
+        registry.AddJobType("flow.callsim-support");
+        registry.AddGuard(CallResolvedGuard);
         registry.AddPrompt("flow.qa-score", "---\nversion: flow.qa-score-1\n---\nYou score calls.\n<!-- user -->\nTranscript {{MAP_INDEX}}:\n{{MAP_ITEM}}\n");
         registry.AddPrompt("flow.qa-summarise", "---\nversion: flow.qa-summarise-1\n---\nYou summarise scores.\n<!-- user -->\nScores:\n{{SCORES_ALL}}\n");
         registry.AddJobType("flow.qa-score");
@@ -160,6 +181,20 @@ public sealed class FlowFixturePack : IPipelinePack
             .Replace(lines[2], "reduce: { handler: " + QaTallyHandler + " }", StringComparison.Ordinal)
             .Replace(lines[3], onItemFailure, StringComparison.Ordinal)
             .Replace(lines[4], string.Empty, StringComparison.Ordinal);
+    }
+
+    private static string CallSimGuardYaml()
+    {
+        var yaml = Read(CallSim + ".pipeline.yaml");
+        // Only the stop changes, so the prompts still validate (ConversationRulesTests checks this edit with them).
+        string[] lines = ["pipeline: " + CallSim + "\n", "stop: { phrase: goodbye }"];
+        if (lines.Any(l => !yaml.Contains(l, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("fixture-callsim no longer has the lines fixture-callsim-guard replaces.");
+        }
+
+        return yaml.Replace(lines[0], "pipeline: " + CallSimGuard + "\n", StringComparison.Ordinal)
+            .Replace(lines[1], "stop: { guard: " + CallResolvedGuard + " }", StringComparison.Ordinal);
     }
 
     private static string QaEscalateYaml()
@@ -399,6 +434,41 @@ public sealed class QaTally(QaLog log) : IStageHandler
     }
 }
 
+/// <summary>FR-356: the <c>flow.call-resolved</c> stop guard: it passes once a turn says <c>[resolved]</c> (it sees the transcript).</summary>
+public sealed class CallResolvedGuard : IGuard
+{
+    public const string Marker = "[resolved]";
+
+    public Task<GuardResult> EvaluateAsync(GuardContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var turns = context.Facts.Get<ConversationTranscriptFact>()?.Turns ?? [];
+        return Task.FromResult(turns.Any(t => t.Text.Contains(Marker, StringComparison.Ordinal))
+            ? GuardResult.Pass
+            : GuardResult.Fail("The call isn't resolved yet."));
+    }
+}
+
+/// <summary>FR-356: a Fake participant answering <paramref name="answers"/> in order (then the last again) and recording every
+/// prompt (system and user) it was sent.</summary>
+public sealed class TurnResponder(string agent, params string[] answers) : IFakeAgentResponder
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _prompts = new();
+    private int _calls;
+
+    public string Agent => agent;
+
+    public IReadOnlyList<string> Prompts => [.. _prompts];
+
+    public string Respond(LlmRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _prompts.Enqueue(request.System + "\n" + string.Join("\n", request.Messages.Select(m => m.Content)));
+        var call = Interlocked.Increment(ref _calls);
+        return answers[Math.Min(call, answers.Length) - 1];
+    }
+}
+
 /// <summary>The API with the <c>flow</c> pack registered; its <c>stage.run</c> jobs are driven with <see cref="FixtureLinearApp"/>.</summary>
 public static class FixtureFlowApp
 {
@@ -419,6 +489,7 @@ public static class FixtureFlowApp
             s.AddPipelineStageHandler<QaScoreItem>(FlowFixturePack.QaScoreHandler);
             s.AddPipelineStageHandler<QaTally>(FlowFixturePack.QaTallyHandler);
             s.AddPipelineGuard<QaScoreGuard>(FlowFixturePack.QaScoreGuard);
+            s.AddPipelineGuard<CallResolvedGuard>(FlowFixturePack.CallResolvedGuard);
             foreach (var responder in responders)
             {
                 s.AddSingleton(responder);

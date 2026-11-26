@@ -106,6 +106,12 @@ public static partial class PipelineDefinitionValidator
                     supplied = [.. supplied ?? [], .. map];
                 }
 
+                // FR-356: a conversation participant also gets {{TRANSCRIPT}}, {{ROLE}} and the stage's inputs.
+                if (ConversationRules.SuppliedPlaceholders(stage, binding.Key) is { Count: > 0 } conversation)
+                {
+                    supplied = [.. supplied ?? [], .. conversation];
+                }
+
                 CheckPrompt(view, agent, path, supplied);
 
                 // D-0.7.0-44: the binding's own validate: and on_invalid:, checked as a stage's.

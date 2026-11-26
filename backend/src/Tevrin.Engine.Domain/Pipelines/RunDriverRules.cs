@@ -68,9 +68,8 @@ public abstract record DriverStep
     /// <summary>FR-355: a map stage: open its items (or go on with them) and reduce once they're done.</summary>
     public sealed record RunMap(MapDefinition Map) : DriverStep;
 
-    /// <summary>A construct the driver doesn't run yet (<paramref name="Construct"/>, e.g. <c>conversation</c>): the stage
-    /// fails with <c>DEFINITION_UNAVAILABLE</c> rather than stopping as a manual stage would.</summary>
-    public sealed record Unsupported(string Construct) : DriverStep;
+    /// <summary>FR-356: a conversation stage: run its next turn, or stop and store the transcript.</summary>
+    public sealed record RunConversation(ConversationDefinition Conversation) : DriverStep;
 }
 
 /// <summary>FR-332, §4.62 steps 5–6: where the run goes after its stage's work is done.</summary>
@@ -216,9 +215,9 @@ public static partial class RunDriverRules
             return new DriverStep.RunMap(map);
         }
 
-        if (stage.Conversation is not null)
+        if (stage.Conversation is { } conversation)
         {
-            return new DriverStep.Unsupported("conversation");
+            return new DriverStep.RunConversation(conversation);
         }
 
         return stage.Kind switch

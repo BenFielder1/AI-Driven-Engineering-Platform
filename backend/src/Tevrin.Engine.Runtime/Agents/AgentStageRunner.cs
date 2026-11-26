@@ -122,6 +122,19 @@ public sealed partial class AgentStageRunner(
             stage = stage with { Inputs = defined.Inputs, Output = defined.Output };
         }
 
+        if (request.TurnIndex is not null)
+        {
+            // FR-356: a conversation turn: the participant reads the stage's inputs (and its binding's) and stores no
+            // artifact; its reply is the run's output, and the driver stores the transcript as the stage's output.
+            if (request.ItemIndex is not null || request.Reduce || request.Variant is not null
+                || ConversationRules.ParticipantOf(defined, request.AgentKey, request.TurnRole) is null)
+            {
+                throw Permanent($"Stage '{defined.Id}' has no conversation participant '{request.AgentKey}' as '{request.TurnRole}'.");
+            }
+
+            stage = stage with { Inputs = [.. defined.Inputs.Union(stage.Inputs, StringComparer.Ordinal)], Output = null };
+        }
+
         var agent = stage.Agent!;
         activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
         var existing = request.AgentRunId is { } runId ? await store.FindAgentRunAsync(runId, cancellationToken) : null;

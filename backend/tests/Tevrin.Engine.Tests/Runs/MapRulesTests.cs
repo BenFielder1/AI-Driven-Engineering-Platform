@@ -178,16 +178,6 @@ public class MapRulesTests
     }
 
     [Fact]
-    public void FR356_a_conversation_stage_is_refused_as_unsupported_rather_than_stopping()
-    {
-        var registry = new PipelineRegistry([new FlowFixturePack(FlowFixturePack.CallSim)], [], Array.Empty<JobHandlerRegistration>());
-        Assert.True(registry.TryGet(FlowFixturePack.CallSim, out var loaded));
-        var stage = loaded.Definition!.Stages.First(s => s.Conversation is not null);
-
-        Assert.Equal("conversation", Assert.IsType<DriverStep.Unsupported>(RunDriverRules.Plan(stage, new StageEntryFacts())).Construct);
-    }
-
-    [Fact]
     public void FR355_the_item_agent_gets_MAP_ITEM_and_MAP_INDEX_and_the_reduce_agent_the_items_list()
     {
         Assert.Equal([MapRules.ItemPlaceholder, MapRules.IndexPlaceholder], MapRules.SuppliedPlaceholders(Score, "qa-scorer"));

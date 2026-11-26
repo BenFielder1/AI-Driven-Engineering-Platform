@@ -67,6 +67,14 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         JobTypes = JobTypes,
     };
 
+    /// <summary>FR-356: the customer simulator's persona prompt (the scenario, its role and the transcript so far).</summary>
+    public const string CallSimCustomerPrompt =
+        "---\nversion: flow.callsim-customer-1\n---\nYou are a customer calling support.\n<!-- user -->\nScenario: {{SCENARIO}}\nYou are the {{ROLE}}.\nThe call so far:\n{{TRANSCRIPT}}\n";
+
+    /// <summary>FR-356: the support agent simulator's persona prompt.</summary>
+    public const string CallSimSupportPrompt =
+        "---\nversion: flow.callsim-support-1\n---\nYou are a support agent.\n<!-- user -->\nScenario: {{SCENARIO}}\nYou are the {{ROLE}}.\nThe call so far:\n{{TRANSCRIPT}}\n";
+
     /// <summary>The guard and job type namespace (<c>flow.&lt;name&gt;</c>).</summary>
     public string Id => "flow";
 
@@ -83,7 +91,10 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         // FR-355: the map's item agent reads its element and index, the reduce agent every item output.
         registry.AddPrompt("flow.qa-score", "---\nversion: flow.qa-score-1\n---\nYou score calls.\n<!-- user -->\nTranscript {{MAP_INDEX}}:\n{{MAP_ITEM}}\n");
         registry.AddPrompt("flow.qa-summarise", "---\nversion: flow.qa-summarise-1\n---\nYou summarise scores.\n<!-- user -->\nScores:\n{{SCORES_ALL}}\n");
-        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check", "flow.qa-score", "flow.qa-summarise"]))
+        // FR-356: each participant's persona, with the scenario, its role and the transcript so far.
+        registry.AddPrompt("flow.callsim-customer", CallSimCustomerPrompt);
+        registry.AddPrompt("flow.callsim-support", CallSimSupportPrompt);
+        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check", "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support"]))
         {
             registry.AddPrompt(prompt, $"""
                 ---

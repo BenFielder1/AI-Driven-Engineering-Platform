@@ -67,6 +67,16 @@ public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigge
     /// inputs and stores the stage's own output (the item outputs come in <see cref="PromptValues"/>).</summary>
     public bool Reduce { get; init; }
 
+    /// <summary>
+    /// FR-356: the 1-based conversation turn this attempt speaks, or <c>null</c>. <see cref="AgentKey"/> is then a participant
+    /// (with role <see cref="TurnRole"/>): it reads the stage's declared inputs plus its binding's, stores no artifact (its
+    /// reply is the run's output text; the driver stores the transcript), and its agent run records the turn and role.
+    /// </summary>
+    public int? TurnIndex { get; init; }
+
+    /// <summary>FR-356: the participant's role for <see cref="TurnIndex"/>.</summary>
+    public string? TurnRole { get; init; }
+
     /// <summary>Whatever the host passes to its own <see cref="AgentStageExtension"/> (the engine never reads it).</summary>
     public object? HostState { get; init; }
 }

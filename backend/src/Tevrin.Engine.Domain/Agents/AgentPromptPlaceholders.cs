@@ -13,6 +13,12 @@ public static class AgentPromptPlaceholders
 {
     public const string Feedback = "FEEDBACK";
 
+    /// <summary>FR-356, §4.69: a conversation participant's prompt gets the turns so far (rendered, one heading per turn).</summary>
+    public const string Transcript = "TRANSCRIPT";
+
+    /// <summary>FR-356, §4.69: a conversation participant's prompt gets its own role name.</summary>
+    public const string Role = "ROLE";
+
     /// <summary>The placeholder name of an artifact key or context name: upper case, <c>-</c>, <c>.</c> and spaces as <c>_</c>.</summary>
     public static string Of(string name)
     {

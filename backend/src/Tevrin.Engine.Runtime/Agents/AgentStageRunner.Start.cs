@@ -43,6 +43,10 @@ public sealed partial class AgentStageRunner
         // FR-355: a map item's run records its index.
         agentRun.ItemIndex = attempt.Request.ItemIndex;
 
+        // FR-356: a conversation turn's run records its 1-based turn and the speaker's role.
+        agentRun.TurnIndex = attempt.Request.TurnIndex;
+        agentRun.TurnRole = attempt.Request.TurnRole;
+
         attempt.AgentRun = agentRun;
         var metadata = await extension.DescribeRunAsync(attempt, cancellationToken);
         agentRun.CatalogVersion = metadata.CatalogVersion;
