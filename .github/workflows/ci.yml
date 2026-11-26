@@ -85,9 +85,9 @@ jobs:
           if-no-files-found: ignore
 
   backend-integration:
-    # Integration tests (WebApplicationFactory + Testcontainers) in 3 shards on separate runners. Every derived test
+    # Integration tests (WebApplicationFactory + Testcontainers) in shards on separate runners. Every derived test
     # host stays alive on the shared TevrinApiFactory until its run ends, so one process for the whole suite outgrows a
-    # runner's memory. The last shard runs every namespace not named in the first two, so new namespaces are covered.
+    # runner's memory. The last shard (rest) runs every namespace not named in the others, so new namespaces are covered.
     name: Backend integration (${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -102,8 +102,11 @@ jobs:
           # FR-260: the SDLC characterisation snapshots (full flows) run in their own shard.
           - shard: characterisation
             filter: -namespace Tevrin.IntegrationTests.Characterisation
+          # The engine run tests (Pipelines, Stages) and Projects outgrew the rest shard's step timeout in 0.8.0 M69.
+          - shard: pipelines-projects
+            filter: -namespace Tevrin.IntegrationTests.Pipelines -namespace Tevrin.IntegrationTests.Stages -namespace Tevrin.IntegrationTests.Projects
           - shard: rest
-            filter: -nonamespace Tevrin.IntegrationTests.Characterisation -nonamespace Tevrin.IntegrationTests.Auth -nonamespace Tevrin.IntegrationTests.Connections -nonamespace Tevrin.IntegrationTests.Llm -nonamespace Tevrin.IntegrationTests.Logging -nonamespace Tevrin.IntegrationTests.Notifications -nonamespace Tevrin.IntegrationTests.Persistence -nonamespace Tevrin.IntegrationTests.Agents -nonamespace Tevrin.IntegrationTests.Artifacts -nonamespace Tevrin.IntegrationTests.Activity -nonamespace Tevrin.IntegrationTests.Admin -nonamespace Tevrin.IntegrationTests.GitHub -nonamespace Tevrin.IntegrationTests.Health -nonamespace Tevrin.IntegrationTests.Jobs -nonamespace Tevrin.IntegrationTests.Lifecycle -nonamespace Tevrin.IntegrationTests.Live -nonamespace Tevrin.IntegrationTests.Deployments -nonamespace Tevrin.IntegrationTests.Execution -nonamespace Tevrin.IntegrationTests.Gates -nonamespace Tevrin.IntegrationTests.Git
+            filter: -nonamespace Tevrin.IntegrationTests.Pipelines -nonamespace Tevrin.IntegrationTests.Stages -nonamespace Tevrin.IntegrationTests.Projects -nonamespace Tevrin.IntegrationTests.Characterisation -nonamespace Tevrin.IntegrationTests.Auth -nonamespace Tevrin.IntegrationTests.Connections -nonamespace Tevrin.IntegrationTests.Llm -nonamespace Tevrin.IntegrationTests.Logging -nonamespace Tevrin.IntegrationTests.Notifications -nonamespace Tevrin.IntegrationTests.Persistence -nonamespace Tevrin.IntegrationTests.Agents -nonamespace Tevrin.IntegrationTests.Artifacts -nonamespace Tevrin.IntegrationTests.Activity -nonamespace Tevrin.IntegrationTests.Admin -nonamespace Tevrin.IntegrationTests.GitHub -nonamespace Tevrin.IntegrationTests.Health -nonamespace Tevrin.IntegrationTests.Jobs -nonamespace Tevrin.IntegrationTests.Lifecycle -nonamespace Tevrin.IntegrationTests.Live -nonamespace Tevrin.IntegrationTests.Deployments -nonamespace Tevrin.IntegrationTests.Execution -nonamespace Tevrin.IntegrationTests.Gates -nonamespace Tevrin.IntegrationTests.Git
     defaults:
       run:
         working-directory: backend
