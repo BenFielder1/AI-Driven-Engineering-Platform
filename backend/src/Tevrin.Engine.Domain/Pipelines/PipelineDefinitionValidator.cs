@@ -470,7 +470,7 @@ public static partial class PipelineDefinitionValidator
         {
             for (var j = 0; j < stage.Inputs.Count; j++)
             {
-                CheckArtifactRef(stage.Inputs[j], $"{path}.inputs[{j}]");
+                CheckArtifactRef(stage.Inputs[j], $"{path}.inputs[{RunsInputRules.InputPosition(stage, j)}]");
             }
 
             if (stage.Output is { } output)
@@ -766,7 +766,7 @@ public static partial class PipelineDefinitionValidator
                     var key = inputs[j];
                     if (_artifactKeys.Contains(key) && !produced.Contains(key) && reported.Add(key))
                     {
-                        Add(DefinitionErrorCodes.ArtifactNoProducer, $"{at}.inputs[{j}]",
+                        Add(DefinitionErrorCodes.ArtifactNoProducer, $"{at}.inputs[{RunsInputRules.InputPosition(stage, j)}]",
                             $"Artifact '{key}' is read but no stage outputs it and no pack handler produces it.");
                     }
                 }

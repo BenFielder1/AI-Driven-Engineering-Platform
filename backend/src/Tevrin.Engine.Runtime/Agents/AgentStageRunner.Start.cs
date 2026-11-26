@@ -112,6 +112,16 @@ public sealed partial class AgentStageRunner
             values[placeholder] = FanOutRules.RenderList(items);
         }
 
+        // FR-357: each from_runs input the template uses is a list over the project's earlier runs, {{<ARTIFACT>_RUNS}}.
+        var runsUsed = stage.FromRuns.Select(RunsInputRules.Placeholder).Where(p => used.Contains(p) && !supplied.Contains(p)).ToHashSet(StringComparer.Ordinal);
+        if (runsUsed.Count > 0)
+        {
+            foreach (var list in await RunsInputs.LoadAsync(store, run, stage, time.GetUtcNow(), cancellationToken, runsUsed))
+            {
+                values[list.Placeholder] = FanOutRules.RenderList(list.Items);
+            }
+        }
+
         // FR-349, §4.67: a branch's prompt context holds its own label as {{VARIANT}} (v1…vn for a variants stage).
         if (request.Variant is { } variant)
         {

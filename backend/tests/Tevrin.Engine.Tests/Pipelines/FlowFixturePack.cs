@@ -75,6 +75,10 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
     public const string CallSimSupportPrompt =
         "---\nversion: flow.callsim-support-1\n---\nYou are a support agent.\n<!-- user -->\nScenario: {{SCENARIO}}\nYou are the {{ROLE}}.\nThe call so far:\n{{TRANSCRIPT}}\n";
 
+    /// <summary>FR-357: the trend analyst's prompt reads the scores of the last 7 days' fixture-qa runs as a list.</summary>
+    public const string TrendsPrompt =
+        "---\nversion: flow.trends-1\n---\nYou write weekly trend reports.\n<!-- user -->\nScores of recent runs, newest first:\n{{SCORES_RUNS}}\n";
+
     /// <summary>The guard and job type namespace (<c>flow.&lt;name&gt;</c>).</summary>
     public string Id => "flow";
 
@@ -94,7 +98,9 @@ public sealed class FlowFixturePack(string pipelineId) : IPipelinePack
         // FR-356: each participant's persona, with the scenario, its role and the transcript so far.
         registry.AddPrompt("flow.callsim-customer", CallSimCustomerPrompt);
         registry.AddPrompt("flow.callsim-support", CallSimSupportPrompt);
-        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check", "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support"]))
+        // FR-357: the from_runs list placeholder.
+        registry.AddPrompt("flow.trends", TrendsPrompt);
+        foreach (var prompt in Prompts.Except(["flow.factwrite", "flow.fact-check", "flow.qa-score", "flow.qa-summarise", "flow.callsim-customer", "flow.callsim-support", "flow.trends"]))
         {
             registry.AddPrompt(prompt, $"""
                 ---

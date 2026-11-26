@@ -71,6 +71,15 @@ public interface IAgentStageStore
     Task<IReadOnlyList<(string Metric, double Score)>> RunOutcomeScoresAsync(PipelineRun run, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<(string Metric, double Score)>>([]);
 
+    /// <summary>
+    /// FR-357: the project's runs of <paramref name="input"/>'s pipeline other than <paramref name="run"/> that ended with
+    /// its status at or after <paramref name="since"/> and have a final version of its artifact (the newest that is no map
+    /// item and not superseded: a plain version first, else a follow-up output), newest completion first, at most
+    /// <see cref="RunsInputDefinition.MaxRuns"/>. <see cref="RunsInputRules.Select"/> makes the list.
+    /// </summary>
+    Task<IReadOnlyList<RunsInputCandidate>> RunsOutputsAsync(PipelineRun run, RunsInputDefinition input, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RunsInputCandidate>>([]);
+
     void Add(AgentRun agentRun);
 
     void Add(Artifact artifact);
@@ -224,6 +233,44 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
             .Where(a => a.PipelineRunId == runId && keys.Contains(a.Type) && a.Variant == null && a.ItemIndex == null && a.Status != ArtifactStatus.Superseded)
             .ToListAsync(cancellationToken);
         return [.. rows.GroupBy(a => a.Type, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!)];
+    }
+
+    public async Task<IReadOnlyList<RunsInputCandidate>> RunsOutputsAsync(PipelineRun run, RunsInputDefinition input, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(input);
+        var (projectId, runId, pipelineId, status, key) = (run.ProjectId, run.Id, input.Pipeline, input.Status, input.Artifact);
+        const string followUp = FollowUpRules.LabelPrefix;
+
+        // One bounded query: the matching runs (newest completion first, capped) with a correlated subquery for each one's
+        // final version of the artifact (a plain version first, else the newest follow-up output, FR-354); runs without one
+        // aren't counted toward the cap. A final version that fails its integrity check isn't replaced by an older one: the
+        // reader drops the run (FR-20).
+        var rows = await db.PipelineRuns.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && r.PipelineId == pipelineId && r.Status == status && r.Id != runId
+                && r.CompletedAt != null && r.CompletedAt >= since)
+            .Where(r => db.Artifacts.Any(a => a.PipelineRunId == r.Id && a.ProjectId == projectId && a.Type == key
+                && (a.Variant == null || a.Variant.StartsWith(followUp)) && a.ItemIndex == null && a.Status != ArtifactStatus.Superseded))
+            .OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.StartedAt)
+            .Take(RunsInputDefinition.MaxRuns)
+            .Select(r => new
+            {
+                r.Id,
+                r.StartedAt,
+                r.CompletedAt,
+                Final = db.Artifacts
+                    .Where(a => a.PipelineRunId == r.Id && a.ProjectId == projectId && a.Type == key
+                        && (a.Variant == null || a.Variant.StartsWith(followUp)) && a.ItemIndex == null && a.Status != ArtifactStatus.Superseded)
+                    .OrderBy(a => a.Variant == null ? 0 : 1).ThenByDescending(a => a.Version).ThenByDescending(a => a.CreatedAt)
+                    .Select(a => new { a.Content, a.ContentHash, a.Status })
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(cancellationToken);
+        return [.. rows.Where(r => r.Final is not null).Select(r => new RunsInputCandidate(r.Id, pipelineId, status, r.StartedAt, r.CompletedAt, r.Final!.Content)
+        {
+            ArtifactStatus = r.Final.Status,
+            ContentHash = r.Final.ContentHash,
+        })];
     }
 
     public void Add(AgentRun agentRun) => db.AgentRuns.Add(agentRun);

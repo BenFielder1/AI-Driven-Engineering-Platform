@@ -242,13 +242,21 @@ public static partial class PipelineDefinitionValidator
         /// <summary>
         /// FR-357: each <c>from_runs</c> input names a kebab-case pipeline id and an artifact key (a declared artifact when the
         /// pipeline is this one), a <c>window</c> that is a positive duration (<c>7d</c>, <c>12h</c>, <c>30m</c>, as
-        /// follow-ups' <c>after</c>) and a final run <c>status</c>.
+        /// follow-ups' <c>after</c>) and a final run <c>status</c>. Two entries of a stage can't read the same artifact key:
+        /// both lists would be <c>{{&lt;ARTIFACT&gt;_RUNS}}</c>.
         /// </summary>
         private void ValidateFromRuns(StageDefinition stage, string path)
         {
+            var placeholders = new HashSet<string>(StringComparer.Ordinal);
             foreach (var runs in stage.FromRuns)
             {
                 var at = $"{path}.inputs[{runs.Position}].from_runs";
+                if (!string.IsNullOrEmpty(runs.Artifact) && !placeholders.Add(RunsInputRules.Placeholder(runs)))
+                {
+                    Add(DefinitionErrorCodes.Parse, at + ".artifact",
+                        $"Another 'from_runs' input of stage '{stage.Id}' reads '{runs.Artifact}'; each list is {{{{{RunsInputRules.Placeholder(runs)}}}}}, so the keys must differ.");
+                }
+
                 if (string.IsNullOrEmpty(runs.Pipeline))
                 {
                     Add(DefinitionErrorCodes.Parse, at + ".pipeline", "'pipeline' is required.");

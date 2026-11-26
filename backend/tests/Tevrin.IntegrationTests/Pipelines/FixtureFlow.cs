@@ -77,6 +77,25 @@ public sealed class FlowFixturePack : IPipelinePack
     public const string CallSimSupportPrompt =
         "---\nversion: flow.callsim-support-1\n---\nYou are a support agent.\n<!-- user -->\nScenario: {{SCENARIO}}\nYou are the {{ROLE}}.\nThe call so far:\n{{TRANSCRIPT}}\n";
 
+    /// <summary>FR-357: a weekly trend report over the final scores of the last 7 days' <c>fixture-qa</c> runs.</summary>
+    public const string Trends = "fixture-trends";
+
+    /// <summary>FR-357: <c>fixture-trends</c> with a <see cref="TrendsRecapStage"/> follow-up a day after completion that
+    /// reads this pipeline's own earlier reports (so the current, completed run must be left out).</summary>
+    public const string TrendsRecap = "fixture-trends-recap";
+    public const string TrendsRecapStage = "recap";
+
+    /// <summary>FR-357: <c>fixture-trends</c> with the <see cref="TrendTallyHandler"/> instead of the analyst.</summary>
+    public const string TrendsHandler = "fixture-trends-handler";
+    public const string TrendTallyHandler = "flow.trend-tally";
+
+    /// <summary>FR-357: the analyst's prompt (the same as the engine tests', which check that it validates).</summary>
+    public const string TrendsPrompt =
+        "---\nversion: flow.trends-1\n---\nYou write weekly trend reports.\n<!-- user -->\nScores of recent runs, newest first:\n{{SCORES_RUNS}}\n";
+
+    public const string TrendsRecapPrompt =
+        "---\nversion: flow.trends-recap-1\n---\nYou recap trend reports.\n<!-- user -->\nEarlier reports:\n{{TREND_REPORT_RUNS?}}\n";
+
     public string Id => "flow";
 
     public void Register(IPackRegistry registry)
@@ -105,6 +124,12 @@ public sealed class FlowFixturePack : IPipelinePack
         registry.AddJobType("flow.callsim-customer");
         registry.AddJobType("flow.callsim-support");
         registry.AddGuard(CallResolvedGuard);
+        registry.AddDefinition(Trends + ".pipeline.yaml", Read(Trends + ".pipeline.yaml"));
+        registry.AddDefinition(TrendsRecap + ".pipeline.yaml", TrendsRecapYaml());
+        registry.AddDefinition(TrendsHandler + ".pipeline.yaml", TrendsHandlerYaml());
+        registry.AddPrompt("flow.trends", TrendsPrompt);
+        registry.AddPrompt("flow.trends-recap", TrendsRecapPrompt);
+        registry.AddStageHandler(TrendTallyHandler);
         registry.AddPrompt("flow.qa-score", "---\nversion: flow.qa-score-1\n---\nYou score calls.\n<!-- user -->\nTranscript {{MAP_INDEX}}:\n{{MAP_ITEM}}\n");
         registry.AddPrompt("flow.qa-summarise", "---\nversion: flow.qa-summarise-1\n---\nYou summarise scores.\n<!-- user -->\nScores:\n{{SCORES_ALL}}\n");
         registry.AddJobType("flow.qa-score");
@@ -195,6 +220,47 @@ public sealed class FlowFixturePack : IPipelinePack
 
         return yaml.Replace(lines[0], "pipeline: " + CallSimGuard + "\n", StringComparison.Ordinal)
             .Replace(lines[1], "stop: { guard: " + CallResolvedGuard + " }", StringComparison.Ordinal);
+    }
+
+    private static string TrendsRecapYaml()
+    {
+        var yaml = Read(Trends + ".pipeline.yaml");
+        string[] lines =
+        [
+            "pipeline: " + Trends + "\n",
+            "  trend_report: { title: Trend report, format: markdown, approval: auto_lock, cascade: none }\n",
+            "    output: trend_report\n",
+        ];
+        if (lines.Any(l => !yaml.Contains(l, StringComparison.Ordinal)) || !yaml.EndsWith(lines[2], StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("fixture-trends no longer has the lines fixture-trends-recap replaces.");
+        }
+
+        return yaml.Replace(lines[0], "pipeline: " + TrendsRecap + "\n", StringComparison.Ordinal)
+            .Replace(lines[1], lines[1] + "  recap: { title: Recap, format: markdown, approval: auto_lock, cascade: none }\n", StringComparison.Ordinal)
+            + "\n  - id: " + TrendsRecapStage + "\n"
+            + "    title: Recap the earlier reports\n"
+            + "    status: reporting\n"
+            + "    agent: { key: trend-recapper, prompt: flow.trends-recap }\n"
+            + "    inputs:\n"
+            + "      - from_runs: { pipeline: " + TrendsRecap + ", artifact: trend_report, window: 7d }\n"
+            + "    output: recap\n"
+            + "\nfollowups:\n"
+            + "  - { stage: " + TrendsRecapStage + ", after: [1d] }\n";
+    }
+
+    private static string TrendsHandlerYaml()
+    {
+        var yaml = Read(Trends + ".pipeline.yaml");
+        string[] lines = ["pipeline: " + Trends + "\n", "    agent: { key: trend-analyst, prompt: flow.trends }\n", "    output: trend_report\n"];
+        if (lines.Any(l => !yaml.Contains(l, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("fixture-trends no longer has the lines fixture-trends-handler replaces.");
+        }
+
+        return yaml.Replace(lines[0], "pipeline: " + TrendsHandler + "\n", StringComparison.Ordinal)
+            .Replace(lines[1], "    handler: " + TrendTallyHandler + "\n", StringComparison.Ordinal)
+            .Replace(lines[2], string.Empty, StringComparison.Ordinal);
     }
 
     private static string QaEscalateYaml()
@@ -469,6 +535,27 @@ public sealed class TurnResponder(string agent, params string[] answers) : IFake
     }
 }
 
+/// <summary>FR-357: the lists the <c>flow.trend-tally</c> handler was given, one per run.</summary>
+public sealed class TrendLog
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(Guid RunId, RunsInputFact? Fact)> _calls = new();
+
+    public IReadOnlyList<(Guid RunId, RunsInputFact? Fact)> Calls => [.. _calls];
+
+    public void Record(Guid runId, RunsInputFact? fact) => _calls.Enqueue((runId, fact));
+}
+
+/// <summary>FR-357: the <c>flow.trend-tally</c> handler of <c>fixture-trends-handler</c>: it records its <c>from_runs</c> lists.</summary>
+public sealed class TrendTally(TrendLog log) : IStageHandler
+{
+    public Task<StageHandlerResult> ExecuteAsync(StageHandlerContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        log.Record(context.RunId, context.Facts.Get<RunsInputFact>());
+        return Task.FromResult(new StageHandlerResult(StageHandlerOutcome.Completed));
+    }
+}
+
 /// <summary>The API with the <c>flow</c> pack registered; its <c>stage.run</c> jobs are driven with <see cref="FixtureLinearApp"/>.</summary>
 public static class FixtureFlowApp
 {
@@ -490,6 +577,8 @@ public static class FixtureFlowApp
             s.AddPipelineStageHandler<QaTally>(FlowFixturePack.QaTallyHandler);
             s.AddPipelineGuard<QaScoreGuard>(FlowFixturePack.QaScoreGuard);
             s.AddPipelineGuard<CallResolvedGuard>(FlowFixturePack.CallResolvedGuard);
+            s.AddSingleton<TrendLog>();
+            s.AddPipelineStageHandler<TrendTally>(FlowFixturePack.TrendTallyHandler);
             foreach (var responder in responders)
             {
                 s.AddSingleton(responder);

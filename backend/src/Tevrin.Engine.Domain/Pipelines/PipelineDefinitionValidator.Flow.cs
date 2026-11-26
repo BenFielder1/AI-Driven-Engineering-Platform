@@ -157,7 +157,7 @@ public static partial class PipelineDefinitionValidator
                     var stage = parallel.Branches[b][k];
                     var at = BranchStagePath(path, b, k);
                     ValidateBranchStage(stage, at, seen);
-                    CheckBranchInputs(stage.Inputs, $"{at}.inputs", b, producedBy);
+                    CheckBranchInputs(stage.Inputs, $"{at}.inputs", b, producedBy, j => RunsInputRules.InputPosition(stage, j));
                     for (var j = 0; j < stage.Agents.Count; j++)
                     {
                         CheckBranchInputs(stage.Agents[j].Inputs, $"{at}.agents[{j}].inputs", b, producedBy);
@@ -169,13 +169,15 @@ public static partial class PipelineDefinitionValidator
         private static IEnumerable<string> Outputs(StageDefinition stage) =>
             stage.WithBranchStages().SelectMany(s => s.Agents.Select(a => a.Output).Prepend(s.Output)).OfType<string>();
 
-        private void CheckBranchInputs(IReadOnlyList<string> inputs, string path, int branch, Dictionary<string, int> producedBy)
+        /// <summary><paramref name="position"/>: the YAML index of a plain input (FR-357: a stage's <c>from_runs</c> entries
+        /// count); unchanged when <c>null</c>.</summary>
+        private void CheckBranchInputs(IReadOnlyList<string> inputs, string path, int branch, Dictionary<string, int> producedBy, Func<int, int>? position = null)
         {
             for (var j = 0; j < inputs.Count; j++)
             {
                 if (producedBy.TryGetValue(inputs[j], out var producer) && producer != branch)
                 {
-                    Add(DefinitionErrorCodes.BranchInput, $"{path}[{j}]",
+                    Add(DefinitionErrorCodes.BranchInput, $"{path}[{position?.Invoke(j) ?? j}]",
                         $"Artifact '{inputs[j]}' is produced by branch {producer + 1} of the same parallel group; branches can't read each other's outputs.");
                 }
             }

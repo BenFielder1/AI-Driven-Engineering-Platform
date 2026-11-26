@@ -64,6 +64,45 @@ internal sealed class InMemoryAgentStageStore : IAgentStageStore
         return Task.FromResult(Artifacts.FirstOrDefault(a => inSubject(a) && a.Type == key && a.AgentRunId == agentRunId));
     }
 
+    /// <summary>FR-357: the store's half of a <c>from_runs</c> read (the SQL's filter, order and cap), over <see cref="Runs"/>
+    /// and <see cref="Artifacts"/>; each call is recorded in <see cref="RunsReads"/>.</summary>
+    public List<(RunsInputDefinition Input, DateTimeOffset Since)> RunsReads { get; } = [];
+
+    public Task<IReadOnlyList<RunsInputCandidate>> RunsOutputsAsync(PipelineRun run, RunsInputDefinition input, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        RunsReads.Add((input, since));
+        Artifact? Final(PipelineRun r) => Artifacts
+            .Where(a => a.PipelineRunId == r.Id && a.ProjectId == run.ProjectId && a.Type == input.Artifact
+                && (a.Variant is null || FollowUpRules.IsLabel(a.Variant)) && a.ItemIndex is null && a.Status != ArtifactStatus.Superseded)
+            .OrderBy(a => a.Variant is null ? 0 : 1).ThenByDescending(a => a.Version).ThenByDescending(a => a.CreatedAt)
+            .FirstOrDefault();
+        return Task.FromResult<IReadOnlyList<RunsInputCandidate>>([.. Runs
+            .Where(r => r.ProjectId == run.ProjectId && r.PipelineId == input.Pipeline && r.Status == input.Status && r.Id != run.Id
+                && r.CompletedAt >= since && Final(r) is not null)
+            .OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.StartedAt)
+            .Take(RunsInputDefinition.MaxRuns)
+            .Select(r => (Run: r, Final: Final(r)!))
+            .Select(x => new RunsInputCandidate(x.Run.Id, x.Run.PipelineId, x.Run.Status, x.Run.StartedAt, x.Run.CompletedAt, x.Final.Content)
+            {
+                ArtifactStatus = x.Final.Status,
+                ContentHash = x.Final.ContentHash,
+            })]);
+    }
+
+    /// <summary>FR-346: as the database store, the run's newest non-superseded plain version of each key (integrity unchecked).</summary>
+    public Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([.. Artifacts
+            .Where(a => a.PipelineRunId == run.Id && keys.Contains(a.Type) && a.Variant is null && a.ItemIndex is null && a.Status != ArtifactStatus.Superseded)
+            .GroupBy(a => a.Type, StringComparer.Ordinal)
+            .Select(g => g.MaxBy(a => a.Version)!)]);
+
+    /// <summary>FR-345: as the database store, the run's newest non-superseded version of each variant (integrity unchecked).</summary>
+    public Task<IReadOnlyList<Artifact>> RunVariantsAsync(PipelineRun run, string key, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([.. Artifacts
+            .Where(a => a.PipelineRunId == run.Id && a.Type == key && a.Variant is not null && a.Status != ArtifactStatus.Superseded)
+            .GroupBy(a => a.Variant!, StringComparer.Ordinal)
+            .Select(g => g.MaxBy(a => a.Version)!)]);
+
     public void Add(AgentRun agentRun) => AgentRuns.Add(agentRun);
 
     public void Add(Artifact artifact) => Artifacts.Add(artifact);

@@ -35,7 +35,8 @@ public static class AgentPromptPlaceholders
     /// <summary>
     /// Why <paramref name="templateSource"/> can't serve <paramref name="stage"/>'s agent, or <c>null</c>: it doesn't parse,
     /// <c>{{FEEDBACK}}</c> is required, or a required placeholder is neither one of the stage's inputs nor one of the
-    /// pack's <paramref name="contextNames"/> (nor, on an aggregate stage, an input's <c>_ALL</c> list, FR-346).
+    /// pack's <paramref name="contextNames"/> (nor, on an aggregate stage, an input's <c>_ALL</c> list, FR-346, nor a
+    /// <c>from_runs</c> input's <c>_RUNS</c> list, FR-357).
     /// <paramref name="supplied"/>: placeholders the engine fills for this agent (FR-350: a validator agent's
     /// <c>{{OUTPUT}}</c>).
     /// </summary>
@@ -57,6 +58,9 @@ public static class AgentPromptPlaceholders
             // FR-346: an aggregate stage also gets {{<KEY>_ALL}}, every branch output of an input key.
             known.UnionWith(stage.Inputs.Select(Pipelines.FanOutRules.AllPlaceholder));
         }
+
+        // FR-357: each from_runs input is a list, {{<ARTIFACT>_RUNS}}.
+        known.UnionWith(stage.FromRuns.Select(Pipelines.RunsInputRules.Placeholder));
 
         if (stage.Variants is not null || stage.FanOut is not null)
         {

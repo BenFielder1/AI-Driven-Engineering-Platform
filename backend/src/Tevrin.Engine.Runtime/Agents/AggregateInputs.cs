@@ -1,3 +1,4 @@
+using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Pipelines;
 
@@ -9,7 +10,8 @@ public static class AggregateInputs
     /// <summary>
     /// Each list placeholder (<c>&lt;KEY&gt;_ALL</c>) of stage <paramref name="stageId"/>'s aggregate, with its items: a
     /// fan-out source's newest version of every variant (labelled by variant, in branch order), or each parallel branch
-    /// stage's newest output (labelled by the branch stage id). Empty when the stage has no aggregate.
+    /// stage's newest output (labelled by the branch stage id). Empty when the stage has no aggregate. An output that fails
+    /// its integrity check (FR-20) is left out, never fed to an agent or handler.
     /// </summary>
     public static async Task<IReadOnlyList<(string Placeholder, IReadOnlyList<AggregateItem> Items)>> LoadAsync(
         IAgentStageStore store, PipelineRun run, PipelineDefinition definition, string stageId, CancellationToken cancellationToken)
@@ -26,6 +28,7 @@ public static class AggregateInputs
         {
             var order = FanOutRules.Branches(source).Select(b => b.Label).ToList();
             var items = (await store.RunVariantsAsync(run, output, cancellationToken))
+                .Where(Intact)
                 .OrderBy(a => order.IndexOf(a.Variant!) is var i and >= 0 ? i : int.MaxValue)
                 .Select(a => new AggregateItem(a.Variant!, a.Content))
                 .ToList();
@@ -34,7 +37,9 @@ public static class AggregateInputs
         }
 
         var sources = FanOutRules.AggregateSources(source);
-        var stored = await store.RunLatestAsync(run, [.. sources.Select(s => s.ArtifactKey).Distinct(StringComparer.Ordinal)], cancellationToken);
+        var stored = (await store.RunLatestAsync(run, [.. sources.Select(s => s.ArtifactKey).Distinct(StringComparer.Ordinal)], cancellationToken))
+            .Where(Intact)
+            .ToList();
         foreach (var group in sources.GroupBy(s => s.ArtifactKey, StringComparer.Ordinal))
         {
             var items = group
@@ -45,6 +50,8 @@ public static class AggregateInputs
 
         return lists;
     }
+
+    private static bool Intact(Artifact a) => ArtifactRules.IntegrityOf(a.Status, a.Content, a.ContentHash) == ArtifactIntegrity.Ok;
 
     /// <summary>All the items of every list, for a <c>disagreement</c> guard or a handler (FR-346's typed list).</summary>
     public static async Task<IReadOnlyList<AggregateItem>> ItemsAsync(

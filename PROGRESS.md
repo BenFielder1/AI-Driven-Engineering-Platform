@@ -96,8 +96,8 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - M70a review minors for later steps: validator error paths `inputs[{j}]` skip `from_runs` entries (wrong YAML index); map/conversation stages read as `Manual` until c/d land; `from_runs` not yet in prompt placeholders or `AgentStageRunner` inputs; `DEF_MAP_SOURCE` checks list order, not reachability.
   - [x] b. Data: `stage_executions.parent_execution_id`, `item_index` on agent runs and artifacts, `agent_runs.turn_index`/`turn_role`; `MAP_TOO_MANY_ITEMS` (D-0.8.0-24). Review minor for c: a child execution must always have an `item_index` (the unique index treats null as distinct) — 8f4349c ([CI 45793183265](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45793183265))
   - [x] c. Driver: map-reduce (FR-355), D-0.8.0-25 — 2c81628 + fix c08549f ([CI 45821499223](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45821499223))
-  - [x] d. Driver: conversation (FR-356), D-0.8.0-26
-  - [ ] e. `from_runs` input resolution (FR-357)
+  - [x] d. Driver: conversation (FR-356), D-0.8.0-26 — ab94bbb + fix ec16b5b ([CI 45830714380](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45830714380))
+  - [x] e. `from_runs` input resolution (FR-357), D-0.8.0-27; FR-20 integrity filter on `from_runs` and FR-346 aggregate lists
 - [ ] M71 Tools and safety — FR-358–FR-361
 - [ ] M72 Engine UI — FR-362–FR-366
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
@@ -140,6 +140,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - The map item isolation check loads every sibling output of the current map entry on each item start (O(n²) rows at `max_items` 1000); push the probe into SQL if large maps get slow (M70c review).
 - Conversation (M70d review minors, left as is): a redelivered escalated turn job after approval raises a fresh escalation (same as plain stages); the stop guard re-runs on already-checked turns at each new turn job.
 - A map stage plans its entry twice (`EnterMapAsync`): an input arriving in between fails the job with a misleading `DEFINITION_UNAVAILABLE`; the run stays active and a manual retry recovers. Use the one-plan pattern from the conversation turn 1 (M70d re-review).
+- No index on `pipeline_runs(project_id, pipeline_id, status, completed_at)` for `from_runs`; add one in a later migration if it gets slow. Conversation stop guards don't get `RunsInputFact`. A map item handler on a stage with `from_runs` reloads the lists per item (up to 1,000 identical queries); load once per map entry if that combination is used (M70e).
 - Integration shards: `rest` hit its 22-min step timeout in M69 and was split (5d048d7, `pipelines-projects`); watch shard times as tests grow.
 
 ## Manual checks (Ben)

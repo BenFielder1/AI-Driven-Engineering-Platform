@@ -165,7 +165,9 @@ public sealed partial class EngineRunDriver
         var dispatch = await handlers.RunAsync(
             new StageHandlerRequest(run.Id, run.ProjectId, run.DefinitionHash, handler)
             {
-                Facts = FactBag.Empty.With(new StageJobFact(job)).With(new MapItemFact(index, element)),
+                // FR-357: a map stage's from_runs lists too.
+                Facts = await RunsInputs.WithFactAsync(
+                    new EngineAgentStageStore(db), run, stage, time.GetUtcNow(), FactBag.Empty.With(new StageJobFact(job)).With(new MapItemFact(index, element)), cancellationToken),
             },
             cancellationToken);
         var handled = dispatch.RequireRan(handler);
@@ -313,7 +315,8 @@ public sealed partial class EngineRunDriver
                 var dispatch = await handlers.RunAsync(
                     new StageHandlerRequest(run.Id, run.ProjectId, run.DefinitionHash, handler)
                     {
-                        Facts = FactBag.Empty.With(new StageJobFact(job)).With(new AggregateListFact(list)),
+                        Facts = await RunsInputs.WithFactAsync(
+                            new EngineAgentStageStore(db), run, stage, time.GetUtcNow(), FactBag.Empty.With(new StageJobFact(job)).With(new AggregateListFact(list)), cancellationToken),
                     },
                     cancellationToken);
                 var handled = dispatch.RequireRan(handler);

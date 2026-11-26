@@ -254,7 +254,14 @@ public sealed partial class EngineRunDriver(
                 var dispatch = await handlers.RunAsync(
                     new StageHandlerRequest(run.Id, run.ProjectId, run.DefinitionHash, handler.Handler)
                     {
-                        Facts = await AggregateFactsAsync(run, stage, definition, FactBag.Empty.With(new StageJobFact(job)), cancellationToken),
+                        // FR-346: the aggregate list; FR-357: the from_runs lists.
+                        Facts = await RunsInputs.WithFactAsync(
+                            new EngineAgentStageStore(db),
+                            run,
+                            stage,
+                            time.GetUtcNow(),
+                            await AggregateFactsAsync(run, stage, definition, FactBag.Empty.With(new StageJobFact(job)), cancellationToken),
+                            cancellationToken),
                     },
                     cancellationToken);
                 var handled = dispatch.RequireRan(handler.Handler);
