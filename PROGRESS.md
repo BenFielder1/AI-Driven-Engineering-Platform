@@ -51,10 +51,10 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-355 | Map-reduce (`fixture-qa`) | 3.6, 4.68 | backend + data | M70 | done | 0f53d58 + 8f4349c + 2c81628 + c08549f, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582) |
 | FR-356 | Conversation stage (`fixture-callsim`) | 3.6, 4.69 | backend | M70 | done | 0f53d58 + 8f4349c + ab94bbb + ec16b5b, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582) |
 | FR-357 | Windowed inputs over runs (`fixture-trends`) | 3.6 | backend | M70 | done | 0f53d58 + 5ce5414, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582) |
-| FR-358 | Tool permission tiers | 3.7 | backend | M71 | todo | — |
-| FR-359 | Mid-stage approval for destructive tools (`fixture-oncall`) | 3.7, 4.73 | backend + data | M71 | todo | — |
-| FR-360 | Human gate before an external action | 3.7 | backend | M71 | todo | — |
-| FR-361 | Webhook triggers and tools on agents (on-call fixture) | 3.7 | backend | M71 | todo | — |
+| FR-358 | Tool permission tiers | 3.7 | backend | M71 | done | 93fbd35 + d4b7410, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
+| FR-359 | Mid-stage approval for destructive tools (`fixture-oncall`) | 3.7, 4.73 | backend + data | M71 | done | b67b366 + 93fbd35 + 3d410b2, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
+| FR-360 | Human gate before an external action | 3.7 | backend | M71 | done | 93fbd35 + 9ea5306 + e695642, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
+| FR-361 | Webhook triggers and tools on agents (on-call fixture) | 3.7 | backend | M71 | done | 93fbd35 + e695642, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
 | FR-362 | Start run / Submit input dialogs | 3.8 | frontend | M72 | todo | — |
 | FR-363 | New constructs in stage list and timeline | 3.8 | frontend | M72 | todo | — |
 | FR-364 | New gate cards | 3.8 | frontend | M72 | todo | — |
@@ -98,15 +98,15 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] c. Driver: map-reduce (FR-355), D-0.8.0-25 — 2c81628 + fix c08549f ([CI 45821499223](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45821499223))
   - [x] d. Driver: conversation (FR-356), D-0.8.0-26 — ab94bbb + fix ec16b5b ([CI 45830714380](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45830714380))
   - [x] e. `from_runs` input resolution (FR-357), D-0.8.0-27; FR-20 integrity filter on `from_runs` and FR-346 aggregate lists — 5ce5414 ([CI 45849216582](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582))
-- [ ] M71 Tools and safety — FR-358–FR-361 (security: destructive tools stay on fixtures)
+- [x] M71 Tools and safety — FR-358–FR-361 (security: destructive tools stay on fixtures)
   - [x] a1. Definition and registration: tool `tier`, handler/tool `external`, `tool_policy: { max_tier }`, `DEF_TOOL_TIER`; fixture `fixture-oncall` (FR-358, FR-359, FR-360 syntax), D-0.8.0-28 — 93fbd35 ([CI 45871148485](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45871148485))
-  - **Blocker for the build PR until c and d land:** from a1 a `max_tier: destructive` stage validates, but the runner doesn't gate destructive or external calls yet (`PipelineRegistry.ToolTierOf`/`IsExternal` are unused). No product pack registers such tools.
+  - ~~Blocker until c and d land~~: resolved by 3d410b2 (destructive) and 9ea5306 (external). Remaining build-PR blocker: the gate DTO must show the payloads (M72, FR-364).
   - For b–e: link `fixture-oncall.pipeline.yaml` in the IntegrationTests csproj and register its prompts and tools (with tiers) in the integration `FlowFixturePack` copy (M70c 404 lesson). Pack-author docs: the tier is only as honest as the pack's registration (an unclassified tool is `write`).
   - [x] a2. Data: `agent_runs.tool_loop_state` (jsonb); error codes `TOOL_STATE_TOO_LARGE`, `EXTERNAL_ACTION_REJECTED`. No other schema needed: the tool-call tier goes in each `agent_runs.tool_calls` element (`AgentToolCallRecord`, optional for old rows), gate `type` is a free string, and the §4.73 call state is derived from `tool_loop_state` + the run's `tool_approval` gate (cleared on resume) — b67b366 ([CI 45867346886](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45867346886))
   - [x] b. Runner: tier enforcement and recording at call time (FR-358), D-0.8.0-29; destructive and external tools are refused (not run) until c/d; startup warning for DI-only tools with no tier — d4b7410 ([CI 45875442063](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45875442063))
   - [x] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73), D-0.8.0-30 — 3d410b2 ([CI 45885330729](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45885330729))
-  - [x] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit, D-0.8.0-31
-  - [x] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361); bad signatures, replay and rotation are covered by FR-337's `TriggerTests`
+  - [x] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit, D-0.8.0-31 — 9ea5306 + test fix e695642
+  - [x] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361); bad signatures, replay and rotation are covered by FR-337's `TriggerTests` — e695642 ([CI 45955212466](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466))
 - [ ] M72 Engine UI — FR-362–FR-366
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
   - Carry-over from M70: show `turn_index`/`turn_role` and map `item_index` on timeline entries (additive DTO fields).
