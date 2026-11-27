@@ -64,6 +64,9 @@ public sealed class SourceOfTruthTests(TevrinApiFactory factory)
         Assert.Equal(["score", "tailor"], agentRuns.Select(r => r.Stage).Order());
         Assert.All(agentRuns, r => Assert.Equal((v2.Id, 2), r.InputArtifacts.Where(i => i.Type == MasterCv).Select(i => (i.ArtifactId, i.Version)).Single()));
 
+        // One run per pipeline is active at a time (FR-331), and this one now waits at submit, so end it before the next.
+        await ProjectApi.ReadAsync<PipelineRunDto>(await fixture.Owner.Client.PostAsync($"/api/pipeline-runs/{run.Id}/cancel", null, Ct));
+
         var next = await ProjectApi.ReadAsync<PipelineRunDto>(
             await fixture.Contributor.Client.PostAsJsonAsync($"{fixture.Path}/pipeline-runs", Start(), Ct), HttpStatusCode.Created);
         Assert.Equal(new PipelineRunPinDto(MasterCv, v3.Id, 3), Assert.Single(next.PinnedArtifacts));

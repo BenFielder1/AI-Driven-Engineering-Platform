@@ -106,7 +106,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] b. Runner: tier enforcement and recording at call time (FR-358), D-0.8.0-29; destructive and external tools are refused (not run) until c/d; startup warning for DI-only tools with no tier — d4b7410 ([CI 45875442063](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45875442063))
   - [x] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73), D-0.8.0-30 — 3d410b2 ([CI 45885330729](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45885330729))
   - [x] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit, D-0.8.0-31
-  - [ ] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361)
+  - [x] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361); bad signatures, replay and rotation are covered by FR-337's `TriggerTests`
 - [ ] M72 Engine UI — FR-362–FR-366
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
   - Carry-over from M70: show `turn_index`/`turn_role` and map `item_index` on timeline entries (additive DTO fields).
