@@ -108,6 +108,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit, D-0.8.0-31 — 9ea5306 + test fix e695642
   - [x] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361); bad signatures, replay and rotation are covered by FR-337's `TriggerTests` — e695642 ([CI 45955212466](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466))
 - [ ] M72 Engine UI — FR-362–FR-366
+  - [x] a. Backend: additive DTO fields and read endpoints the engine UI needs (gate payload, timeline labels, map progress, input schemas, follow-ups, next fire times; map items and schedule preview endpoints); contract + client regenerated, D-0.8.0-32. Feedback, mean scores, pinned artifacts, scope and trigger CRUD already existed. Gate payloads are now on the DTO, which clears the M71 build-PR blocker once the UI shows them (b2)
+  - [ ] b1. Frontend: Start run / Submit input dialogs (FR-362), Feedback and scores (FR-365), Triggers (FR-366)
+  - [ ] b2. Frontend: lanes, map progress, variants, transcripts, follow-ups, veto/route entries (FR-363); gate cards (FR-364); error copy
   - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
   - Carry-over from M70: show `turn_index`/`turn_role` and map `item_index` on timeline entries (additive DTO fields).
   - Carry-over from M69: show the follow-up label (`stage_executions.followup`) on timeline entries (additive DTO field), and the outcome scores and feedback (FR-365).

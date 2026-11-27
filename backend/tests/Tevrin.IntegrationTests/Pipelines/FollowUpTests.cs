@@ -17,7 +17,7 @@ namespace Tevrin.IntegrationTests.Pipelines;
 /// <c>completed</c>; cancelling the completed run cancels the rest; a run cancelled before it completes schedules none.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class FollowUpTests(TevrinApiFactory factory)
+public sealed partial class FollowUpTests(TevrinApiFactory factory)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

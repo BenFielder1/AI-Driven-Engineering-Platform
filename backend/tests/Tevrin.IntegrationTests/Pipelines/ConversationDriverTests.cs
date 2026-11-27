@@ -16,7 +16,7 @@ namespace Tevrin.IntegrationTests.Pipelines;
 /// and one agent run.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class ConversationDriverTests(TevrinApiFactory factory)
+public sealed partial class ConversationDriverTests(TevrinApiFactory factory)
 {
     private const string Scenario = "The customer's home router keeps dropping the connection.";
 

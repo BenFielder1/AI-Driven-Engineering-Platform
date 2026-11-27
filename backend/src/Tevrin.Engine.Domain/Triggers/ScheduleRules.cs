@@ -30,11 +30,14 @@ public static class ScheduleRules
             : Result.Success(new ScheduleSpec(schedule, zone));
     }
 
+    /// <summary>The longest timezone id accepted (as the cron's <see cref="CronSchedule.MaxLength"/>).</summary>
+    public const int MaxTimezoneLength = 100;
+
     /// <summary>An IANA timezone by id (<c>UTC</c> included); Windows ids are refused.</summary>
     public static bool TryZone(string? id, [NotNullWhen(true)] out TimeZoneInfo? zone)
     {
         zone = null;
-        if (string.IsNullOrWhiteSpace(id) || id.Length > 100 || !TimeZoneInfo.TryFindSystemTimeZoneById(id, out var found))
+        if (string.IsNullOrWhiteSpace(id) || id.Length > MaxTimezoneLength || !TimeZoneInfo.TryFindSystemTimeZoneById(id, out var found))
         {
             return false;
         }
@@ -57,6 +60,45 @@ public static class ScheduleRules
     {
         ArgumentNullException.ThrowIfNull(spec);
         return spec.Cron.NextOccurrence(now, spec.Zone);
+    }
+
+    /// <summary>How many fire times a schedule preview shows (FR-366).</summary>
+    public const int PreviewCount = 3;
+
+    /// <summary>
+    /// FR-366: the next <paramref name="count"/> fire times strictly after <paramref name="after"/> (UTC), in order; fewer
+    /// when the cron stops matching within <see cref="CronSchedule.SearchYears"/>.
+    /// </summary>
+    public static IReadOnlyList<DateTimeOffset> NextFireTimes(ScheduleSpec spec, DateTimeOffset after, int count = PreviewCount)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        var times = new List<DateTimeOffset>(count);
+        var from = after;
+        while (times.Count < count && spec.Cron.NextOccurrence(from, spec.Zone) is { } next)
+        {
+            times.Add(next);
+            from = next;
+        }
+
+        return times;
+    }
+
+    /// <summary>
+    /// FR-366: a stored schedule's upcoming fire times. An active schedule fires next at <paramref name="nextFireAt"/> (even
+    /// when that is overdue: the next pass fires it once, §4.71), then at the cron's following times. A paused one would
+    /// restart from <paramref name="now"/> when resumed (as <see cref="NextAfterFire"/>), so its times count from now.
+    /// </summary>
+    public static IReadOnlyList<DateTimeOffset> Upcoming(ScheduleSpec spec, bool paused, DateTimeOffset nextFireAt, DateTimeOffset now, int count = PreviewCount)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        if (paused)
+        {
+            return NextFireTimes(spec, now, count);
+        }
+
+        return count == 0 ? [] : [nextFireAt, .. NextFireTimes(spec, nextFireAt, count - 1)];
     }
 
     /// <summary>Whether a schedule is due at <paramref name="now"/>.</summary>

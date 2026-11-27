@@ -15,7 +15,7 @@ namespace Tevrin.IntegrationTests.Pipelines;
 /// <c>fixture-qa-fail</c>), which keep the larger counts cheap.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class MapDriverTests(TevrinApiFactory factory)
+public sealed partial class MapDriverTests(TevrinApiFactory factory)
 {
     private const int MaxParallel = 8;
 

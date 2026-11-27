@@ -14181,7 +14181,7 @@
         "tags": [
           "Pipelines"
         ],
-        "summary": "FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses. 404 NOT_FOUND for an unknown hash.",
+        "summary": "FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses; FR-362, FR-363: run control, approval modes, triggers, follow-ups, input artifacts with their JSON schemas, and each stage's constructs. 404 NOT_FOUND for an unknown hash.",
         "operationId": "GetPipelineDefinition",
         "parameters": [
           {
@@ -14541,6 +14541,99 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PipelineTimelinePageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/stage-executions/{executionId}/items": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-355, FR-363: a map stage execution's items in index order with the map's progress (done, failed, total), each with its newest agent run and output version; cursor-paged (limit 1-200, default 50), filterable by status (open, completed, failed). 400 VALIDATION for a bad status, cursor or limit; 404 NOT_FOUND for an execution that isn't a map execution of the run.",
+        "operationId": "ListPipelineRunMapItems",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineMapItemPageDto"
                 }
               }
             }
@@ -15710,6 +15803,92 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-schedules/preview": {
+      "get": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-366: the next 3 fire times (UTC) of a cron in an IANA timezone, before saving a schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone); 403 FORBIDDEN.",
+        "operationId": "PreviewPipelineSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cron",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineSchedulePreviewDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24288,7 +24467,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing."
+            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. SOURCE_ARTIFACT_MISSING: the missing artifact's title (FR-352; details holds its key)."
           },
           "installUrl": {
             "type": "string",
@@ -24831,6 +25010,21 @@
           "fake"
         ],
         "description": "Where a managed database lives (§5). Wire values: `supabase`, `render`, `railway`, `external`, `fake`."
+      },
+      "MapItemFailure": {
+        "enum": [
+          "skip",
+          "fail"
+        ],
+        "description": "FR-355, §4.68: what a failed item does."
+      },
+      "MapItemStatus": {
+        "enum": [
+          "open",
+          "completed",
+          "failed"
+        ],
+        "description": "FR-355: where one map item execution is."
       },
       "MemberDto": {
         "required": [
@@ -25676,6 +25870,21 @@
           "scope": {
             "description": "FR-352: `project` for a source-of-truth artifact people edit and runs pin; `run` otherwise.",
             "$ref": "#/components/schemas/ArtifactScope"
+          },
+          "input": {
+            "type": "boolean",
+            "description": "FR-335, FR-362: supplied from outside the run (at start, by Submit input or a trigger)."
+          },
+          "schema": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-279, FR-362: the JSON schema a JSON artifact is checked against (the pack's schema document), or\n            `null`. References to the pack's other schema files are left as written; the server checks inputs in full.",
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
           }
         },
         "description": "An artifact a definition produces or reads."
@@ -25834,9 +26043,79 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "variant": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-349, FR-354, FR-363: the variant label (`v1`…, a fan-out branch, `followup:&lt;duration&gt;`)."
+          },
+          "itemIndex": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "FR-355, FR-363: the map item index of an item's output.",
+            "format": "int32"
           }
         },
         "description": "One artifact version in a run's artifact list."
+      },
+      "PipelineBranchDefinitionDto": {
+        "required": [
+          "id",
+          "stages"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineStageDefinitionDto"
+            }
+          }
+        },
+        "description": "FR-343, FR-363: a parallel group's branch: its id (as stage executions' `branch`) and its stages in order."
+      },
+      "PipelineConversationDefinitionDto": {
+        "required": [
+          "participants",
+          "maxTurns"
+        ],
+        "type": "object",
+        "properties": {
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineConversationParticipantDto"
+            }
+          },
+          "maxTurns": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-356, FR-363: a turn-based conversation: its participants (agent and role) in turn order and its turn cap."
+      },
+      "PipelineConversationParticipantDto": {
+        "required": [
+          "agent",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "description": "FR-356: one participant of a conversation."
       },
       "PipelineDefinitionDto": {
         "required": [
@@ -25891,6 +26170,41 @@
             "items": {
               "$ref": "#/components/schemas/PipelineStatusDefinitionDto"
             }
+          },
+          "runControl": {
+            "description": "FR-330, FR-362: who controls the pipeline's runs (`engine` or `host`).",
+            "$ref": "#/components/schemas/RunControl"
+          },
+          "approvalModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalMode"
+            },
+            "description": "FR-331, FR-362: the approval modes a run may choose (empty: any), and the default."
+          },
+          "defaultApprovalMode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalMode"
+              }
+            ]
+          },
+          "triggers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineTriggerDefinitionDto"
+            },
+            "description": "FR-336, FR-337, FR-366: the triggers the definition declares."
+          },
+          "followUps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineFollowUpDefinitionDto"
+            },
+            "description": "FR-354, FR-363: the follow-up stages and when they run after completion."
           }
         },
         "description": "FR-299: a pipeline definition by hash: its stages, artifacts and statuses."
@@ -25934,6 +26248,48 @@
           }
         },
         "description": "A line of an artifact diff (FR-21); `skipped` counts the unchanged lines a `skipped` entry stands for."
+      },
+      "PipelineFanOutDefinitionDto": {
+        "required": [
+          "agents",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "count": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "FR-345, FR-363: a fan-out: one branch per agent key, or `count` branches (`#1`…) of the stage's agent."
+      },
+      "PipelineFollowUpDefinitionDto": {
+        "required": [
+          "stage",
+          "after"
+        ],
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "FR-354, FR-363: a follow-up stage and the durations after completion it runs at (e.g. `7d`)."
       },
       "PipelineGateDto": {
         "required": [
@@ -26050,6 +26406,112 @@
           },
           "overdue": {
             "type": "boolean"
+          },
+          "payload": {
+            "required": [
+              "kind"
+            ],
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "`variant_select`, `tool_call` or `external_handler`."
+              },
+              "stage": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "variants": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "required": [
+                    "label",
+                    "artifactId",
+                    "artifactKey",
+                    "artifactVersion"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "artifactId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "artifactKey": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "artifactVersion": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ],
+                      "format": "int32"
+                    }
+                  },
+                  "description": "FR-349, FR-364: one variant a `variant_select` gate offers; `artifactKey`/`artifactVersion`\n            fetch its content from the run's artifact endpoints."
+                }
+              },
+              "choice": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "tool": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "tier": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "arguments": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "agentRunId": {
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "format": "uuid"
+              },
+              "handler": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "payload": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "description": "            FR-364: what a gate asks the decider to approve, read from the gate's stored payload. One shape for every gate type,\n            told apart by `kind`, with the fields of that kind set and the rest `null`:\n            * variant_select (FR-349): stage, variants (label, artifact id, key and version; never the\n            content) and, once decided, choice.\n* tool_call (FR-359 tool_approval, FR-360 an external tool's external_action): tool,\n            tier, arguments (the redacted JSON the tool runs with), the agent's reason and its\n            agentRunId.\n* external_handler (FR-360 an external handler's external_action): handler, stage and\n            payload, the exact text that is sent once approved.\n            Internal bookkeeping (claims, send times, job and execution ids) is never shown."
           }
         },
         "description": "FR-301: a gate of a run. `stageId` is the stage that declares the gate type (when one does);\n`artifactKey`/`artifactVersion` name the gated artifact. Decided gates carry `decidedAt`,\n`decidedByUserId`, `comment` and an escalation's `decision`."
@@ -26103,6 +26565,311 @@
           }
         },
         "description": "A page of the gate inbox; `next` is the cursor of the following page, or `null`."
+      },
+      "PipelineGatePayloadDto": {
+        "required": [
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`variant_select`, `tool_call` or `external_handler`."
+          },
+          "stage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "variants": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PipelineGateVariantDto"
+            }
+          },
+          "choice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tier": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "arguments": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "handler": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "payload": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "            FR-364: what a gate asks the decider to approve, read from the gate's stored payload. One shape for every gate type,\n            told apart by `kind`, with the fields of that kind set and the rest `null`:\n            * variant_select (FR-349): stage, variants (label, artifact id, key and version; never the\n            content) and, once decided, choice.\n* tool_call (FR-359 tool_approval, FR-360 an external tool's external_action): tool,\n            tier, arguments (the redacted JSON the tool runs with), the agent's reason and its\n            agentRunId.\n* external_handler (FR-360 an external handler's external_action): handler, stage and\n            payload, the exact text that is sent once approved.\n            Internal bookkeeping (claims, send times, job and execution ids) is never shown."
+      },
+      "PipelineGateVariantDto": {
+        "required": [
+          "label",
+          "artifactId",
+          "artifactKey",
+          "artifactVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "artifactId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "artifactKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "FR-349, FR-364: one variant a `variant_select` gate offers; `artifactKey`/`artifactVersion`\n            fetch its content from the run's artifact endpoints."
+      },
+      "PipelineMapDefinitionDto": {
+        "required": [
+          "over",
+          "agent",
+          "handler",
+          "maxParallel",
+          "maxItems",
+          "onItemFailure",
+          "maxFailed",
+          "reduceAgent",
+          "reduceHandler"
+        ],
+        "type": "object",
+        "properties": {
+          "over": {
+            "type": "string"
+          },
+          "agent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "handler": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxParallel": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "onItemFailure": {
+            "$ref": "#/components/schemas/MapItemFailure"
+          },
+          "maxFailed": {
+            "type": "string"
+          },
+          "reduceAgent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reduceHandler": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-355, FR-363: a map over `over` by an agent or handler, its limits, and its reduce step."
+      },
+      "PipelineMapItemDto": {
+        "required": [
+          "executionId",
+          "itemIndex",
+          "status",
+          "enteredAt",
+          "exitedAt",
+          "agentRunId",
+          "agentRunStatus",
+          "error",
+          "artifactId",
+          "artifactKey",
+          "artifactVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "itemIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MapItemStatus"
+          },
+          "enteredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "agentRunStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentRunStatus"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "artifactKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "FR-355, FR-363: one map item: its execution, index, status (`open`, `completed`, `failed`),\n            times, its newest agent run and its output version, when it has them."
+      },
+      "PipelineMapItemPageDto": {
+        "required": [
+          "progress",
+          "items",
+          "next"
+        ],
+        "type": "object",
+        "properties": {
+          "progress": {
+            "$ref": "#/components/schemas/PipelineMapProgressDto"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineMapItemDto"
+            }
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-363: a page of a map execution's items in index order, with the map's progress; `next` is the cursor\n            of the following page, or `null`."
+      },
+      "PipelineMapProgressDto": {
+        "required": [
+          "executionId",
+          "total",
+          "completed",
+          "failed"
+        ],
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are\n            open). `executionId` pages them (`ListPipelineRunMapItems`)."
       },
       "PipelineRunDto": {
         "required": [
@@ -26231,9 +26998,123 @@
               "description": "FR-352: a project-scope artifact version a run pinned."
             },
             "description": "FR-352, §4.76: the project-scope artifact versions the run pinned at its start (every stage reads them)."
+          },
+          "followUps": {
+            "type": "array",
+            "items": {
+              "required": [
+                "stage",
+                "label",
+                "dueAt",
+                "stageExecutionId",
+                "enteredAt",
+                "exitedAt",
+                "outcome"
+              ],
+              "type": "object",
+              "properties": {
+                "stage": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "dueAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "date-time"
+                },
+                "stageExecutionId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "uuid"
+                },
+                "enteredAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "date-time"
+                },
+                "exitedAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "date-time"
+                },
+                "outcome": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              },
+              "description": "FR-354, FR-363: one follow-up of a run: its stage and label (`followup:&lt;duration&gt;`), when it is due\n(`null` until the run completes, which schedules it) and, once it has run, its stage execution's times and outcome."
+            },
+            "description": "FR-354, FR-363: the run's follow-ups in declared order, with due times once the run completed."
           }
         },
         "description": "FR-300: a pipeline run. `status` is the generic status derived on read (§4.57); `packStatus` the pack's own.\n`hashShort` is the first 12 characters of the pinned definition hash. `cost` and the token totals sum the\nrun's agent runs."
+      },
+      "PipelineRunFollowUpDto": {
+        "required": [
+          "stage",
+          "label",
+          "dueAt",
+          "stageExecutionId",
+          "enteredAt",
+          "exitedAt",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "dueAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "stageExecutionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "enteredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-354, FR-363: one follow-up of a run: its stage and label (`followup:&lt;duration&gt;`), when it is due\n(`null` until the run completes, which schedules it) and, once it has run, its stage execution's times and outcome."
       },
       "PipelineRunPinDto": {
         "required": [
@@ -26299,9 +27180,41 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "nextFireTimes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "FR-366: the next 3 fire times (UTC; show them in string PipelineScheduleDto.Timezone). Active: from\n            DateTimeOffset PipelineScheduleDto.NextFireAt; paused: from now, as a resume would."
           }
         },
         "description": "FR-336: a project schedule (cron evaluated in string PipelineScheduleDto.Timezone, §4.71)."
+      },
+      "PipelineSchedulePreviewDto": {
+        "required": [
+          "cron",
+          "timezone",
+          "nextFireTimes"
+        ],
+        "type": "object",
+        "properties": {
+          "cron": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "nextFireTimes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "description": "FR-366: a cron and timezone's next fire times (UTC), before the schedule is saved."
       },
       "PipelineStageDefinitionDto": {
         "required": [
@@ -26362,6 +27275,77 @@
             "items": {
               "$ref": "#/components/schemas/PipelineStageTransitionDto"
             }
+          },
+          "branches": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PipelineBranchDefinitionDto"
+            },
+            "description": "FR-343, FR-363: a parallel group's branches (lanes); `null` for other stages."
+          },
+          "fanOut": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-345, FR-363: the stage's fan-out, or `null`.",
+                "$ref": "#/components/schemas/PipelineFanOutDefinitionDto"
+              }
+            ]
+          },
+          "variants": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-349, FR-363: the stage's output variants, or `null`.",
+                "$ref": "#/components/schemas/PipelineVariantsDefinitionDto"
+              }
+            ]
+          },
+          "map": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-355, FR-363: the stage's map (and reduce), or `null`.",
+                "$ref": "#/components/schemas/PipelineMapDefinitionDto"
+              }
+            ]
+          },
+          "conversation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-356, FR-363: the stage's conversation, or `null`.",
+                "$ref": "#/components/schemas/PipelineConversationDefinitionDto"
+              }
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "FR-347, FR-363: earlier stages the agent may route back to."
+          },
+          "veto": {
+            "type": "boolean",
+            "description": "FR-344, FR-363: whether the stage has veto checks, and where a veto goes (`null`: the run ends vetoed)."
+          },
+          "onVetoTo": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "A stage of a definition. `kind` is `agent`, `code` or `manual`; `transitions` lists\n            where it can go next."
@@ -26422,6 +27406,41 @@
               "integer"
             ],
             "format": "int64"
+          },
+          "map": {
+            "required": [
+              "executionId",
+              "total",
+              "completed",
+              "failed"
+            ],
+            "type": "object",
+            "properties": {
+              "executionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "total": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "completed": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "failed": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "description": "FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are\n            open). `executionId` pages them (`ListPipelineRunMapItems`)."
+          },
+          "chosenVariant": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-349, FR-363: the variant (`v1`…) a variants stage promoted on its newest entry; `null` before\n            one was chosen and for other stages."
           }
         },
         "description": "FR-300: a stage of a run (D-0.7.0-32: iterations count entries). `runId` identifies the run in live\n            `stageUpdated` messages."
@@ -26538,6 +27557,10 @@
           },
           "packId": {
             "type": "string"
+          },
+          "runControl": {
+            "description": "FR-330, FR-362: `engine` when the engine's run control starts and drives its runs (Start run);\n            `host` when the host does (the SDLC).",
+            "$ref": "#/components/schemas/RunControl"
           }
         },
         "description": "FR-299: a registered pipeline: id, title, version, current definition hash and pack."
@@ -26796,9 +27819,71 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "branch": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-343, FR-345, FR-363: the parallel or fan-out branch a stage execution ran in (a parallel branch's\n            0-based index, a fan-out's agent key or `#n`, a variant's `vn`); `null` outside a branch."
+          },
+          "variant": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-345, FR-349, FR-354, FR-363: a stage execution's or artifact version's variant label (`v1`…,\n            a fan-out branch label, or a follow-up's `followup:&lt;duration&gt;`); `null` otherwise."
+          },
+          "itemIndex": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "FR-355, FR-363: the 0-based map item index of an item's stage execution, agent run or artifact version.",
+            "format": "int32"
+          },
+          "parentExecutionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-355, FR-363: a map item's stage execution points at its map stage's execution.",
+            "format": "uuid"
+          },
+          "followUp": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-354, FR-363: the follow-up label (`followup:&lt;duration&gt;`) of a stage execution run after the\n            run completed; `null` for the main flow."
+          },
+          "vetoFindings": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "FR-344, FR-363: the veto findings (`&lt;check&gt;: &lt;reason&gt;`) of a stage execution a veto\n            stopped; `null` otherwise."
+          },
+          "turnIndex": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "FR-356, FR-363: a conversation turn's 1-based index and its participant's role.",
+            "format": "int32"
+          },
+          "turnRole": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-356, FR-363: the role of the participant who spoke the turn."
           }
         },
-        "description": "            FR-300, FR-303: one timeline entry. Every entry has `id` (its source row), `at` and `kind`; the other\n            fields belong to kinds:\n            * transition: fromStage, toStage, transitionKind, checkpoint, reason.\n* stage_entered: stageId, iteration, checkpoint, exitedAt, outcome.\n* agent_run: stageId, agentKey, agentRunStatus, model, promptVersion,\n            tokens, cost, durationMs, latencyMs, error; in the replay also input,\n            inputTruncated, output and outputTruncated.\n* gate_created / gate_decided: gateId, gateType, gateStatus, decision,\n            comment.\n* artifact_version: artifactId, artifactKey, artifactVersion, artifactStatus,\n            contentHash, agentRunId."
+        "description": "            FR-300, FR-303: one timeline entry. Every entry has `id` (its source row), `at` and `kind`; the other\n            fields belong to kinds:\n            * transition: fromStage, toStage, transitionKind, checkpoint, reason.\n* stage_entered: stageId, iteration, checkpoint, exitedAt, outcome; FR-363:\n            branch, variant, itemIndex, parentExecutionId, followUp and vetoFindings.\n* agent_run: stageId, agentKey, agentRunStatus, model, promptVersion,\n            tokens, cost, durationMs, latencyMs, error; FR-363: itemIndex, turnIndex,\n            turnRole; in the replay also input, inputTruncated, output and outputTruncated.\n* gate_created / gate_decided: gateId, gateType, gateStatus, decision,\n            comment.\n* artifact_version: artifactId, artifactKey, artifactVersion, artifactStatus,\n            contentHash, agentRunId; FR-363: variant and itemIndex."
       },
       "PipelineTimelineKind": {
         "enum": [
@@ -26832,6 +27917,52 @@
           }
         },
         "description": "A page of a run's timeline (FR-300) or replay (FR-303); `next` is the cursor of the following page, or `null`."
+      },
+      "PipelineTriggerDefinitionDto": {
+        "required": [
+          "kind",
+          "input"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TriggerKind"
+          },
+          "input": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-336, FR-337, FR-362: a trigger the definition declares (`manual`, `schedule` or `webhook`)\n            and, for a webhook, the input artifact its body becomes."
+      },
+      "PipelineVariantsDefinitionDto": {
+        "required": [
+          "count",
+          "selectAgent",
+          "labels"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "selectAgent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "FR-349, FR-363: output variants `v1`…`v{count}`, chosen by `selectAgent` or (when it is\n            `null`) a `variant_select` gate."
       },
       "PipelineWebhookAcceptedDto": {
         "required": [
@@ -27330,7 +28461,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing."
+            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. SOURCE_ARTIFACT_MISSING: the missing artifact's title (FR-352; details holds its key)."
           },
           "installUrl": {
             "type": "string",
@@ -29711,6 +30842,13 @@
           "skipped"
         ],
         "description": "The state of a rollout step. Wire values: `pending`, `running`, `succeeded`, `failed`, `skipped`."
+      },
+      "RunControl": {
+        "enum": [
+          "engine",
+          "host"
+        ],
+        "description": "FR-330: who starts and moves a pipeline's runs."
       },
       "RunInputArtifactDto": {
         "required": [
@@ -32229,6 +33367,14 @@
           }
         },
         "description": "FR-165: one tracker for the Issue trackers section: whether it's `ready` to browse and, if not, why (`reason`:\n`not_connected`, `app_not_registered` or `issues_permission_missing`, with the App settings link in `settingsUrl`)."
+      },
+      "TriggerKind": {
+        "enum": [
+          "manual",
+          "schedule",
+          "webhook"
+        ],
+        "description": "FR-284: 0.7.0 ran only TriggerKind.Manual (D-0.7.0-3); 0.8.0 adds schedules and webhooks (FR-336, FR-337)."
       },
       "UnreadNotificationCountDto": {
         "required": [

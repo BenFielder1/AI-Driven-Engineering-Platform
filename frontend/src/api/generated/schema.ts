@@ -2685,7 +2685,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses. 404 NOT_FOUND for an unknown hash. */
+        /** FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses; FR-362, FR-363: run control, approval modes, triggers, follow-ups, input artifacts with their JSON schemas, and each stage's constructs. 404 NOT_FOUND for an unknown hash. */
         get: operations["GetPipelineDefinition"];
         put?: never;
         post?: never;
@@ -2772,6 +2772,23 @@ export interface paths {
         };
         /** FR-303: the run's timeline with each agent run's input and output. Read-only. 400 VALIDATION for a bad cursor or limit. */
         get: operations["GetPipelineRunReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pipeline-runs/{runId}/stage-executions/{executionId}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-355, FR-363: a map stage execution's items in index order with the map's progress (done, failed, total), each with its newest agent run and output version; cursor-paged (limit 1-200, default 50), filterable by status (open, completed, failed). 400 VALIDATION for a bad status, cursor or limit; 404 NOT_FOUND for an execution that isn't a map execution of the run. */
+        get: operations["ListPipelineRunMapItems"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2980,6 +2997,23 @@ export interface paths {
         put?: never;
         /** FR-336: schedule a pipeline that declares trigger kind schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone), VALIDATION or INPUT_INVALID; 403 FORBIDDEN; 404 NOT_FOUND (pipeline); 409 TRIGGER_NOT_SUPPORTED or RUN_CONTROLLED_BY_HOST. */
         post: operations["CreatePipelineSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/pipeline-schedules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FR-366: the next 3 fire times (UTC) of a cron in an IANA timezone, before saving a schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone); 403 FORBIDDEN. */
+        get: operations["PreviewPipelineSchedule"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5782,7 +5816,7 @@ export interface components {
             traceId?: string;
             /** @description Individual reasons, when there are several. */
             details?: string[];
-            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
+            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. SOURCE_ARTIFACT_MISSING: the missing artifact's title (FR-352; details holds its key). */
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the Tevrin GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the Tevrin GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
@@ -5986,6 +6020,16 @@ export interface components {
          * @enum {unknown}
          */
         ManagedDatabaseProvider: "supabase" | "render" | "railway" | "external" | "fake";
+        /**
+         * @description FR-355, §4.68: what a failed item does.
+         * @enum {unknown}
+         */
+        MapItemFailure: "skip" | "fail";
+        /**
+         * @description FR-355: where one map item execution is.
+         * @enum {unknown}
+         */
+        MapItemStatus: "open" | "completed" | "failed";
         /** @description A project member (FR-8). */
         MemberDto: {
             /** Format: uuid */
@@ -6301,6 +6345,9 @@ export interface components {
             format: components["schemas"]["ArtifactFormat"];
             /** @description FR-352: `project` for a source-of-truth artifact people edit and runs pin; `run` otherwise. */
             scope?: components["schemas"]["ArtifactScope"];
+            /** @description FR-335, FR-362: supplied from outside the run (at start, by Submit input or a trigger). */
+            input?: boolean;
+            schema?: null | components["schemas"]["JsonElement"];
         };
         /** @description FR-301: the line diff between two versions of a run's artifact. */
         PipelineArtifactDiffDto: {
@@ -6352,6 +6399,29 @@ export interface components {
             hash: string;
             /** Format: date-time */
             createdAt: string;
+            /** @description FR-349, FR-354, FR-363: the variant label (`v1`…, a fan-out branch, `followup:&lt;duration&gt;`). */
+            variant?: null | string;
+            /**
+             * Format: int32
+             * @description FR-355, FR-363: the map item index of an item's output.
+             */
+            itemIndex?: null | number;
+        };
+        /** @description FR-343, FR-363: a parallel group's branch: its id (as stage executions' `branch`) and its stages in order. */
+        PipelineBranchDefinitionDto: {
+            id: string;
+            stages: components["schemas"]["PipelineStageDefinitionDto"][];
+        };
+        /** @description FR-356, FR-363: a turn-based conversation: its participants (agent and role) in turn order and its turn cap. */
+        PipelineConversationDefinitionDto: {
+            participants: components["schemas"]["PipelineConversationParticipantDto"][];
+            /** Format: int32 */
+            maxTurns: number;
+        };
+        /** @description FR-356: one participant of a conversation. */
+        PipelineConversationParticipantDto: {
+            agent: string;
+            role: string;
         };
         /** @description FR-299: a pipeline definition by hash: its stages, artifacts and statuses. */
         PipelineDefinitionDto: {
@@ -6365,6 +6435,15 @@ export interface components {
             stages: components["schemas"]["PipelineStageDefinitionDto"][];
             artifacts: components["schemas"]["PipelineArtifactDefinitionDto"][];
             statuses: components["schemas"]["PipelineStatusDefinitionDto"][];
+            /** @description FR-330, FR-362: who controls the pipeline's runs (`engine` or `host`). */
+            runControl?: components["schemas"]["RunControl"];
+            /** @description FR-331, FR-362: the approval modes a run may choose (empty: any), and the default. */
+            approvalModes?: components["schemas"]["ApprovalMode"][];
+            defaultApprovalMode?: null | components["schemas"]["ApprovalMode"];
+            /** @description FR-336, FR-337, FR-366: the triggers the definition declares. */
+            triggers?: components["schemas"]["PipelineTriggerDefinitionDto"][];
+            /** @description FR-354, FR-363: the follow-up stages and when they run after completion. */
+            followUps?: components["schemas"]["PipelineFollowUpDefinitionDto"][];
         };
         /** @description A line of an artifact diff (FR-21); `skipped` counts the unchanged lines a `skipped` entry stands for. */
         PipelineDiffLineDto: {
@@ -6376,6 +6455,17 @@ export interface components {
             text: string;
             /** Format: int32 */
             skipped: null | number;
+        };
+        /** @description FR-345, FR-363: a fan-out: one branch per agent key, or `count` branches (`#1`…) of the stage's agent. */
+        PipelineFanOutDefinitionDto: {
+            agents: string[];
+            /** Format: int32 */
+            count: null | number;
+        };
+        /** @description FR-354, FR-363: a follow-up stage and the durations after completion it runs at (e.g. `7d`). */
+        PipelineFollowUpDefinitionDto: {
+            stage: string;
+            after: string[];
         };
         /**
          * @description FR-301: a gate of a run. `stageId` is the stage that declares the gate type (when one does);
@@ -6411,6 +6501,40 @@ export interface components {
             /** Format: int32 */
             targetCheckpoint: null | number;
             overdue: boolean;
+            /**
+             * @description FR-364: what a gate asks the decider to approve, read from the gate's stored payload. One shape for every gate type,
+             *                 told apart by `kind`, with the fields of that kind set and the rest `null`:
+             *                 * variant_select (FR-349): stage, variants (label, artifact id, key and version; never the
+             *                 content) and, once decided, choice.
+             *     * tool_call (FR-359 tool_approval, FR-360 an external tool's external_action): tool,
+             *                 tier, arguments (the redacted JSON the tool runs with), the agent's reason and its
+             *                 agentRunId.
+             *     * external_handler (FR-360 an external handler's external_action): handler, stage and
+             *                 payload, the exact text that is sent once approved.
+             *                 Internal bookkeeping (claims, send times, job and execution ids) is never shown.
+             */
+            payload?: {
+                /** @description `variant_select`, `tool_call` or `external_handler`. */
+                kind: string;
+                stage?: null | string;
+                variants?: null | {
+                    label: string;
+                    /** Format: uuid */
+                    artifactId: string;
+                    artifactKey: null | string;
+                    /** Format: int32 */
+                    artifactVersion: null | number;
+                }[];
+                choice?: null | string;
+                tool?: null | string;
+                tier?: null | string;
+                arguments?: null | string;
+                reason?: null | string;
+                /** Format: uuid */
+                agentRunId?: null | string;
+                handler?: null | string;
+                payload?: null | string;
+            };
         };
         /**
          * @description FR-302: a pending gate in the inbox, with its project and pipeline. `canDecide` is whether the caller
@@ -6427,6 +6551,106 @@ export interface components {
         PipelineGateInboxPageDto: {
             items: components["schemas"]["PipelineGateInboxItemDto"][];
             next: null | string;
+        };
+        /**
+         * @description FR-364: what a gate asks the decider to approve, read from the gate's stored payload. One shape for every gate type,
+         *                 told apart by `kind`, with the fields of that kind set and the rest `null`:
+         *                 * variant_select (FR-349): stage, variants (label, artifact id, key and version; never the
+         *                 content) and, once decided, choice.
+         *     * tool_call (FR-359 tool_approval, FR-360 an external tool's external_action): tool,
+         *                 tier, arguments (the redacted JSON the tool runs with), the agent's reason and its
+         *                 agentRunId.
+         *     * external_handler (FR-360 an external handler's external_action): handler, stage and
+         *                 payload, the exact text that is sent once approved.
+         *                 Internal bookkeeping (claims, send times, job and execution ids) is never shown.
+         */
+        PipelineGatePayloadDto: {
+            /** @description `variant_select`, `tool_call` or `external_handler`. */
+            kind: string;
+            stage?: null | string;
+            variants?: null | components["schemas"]["PipelineGateVariantDto"][];
+            choice?: null | string;
+            tool?: null | string;
+            tier?: null | string;
+            arguments?: null | string;
+            reason?: null | string;
+            /** Format: uuid */
+            agentRunId?: null | string;
+            handler?: null | string;
+            payload?: null | string;
+        };
+        /**
+         * @description FR-349, FR-364: one variant a `variant_select` gate offers; `artifactKey`/`artifactVersion`
+         *                 fetch its content from the run's artifact endpoints.
+         */
+        PipelineGateVariantDto: {
+            label: string;
+            /** Format: uuid */
+            artifactId: string;
+            artifactKey: null | string;
+            /** Format: int32 */
+            artifactVersion: null | number;
+        };
+        /** @description FR-355, FR-363: a map over `over` by an agent or handler, its limits, and its reduce step. */
+        PipelineMapDefinitionDto: {
+            over: string;
+            agent: null | string;
+            handler: null | string;
+            /** Format: int32 */
+            maxParallel: number;
+            /** Format: int32 */
+            maxItems: number;
+            onItemFailure: components["schemas"]["MapItemFailure"];
+            maxFailed: string;
+            reduceAgent: null | string;
+            reduceHandler: null | string;
+        };
+        /**
+         * @description FR-355, FR-363: one map item: its execution, index, status (`open`, `completed`, `failed`),
+         *                 times, its newest agent run and its output version, when it has them.
+         */
+        PipelineMapItemDto: {
+            /** Format: uuid */
+            executionId: string;
+            /** Format: int32 */
+            itemIndex: number;
+            status: components["schemas"]["MapItemStatus"];
+            /** Format: date-time */
+            enteredAt: string;
+            /** Format: date-time */
+            exitedAt: null | string;
+            /** Format: uuid */
+            agentRunId: null | string;
+            agentRunStatus: null | components["schemas"]["AgentRunStatus"];
+            error: null | string;
+            /** Format: uuid */
+            artifactId: null | string;
+            artifactKey: null | string;
+            /** Format: int32 */
+            artifactVersion: null | number;
+        };
+        /**
+         * @description FR-363: a page of a map execution's items in index order, with the map's progress; `next` is the cursor
+         *                 of the following page, or `null`.
+         */
+        PipelineMapItemPageDto: {
+            progress: components["schemas"]["PipelineMapProgressDto"];
+            items: components["schemas"]["PipelineMapItemDto"][];
+            next: null | string;
+        };
+        /**
+         * @description FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are
+         *                 open). `executionId` pages them (`ListPipelineRunMapItems`).
+         */
+        PipelineMapProgressDto: {
+            /** Format: uuid */
+            executionId: string;
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            completed: number;
+            /** Format: int32 */
+            failed: number;
         };
         /**
          * @description FR-300: a pipeline run. `status` is the generic status derived on read (§4.57); `packStatus` the pack's own.
@@ -6474,6 +6698,37 @@ export interface components {
                 /** Format: int32 */
                 version: number;
             }[];
+            /** @description FR-354, FR-363: the run's follow-ups in declared order, with due times once the run completed. */
+            followUps?: {
+                stage: string;
+                label: string;
+                /** Format: date-time */
+                dueAt: null | string;
+                /** Format: uuid */
+                stageExecutionId: null | string;
+                /** Format: date-time */
+                enteredAt: null | string;
+                /** Format: date-time */
+                exitedAt: null | string;
+                outcome: null | string;
+            }[];
+        };
+        /**
+         * @description FR-354, FR-363: one follow-up of a run: its stage and label (`followup:&lt;duration&gt;`), when it is due
+         *     (`null` until the run completes, which schedules it) and, once it has run, its stage execution's times and outcome.
+         */
+        PipelineRunFollowUpDto: {
+            stage: string;
+            label: string;
+            /** Format: date-time */
+            dueAt: null | string;
+            /** Format: uuid */
+            stageExecutionId: null | string;
+            /** Format: date-time */
+            enteredAt: null | string;
+            /** Format: date-time */
+            exitedAt: null | string;
+            outcome: null | string;
         };
         /** @description FR-352: a project-scope artifact version a run pinned. */
         PipelineRunPinDto: {
@@ -6496,6 +6751,17 @@ export interface components {
             nextFireAt: string;
             /** Format: date-time */
             lastFireAt: null | string;
+            /**
+             * @description FR-366: the next 3 fire times (UTC; show them in string PipelineScheduleDto.Timezone). Active: from
+             *                 DateTimeOffset PipelineScheduleDto.NextFireAt; paused: from now, as a resume would.
+             */
+            nextFireTimes?: string[];
+        };
+        /** @description FR-366: a cron and timezone's next fire times (UTC), before the schedule is saved. */
+        PipelineSchedulePreviewDto: {
+            cron: string;
+            timezone: string;
+            nextFireTimes: string[];
         };
         /**
          * @description A stage of a definition. `kind` is `agent`, `code` or `manual`; `transitions` lists
@@ -6511,6 +6777,17 @@ export interface components {
             output: null | string;
             gate: null | components["schemas"]["PipelineStageGateDto"];
             transitions: components["schemas"]["PipelineStageTransitionDto"][];
+            /** @description FR-343, FR-363: a parallel group's branches (lanes); `null` for other stages. */
+            branches?: null | components["schemas"]["PipelineBranchDefinitionDto"][];
+            fanOut?: null | components["schemas"]["PipelineFanOutDefinitionDto"];
+            variants?: null | components["schemas"]["PipelineVariantsDefinitionDto"];
+            map?: null | components["schemas"]["PipelineMapDefinitionDto"];
+            conversation?: null | components["schemas"]["PipelineConversationDefinitionDto"];
+            /** @description FR-347, FR-363: earlier stages the agent may route back to. */
+            routes?: string[];
+            /** @description FR-344, FR-363: whether the stage has veto checks, and where a veto goes (`null`: the run ends vetoed). */
+            veto?: boolean;
+            onVetoTo?: null | string;
         };
         /**
          * @description FR-300: a stage of a run (D-0.7.0-32: iterations count entries). `runId` identifies the run in live
@@ -6534,6 +6811,25 @@ export interface components {
             exitedAt: null | string;
             /** Format: int64 */
             durationMs: null | number;
+            /**
+             * @description FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are
+             *                 open). `executionId` pages them (`ListPipelineRunMapItems`).
+             */
+            map?: {
+                /** Format: uuid */
+                executionId: string;
+                /** Format: int32 */
+                total: number;
+                /** Format: int32 */
+                completed: number;
+                /** Format: int32 */
+                failed: number;
+            };
+            /**
+             * @description FR-349, FR-363: the variant (`v1`…) a variants stage promoted on its newest entry; `null` before
+             *                 one was chosen and for other stages.
+             */
+            chosenVariant?: null | string;
         };
         /** @description The gate a stage raises: type key, the approval modes it applies in and the artifact it approves. */
         PipelineStageGateDto: {
@@ -6568,19 +6864,25 @@ export interface components {
             version: number;
             hash: string;
             packId: string;
+            /**
+             * @description FR-330, FR-362: `engine` when the engine's run control starts and drives its runs (Start run);
+             *                 `host` when the host does (the SDLC).
+             */
+            runControl?: components["schemas"]["RunControl"];
         };
         /**
          * @description FR-300, FR-303: one timeline entry. Every entry has `id` (its source row), `at` and `kind`; the other
          *                 fields belong to kinds:
          *                 * transition: fromStage, toStage, transitionKind, checkpoint, reason.
-         *     * stage_entered: stageId, iteration, checkpoint, exitedAt, outcome.
+         *     * stage_entered: stageId, iteration, checkpoint, exitedAt, outcome; FR-363:
+         *                 branch, variant, itemIndex, parentExecutionId, followUp and vetoFindings.
          *     * agent_run: stageId, agentKey, agentRunStatus, model, promptVersion,
-         *                 tokens, cost, durationMs, latencyMs, error; in the replay also input,
-         *                 inputTruncated, output and outputTruncated.
+         *                 tokens, cost, durationMs, latencyMs, error; FR-363: itemIndex, turnIndex,
+         *                 turnRole; in the replay also input, inputTruncated, output and outputTruncated.
          *     * gate_created / gate_decided: gateId, gateType, gateStatus, decision,
          *                 comment.
          *     * artifact_version: artifactId, artifactKey, artifactVersion, artifactStatus,
-         *                 contentHash, agentRunId.
+         *                 contentHash, agentRunId; FR-363: variant and itemIndex.
          */
         PipelineTimelineItemDto: {
             /** Format: uuid */
@@ -6641,6 +6943,43 @@ export interface components {
             contentHash?: null | string;
             /** Format: uuid */
             agentRunId?: null | string;
+            /**
+             * @description FR-343, FR-345, FR-363: the parallel or fan-out branch a stage execution ran in (a parallel branch's
+             *                 0-based index, a fan-out's agent key or `#n`, a variant's `vn`); `null` outside a branch.
+             */
+            branch?: null | string;
+            /**
+             * @description FR-345, FR-349, FR-354, FR-363: a stage execution's or artifact version's variant label (`v1`…,
+             *                 a fan-out branch label, or a follow-up's `followup:&lt;duration&gt;`); `null` otherwise.
+             */
+            variant?: null | string;
+            /**
+             * Format: int32
+             * @description FR-355, FR-363: the 0-based map item index of an item's stage execution, agent run or artifact version.
+             */
+            itemIndex?: null | number;
+            /**
+             * Format: uuid
+             * @description FR-355, FR-363: a map item's stage execution points at its map stage's execution.
+             */
+            parentExecutionId?: null | string;
+            /**
+             * @description FR-354, FR-363: the follow-up label (`followup:&lt;duration&gt;`) of a stage execution run after the
+             *                 run completed; `null` for the main flow.
+             */
+            followUp?: null | string;
+            /**
+             * @description FR-344, FR-363: the veto findings (`&lt;check&gt;: &lt;reason&gt;`) of a stage execution a veto
+             *                 stopped; `null` otherwise.
+             */
+            vetoFindings?: null | string[];
+            /**
+             * Format: int32
+             * @description FR-356, FR-363: a conversation turn's 1-based index and its participant's role.
+             */
+            turnIndex?: null | number;
+            /** @description FR-356, FR-363: the role of the participant who spoke the turn. */
+            turnRole?: null | string;
         };
         /**
          * @description FR-300: the kinds of a run's timeline entries.
@@ -6651,6 +6990,24 @@ export interface components {
         PipelineTimelinePageDto: {
             items: components["schemas"]["PipelineTimelineItemDto"][];
             next: null | string;
+        };
+        /**
+         * @description FR-336, FR-337, FR-362: a trigger the definition declares (`manual`, `schedule` or `webhook`)
+         *                 and, for a webhook, the input artifact its body becomes.
+         */
+        PipelineTriggerDefinitionDto: {
+            kind: components["schemas"]["TriggerKind"];
+            input: null | string;
+        };
+        /**
+         * @description FR-349, FR-363: output variants `v1`…`v{count}`, chosen by `selectAgent` or (when it is
+         *                 `null`) a `variant_select` gate.
+         */
+        PipelineVariantsDefinitionDto: {
+            /** Format: int32 */
+            count: number;
+            selectAgent: null | string;
+            labels: string[];
         };
         /** @description FR-337: the run a webhook call started or submitted to. */
         PipelineWebhookAcceptedDto: {
@@ -6828,7 +7185,7 @@ export interface components {
             traceId?: string;
             /** @description Individual reasons, when there are several. */
             details?: string[];
-            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. */
+            /** @description Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. SOURCE_ARTIFACT_MISSING: the missing artifact's title (FR-352; details holds its key). */
             reason?: string;
             /** @description GITHUB_APP_NOT_INSTALLED: the Tevrin GitHub App's install link, when an App is registered (FR-81, FR-83). PLATFORM_GIT_NOT_CONNECTED: the platform's Git install or connect link; PLATFORM_PERMISSION_MISSING: the Tevrin GitHub App's settings link (FR-143, FR-144). */
             installUrl?: string;
@@ -7626,6 +7983,11 @@ export interface components {
          * @enum {unknown}
          */
         RolloutStepState: "pending" | "running" | "succeeded" | "failed" | "skipped";
+        /**
+         * @description FR-330: who starts and moves a pipeline's runs.
+         * @enum {unknown}
+         */
+        RunControl: "engine" | "host";
         /** @description An artifact version a run used as input (FR-23). */
         RunInputArtifactDto: {
             type: components["schemas"]["ArtifactType"];
@@ -8347,6 +8709,11 @@ export interface components {
             settingsUrl: null | string;
             connections: components["schemas"]["TrackerConnectionSummaryDto"][];
         };
+        /**
+         * @description FR-284: 0.7.0 ran only TriggerKind.Manual (D-0.7.0-3); 0.8.0 adds schedules and webhooks (FR-336, FR-337).
+         * @enum {unknown}
+         */
+        TriggerKind: "manual" | "schedule" | "webhook";
         /** @description The number of the caller's unread notifications (the bell badge). */
         UnreadNotificationCountDto: {
             /** Format: int32 */
@@ -19304,6 +19671,60 @@ export interface operations {
             };
         };
     };
+    ListPipelineRunMapItems: {
+        parameters: {
+            query?: {
+                status?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                runId: string;
+                executionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineMapItemPageDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     ListPipelineRunArtifacts: {
         parameters: {
             query?: never;
@@ -20109,6 +20530,67 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PreviewPipelineSchedule: {
+        parameters: {
+            query?: {
+                cron?: string;
+                timezone?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineSchedulePreviewDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Tevrin.Engine.Api.Hosting;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Pipelines;
 
 namespace Tevrin.Engine.Api;
 
@@ -45,6 +46,10 @@ public static partial class PipelineRunEndpoints
         runs.MapGet("/replay", GetReplay).WithName("GetPipelineRunReplay")
             .WithSummary("FR-303: the run's timeline with each agent run's input and output. Read-only. 400 VALIDATION for a bad cursor or limit.")
             .Produces<PipelineTimelinePageDto>()
+            .ProducesProblem(StatusCodes.Status400BadRequest);
+        runs.MapGet("/stage-executions/{executionId:guid}/items", ListMapItems).WithName("ListPipelineRunMapItems")
+            .WithSummary("FR-355, FR-363: a map stage execution's items in index order with the map's progress (done, failed, total), each with its newest agent run and output version; cursor-paged (limit 1-200, default 50), filterable by status (open, completed, failed). 400 VALIDATION for a bad status, cursor or limit; 404 NOT_FOUND for an execution that isn't a map execution of the run.")
+            .Produces<PipelineMapItemPageDto>()
             .ProducesProblem(StatusCodes.Status400BadRequest);
         runs.MapGet("/artifacts", ListArtifacts).WithName("ListPipelineRunArtifacts")
             .WithSummary("FR-301: the run's artifacts by key with their versions, newest first.")
@@ -132,6 +137,49 @@ public static partial class PipelineRunEndpoints
         }
 
         return TypedResults.Ok(await timeline.PageAsync(run.Id, after, size, replay, cancellationToken));
+    }
+
+    private static async Task<Results<Ok<PipelineMapItemPageDto>, ProblemHttpResult>> ListMapItems(
+        Guid runId, Guid executionId, IRunAccessPolicy access, PipelineRunReader reader, IEngineProblems problems,
+        CancellationToken cancellationToken, string? status = null, string? cursor = null, int? limit = null)
+    {
+        var (run, problem) = await VisibleRunAsync(runId, access, reader, problems, cancellationToken);
+        if (run is null)
+        {
+            return problem!;
+        }
+
+        MapItemStatus? wanted = null;
+        if (status is not null)
+        {
+            if (!EnumStrings.TryParse<MapItemStatus>(status, out var parsed))
+            {
+                return problems.FromError(PipelineRequests.Invalid("status", $"status must be one of {string.Join(", ", EnumStrings.Values<MapItemStatus>())}."));
+            }
+
+            wanted = parsed;
+        }
+
+        var size = limit ?? RunTimeline.DefaultLimit;
+        if (size is < 1 or > RunTimeline.MaxLimit)
+        {
+            return problems.FromError(PipelineRequests.Invalid("limit", $"limit must be between 1 and {RunTimeline.MaxLimit}."));
+        }
+
+        int? after = null;
+        if (cursor is not null)
+        {
+            if (!int.TryParse(cursor, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var index))
+            {
+                return problems.FromError(PipelineRequests.Invalid("cursor", "cursor must be a next value from a previous page."));
+            }
+
+            after = index;
+        }
+
+        return await reader.MapItemsAsync(run, executionId, wanted, after, size, cancellationToken) is { } page
+            ? TypedResults.Ok(page)
+            : problems.FromError(new DomainError(EngineErrorCodes.NotFound, "The map stage execution was not found in this run."));
     }
 
     private static async Task<Results<Ok<IReadOnlyList<PipelineArtifactDto>>, ProblemHttpResult>> ListArtifacts(

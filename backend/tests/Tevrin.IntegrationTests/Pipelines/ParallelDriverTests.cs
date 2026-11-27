@@ -14,7 +14,7 @@ namespace Tevrin.IntegrationTests.Pipelines;
 /// (branch 0: bull → bull_review; branch 1: bear) and its failing-bear variants.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class ParallelDriverTests(TevrinApiFactory factory)
+public sealed partial class ParallelDriverTests(TevrinApiFactory factory)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

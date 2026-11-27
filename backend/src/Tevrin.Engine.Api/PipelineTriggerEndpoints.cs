@@ -23,7 +23,12 @@ public sealed record PipelineScheduleDto(
     JsonElement Inputs,
     bool Paused,
     DateTimeOffset NextFireAt,
-    DateTimeOffset? LastFireAt);
+    DateTimeOffset? LastFireAt)
+{
+    /// <summary>FR-366: the next 3 fire times (UTC; show them in <see cref="Timezone"/>). Active: from
+    /// <see cref="NextFireAt"/>; paused: from now, as a resume would.</summary>
+    public IReadOnlyList<DateTimeOffset> NextFireTimes { get; init; } = [];
+}
 
 /// <summary>FR-336: schedule a pipeline that declares <c>trigger: { kind: schedule }</c>.</summary>
 public sealed record CreatePipelineScheduleRequest
@@ -86,6 +91,11 @@ public static partial class PipelineRunEndpoints
         schedules.MapGet("/", ListSchedules).WithName("ListPipelineSchedules")
             .WithSummary("FR-336: the project's pipeline schedules (Viewer).")
             .Produces<IReadOnlyList<PipelineScheduleDto>>();
+        schedules.MapGet("/preview", PreviewSchedule).WithName("PreviewPipelineSchedule")
+            .WithSummary("FR-366: the next 3 fire times (UTC) of a cron in an IANA timezone, before saving a schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone); 403 FORBIDDEN.")
+            .Produces<PipelineSchedulePreviewDto>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
         schedules.MapPost("/", CreateSchedule).WithName("CreatePipelineSchedule")
             .WithSummary("FR-336: schedule a pipeline that declares trigger kind schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone), VALIDATION or INPUT_INVALID; 403 FORBIDDEN; 404 NOT_FOUND (pipeline); 409 TRIGGER_NOT_SUPPORTED or RUN_CONTROLLED_BY_HOST.")
             .Produces<PipelineScheduleDto>(StatusCodes.Status201Created)
@@ -148,8 +158,36 @@ public static partial class PipelineRunEndpoints
             .ProducesProblem(StatusCodes.Status413PayloadTooLarge);
     }
 
+    private static async Task<Results<Ok<PipelineSchedulePreviewDto>, ProblemHttpResult>> PreviewSchedule(
+        Guid id, IRunControlAccess access, TimeProvider time, IEngineProblems problems, CancellationToken cancellationToken,
+        string? cron = null, string? timezone = null)
+    {
+        if (await access.CheckAsync(id, RunControlAction.ManageTriggers, cancellationToken) is { } denied)
+        {
+            return problems.FromError(denied);
+        }
+
+        // The same limits as a saved schedule (ScheduleRules.Parse), checked before any parsing.
+        if (cron is { Length: > CronSchedule.MaxLength })
+        {
+            return problems.FromError(new DomainError(EngineErrorCodes.ScheduleInvalid, $"A cron expression has at most {CronSchedule.MaxLength} characters.") { Field = "cron" });
+        }
+
+        if (timezone is { Length: > ScheduleRules.MaxTimezoneLength })
+        {
+            return problems.FromError(new DomainError(EngineErrorCodes.ScheduleInvalid, $"A timezone has at most {ScheduleRules.MaxTimezoneLength} characters.") { Field = "timezone" });
+        }
+
+        var now = time.GetUtcNow();
+        var zone = (timezone ?? string.Empty).Trim();
+        var spec = ScheduleRules.Parse(cron, zone, now);
+        return spec.IsFailure
+            ? problems.FromError(spec.Error!)
+            : TypedResults.Ok(new PipelineSchedulePreviewDto(spec.Value.Cron.Expression, zone, ScheduleRules.NextFireTimes(spec.Value, now)));
+    }
+
     private static async Task<Results<Ok<IReadOnlyList<PipelineScheduleDto>>, ProblemHttpResult>> ListSchedules(
-        Guid id, IRunControlAccess access, PipelineSchedules schedules, IEngineProblems problems, CancellationToken cancellationToken)
+        Guid id, IRunControlAccess access, PipelineSchedules schedules, TimeProvider time, IEngineProblems problems, CancellationToken cancellationToken)
     {
         if (await access.CheckAsync(id, RunControlAction.ViewTriggers, cancellationToken) is { } denied)
         {
@@ -157,11 +195,12 @@ public static partial class PipelineRunEndpoints
         }
 
         var rows = await schedules.ListAsync(id, cancellationToken);
-        return TypedResults.Ok<IReadOnlyList<PipelineScheduleDto>>([.. rows.Select(ToDto)]);
+        var now = time.GetUtcNow();
+        return TypedResults.Ok<IReadOnlyList<PipelineScheduleDto>>([.. rows.Select(s => ToDto(s, now))]);
     }
 
     private static async Task<Results<Created<PipelineScheduleDto>, ProblemHttpResult>> CreateSchedule(
-        Guid id, CreatePipelineScheduleRequest? request, IRunControlAccess access, PipelineSchedules schedules, IEngineProblems problems,
+        Guid id, CreatePipelineScheduleRequest? request, IRunControlAccess access, PipelineSchedules schedules, TimeProvider time, IEngineProblems problems,
         CancellationToken cancellationToken)
     {
         if (request is null || string.IsNullOrWhiteSpace(request.PipelineId) || request.PipelineId.Length > MaxPipelineIdLength)
@@ -179,12 +218,12 @@ public static partial class PipelineRunEndpoints
             cancellationToken);
         return created.IsFailure
             ? problems.FromError(created.Error!)
-            : TypedResults.Created($"/api/projects/{id}/pipeline-schedules/{created.Value.Id}", ToDto(created.Value));
+            : TypedResults.Created($"/api/projects/{id}/pipeline-schedules/{created.Value.Id}", ToDto(created.Value, time.GetUtcNow()));
     }
 
     private static async Task<Results<Ok<PipelineScheduleDto>, ProblemHttpResult>> UpdateSchedule(
         Guid id, Guid scheduleId, UpdatePipelineScheduleRequest? request, IRunControlAccess access, PipelineSchedules schedules,
-        IEngineProblems problems, CancellationToken cancellationToken)
+        TimeProvider time, IEngineProblems problems, CancellationToken cancellationToken)
     {
         if (request is null)
         {
@@ -202,7 +241,7 @@ public static partial class PipelineRunEndpoints
         }
 
         var updated = await schedules.UpdateAsync(schedule, new UpdateSchedule(request.Paused, request.Cron, request.Timezone?.Trim(), request.Inputs), cancellationToken);
-        return updated.IsFailure ? problems.FromError(updated.Error!) : TypedResults.Ok(ToDto(updated.Value));
+        return updated.IsFailure ? problems.FromError(updated.Error!) : TypedResults.Ok(ToDto(updated.Value, time.GetUtcNow()));
     }
 
     private static async Task<Results<NoContent, ProblemHttpResult>> DeleteSchedule(
@@ -351,9 +390,14 @@ public static partial class PipelineRunEndpoints
 
     private static string HookUrl(AppOptions app, Guid webhookId) => app.Absolute($"/api/hooks/pipelines/{webhookId}");
 
-    private static PipelineScheduleDto ToDto(PipelineSchedule s)
+    private static PipelineScheduleDto ToDto(PipelineSchedule s, DateTimeOffset now)
     {
         using var inputs = JsonDocument.Parse(string.IsNullOrWhiteSpace(s.Inputs) ? "{}" : s.Inputs);
-        return new PipelineScheduleDto(s.Id, s.PipelineId, s.Cron, s.Timezone, inputs.RootElement.Clone(), s.Paused, s.NextFireAt, s.LastFireAt);
+        var spec = ScheduleRules.Parse(s.Cron, s.Timezone, now);
+        return new PipelineScheduleDto(s.Id, s.PipelineId, s.Cron, s.Timezone, inputs.RootElement.Clone(), s.Paused, s.NextFireAt, s.LastFireAt)
+        {
+            // A stored schedule this host can no longer read (e.g. its timezone) previews nothing; the scheduler pauses it.
+            NextFireTimes = spec.IsFailure ? [] : ScheduleRules.Upcoming(spec.Value, s.Paused, s.NextFireAt, now),
+        };
     }
 }

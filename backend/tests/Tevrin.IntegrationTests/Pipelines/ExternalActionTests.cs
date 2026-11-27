@@ -20,7 +20,7 @@ namespace Tevrin.IntegrationTests.Pipelines;
 /// 24-hour timer rejects; and a job that ends without succeeding closes its gate.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class ExternalActionTests(TevrinApiFactory factory)
+public sealed partial class ExternalActionTests(TevrinApiFactory factory)
 {
     private const string Submit = "submit";
 

@@ -31,6 +31,9 @@ public sealed class PipelineTimelineReader(IEngineDbContext db, IPipelineTransit
         DurationMs = r.DurationMs,
         LatencyMs = r.LatencyMs,
         Error = r.Error,
+        ItemIndex = r.ItemIndex,
+        TurnIndex = r.TurnIndex,
+        TurnRole = r.TurnRole,
     };
 
     private static readonly Expression<Func<AgentRun, AgentRun>> WithInputAndOutput = r => new AgentRun
@@ -52,6 +55,9 @@ public sealed class PipelineTimelineReader(IEngineDbContext db, IPipelineTransit
         Input = r.Input,
         InputTruncated = r.InputTruncated,
         Output = r.Output,
+        ItemIndex = r.ItemIndex,
+        TurnIndex = r.TurnIndex,
+        TurnRole = r.TurnRole,
     };
 
     /// <summary>The page after <paramref name="cursor"/>; <paramref name="replay"/> adds agent input and output.</summary>
@@ -83,7 +89,7 @@ public sealed class PipelineTimelineReader(IEngineDbContext db, IPipelineTransit
 
         var artifacts = await WindowAsync(
             db.Artifacts.AsNoTracking().Where(a => a.PipelineRunId == runId)
-                .Select(a => new ArtifactRow { Id = a.Id, Type = a.Type, Version = a.Version, Status = a.Status, ContentHash = a.ContentHash, AgentRunId = a.AgentRunId, CreatedAt = a.CreatedAt }),
+                .Select(a => new ArtifactRow { Id = a.Id, Type = a.Type, Version = a.Version, Status = a.Status, ContentHash = a.ContentHash, AgentRunId = a.AgentRunId, CreatedAt = a.CreatedAt, Variant = a.Variant, ItemIndex = a.ItemIndex }),
             a => a.CreatedAt, a => a.Id, cursor, take, cancellationToken);
         items.AddRange(artifacts.Select(TimelineItems.Artifact));
 
@@ -132,4 +138,8 @@ internal sealed class ArtifactRow
     public Guid? AgentRunId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public string? Variant { get; init; }
+
+    public int? ItemIndex { get; init; }
 }

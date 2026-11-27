@@ -10,14 +10,15 @@ namespace Tevrin.Engine.Api;
 /// fields belong to kinds:
 /// <list type="bullet">
 /// <item><c>transition</c>: <c>fromStage</c>, <c>toStage</c>, <c>transitionKind</c>, <c>checkpoint</c>, <c>reason</c>.</item>
-/// <item><c>stage_entered</c>: <c>stageId</c>, <c>iteration</c>, <c>checkpoint</c>, <c>exitedAt</c>, <c>outcome</c>.</item>
+/// <item><c>stage_entered</c>: <c>stageId</c>, <c>iteration</c>, <c>checkpoint</c>, <c>exitedAt</c>, <c>outcome</c>; FR-363:
+/// <c>branch</c>, <c>variant</c>, <c>itemIndex</c>, <c>parentExecutionId</c>, <c>followUp</c> and <c>vetoFindings</c>.</item>
 /// <item><c>agent_run</c>: <c>stageId</c>, <c>agentKey</c>, <c>agentRunStatus</c>, <c>model</c>, <c>promptVersion</c>,
-/// tokens, <c>cost</c>, <c>durationMs</c>, <c>latencyMs</c>, <c>error</c>; in the replay also <c>input</c>,
-/// <c>inputTruncated</c>, <c>output</c> and <c>outputTruncated</c>.</item>
+/// tokens, <c>cost</c>, <c>durationMs</c>, <c>latencyMs</c>, <c>error</c>; FR-363: <c>itemIndex</c>, <c>turnIndex</c>,
+/// <c>turnRole</c>; in the replay also <c>input</c>, <c>inputTruncated</c>, <c>output</c> and <c>outputTruncated</c>.</item>
 /// <item><c>gate_created</c> / <c>gate_decided</c>: <c>gateId</c>, <c>gateType</c>, <c>gateStatus</c>, <c>decision</c>,
 /// <c>comment</c>.</item>
 /// <item><c>artifact_version</c>: <c>artifactId</c>, <c>artifactKey</c>, <c>artifactVersion</c>, <c>artifactStatus</c>,
-/// <c>contentHash</c>, <c>agentRunId</c>.</item>
+/// <c>contentHash</c>, <c>agentRunId</c>; FR-363: <c>variant</c> and <c>itemIndex</c>.</item>
 /// </list>
 /// </summary>
 public sealed record PipelineTimelineItemDto
@@ -100,6 +101,34 @@ public sealed record PipelineTimelineItemDto
     public string? ContentHash { get; init; }
 
     public Guid? AgentRunId { get; init; }
+
+    /// <summary>FR-343, FR-345, FR-363: the parallel or fan-out branch a stage execution ran in (a parallel branch's
+    /// 0-based index, a fan-out's agent key or <c>#n</c>, a variant's <c>vn</c>); <c>null</c> outside a branch.</summary>
+    public string? Branch { get; init; }
+
+    /// <summary>FR-345, FR-349, FR-354, FR-363: a stage execution's or artifact version's variant label (<c>v1</c>…,
+    /// a fan-out branch label, or a follow-up's <c>followup:&lt;duration&gt;</c>); <c>null</c> otherwise.</summary>
+    public string? Variant { get; init; }
+
+    /// <summary>FR-355, FR-363: the 0-based map item index of an item's stage execution, agent run or artifact version.</summary>
+    public int? ItemIndex { get; init; }
+
+    /// <summary>FR-355, FR-363: a map item's stage execution points at its map stage's execution.</summary>
+    public Guid? ParentExecutionId { get; init; }
+
+    /// <summary>FR-354, FR-363: the follow-up label (<c>followup:&lt;duration&gt;</c>) of a stage execution run after the
+    /// run completed; <c>null</c> for the main flow.</summary>
+    public string? FollowUp { get; init; }
+
+    /// <summary>FR-344, FR-363: the veto findings (<c>&lt;check&gt;: &lt;reason&gt;</c>) of a stage execution a veto
+    /// stopped; <c>null</c> otherwise.</summary>
+    public IReadOnlyList<string>? VetoFindings { get; init; }
+
+    /// <summary>FR-356, FR-363: a conversation turn's 1-based index and its participant's role.</summary>
+    public int? TurnIndex { get; init; }
+
+    /// <summary>FR-356, FR-363: the role of the participant who spoke the turn.</summary>
+    public string? TurnRole { get; init; }
 }
 
 /// <summary>A page of a run's timeline (FR-300) or replay (FR-303); <c>next</c> is the cursor of the following page, or <c>null</c>.</summary>

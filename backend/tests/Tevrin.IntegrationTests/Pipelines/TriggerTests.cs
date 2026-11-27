@@ -73,7 +73,7 @@ public sealed class TriggerClock(DateTimeOffset start) : TimeProvider
 /// webhook calls start runs, with replay, staleness and rotation checks (§4.71, §4.72).
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class TriggerTests(TevrinApiFactory factory)
+public sealed partial class TriggerTests(TevrinApiFactory factory)
 {
     /// <summary>§4.72's worked example (as in the engine's PipelineWebhookSignatureTests).</summary>
     private const string VectorSecret = "whsec_test";

@@ -36,7 +36,7 @@ internal sealed class ProblemDetailsSchemaTransformer : IOpenApiSchemaTransforme
         schema.Properties[ApiProblems.ReasonKey] = new OpenApiSchema
         {
             Type = JsonSchemaType.String,
-            Description = "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing.",
+            Description = "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. SOURCE_ARTIFACT_MISSING: the missing artifact's title (FR-352; details holds its key).",
         };
         schema.Properties[ApiProblems.InstallUrlKey] = new OpenApiSchema
         {

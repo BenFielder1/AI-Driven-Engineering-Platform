@@ -14,8 +14,13 @@ public static class PipelineDtoMapper
     public static string ShortHash(string hash) =>
         hash.Length <= ShortHashLength ? hash : hash[..ShortHashLength];
 
-    /// <summary>FR-299: the definition summary.</summary>
-    public static PipelineDefinitionDto ToDefinitionDto(PipelineDefinition definition, string hash, string packId)
+    /// <summary>
+    /// FR-299: the definition summary. FR-362, FR-363: with its run control, approval modes, triggers, follow-ups, input
+    /// artifacts and their schemas (<paramref name="schemaOf"/>: a pack schema's JSON by name, or <c>null</c>) and each
+    /// stage's constructs.
+    /// </summary>
+    public static PipelineDefinitionDto ToDefinitionDto(
+        PipelineDefinition definition, string hash, string packId, RunControl runControl = RunControl.Engine, Func<string, string?>? schemaOf = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         return new PipelineDefinitionDto(
@@ -26,8 +31,34 @@ public static class PipelineDtoMapper
             packId,
             definition.Start,
             [.. definition.Stages.Select(s => ToStageDto(definition, s))],
-            [.. definition.Artifacts.Select(a => new PipelineArtifactDefinitionDto(a.Key, a.Title, a.Format) { Scope = a.Scope })],
-            [.. definition.Statuses.Select(s => new PipelineStatusDefinitionDto(s.Name, s.Generic))]);
+            [.. definition.Artifacts.Select(a => new PipelineArtifactDefinitionDto(a.Key, a.Title, a.Format)
+            {
+                Scope = a.Scope,
+                Input = a.Input,
+                Schema = a.Schema is { } name && schemaOf?.Invoke(name) is { } json ? SchemaElement(json) : null,
+            })],
+            [.. definition.Statuses.Select(s => new PipelineStatusDefinitionDto(s.Name, s.Generic))])
+        {
+            RunControl = runControl,
+            ApprovalModes = definition.ApprovalModes,
+            DefaultApprovalMode = definition.DefaultApprovalMode,
+            Triggers = [.. definition.DeclaredTriggers.Select(t => new PipelineTriggerDefinitionDto(t.Kind, t.Input))],
+            FollowUps = [.. definition.FollowUps.Select(f => new PipelineFollowUpDefinitionDto(f.Stage, f.After))],
+        };
+    }
+
+    /// <summary>A schema document as JSON, or <c>null</c> when it doesn't parse (the registry rejects such packs at load).</summary>
+    private static JsonElement? SchemaElement(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>A stage and its ways out: the implicit next stage (when it has no <c>on_success</c>), <c>on_success</c>,
@@ -65,7 +96,20 @@ public static class PipelineDtoMapper
             stage.Inputs,
             stage.Output,
             stage.Gate is { } gate ? new PipelineStageGateDto(gate.Type, gate.Modes, gate.Approves) : null,
-            transitions);
+            transitions)
+        {
+            Branches = stage.Parallel is { } parallel
+                ? [.. parallel.Branches.Select((stages, i) => new PipelineBranchDefinitionDto(
+                    RunDriverRules.BranchId(i), [.. stages.Select(s => ToStageDto(definition, s))]))]
+                : null,
+            FanOut = PipelineConstructDtos.FanOut(stage),
+            Variants = PipelineConstructDtos.Variants(stage),
+            Map = PipelineConstructDtos.Map(stage),
+            Conversation = PipelineConstructDtos.Conversation(stage),
+            Routes = stage.Routes,
+            Veto = stage.Veto.Count > 0,
+            OnVetoTo = stage.OnVeto?.To,
+        };
     }
 
     /// <summary>FR-298: a prompt comparison row.</summary>

@@ -36,7 +36,7 @@ public sealed class FakeTurnLog : IFakeLlmObserver
 /// cancel while pending closes the gate.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
-public sealed class ToolApprovalTests(TevrinApiFactory factory)
+public sealed partial class ToolApprovalTests(TevrinApiFactory factory)
 {
     private const string Executor = "executor";
     private const string RestartArguments = """{"pod":"api-0","reason":"api-0 is out of memory"}""";
