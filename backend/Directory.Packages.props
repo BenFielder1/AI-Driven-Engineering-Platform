@@ -33,7 +33,7 @@
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- FR-279: JSON Schema checks. Pinned to 8.0.5, the last MIT release; 9.x ships under the OSMF EULA (a commercial
          maintenance fee), which needs a spec decision before it's used. -->
-    <PackageVersion Include="JsonSchema.Net" Version="8.0.5" />
+    <PackageVersion Include="JsonSchema.Net" Version="9.7.0" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
