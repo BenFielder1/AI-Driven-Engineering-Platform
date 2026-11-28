@@ -56,7 +56,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-360 | Human gate before an external action | 3.7 | backend | M71 | done | 93fbd35 + 9ea5306 + e695642, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
 | FR-361 | Webhook triggers and tools on agents (on-call fixture) | 3.7 | backend | M71 | done | 93fbd35 + e695642, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
 | FR-362 | Start run / Submit input dialogs | 3.8 | frontend | M72 | done | 04b940b + f441ee1 + a767ea4, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
-| FR-363 | New constructs in stage list and timeline | 3.8 | frontend | M72 | partial | 04b940b + f441ee1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061); §6 hub events `stageBranchUpdated`/`mapProgress` in progress |
+| FR-363 | New constructs in stage list and timeline | 3.8 | frontend | M72 | done | 04b940b + f441ee1 + ba0e2db, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46138735113) |
 | FR-364 | New gate cards | 3.8 | frontend | M72 | done | 04b940b + f441ee1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
 | FR-365 | Scores and feedback UI | 3.8 | frontend | M72 | done | 04b940b + f441ee1 + a767ea4, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
 | FR-366 | Triggers UI | 3.8 | frontend | M72 | done | 04b940b + f441ee1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
@@ -107,11 +107,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] c. Destructive tool approval mid-stage, saved loop state, resume (FR-359, §4.73), D-0.8.0-30 — 3d410b2 ([CI 45885330729](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45885330729))
   - [x] d. External action gate before external handlers and tools (FR-360), `fixture-cv` submit, D-0.8.0-31 — 9ea5306 + test fix e695642
   - [x] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361); bad signatures, replay and rotation are covered by FR-337's `TriggerTests` — e695642 ([CI 45955212466](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466))
-- [ ] M72 Engine UI — FR-362–FR-366
+- [x] M72 Engine UI — FR-362–FR-366
   - [x] a. Backend: additive DTO fields and read endpoints the engine UI needs (gate payload, timeline labels, map progress, input schemas, follow-ups, next fire times; map items and schedule preview endpoints); contract + client regenerated, D-0.8.0-32. Feedback, mean scores, pinned artifacts, scope and trigger CRUD already existed. Gate payloads are now on the DTO, which clears the M71 build-PR blocker once the UI shows them (b2) — 04b940b ([CI 46062120341](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46062120341))
   - [x] b1. Frontend: Start run / Submit input dialogs (FR-362), Feedback and scores (FR-365), Triggers (FR-366); host page passes `access` — f441ee1 + fixes a767ea4 ([CI 46136578515](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46136578515))
   - Carry-overs from M67–M71 (gate payloads, timeline labels, pinned artifacts, `{artifact}`, scores and feedback) are all closed by a and b; `DEF_*` codes keep no copy.
-  - [x] c. Live hub events `stageBranchUpdated` and `mapProgress` (§6, FR-363), D-0.8.0-33 — found by the pre-PR audit
+  - [x] c. Live hub events `stageBranchUpdated` and `mapProgress` (§6, FR-363), D-0.8.0-33 — found by the pre-PR audit — ba0e2db ([CI 46138735113](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46138735113))
   - [x] d. Spec and docs cleanup from the audit: §6 routes, acceptance headings, §10 order, CLAUDE.md/STACK.md coach pack, coach guide "From the UI"; release-PR docs (Triggers and webhooks guide, construct reference, error-codes reference) stay in M73
   - [x] b2. Frontend: lanes, map progress, variants, transcripts, follow-ups, veto/route entries (FR-363); gate cards with payloads (FR-364); `{artifact}` in `SOURCE_ARTIFACT_MISSING`. `DEF_*` codes have no copy (none do; the parity test reads `ErrorCodes.cs` only)
 - [ ] M73 Release 0.8.0 — FR-367 (on Ben's confirmation)
