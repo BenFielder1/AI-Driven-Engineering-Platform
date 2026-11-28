@@ -88,7 +88,14 @@ Set `"volumeUnit": "minutes"` to count `durationMin` instead of `distanceKm`. A 
 
 ### From the UI
 
-Open the project's Pipeline tab. The dialog that starts a run arrives with the 0.8.0 engine UI. Until then, use the API or a webhook.
+Open the project's Pipeline tab and select **Start run**. The button shows for Contributors and up, and a Viewer doesn't see it.
+
+1. Pick the pipeline, here `impulse-coach`, and an approval mode if the definition offers a choice.
+2. Fill in each input the pipeline declares. The editor is built from the input's schema. `session_log` has no flat form, so it opens as a JSON editor that lists the schema errors inline. You can also choose **Upload a JSON file**.
+3. Leave an input blank to add it later. The run then waits on input.
+4. Select **Start run**. A valid submit lands on the new run.
+
+For a run that is waiting on input, select **Submit input** on the Pipeline tab, pick the input, and enter it in the same editor. The run continues once the input passes its schema.
 
 ### From the API
 

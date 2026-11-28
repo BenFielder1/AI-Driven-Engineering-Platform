@@ -53,7 +53,9 @@ backend/
   src/Tevrin.Engine.Runtime/  YAML loader, pipeline registry, job queue, LLM providers, artifact store, gates, notifications, run log, `AgentStageRunner`
   src/Tevrin.Engine.Api/      generic endpoints (definitions, pipeline runs, timeline, replay, gate inbox) and hub events
   src/Tevrin.Pack.Sdlc/       the SDLC pack: Definitions/sdlc.pipeline.yaml, key constants (`SdlcAgents`, `SdlcArtifacts`, `SdlcGates`, `SdlcJobTypes`), `SdlcPack`
+  src/Tevrin.Pack.Coach/      the coach pack (0.8.0): Definitions/, Schemas/, Prompts/, key constants (`CoachAgents`, `CoachArtifacts`, `CoachGates`), `CoachPack`, the `coach.velocity-load-rules` guard (`VelocityLoadRulesGuard`)
   tests/Tevrin.UnitTests/     domain + application tests
+  tests/Tevrin.Pack.Coach.Tests/ coach pack tests: definition, velocity rules and the load-rules guard
   tests/Tevrin.Engine.Tests/ engine tests: definitions, state machine, agent stages, architecture rules; fixtures in Fixtures/ (`fixture-review.pipeline.yaml`)
   tests/Tevrin.IntegrationTests/ WebApplicationFactory + Testcontainers
     Characterisation/       SDLC end-to-end snapshots (Snapshots/*.json), frozen since 0.7.0 M54: CI runs scripts/ci/check-snapshots-frozen.sh

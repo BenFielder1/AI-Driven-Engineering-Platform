@@ -55,12 +55,12 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 | FR-359 | Mid-stage approval for destructive tools (`fixture-oncall`) | 3.7, 4.73 | backend + data | M71 | done | b67b366 + 93fbd35 + 3d410b2, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
 | FR-360 | Human gate before an external action | 3.7 | backend | M71 | done | 93fbd35 + 9ea5306 + e695642, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
 | FR-361 | Webhook triggers and tools on agents (on-call fixture) | 3.7 | backend | M71 | done | 93fbd35 + e695642, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466) |
-| FR-362 | Start run / Submit input dialogs | 3.8 | frontend | M72 | todo | — |
-| FR-363 | New constructs in stage list and timeline | 3.8 | frontend | M72 | todo | — |
-| FR-364 | New gate cards | 3.8 | frontend | M72 | todo | — |
-| FR-365 | Scores and feedback UI | 3.8 | frontend | M72 | todo | — |
-| FR-366 | Triggers UI | 3.8 | frontend | M72 | todo | — |
-| FR-367 | Version 0.8.0, changelog, guides, release docs | 3.9 | frontend + docs | M65 (bump) / M73 | todo | — |
+| FR-362 | Start run / Submit input dialogs | 3.8 | frontend | M72 | done | 04b940b + f441ee1 + a767ea4, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
+| FR-363 | New constructs in stage list and timeline | 3.8 | frontend | M72 | partial | 04b940b + f441ee1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061); §6 hub events `stageBranchUpdated`/`mapProgress` in progress |
+| FR-364 | New gate cards | 3.8 | frontend | M72 | done | 04b940b + f441ee1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
+| FR-365 | Scores and feedback UI | 3.8 | frontend | M72 | done | 04b940b + f441ee1 + a767ea4, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
+| FR-366 | Triggers UI | 3.8 | frontend | M72 | done | 04b940b + f441ee1, [CI](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46134930061) |
+| FR-367 | Version 0.8.0, changelog, guides, release docs | 3.9 | frontend + docs | M65 (bump) / M73 | partial | build part done (version 0.8.0 in the three sources, changelog `date: null`, 9a79474); release part (history page, date, guides, spec move) in M73 |
 
 ## Phases
 - [x] M65 Rename (base: d1301d2) — FR-323–FR-329; version bump to 0.8.0 (FR-367)
@@ -100,7 +100,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] e. `from_runs` input resolution (FR-357), D-0.8.0-27; FR-20 integrity filter on `from_runs` and FR-346 aggregate lists — 5ce5414 ([CI 45849216582](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45849216582))
 - [x] M71 Tools and safety — FR-358–FR-361 (security: destructive tools stay on fixtures)
   - [x] a1. Definition and registration: tool `tier`, handler/tool `external`, `tool_policy: { max_tier }`, `DEF_TOOL_TIER`; fixture `fixture-oncall` (FR-358, FR-359, FR-360 syntax), D-0.8.0-28 — 93fbd35 ([CI 45871148485](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45871148485))
-  - ~~Blocker until c and d land~~: resolved by 3d410b2 (destructive) and 9ea5306 (external). Remaining build-PR blocker: the gate DTO must show the payloads (M72, FR-364).
+  - ~~Blocker until c and d land~~: resolved by 3d410b2 (destructive) and 9ea5306 (external). The gate payload blocker is resolved too: 04b940b (DTO) + f441ee1 (cards), tested by `fr364-gates`.
   - For b–e: link `fixture-oncall.pipeline.yaml` in the IntegrationTests csproj and register its prompts and tools (with tiers) in the integration `FlowFixturePack` copy (M70c 404 lesson). Pack-author docs: the tier is only as honest as the pack's registration (an unclassified tool is `write`).
   - [x] a2. Data: `agent_runs.tool_loop_state` (jsonb); error codes `TOOL_STATE_TOO_LARGE`, `EXTERNAL_ACTION_REJECTED`. No other schema needed: the tool-call tier goes in each `agent_runs.tool_calls` element (`AgentToolCallRecord`, optional for old rows), gate `type` is a free string, and the §4.73 call state is derived from `tool_loop_state` + the run's `tool_approval` gate (cleared on resume) — b67b366 ([CI 45867346886](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45867346886))
   - [x] b. Runner: tier enforcement and recording at call time (FR-358), D-0.8.0-29; destructive and external tools are refused (not run) until c/d; startup warning for DI-only tools with no tier — d4b7410 ([CI 45875442063](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45875442063))
@@ -109,14 +109,11 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361); bad signatures, replay and rotation are covered by FR-337's `TriggerTests` — e695642 ([CI 45955212466](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466))
 - [ ] M72 Engine UI — FR-362–FR-366
   - [x] a. Backend: additive DTO fields and read endpoints the engine UI needs (gate payload, timeline labels, map progress, input schemas, follow-ups, next fire times; map items and schedule preview endpoints); contract + client regenerated, D-0.8.0-32. Feedback, mean scores, pinned artifacts, scope and trigger CRUD already existed. Gate payloads are now on the DTO, which clears the M71 build-PR blocker once the UI shows them (b2) — 04b940b ([CI 46062120341](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46062120341))
-  - [x] b1. Frontend: Start run / Submit input dialogs (FR-362), Feedback and scores (FR-365), Triggers (FR-366); host page passes `access`
+  - [x] b1. Frontend: Start run / Submit input dialogs (FR-362), Feedback and scores (FR-365), Triggers (FR-366); host page passes `access` — f441ee1 + fixes a767ea4
+  - Carry-overs from M67–M71 (gate payloads, timeline labels, pinned artifacts, `{artifact}`, scores and feedback) are all closed by a and b; `DEF_*` codes keep no copy.
+  - [ ] c. Live hub events `stageBranchUpdated` and `mapProgress` (§6, FR-363) — found by the pre-PR audit
+  - [x] d. Spec and docs cleanup from the audit: §6 routes, acceptance headings, §10 order, CLAUDE.md/STACK.md coach pack, coach guide "From the UI"; release-PR docs (Triggers and webhooks guide, construct reference, error-codes reference) stay in M73
   - [x] b2. Frontend: lanes, map progress, variants, transcripts, follow-ups, veto/route entries (FR-363); gate cards with payloads (FR-364); `{artifact}` in `SOURCE_ARTIFACT_MISSING`. `DEF_*` codes have no copy (none do; the parity test reads `ErrorCodes.cs` only)
-  - Carry-over from M70: map `src/lib/errors.ts` copy for `DEF_MAP_SOURCE`, `DEF_CONVERSATION_PARTICIPANTS` (`MAP_TOO_MANY_ITEMS` added in M70b).
-  - Carry-over from M70: show `turn_index`/`turn_role` and map `item_index` on timeline entries (additive DTO fields).
-  - Carry-over from M69: show the follow-up label (`stage_executions.followup`) on timeline entries (additive DTO field), and the outcome scores and feedback (FR-365).
-  - **FR-360/FR-359 depend on this:** the gate DTO must show the `tool_approval` (tool, tier, redacted arguments, reason) and `external_action` (exact payload) payloads, Owner-facing, so an approver sees what will run or be sent (M71d review). Until then the build PR stays blocked.
-  - Carry-over from M68: expose `approval_gates.payload` (variant labels and artifact ids) on the engine gate DTO for the `variant_select` card.
-  - Carry-over from M67: show an artifact's project scope and a run's pinned project artifacts (`pinnedArtifacts`, FR-352) in the run view; fill `{artifact}` in `SOURCE_ARTIFACT_MISSING` from the problem `reason`.
 - [ ] M73 Release 0.8.0 — FR-367 (on Ben's confirmation)
 
 ## Decisions
