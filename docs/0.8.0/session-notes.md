@@ -1,6 +1,6 @@
 # 0.8.0 build notes: context from the 0.7.0 session
 
-Reference for starting the 0.8.0 build in a new session. The spec is [`SPEC.md`](SPEC.md) in this folder. Read it first, then this file. These notes record what isn't in the spec or the code: where things stand, how 0.7.0 was built, what went wrong, and what to watch for in 0.8.0.
+Reference for starting the 0.8.0 build in a new session. The spec is the root `SPEC.md` while 0.8.0 is being built (it moves to this folder at release). Read it first, then this file. These notes record what isn't in the spec or the code: where things stand, how 0.7.0 was built, what went wrong, and what to watch for in 0.8.0.
 
 Written 2026-11-23, at the end of the session that built 0.7.0's second and third build PRs and wrote the 0.8.0 spec.
 

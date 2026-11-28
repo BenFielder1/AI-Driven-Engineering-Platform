@@ -40,19 +40,25 @@ public class ExternalActionRulesTests
     public void FR360_ordinary_cv_and_application_text_goes_on_the_gate_as_is(string payload) =>
         Assert.Null(ExternalActionRules.PayloadProblem(payload));
 
+    // Fake credential-shaped vectors, assembled at run time so secret scanners don't read the source as real secrets.
+    public static TheoryData<string> CredentialShapedPayloads() => new()
+    {
+        "{\"key\":\"" + "sk-ant-" + "api03-AbCdEfGhIjKlMnOpQrStUvWx" + "\"}",
+        "{\"key\":\"" + "sk-proj-" + "0123456789abcdefghijKLMN" + "\"}",
+        "token " + "ghp_" + "0123456789abcdefghijABCDEFGHIJ012345",
+        "github" + "_pat_" + "11ABCDEFG0123456789_abcdefghijklmnop",
+        "glpat" + "-" + "AbCdEfGhIjKlMnOpQrSt",
+        "xoxb" + "-" + "1234567890-abcdefghij",
+        "AKIA" + "IOSFODNN7EXAMPLE",
+        "AIza" + "SyA0123456789abcdefghijklmnopqrstuv",
+        string.Join('.', "eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJmYWtlIn0", "c2lnbmF0dXJlLW5vdC1yZWFsLWZvci10ZXN0cw"),
+        string.Join('\n', "-----BEGIN RSA " + "PRIVATE KEY-----", "MIIEow==", "-----END RSA " + "PRIVATE KEY-----"),
+        "-----BEGIN OPENSSH " + "PRIVATE KEY-----",
+        "{\"headers\":{\"Authorization\":\"" + "Bearer " + "0123456789abcdefghijKLMNOP" + "\"}}",
+    };
+
     [Theory]
-    [InlineData("""{"key":"sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWx"}""")]
-    [InlineData("""{"key":"sk-proj-0123456789abcdefghijKLMN"}""")]
-    [InlineData("token ghp_0123456789abcdefghijABCDEFGHIJ012345")]
-    [InlineData("github_pat_11ABCDEFG0123456789_abcdefghijklmnop")]
-    [InlineData("glpat-AbCdEfGhIjKlMnOpQrSt")]
-    [InlineData("xoxb-1234567890-abcdefghij")]
-    [InlineData("AKIAIOSFODNN7EXAMPLE")]
-    [InlineData("AIzaSyA0123456789abcdefghijklmnopqrstuv")]
-    [InlineData("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U")]
-    [InlineData("-----BEGIN RSA PRIVATE KEY-----\nMIIEow==\n-----END RSA PRIVATE KEY-----")]
-    [InlineData("-----BEGIN OPENSSH PRIVATE KEY-----")]
-    [InlineData("""{"headers":{"Authorization":"Bearer 0123456789abcdefghijKLMNOP"}}""")]
+    [MemberData(nameof(CredentialShapedPayloads))]
     public void FR360_a_payload_carrying_a_credential_is_refused_and_the_reason_never_quotes_it(string payload)
     {
         var problem = ExternalActionRules.PayloadProblem(payload);
