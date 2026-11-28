@@ -52,7 +52,7 @@ export const selfHostPaths: readonly SelfHostPath[] = [
     docsHref: docsUrl('getting-started/dev-loop/'),
     commands: [
       { command: 'docker compose up -d db', note: 'dev database (PostgreSQL 18, values from .env)' },
-      { command: 'dotnet run --project backend/src/Aide.Api', note: 'http://localhost:5080' },
+      { command: 'dotnet run --project backend/src/Tevrin.Api', note: 'http://localhost:5080' },
       {
         command: 'npm --prefix frontend run dev',
         note: 'http://localhost:3000 (proxies /api + WebSockets → BACKEND_URL, default 5080)',

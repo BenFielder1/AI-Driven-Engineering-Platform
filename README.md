@@ -48,15 +48,15 @@ flowchart LR
 
 - One API process runs the endpoints and the background workers. Workers claim jobs from a PostgreSQL table. There is no Redis or broker.
 - The frontend calls the API only through the generated client, at same-origin `/api`. The web server proxies it, WebSockets included.
-- Business rules live in `Aide.Domain`: pure and unit-tested. Endpoints stay thin.
+- Business rules live in `Tevrin.Domain`: pure and unit-tested. Endpoints stay thin.
 - The contract flows one way: the backend build writes `backend/openapi/api.json`, then `npm run gen:api` writes the client. Never hand-edit either.
 - Schema changes are EF Core migrations, run by a bundle before the new version starts.
-- Internal identifiers keep the `aide` name (`Aide.*`, the database, cookies, `aide_pat_` tokens).
+- 0.8.0 renamed the internal identifiers to Tevrin (projects, config, cookie, `tevrin_pat_` tokens, images, namespace). The old names are still read until 0.9.0. Kept: `AIDE_RUN_MIGRATIONS`, the Data Protection application name `aide`, the dev-loop database and user `aide`, the preview domain `aide.benfielder.com` and the seed admin `admin@aide.local`. See [Rename to Tevrin](docs/operations/rename-to-tevrin.md).
 
 ## Repo layout
 
 ```
-backend/    src/Aide.Api, Aide.Domain, Aide.Infrastructure · tests/ · openapi/api.json (generated)
+backend/    src/Tevrin.Api, Tevrin.Domain, Tevrin.Infrastructure · tests/ · openapi/api.json (generated)
 frontend/   src/app, src/features, src/api/generated (generated) · server.ts · e2e/
 deploy/     k8s/ (Kustomize) · scripts/ · railway/ (ops docs)
 .railway/   Railway infrastructure as code

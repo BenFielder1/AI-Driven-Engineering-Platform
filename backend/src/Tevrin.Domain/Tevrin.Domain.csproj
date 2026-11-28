@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure business rules: no EF Core, no ASP.NET Core, no I/O. -->
+  <PropertyGroup>
+    <RootNamespace>Tevrin.Domain</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- FR-262: the engine's generic rules (jobs, gates, artifacts, run log); pure as well. -->
+    <ProjectReference Include="..\Tevrin.Engine.Domain\Tevrin.Engine.Domain.csproj" />
+    <!-- D-0.7.0-23: the SDLC pack's key constants (SdlcAgents, SdlcArtifacts, SdlcGates). -->
+    <ProjectReference Include="..\Tevrin.Pack.Sdlc\Tevrin.Pack.Sdlc.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -4,6 +4,29 @@ import type { PromptStats } from '../api/types'
 import { formatAverage, formatCost, formatDuration, formatNumber, formatPromptVersion, formatRate } from '../format'
 
 const head = 'px-3 py-2 font-medium'
+const scoreFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 })
+
+/** FR-365: the outcome metrics scored for any of the agent's prompt versions, in first-seen order. */
+function metricsOf(rows: readonly PromptStats[]): string[] {
+  return [...new Set(rows.flatMap((r) => r.outcomes.map((o) => o.metric)))]
+}
+
+/** FR-353, FR-365: a version's mean score for a metric and how many targets were scored ("—" when none). */
+function ScoreCell({ row, metric }: { row: PromptStats; metric: string }) {
+  const outcome = row.outcomes.find((o) => o.metric === metric)
+  return (
+    <td className={num}>
+      {outcome ? (
+        <>
+          {scoreFormat.format(outcome.meanScore)}{' '}
+          <span className="text-xs text-muted-foreground">({formatNumber(outcome.count)} scored)</span>
+        </>
+      ) : (
+        '—'
+      )}
+    </td>
+  )
+}
 const num = 'px-3 py-2 text-right tabular-nums'
 
 /** Groups by agent key (in first-seen order), each group's prompt versions in the API's order. */
@@ -18,6 +41,7 @@ function byAgent(stats: readonly PromptStats[]): [string, PromptStats[]][] {
 }
 
 function AgentTable({ agentKey, rows }: { agentKey: string; rows: readonly PromptStats[] }) {
+  const metrics = metricsOf(rows)
   return (
     <div className="overflow-x-auto rounded-lg border border-border/60" tabIndex={0} role="region" aria-label={`${agentKey} prompt versions (scrolls sideways)`}>
       <table className="w-full min-w-[48rem] border-collapse text-sm">
@@ -48,6 +72,11 @@ function AgentTable({ agentKey, rows }: { agentKey: string; rows: readonly Promp
             <th scope="col" className={`${head} text-right`}>
               Failure rate
             </th>
+            {metrics.map((metric) => (
+              <th key={metric} scope="col" className={`${head} text-right`}>
+                Mean {metric}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -63,6 +92,9 @@ function AgentTable({ agentKey, rows }: { agentKey: string; rows: readonly Promp
               <td className={num}>{row.avgLatencyMs === null ? '—' : formatDuration(row.avgLatencyMs)}</td>
               <td className={num}>{formatDuration(row.avgDurationMs)}</td>
               <td className={num}>{formatRate(row.failureRate)}</td>
+              {metrics.map((metric) => (
+                <ScoreCell key={metric} row={row} metric={metric} />
+              ))}
             </tr>
           ))}
         </tbody>
@@ -74,7 +106,8 @@ function AgentTable({ agentKey, rows }: { agentKey: string; rows: readonly Promp
 /**
  * FR-298, FR-306 "Prompt versions": the pipeline's agent runs on this project grouped by agent key and prompt version,
  * one table per agent key, so a new prompt version can be compared with the one before it. A run whose output was
- * rejected by validation counts as a failure (D-0.7.0-33).
+ * rejected by validation counts as a failure (D-0.7.0-33). FR-365: each outcome metric scored for the agent adds a column
+ * with each version's mean score and how many targets were scored.
  */
 export function PromptComparison({ pipelineId, projectId }: { pipelineId: string; projectId: string }) {
   const stats = usePromptStats(pipelineId, projectId)

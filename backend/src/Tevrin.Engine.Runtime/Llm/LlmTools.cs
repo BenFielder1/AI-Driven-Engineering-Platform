@@ -112,6 +112,86 @@ public sealed class LlmToolLoopStoppedException : Exception
 }
 
 /// <summary>
+/// FR-359: thrown by an <see cref="ILlmToolExecutor"/> instead of running <see cref="Call"/>, which waits on a human (a
+/// destructive tool's <c>tool_approval</c> gate). The tool loop stops and reports where it was
+/// (<see cref="LlmToolLoopSuspendedException"/>).
+/// </summary>
+public sealed class LlmToolCallSuspendedException : Exception
+{
+    public LlmToolCallSuspendedException()
+    {
+    }
+
+    public LlmToolCallSuspendedException(string message)
+        : base(message)
+    {
+    }
+
+    public LlmToolCallSuspendedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public LlmToolCallSuspendedException(string message, LlmToolCall call)
+        : base(message)
+    {
+        Call = call;
+    }
+
+    public LlmToolCall? Call { get; }
+}
+
+/// <summary>
+/// FR-359, §4.73: where a tool loop stopped: the completed <see cref="Exchanges"/>, the <see cref="Current"/> turn (the
+/// model's text and calls, and the results of the calls before the waiting one) and its 1-based <see cref="Turn"/>. The
+/// waiting call is <c>Current.Calls[Current.Results.Count]</c>.
+/// </summary>
+public sealed record LlmToolLoopSnapshot(IReadOnlyList<LlmToolExchange> Exchanges, LlmToolExchange Current, int Turn)
+{
+    /// <summary>The call the loop stopped at.</summary>
+    public LlmToolCall Waiting => Current.Calls[Current.Results.Count];
+}
+
+/// <summary>
+/// FR-359: the tool loop stopped at a call that waits on a human (<see cref="LlmToolCallSuspendedException"/>). Carries
+/// where (<see cref="Snapshot"/>) and the tokens of the turns so far, which were paid for.
+/// </summary>
+public sealed class LlmToolLoopSuspendedException : Exception
+{
+    public LlmToolLoopSuspendedException()
+    {
+    }
+
+    public LlmToolLoopSuspendedException(string message)
+        : base(message)
+    {
+    }
+
+    public LlmToolLoopSuspendedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public LlmToolLoopSuspendedException(string message, LlmToolLoopSnapshot snapshot, LlmTurnTokens tokens, Exception innerException)
+        : base(message, innerException)
+    {
+        Snapshot = snapshot;
+        Tokens = tokens;
+    }
+
+    public LlmToolLoopSnapshot? Snapshot { get; }
+
+    public LlmTurnTokens Tokens { get; }
+}
+
+/// <summary>
+/// FR-359, §4.73: continues a stopped tool loop with no repeated model call for its earlier turns: the saved
+/// <see cref="Exchanges"/>, then the rest of the <see cref="Current"/> turn's calls (its <c>Results</c> include the decided
+/// call's), then the next model turn (<see cref="Turn"/> + 1). The request's messages are the saved ones.
+/// </summary>
+public sealed record LlmToolLoopResume(IReadOnlyList<LlmToolExchange> Exchanges, LlmToolExchange Current, int Turn);
+
+/// <summary>
 /// The provider-agnostic tool loop (FR-71): send the request with the tool definitions; while the model answers with tool
 /// calls, execute them in order and send the results back; stop at a final answer. After a <c>TOOL_LIMIT</c> result (or at
 /// <see cref="MaxTurns"/>) the next turn is forced to answer without tools. Token counts are summed over all turns.
@@ -164,31 +244,81 @@ public static class LlmToolLoop
     /// turns so far: the caller records them (so a later failure doesn't lose what was paid for) and returns <c>false</c> to
     /// stop the loop (<see cref="LlmToolLoopStoppedException"/>), e.g. when the token budget is used up.
     /// </param>
-    public static async Task<LlmToolLoopResult> RunAsync(
+    public static Task<LlmToolLoopResult> RunAsync(
         ILlmProvider provider,
         LlmRequest request,
         ILlmToolExecutor? tools,
         CancellationToken cancellationToken,
+        Func<LlmTurnTokens, CancellationToken, Task<bool>>? onToolTurn = null) =>
+        RunCoreAsync(provider, request, tools, resume: null, onToolTurn, cancellationToken);
+
+    /// <summary>
+    /// FR-359, §4.73: continues a stopped tool loop (<see cref="LlmToolLoopResume"/>) without calling the model for its
+    /// earlier turns: the rest of the stopped turn's calls, then the next model turn, as <c>RunAsync</c> does from there.
+    /// <paramref name="request"/> carries the saved messages.
+    /// </summary>
+    public static Task<LlmToolLoopResult> ResumeAsync(
+        ILlmProvider provider,
+        LlmRequest request,
+        ILlmToolExecutor tools,
+        LlmToolLoopResume resume,
+        CancellationToken cancellationToken,
         Func<LlmTurnTokens, CancellationToken, Task<bool>>? onToolTurn = null)
+    {
+        ArgumentNullException.ThrowIfNull(tools);
+        ArgumentNullException.ThrowIfNull(resume);
+        return RunCoreAsync(provider, request, tools, resume, onToolTurn, cancellationToken);
+    }
+
+    /// <summary>
+    /// The loop; FR-359: a call the executor suspends (<see cref="LlmToolCallSuspendedException"/>) stops it with
+    /// <see cref="LlmToolLoopSuspendedException"/>, and <paramref name="resume"/> continues a stopped one.
+    /// </summary>
+    private static async Task<LlmToolLoopResult> RunCoreAsync(
+        ILlmProvider provider,
+        LlmRequest request,
+        ILlmToolExecutor? tools,
+        LlmToolLoopResume? resume,
+        Func<LlmTurnTokens, CancellationToken, Task<bool>>? onToolTurn,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(request);
-        if (tools is null)
+        IToolCallingLlmProvider toolProvider;
+        if (resume is not null)
+        {
+            // The stopped loop called tools on this provider, so it takes them.
+            ArgumentNullException.ThrowIfNull(tools);
+            toolProvider = provider as IToolCallingLlmProvider
+                ?? throw new InvalidOperationException("A tool loop can only be resumed on a provider that calls tools.");
+        }
+        else if (tools is null)
         {
             var completion = await provider.CompleteAsync(request, cancellationToken);
             return await ContinuePlainAsync(provider, request, completion, [], onToolTurn, cancellationToken);
         }
-
-        if (provider is not IToolCallingLlmProvider toolProvider || !await toolProvider.SupportsToolsAsync(request, cancellationToken))
+        else if (provider is not IToolCallingLlmProvider calling || !await calling.SupportsToolsAsync(request, cancellationToken))
         {
             var withContext = WithContext(request, await tools.FallbackContextAsync(cancellationToken));
             var completion = await provider.CompleteAsync(withContext, cancellationToken);
             return await ContinuePlainAsync(provider, withContext, completion, [ToolsUnsupportedWarning], onToolTurn, cancellationToken);
         }
+        else
+        {
+            toolProvider = calling;
+        }
 
-        var exchanges = new List<LlmToolExchange>();
+        var exchanges = new List<LlmToolExchange>(resume?.Exchanges ?? []);
         int input = 0, output = 0;
-        for (var turn = 1; ; turn++)
+        var first = 1;
+        if (resume is not null)
+        {
+            // FR-359: the rest of the stopped turn's calls (a later destructive one stops the loop again), then a new turn.
+            await RunCallsAsync(tools, resume.Current.AssistantText, resume.Current.Calls, [.. resume.Current.Results], exchanges, resume.Turn, new LlmTurnTokens(0, 0), cancellationToken);
+            first = resume.Turn + 1;
+        }
+
+        for (var turn = first; ; turn++)
         {
             var force = tools.LimitReached || turn >= MaxTurns;
             var answer = await toolProvider.CompleteTurnAsync(
@@ -239,14 +369,41 @@ public static class LlmToolLoop
                 throw new LlmToolLoopStoppedException("The tool loop was stopped between turns.", new LlmTurnTokens(input, output));
             }
 
-            var results = new List<LlmToolResult>(answer.Calls.Count);
-            foreach (var call in answer.Calls)
-            {
-                results.Add(await tools.ExecuteAsync(call, cancellationToken));
-            }
-
-            exchanges.Add(new LlmToolExchange(answer.Text, answer.Calls, results));
+            await RunCallsAsync(tools, answer.Text, answer.Calls, new List<LlmToolResult>(answer.Calls.Count), exchanges, turn, new LlmTurnTokens(input, output), cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Runs a turn's calls from the first without a result, in order, and adds the turn to <paramref name="exchanges"/>. A
+    /// call the executor suspends stops the loop: <see cref="LlmToolLoopSuspendedException"/> with where it stopped.
+    /// </summary>
+    private static async Task RunCallsAsync(
+        ILlmToolExecutor tools,
+        string text,
+        IReadOnlyList<LlmToolCall> calls,
+        List<LlmToolResult> results,
+        List<LlmToolExchange> exchanges,
+        int turn,
+        LlmTurnTokens tokens,
+        CancellationToken cancellationToken)
+    {
+        for (var i = results.Count; i < calls.Count; i++)
+        {
+            try
+            {
+                results.Add(await tools.ExecuteAsync(calls[i], cancellationToken));
+            }
+            catch (LlmToolCallSuspendedException ex)
+            {
+                throw new LlmToolLoopSuspendedException(
+                    "The tool loop stopped at a call that waits on approval.",
+                    new LlmToolLoopSnapshot([.. exchanges], new LlmToolExchange(text, calls, [.. results]), turn),
+                    tokens,
+                    ex);
+            }
+        }
+
+        exchanges.Add(new LlmToolExchange(text, calls, results));
     }
 
     /// <summary>Whether a provider stopped because the output cap was reached (Anthropic <c>max_tokens</c>; OpenAI and

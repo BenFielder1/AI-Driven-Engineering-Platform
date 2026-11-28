@@ -34,7 +34,7 @@ public static class PipelineEndpoints
 
         pipelines.MapGet("/{pipelineId}/definitions/{hash}", GetDefinition)
             .WithName("GetPipelineDefinition")
-            .WithSummary("FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses. 404 NOT_FOUND for an unknown hash.")
+            .WithSummary("FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses; FR-362, FR-363: run control, approval modes, triggers, follow-ups, input artifacts with their JSON schemas, and each stage's constructs. 404 NOT_FOUND for an unknown hash.")
             .Produces<PipelineDefinitionDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -58,12 +58,16 @@ public static class PipelineEndpoints
 
     private static Ok<IReadOnlyList<PipelineSummaryDto>> ListPipelines(PipelineDefinitionResolver definitions) =>
         TypedResults.Ok<IReadOnlyList<PipelineSummaryDto>>([.. definitions.Registered()
-            .Select(d => new PipelineSummaryDto(d.Definition!.Pipeline, d.Definition.Title, d.Definition.Version, d.Hash!, d.PackId))]);
+            .Select(d => new PipelineSummaryDto(d.Definition!.Pipeline, d.Definition.Title, d.Definition.Version, d.Hash!, d.PackId)
+            {
+                RunControl = d.RunControl,
+            })]);
 
     private static async Task<Results<Ok<PipelineDefinitionDto>, ProblemHttpResult>> GetDefinition(
         string pipelineId,
         string hash,
         PipelineDefinitionResolver definitions,
+        PipelineRegistryHost registryHost,
         IEngineProblems problems,
         CancellationToken cancellationToken)
     {
@@ -73,7 +77,15 @@ public static class PipelineEndpoints
             return problems.FromError(new DomainError(EngineErrorCodes.NotFound, "The pipeline definition was not found."));
         }
 
-        return TypedResults.Ok(PipelineDtoMapper.ToDefinitionDto(resolved.Definition, resolved.Hash, resolved.PackId));
+        // FR-362: input schemas come from the pack's registered schema files; run control from the pack (engine when unknown).
+        var registry = registryHost.Registry;
+        var schemas = registry?.Packs.FirstOrDefault(p => p.PackId == resolved.PackId)?.Schemas;
+        return TypedResults.Ok(PipelineDtoMapper.ToDefinitionDto(
+            resolved.Definition,
+            resolved.Hash,
+            resolved.PackId,
+            registry?.RunControlOf(pipelineId) ?? RunControl.Engine,
+            name => schemas?.GetValueOrDefault(name)));
     }
 
     private static async Task<Results<Ok<IReadOnlyList<PromptStatsDto>>, ProblemHttpResult>> GetPromptStats(

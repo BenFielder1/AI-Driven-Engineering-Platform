@@ -39,7 +39,7 @@ public sealed class AgentAttempt
     /// D-0.7.0-42: whether <see cref="Agent"/> is one of the stage's <c>agents:</c> bindings rather than its primary agent.
     /// <see cref="Stage"/> is then a view of the stage with the binding's agent, inputs and output.
     /// </summary>
-    public bool IsSecondaryAgent => !string.Equals(Definition.FindStage(Stage.Id)?.Agent?.Key, Agent.Key, StringComparison.Ordinal);
+    public bool IsSecondaryAgent => !string.Equals(Definition.FindAnyStage(Stage.Id)?.Agent?.Key, Agent.Key, StringComparison.Ordinal);
 
     /// <summary>The agent run stored under the caller's id before this attempt started, or <c>null</c> (FR-310).</summary>
     public AgentRun? Existing { get; }

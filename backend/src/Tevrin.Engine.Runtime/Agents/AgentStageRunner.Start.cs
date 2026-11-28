@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Common;
@@ -12,8 +13,11 @@ namespace Tevrin.Engine.Runtime.Agents;
 
 public sealed partial class AgentStageRunner
 {
-    /// <summary>The rendered prompt of an attempt and the stage's tools (the executor is built with the host's options).</summary>
-    private sealed record PreparedCall(string System, string User, IReadOnlyList<IAgentTool> Tools);
+    /// <summary>
+    /// The rendered prompt of an attempt, the tools the stage lists (each with its tier now, FR-358) and its
+    /// <c>max_tier</c> (the executor is built with the host's options).
+    /// </summary>
+    private sealed record PreparedCall(string System, string User, IReadOnlyList<StageTool> Tools, ToolTier MaxTier);
 
     /// <summary>
     /// Step 3 (FR-310, FR-312): continues a run left <c>running</c> (its provider and model, with the key resolved again),
@@ -39,6 +43,13 @@ public sealed partial class AgentStageRunner
         {
             agentRun.Id = id;
         }
+
+        // FR-355: a map item's run records its index.
+        agentRun.ItemIndex = attempt.Request.ItemIndex;
+
+        // FR-356: a conversation turn's run records its 1-based turn and the speaker's role.
+        agentRun.TurnIndex = attempt.Request.TurnIndex;
+        agentRun.TurnRole = attempt.Request.TurnRole;
 
         attempt.AgentRun = agentRun;
         var metadata = await extension.DescribeRunAsync(attempt, cancellationToken);
@@ -87,13 +98,57 @@ public sealed partial class AgentStageRunner
             .Where(a => ArtifactRules.IntegrityOf(a.Status, a.Content, a.ContentHash) == ArtifactIntegrity.Ok)
             .ToList();
         var context = new List<AgentContextSection>();
-        var contextRequest = new AgentContextRequest(run.Id, run.ProjectId, attempt.Definition.Pipeline, stage.Id, agent.Key) { SuppliedPlaceholders = supplied };
+        var contextRequest = new AgentContextRequest(run.Id, run.ProjectId, attempt.Definition.Pipeline, stage.Id, agent.Key)
+        {
+            SuppliedPlaceholders = supplied,
+            Branch = request.Variant,
+        };
         foreach (var provider in contextProviders.Where(p => p.PipelineId == attempt.Definition.Pipeline))
         {
             context.AddRange(await provider.GetContextAsync(contextRequest, cancellationToken));
         }
 
         var values = AgentStagePrompt.Values(inputs, context, request.Feedback);
+
+        // FR-346: an aggregate stage gets every branch output of its source as {{<KEY>_ALL}}, each item labelled.
+        foreach (var (placeholder, items) in await AggregateInputs.LoadAsync(store, run, attempt.Definition, stage.Id, cancellationToken))
+        {
+            values[placeholder] = FanOutRules.RenderList(items);
+        }
+
+        // FR-357: each from_runs input the template uses is a list over the project's earlier runs, {{<ARTIFACT>_RUNS}}.
+        var runsUsed = stage.FromRuns.Select(RunsInputRules.Placeholder).Where(p => used.Contains(p) && !supplied.Contains(p)).ToHashSet(StringComparer.Ordinal);
+        if (runsUsed.Count > 0)
+        {
+            foreach (var list in await RunsInputs.LoadAsync(store, run, stage, time.GetUtcNow(), cancellationToken, runsUsed))
+            {
+                values[list.Placeholder] = FanOutRules.RenderList(list.Items);
+            }
+        }
+
+        // FR-349, §4.67: a branch's prompt context holds its own label as {{VARIANT}} (v1…vn for a variants stage).
+        if (request.Variant is { } variant)
+        {
+            values[VariantRules.LabelPlaceholder] = variant;
+        }
+
+        // FR-354: a follow-up reads the run's outcome scores as {{OUTCOME_SCORES}} (one "metric: score" line each).
+        if (FollowUpRules.IsLabel(request.Variant))
+        {
+            values[FollowUpRules.OutcomeScoresPlaceholder] = FollowUpRules.RenderScores(await store.RunOutcomeScoresAsync(run, cancellationToken));
+        }
+
+        // FR-351, §4.75: a stage with feedback.inject gets its agent's feedback entries as {{AGENT_FEEDBACK}}, and the agent
+        // run records the entries it used. A stage without it is unchanged (FeedbackIds stays null).
+        if (stage.Feedback is { Inject: true } feedback && string.Equals(agent.Key, stage.Agent?.Key, StringComparison.Ordinal))
+        {
+            var entries = await store.FeedbackAsync(run, attempt.Definition.Pipeline, agent.Key, FeedbackInjectionRules.MaxLimit, cancellationToken);
+            var selection = FeedbackInjectionRules.Select(entries, feedback.Limit);
+            values[FeedbackInjectionRules.Placeholder] = selection.Rendered;
+            // A resumed run keeps the ids recorded for its first prompt.
+            attempt.AgentRun!.FeedbackIds ??= selection.Ids;
+        }
+
         foreach (var (name, value) in request.PromptValues ?? new Dictionary<string, string?>())
         {
             values[name] = value;
@@ -124,8 +179,72 @@ public sealed partial class AgentStageRunner
         }
 
         var user = AgentStagePrompt.UserMessage(template, prompt, request.AppendFeedback ? request.Feedback : null);
-        var tools = agent.Tools.Select(name => services.GetPipelineTool(name) ?? throw Permanent($"Tool '{name}' is not bound.")).ToList();
-        return new PreparedCall(prompt.System, user, tools);
+        await CheckIsolationAsync(attempt, string.Join('\n', prompt.System, user), cancellationToken);
+        return new PreparedCall(prompt.System, user, StageTools(attempt), ToolTierRules.MaxTierOf(stage.ToolPolicy));
+    }
+
+    /// <summary>
+    /// FR-358, D-0.8.0-28: the tools the stage (or binding) lists, each bound from DI and with its tier and <c>external</c>
+    /// flag in the registry now, not as when the run was pinned: a pack that raised a tool's tier since is obeyed. Without a
+    /// registry no tier is known, so nothing is offered.
+    /// </summary>
+    private List<StageTool> StageTools(AgentAttempt attempt)
+    {
+        var registry = registryHost.Registry;
+        var maxTier = ToolTierRules.MaxTierOf(attempt.Stage.ToolPolicy);
+        var tools = new List<StageTool>(attempt.Agent.Tools.Count);
+        foreach (var name in attempt.Agent.Tools)
+        {
+            var tool = services.GetPipelineTool(name) ?? throw Permanent($"Tool '{name}' is not bound.");
+            var tier = registry?.ToolTierOf(name);
+            if (!ToolTierRules.IsOffered(maxTier, tier))
+            {
+                LogToolNotOffered(logger, attempt.Run.Id, attempt.Stage.Id, attempt.Agent.Key, name, tier?.ToWire() ?? "unregistered", maxTier.ToWire());
+            }
+
+            tools.Add(new StageTool(name, tool, tier, registry?.IsExternal(PipelineComponentKind.Tool, name) ?? false));
+        }
+
+        return tools;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline run {PipelineRunId} stage {StageId} agent {AgentKey}: tool {Tool} (tier {Tier}) is not offered under max tier {MaxTier}")]
+    private static partial void LogToolNotOffered(ILogger logger, Guid pipelineRunId, string stageId, string agentKey, string tool, string tier, string maxTier);
+
+    /// <summary>
+    /// §4.65: a fan-out branch's rendered input must hold no sibling branch's output (any stored version, so a retry is
+    /// checked against outputs its siblings stored meanwhile); else the branch fails with <c>FANOUT_ISOLATION_BROKEN</c>.
+    /// </summary>
+    private async Task CheckIsolationAsync(AgentAttempt attempt, string rendered, CancellationToken cancellationToken)
+    {
+        if (attempt.Request.ItemIndex is { } index && attempt.Stage.Output is { } itemKey)
+        {
+            // FR-355, §4.65: map items are isolated as fan-out branches are: no other item's output in the input.
+            var own = MapRules.ItemLabel(index);
+            var since = attempt.Request.ItemsSince ?? DateTimeOffset.MinValue;
+            var others = (await store.RunItemsAsync(attempt.Run, itemKey, since, cancellationToken))
+                .Select(a => new AggregateItem(MapRules.ItemLabel(a.ItemIndex!.Value), a.Content));
+            if (FanOutRules.IsolationBreach(rendered, own, others) is { } leakedItem)
+            {
+                throw new JobFailedException(
+                    $"Map item {index} of {attempt.Stage.Id} was given {leakedItem}'s output.", transient: false, EngineErrorCodes.FanoutIsolationBroken);
+            }
+
+            return;
+        }
+
+        if (attempt.Request.Variant is not { } label || attempt.Stage.Output is not { } key || FollowUpRules.IsLabel(label))
+        {
+            return;
+        }
+
+        var siblings = (await store.RunVariantsAsync(attempt.Run, key, cancellationToken))
+            .Select(a => new AggregateItem(a.Variant!, a.Content));
+        if (FanOutRules.IsolationBreach(rendered, label, siblings) is { } leaked)
+        {
+            throw new JobFailedException(
+                $"Fan-out branch '{label}' of {attempt.Stage.Id} was given branch '{leaked}''s output.", transient: false, EngineErrorCodes.FanoutIsolationBroken);
+        }
     }
 
     /// <summary>

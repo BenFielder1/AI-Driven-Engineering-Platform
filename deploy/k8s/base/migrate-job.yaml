@@ -38,14 +38,14 @@ spec:
             limits: { memory: 64Mi }
       containers:
         - name: migrate
-          image: aide-api
+          image: tevrin-api
           imagePullPolicy: IfNotPresent
           command: ["/app/efbundle"]
-          args: ["--connection", "$(ConnectionStrings__Aide)"]
+          args: ["--connection", "$(ConnectionStrings__Tevrin)"]
           env:
-            - name: ConnectionStrings__Aide
+            - name: ConnectionStrings__Tevrin
               valueFrom:
-                secretKeyRef: { name: app-secrets, key: ConnectionStrings__Aide }
+                secretKeyRef: { name: app-secrets, key: ConnectionStrings__Tevrin }
             - name: DOTNET_BUNDLE_EXTRACT_BASE_DIR
               value: /tmp
           securityContext:

@@ -6,12 +6,15 @@ import { useCallback, useState, useSyncExternalStore } from 'react'
  */
 export type SidebarMode = 'auto' | 'collapsed' | 'expanded'
 
-export const SIDEBAR_STORAGE_KEY = 'aide.sidebar'
+export const SIDEBAR_STORAGE_KEY = 'tevrin.sidebar'
+/** FR-326: the pre-0.8.0 key, read when SIDEBAR_STORAGE_KEY is missing; writing removes it. */
+export const LEGACY_SIDEBAR_STORAGE_KEY = 'aide.sidebar'
 const XL_QUERY = '(min-width: 80rem)'
 
 export function readSidebarMode(): SidebarMode {
   try {
-    const stored = globalThis.localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    const stored =
+      globalThis.localStorage.getItem(SIDEBAR_STORAGE_KEY) ?? globalThis.localStorage.getItem(LEGACY_SIDEBAR_STORAGE_KEY)
     return stored === 'collapsed' || stored === 'expanded' ? stored : 'auto'
   } catch {
     return 'auto'
@@ -20,6 +23,7 @@ export function readSidebarMode(): SidebarMode {
 
 function writeSidebarMode(mode: SidebarMode): void {
   try {
+    globalThis.localStorage.removeItem(LEGACY_SIDEBAR_STORAGE_KEY)
     if (mode === 'auto') {
       globalThis.localStorage.removeItem(SIDEBAR_STORAGE_KEY)
     } else {

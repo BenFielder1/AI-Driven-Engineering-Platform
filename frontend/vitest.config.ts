@@ -11,7 +11,7 @@ export default defineConfig({
   // shadcn/ui CLI alias (components.json, tsconfig.json paths).
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   // Tests only: src/lib/lib.test.ts reads the backend's ErrorCodes.cs to keep errors.ts in sync.
-  server: { fs: { allow: ['.', '../backend/src/Aide.Domain/Common'] } },
+  server: { fs: { allow: ['.', '../backend/src/Tevrin.Domain/Common'] } },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

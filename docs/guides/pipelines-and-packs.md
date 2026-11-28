@@ -16,10 +16,10 @@ Since 0.7.0 Tevrin runs on a reusable **pipeline engine**. The engine owns the s
 | Engine runtime | `Tevrin.Engine.Runtime` | YAML loader, registry, job queue, LLM providers, artifact store, gates, notifications, run log, agent stage runner |
 | Engine API | `Tevrin.Engine.Api` | The generic read endpoints, gate decisions and the SignalR events |
 | SDLC pack | `Tevrin.Pack.Sdlc` | `sdlc.pipeline.yaml`, key constants, guard names, `SdlcPack` |
-| Host | `Aide.*` | Composes the pack: guard implementations, settings, start selector, project permissions |
+| Host | `Tevrin.Api`, `Tevrin.Domain`, `Tevrin.Infrastructure`` | Composes the pack: guard implementations, settings, start selector, project permissions |
 | Engine UI | `frontend/src/engine/` | Pipeline views that render any definition |
 
-**The dependency rule:** no `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*`, and a pack references only the engine. An architecture test in `Tevrin.Engine.Tests` fails the build if that changes. A second test fails if an engine source file contains an SDLC key. The frontend has the same rule: an ESLint rule stops `src/engine/` importing `src/features/` or `src/app/`.
+**The dependency rule:** no `Tevrin.Engine.*` assembly references the host projects (`Tevrin.Api`, `Domain`, `Infrastructure`) or `Tevrin.Pack.*`, and a pack references only the engine. An architecture test in `Tevrin.Engine.Tests` fails the build if that changes. A second test fails if an engine source file contains an SDLC key. The frontend has the same rule: an ESLint rule stops `src/engine/` importing `src/features/` or `src/app/`.
 
 ## A definition
 
@@ -182,7 +182,7 @@ When a guard or the artifact schema rejects an agent's output, the stage reruns 
 
 ## The SDLC as the first pack
 
-`sdlc.pipeline.yaml` holds the lifecycle: Analysis (a start stage only), Refinement, Specification, Planning, Execution, Review and Release. Its entry gates, statuses and the review loop equal the 0.6.1 rules, and `SdlcLifecycleTransitionTests` keeps a unit test for every allowed and forbidden transition. The characterisation snapshots under `backend/tests/Aide.IntegrationTests/Characterisation/Snapshots/` record the whole flow, and CI fails if any changes (`scripts/ci/check-snapshots-frozen.sh`).
+`sdlc.pipeline.yaml` holds the lifecycle: Analysis (a start stage only), Refinement, Specification, Planning, Execution, Review and Release. Its entry gates, statuses and the review loop equal the 0.6.1 rules, and `SdlcLifecycleTransitionTests` keeps a unit test for every allowed and forbidden transition. The characterisation snapshots under `backend/tests/Tevrin.IntegrationTests/Characterisation/Snapshots/` record the whole flow, and CI fails if any changes (`scripts/ci/check-snapshots-frozen.sh`).
 
 In 0.7.0 the SDLC runs on the engine runner. All eight SDLC agents run as agent stages, or as agents bound to a stage (`agents:`), through the same `AgentStageRunner` that new packs use. The SDLC adds its own hooks, context providers and tools (`SdlcAgentExtension`), so the prompts, run records, events, retries and error codes stay the same as in 0.6.1. Golden prompt tests pin the prompts. 0.6.1's separate SDLC runner has been removed. A project that predates pipeline runs gets its run when an agent first needs one.
 
@@ -200,3 +200,7 @@ In 0.7.0 the SDLC runs on the engine runner. All eight SDLC agents run as agent 
 The loader uses YamlDotNet 18.1.0 and the schema check uses JsonSchema.Net, pinned at 8.0.5 because later releases use a commercial licence. Both are referenced by `Tevrin.Engine.Runtime` only.
 
 See also [Architecture](../reference/architecture.md) and [Pipeline definitions](../operations/pipeline-definitions.md).
+
+## Other packs
+
+Since 0.8.0 a second pack, `coach`, runs the `impulse-coach` pipeline. See the [Impulse coaching pack](impulse-coaching-pack.md) guide.

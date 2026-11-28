@@ -31,6 +31,9 @@ public sealed class PackRegistration : IPackRegistry
     private readonly HashSet<string> _guards = new(StringComparer.Ordinal);
     private readonly HashSet<string> _handlers = new(StringComparer.Ordinal);
     private readonly HashSet<string> _tools = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ToolTier> _toolTiers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _externalHandlers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _externalTools = new(StringComparer.Ordinal);
     private readonly HashSet<string> _jobTypes = new(StringComparer.Ordinal);
     private readonly HashSet<string> _settings = new(StringComparer.Ordinal);
     private readonly HashSet<string> _producedArtifacts = new(StringComparer.Ordinal);
@@ -60,6 +63,16 @@ public sealed class PackRegistration : IPackRegistry
     public IReadOnlyCollection<string> Handlers => _handlers;
 
     public IReadOnlyCollection<string> Tools => _tools;
+
+    /// <summary>FR-358: each registered tool's tier (<see cref="ToolTierRules.DefaultRegisteredTier"/> when the pack
+    /// stated none).</summary>
+    public IReadOnlyDictionary<string, ToolTier> ToolTiers => _toolTiers;
+
+    /// <summary>FR-360: the handlers registered with <c>external: true</c>.</summary>
+    public IReadOnlyCollection<string> ExternalHandlers => _externalHandlers;
+
+    /// <summary>FR-360: the tools registered with <c>external: true</c>.</summary>
+    public IReadOnlyCollection<string> ExternalTools => _externalTools;
 
     public IReadOnlyCollection<string> JobTypes => _jobTypes;
 
@@ -103,9 +116,36 @@ public sealed class PackRegistration : IPackRegistry
 
     public void AddGuard(string name) => _guards.Add(Namespaced(name));
 
-    public void AddStageHandler(string name) => _handlers.Add(Namespaced(name));
+    public void AddStageHandler(string name) => AddStageHandler(name, external: false);
 
-    public void AddTool(string name) => _tools.Add(Namespaced(name));
+    /// <summary>FR-360: registering a name again keeps it external once any registration says so.</summary>
+    public void AddStageHandler(string name, bool external)
+    {
+        _handlers.Add(Namespaced(name));
+        if (external)
+        {
+            _externalHandlers.Add(name);
+        }
+    }
+
+    public void AddTool(string name) => AddTool(name, ToolTierRules.DefaultRegisteredTier);
+
+    /// <summary>FR-358, FR-360: a tool registered twice keeps its highest tier, and stays external once any registration
+    /// says so (a re-registration never weakens a tool's safety).</summary>
+    public void AddTool(string name, ToolTier tier, bool external = false)
+    {
+        if (!System.Enum.IsDefined(tier))
+        {
+            throw new ArgumentOutOfRangeException(nameof(tier), tier, "Undefined tool tier.");
+        }
+
+        _tools.Add(Namespaced(name));
+        _toolTiers[name] = _toolTiers.TryGetValue(name, out var earlier) && earlier > tier ? earlier : tier;
+        if (external)
+        {
+            _externalTools.Add(name);
+        }
+    }
 
     public void AddJobType(string jobType)
     {

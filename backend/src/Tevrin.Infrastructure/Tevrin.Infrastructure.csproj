@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Tevrin.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tevrin.Domain\Tevrin.Domain.csproj" />
+    <!-- FR-262, D-0.7.0-12: the engine runtime and its entity configurations, applied by TevrinDbContext. -->
+    <ProjectReference Include="..\Tevrin.Engine.Runtime\Tevrin.Engine.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ASP.NET Core Data Protection (ISecretProtector, key persistence) from the shared framework; no extra package. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Versioned prompt templates (FR-24, D7), one per agent, loaded by EmbeddedPromptLibrary. -->
+    <EmbeddedResource Include="Agents\Prompts\*.md" LogicalName="Tevrin.Infrastructure.Agents.Prompts.%(Filename)%(Extension)" />
+    <!-- Stack catalog (FR-113, §4.16): every file of Agents/Stack/, loaded and content-hashed by StackCatalogProvider.
+         Logical names keep the folder layout: Tevrin.Infrastructure.Agents.Stack/<path>. -->
+    <EmbeddedResource Include="Agents\Stack\**\*" LogicalName="Tevrin.Infrastructure.Agents.Stack/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

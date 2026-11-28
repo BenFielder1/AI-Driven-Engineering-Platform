@@ -90,7 +90,7 @@ export function ShellNavigation({
 /**
  * FR-53, FR-206 desktop sidebar: fixed and opaque; hidden below lg (the drawer replaces it), a 56 px icon rail (items
  * keep their label as a tooltip) from lg to xl and 240 px from xl, unless the user pins it collapsed or expanded
- * (`aide.sidebar`). The logo goes Home (FR-207); the user menu holds the theme (FR-204).
+ * (`tevrin.sidebar`, read from `aide.sidebar` too: FR-326). The logo goes Home (FR-207); the user menu holds the theme (FR-204).
  */
 export function Sidebar({
   user,

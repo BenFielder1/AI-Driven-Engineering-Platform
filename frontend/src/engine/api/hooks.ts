@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { toApiError } from '../../lib/errors'
 import { engineKeys } from './keys'
+import type { MapItemStatus } from './types'
 
 /** The data of an openapi-fetch result, or the API error (ProblemDetails → `ApiError`, mapped to copy in lib/errors). */
 export function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
@@ -167,5 +168,31 @@ export function useRunGates(runId: string | undefined) {
     queryFn: async ({ signal }) =>
       unwrap(await api.GET('/api/pipeline-runs/{runId}/gates', { params: { path: { runId: runId ?? '' } }, signal })),
     enabled: Boolean(runId),
+  })
+}
+
+/** FR-363: map items per page in the drill-down ("Load more" follows `next`). */
+export const MAP_ITEMS_PAGE_SIZE = 50
+
+/** FR-355, FR-363: a map execution's items in index order, optionally of one status, a page at a time. */
+export function useMapItems(runId: string, executionId: string, status: MapItemStatus | null) {
+  return useInfiniteQuery({
+    queryKey: engineKeys.mapItems(runId, executionId, status),
+    queryFn: async ({ pageParam, signal }) =>
+      unwrap(
+        await api.GET('/api/pipeline-runs/{runId}/stage-executions/{executionId}/items', {
+          params: {
+            path: { runId, executionId },
+            query: {
+              limit: MAP_ITEMS_PAGE_SIZE,
+              ...(status ? { status } : {}),
+              ...(pageParam ? { cursor: pageParam } : {}),
+            },
+          },
+          signal,
+        }),
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next ?? undefined,
   })
 }

@@ -6938,7 +6938,7 @@
         "tags": [
           "Project settings"
         ],
-        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: aide_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to aide_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.",
+        "summary": "Update the Git settings (Owner). A GitHub provider needs a https://github.com/<owner>/<repo> URL. Also sets the release settings: mergeStrategy (FR-65: tevrin_merges or manual) and tagPrefix (§4.10, FR-64: ^[A-Za-z0-9._/-]{0,20}$, else 400 VALIDATION; 409 CONFLICT while the version in development is awaiting_merge or a release attempt is in progress). mergeStrategy fast_forward and squash (FR-140) are Bitbucket only (400 VALIDATION elsewhere); a project leaving Bitbucket goes back to tevrin_merges. FR-136: connectionId re-binds a GitLab or Bitbucket project to the caller's own connection after Tevrin checks its access to the repository (GitLab Developer or higher, Bitbucket write or admin); the response shows the host instance, the repo and the binding (\"connected by <name>\"). A project can't move onto gitlab or bitbucket here (400 VALIDATION). FR-177: commitCreditEnabled turns the Co-authored-by trailer on later commits on or off.",
         "operationId": "UpdateGitSettings",
         "parameters": [
           {
@@ -10378,7 +10378,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable aide-stack-profile block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose aide-plan block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason).",
+            "description": "VALIDATION: unknown artifact type, or empty or too long content; for a stack_profile (FR-183), an unreadable tevrin-stack-profile (or aide-stack-profile) block, options outside the catalog, FR-119 paths, or layer paths and cited files missing at the base commit (errors: field → messages). INVALID_PLAN: a plan draft whose tevrin-plan (or aide-plan) block is missing, repeated or invalid, or that does not read back to the same steps once rendered (details: every reason).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10595,7 +10595,7 @@
             }
           },
           "400": {
-            "description": "VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose aide-plan block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183).",
+            "description": "VALIDATION (generalist on another type; a stack_profile that can't be read). INVALID_PLAN: a plan whose tevrin-plan (or aide-plan) block is invalid, or whose steps declare more files than the project's current max files per step (details: every reason). STACK_INCOMPATIBLE (violations) or VCS_MISMATCH: a stack_profile whose layers and hosts fail the PUT /stack rules (FR-183).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11837,7 +11837,7 @@
         "tags": [
           "Git"
         ],
-        "summary": "Merge readiness of the version's PR (members, FR-84): whether Tevrin's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (aide_merges strategy and canMerge: \"Tevrin will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65).",
+        "summary": "Merge readiness of the version's PR (members, FR-84): whether Tevrin's token may merge it (permission and allowed merge methods, branch rules with required reviews and checks, the PR's mergeStateStatus and reviewDecision, failing required checks), willAutoMerge (tevrin_merges strategy and canMerge: \"Tevrin will merge automatically\", else \"A merge on GitHub will be needed\" with the reasons) and the PR head's check runs. Checked when the pre-release gate is created and on demand: in the review and release phases only (409 WRONG_PHASE otherwise). The last result (stored when the pre-release gate was created, or by an earlier check) is returned while it is under 5 minutes old; refresh=true (or no fresh result) asks GitHub again. Without GraphQL for the token, mergeStateStatus and reviewDecision are null and required approvals count as missing. A Local project can merge unless a dry-run merge conflicts. A GitLab project (FR-138) reads the merge request's detailed_merge_status (returned as mergeStateStatus, re-read while unchecked, checking, preparing or approvals_syncing), approvals, the protected branch's merge levels and the head pipeline, with the head's pipeline jobs and commit statuses as checks (FR-139). The merge itself stays authoritative (FR-65).",
         "operationId": "GetMergeReadiness",
         "parameters": [
           {
@@ -13525,6 +13525,183 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-331: start a run of an engine-controlled pipeline (Contributor). 404 NOT_FOUND for an unknown pipeline, 409 RUN_CONTROLLED_BY_HOST or RUN_ALREADY_ACTIVE, 400 VALIDATION (undeclared input key) or INPUT_INVALID (details: the failing paths).",
+        "operationId": "StartPipelineRun",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StartPipelineRunRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineRunDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hooks/pipelines/{webhookId}": {
+      "post": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-337, §4.72: a signed webhook call (X-Tevrin-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, \"<t>.<raw body>\")>, X-Tevrin-Delivery: <uuid>). Starts a run with the JSON body as the trigger's input, or submits it to the active run (on_active: submit). 401 WEBHOOK_SIGNATURE_INVALID (also for an unknown webhook); 409 WEBHOOK_REPLAY or RUN_ALREADY_ACTIVE; 400 INPUT_INVALID or VALIDATION (delivery id); 413 VALIDATION (body over 256 KB).",
+        "operationId": "ReceivePipelineWebhook",
+        "parameters": [
+          {
+            "name": "webhookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineWebhookAcceptedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/me/notifications": {
@@ -14004,7 +14181,7 @@
         "tags": [
           "Pipelines"
         ],
-        "summary": "FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses. 404 NOT_FOUND for an unknown hash.",
+        "summary": "FR-299: a pipeline definition by hash (registered or stored): stages, artifacts and statuses; FR-362, FR-363: run control, approval modes, triggers, follow-ups, input artifacts with their JSON schemas, and each stage's constructs. 404 NOT_FOUND for an unknown hash.",
         "operationId": "GetPipelineDefinition",
         "parameters": [
           {
@@ -14364,6 +14541,99 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PipelineTimelinePageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/stage-executions/{executionId}/items": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-355, FR-363: a map stage execution's items in index order with the map's progress (done, failed, total), each with its newest agent run and output version; cursor-paged (limit 1-200, default 50), filterable by status (open, completed, failed). 400 VALIDATION for a bad status, cursor or limit; 404 NOT_FOUND for an execution that isn't a map execution of the run.",
+        "operationId": "ListPipelineRunMapItems",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineMapItemPageDto"
                 }
               }
             }
@@ -14859,6 +15129,1730 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/cancel": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-333: end the run cancelled and cancel its queued jobs (Owner). 403 FORBIDDEN, 409 RUN_NOT_ACTIVE or RUN_CONTROLLED_BY_HOST.",
+        "operationId": "CancelPipelineRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineRunDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/rollback": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-333: roll the run back to a checkpoint by the engine rollback rules (Owner). 400 VALIDATION or INVALID_TARGET_VERSION, 403 FORBIDDEN, 409 RUN_NOT_ACTIVE or RUN_CONTROLLED_BY_HOST.",
+        "operationId": "RollbackPipelineRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RollbackPipelineRunRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineRunDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/retry": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-333: re-queue the run's failed stage (Contributor). 403 FORBIDDEN, 409 RUN_NOT_ACTIVE, RUN_CONTROLLED_BY_HOST or CONFLICT (the stage is still queued or running).",
+        "operationId": "RetryPipelineRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineRunDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/inputs/{artifactKey}": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-335: add a version of an input artifact; a run waiting on input continues (Contributor). 400 INPUT_INVALID (details: the failing paths), 403 FORBIDDEN, 404 NOT_FOUND for an unknown input, 409 RUN_NOT_ACTIVE or RUN_CONTROLLED_BY_HOST.",
+        "operationId": "SubmitPipelineRunInput",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "artifactKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-runs/{runId}/outcomes": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-353: the run's outcome scores, oldest first, optionally only those about one agent run (agentRunId) or one artifact (artifactKey, with version and variant). 400 VALIDATION for a bad filter.",
+        "operationId": "ListPipelineRunOutcomes",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "agentRunId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "artifactKey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutcomeScoreDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-353: store an external outcome score for an agent run or artifact version of this run (Contributor). probability_brier scores are (prediction − value)² (§4.74). 400 VALIDATION, 403 FORBIDDEN, 404 NOT_FOUND for a target not in this run.",
+        "operationId": "CreatePipelineRunOutcome",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateOutcomeScoreRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeScoreDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-schedules": {
+      "get": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-336: the project's pipeline schedules (Viewer).",
+        "operationId": "ListPipelineSchedules",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineScheduleDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-336: schedule a pipeline that declares trigger kind schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone), VALIDATION or INPUT_INVALID; 403 FORBIDDEN; 404 NOT_FOUND (pipeline); 409 TRIGGER_NOT_SUPPORTED or RUN_CONTROLLED_BY_HOST.",
+        "operationId": "CreatePipelineSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreatePipelineScheduleRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineScheduleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-schedules/preview": {
+      "get": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-366: the next 3 fire times (UTC) of a cron in an IANA timezone, before saving a schedule (Owner). 400 SCHEDULE_INVALID (cron or timezone); 403 FORBIDDEN.",
+        "operationId": "PreviewPipelineSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cron",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineSchedulePreviewDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-schedules/{scheduleId}": {
+      "patch": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-336: pause, resume or change a schedule (Owner). 400 SCHEDULE_INVALID, VALIDATION or INPUT_INVALID; 403 FORBIDDEN; 404 NOT_FOUND.",
+        "operationId": "UpdatePipelineSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UpdatePipelineScheduleRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineScheduleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-336: delete a schedule (Owner). 403 FORBIDDEN; 404 NOT_FOUND.",
+        "operationId": "DeletePipelineSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-webhooks": {
+      "get": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-337: the project's pipeline webhooks, without their secrets (Viewer).",
+        "operationId": "ListPipelineWebhooks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineWebhookDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-337: create a webhook for a pipeline that declares trigger kind webhook (Owner); the secret is shown only in this response. 400 VALIDATION; 403 FORBIDDEN; 404 NOT_FOUND (pipeline); 409 TRIGGER_NOT_SUPPORTED or RUN_CONTROLLED_BY_HOST.",
+        "operationId": "CreatePipelineWebhook",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreatePipelineWebhookRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedPipelineWebhookDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-webhooks/{webhookId}/rotate": {
+      "post": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-337: a new secret, shown only in this response; the old one stays valid for 24 hours (Owner). 403 FORBIDDEN; 404 NOT_FOUND; 409 CONFLICT.",
+        "operationId": "RotatePipelineWebhookSecret",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "webhookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineWebhookSecretDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipeline-webhooks/{webhookId}": {
+      "delete": {
+        "tags": [
+          "Pipeline triggers"
+        ],
+        "summary": "FR-337: delete a webhook (Owner). 403 FORBIDDEN; 404 NOT_FOUND.",
+        "operationId": "DeletePipelineWebhook",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "webhookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-352: the versions of a project-scope artifact, newest first (project viewer). 404 NOT_FOUND for an unknown pipeline or an artifact that isn't project-scope.",
+        "operationId": "ListProjectArtifactVersions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}/versions": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-352: add the next version of a project-scope artifact, a draft unless the artifact auto-locks (Contributor). 400 VALIDATION (no content) or INPUT_INVALID (details: the failing paths), 403 FORBIDDEN, 404 NOT_FOUND.",
+        "operationId": "CreateProjectArtifactVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateProjectArtifactVersionRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/artifacts/{key}/versions/{version}/lock": {
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-352: lock a draft version of a project-scope artifact; runs started from now on pin it, running runs keep theirs (Owner). 403 FORBIDDEN, 404 NOT_FOUND, 409 ARTIFACT_NOT_DRAFT or CONFLICT.",
+        "operationId": "LockProjectArtifactVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineArtifactVersionDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/pipelines/{pipelineId}/agents/{agentKey}/feedback": {
+      "get": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-351: an agent's feedback entries in the project, newest first, deleted ones left out (project viewer). 404 NOT_FOUND for an unknown pipeline or agent key.",
+        "operationId": "ListAgentFeedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentFeedbackDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-351: add a human feedback entry for an agent (Contributor). 400 VALIDATION (text blank or over 2,000 characters), 403 FORBIDDEN, 404 NOT_FOUND.",
+        "operationId": "CreateAgentFeedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateAgentFeedbackRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentFeedbackDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/agent-feedback/{feedbackId}": {
+      "delete": {
+        "tags": [
+          "Pipeline runs"
+        ],
+        "summary": "FR-351: delete a feedback entry; it is never injected again (Owner, or the entry's author as a Contributor). 403 FORBIDDEN, 404 NOT_FOUND.",
+        "operationId": "DeleteAgentFeedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "feedbackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15626,6 +17620,71 @@
           }
         },
         "description": "A Supabase security advisor finding recorded on a run (FR-153)."
+      },
+      "AgentFeedbackDto": {
+        "required": [
+          "id",
+          "pipelineId",
+          "agentKey",
+          "source",
+          "text",
+          "runId",
+          "agentRunId",
+          "createdBy",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "agentKey": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AgentFeedbackSource"
+          },
+          "text": {
+            "type": "string"
+          },
+          "runId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "FR-351: one agent feedback entry (`human` or `stage`)."
+      },
+      "AgentFeedbackSource": {
+        "enum": [
+          "human",
+          "stage"
+        ],
+        "description": "FR-351: where an agent feedback entry came from. Wire values: `human`, `stage`."
       },
       "AgentJobTrigger": {
         "enum": [
@@ -16548,6 +18607,13 @@
           "corrupted"
         ],
         "description": "Result of re-checking an artifact's content hash on read (FR-20). `corrupted` means the stored content no\nlonger matches `content_hash` (§4.3), or the row is already marked ArtifactStatus.Corrupted."
+      },
+      "ArtifactScope": {
+        "enum": [
+          "run",
+          "project"
+        ],
+        "description": "FR-352: whose version history an artifact has."
       },
       "ArtifactStateDto": {
         "required": [
@@ -18016,6 +20082,19 @@
         },
         "description": "Confirms the decision of a one-click approval link; `comment` is optional (feedback on reject)."
       },
+      "CreateAgentFeedbackRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The feedback, 1–2,000 characters."
+          }
+        },
+        "description": "FR-351: a human feedback entry for an agent."
+      },
       "CreateApiTokenRequest": {
         "required": [
           "name"
@@ -18343,6 +20422,111 @@
         },
         "description": "FR-152: provision a database: region (Supabase: a region code or americas/emea/apac; Render: defaults to the backend's), plan, and an optional name."
       },
+      "CreateOutcomeScoreRequest": {
+        "required": [
+          "target",
+          "metric",
+          "kind",
+          "value",
+          "observedAt",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OutcomeTargetDto"
+              }
+            ]
+          },
+          "metric": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OutcomeScoreKind"
+              }
+            ]
+          },
+          "value": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "The observed value; for `probability_brier` the outcome, 0 or 1.",
+            "format": "double"
+          },
+          "prediction": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "The predicted probability in [0, 1] (`probability_brier` only).",
+            "format": "double"
+          },
+          "observedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "source": {
+            "maxLength": 200,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who or what reported the outcome (e.g. a system name)."
+          }
+        },
+        "description": "FR-353: an external outcome score for a run."
+      },
+      "CreatePipelineScheduleRequest": {
+        "type": "object",
+        "properties": {
+          "pipelineId": {
+            "type": "string"
+          },
+          "cron": {
+            "type": "string",
+            "description": "Five fields: minute hour day-of-month month day-of-week."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "An IANA timezone, e.g. `Europe/London`."
+          },
+          "inputs": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "description": "Input artifacts each fire starts its run with, by key."
+          }
+        },
+        "description": "FR-336: schedule a pipeline that declares `trigger: { kind: schedule }`."
+      },
+      "CreatePipelineWebhookRequest": {
+        "type": "object",
+        "properties": {
+          "pipelineId": {
+            "type": "string"
+          }
+        },
+        "description": "FR-337: create a webhook for a pipeline that declares `trigger: { kind: webhook, input }`."
+      },
       "CreatePlatformConnectionRequest": {
         "required": [
           "provider",
@@ -18403,6 +20587,16 @@
           }
         },
         "description": "Add a platform connection (FR-142, §4.20): the provider, a label and the pasted token, plus optionally the account it\nis for (`accountId`: a team, account, workspace or organisation id the token reaches; required for a Railway\nworkspace token, which can't name its workspace itself). The token is checked with the platform before anything is\nsaved."
+      },
+      "CreateProjectArtifactVersionRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "description": "The content: a string for a Markdown artifact, the JSON value (checked against its schema) for a JSON one.",
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        },
+        "description": "FR-352: a new version of a project-scope artifact."
       },
       "CreateProjectDeploymentRequest": {
         "required": [
@@ -18767,6 +20961,27 @@
         },
         "description": "A newly created token. string CreatedApiTokenDto.Token is shown once and can't be retrieved again."
       },
+      "CreatedPipelineWebhookDto": {
+        "required": [
+          "id",
+          "url",
+          "secret"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "description": "FR-337: a new webhook with its secret, shown only now."
+      },
       "DatabaseProvisioningDto": {
         "required": [
           "jobId",
@@ -18968,6 +21183,14 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "choice": {
+            "maxLength": 16,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-349: the chosen variant (v1…vn) when approving a `variant_select` gate; ignored by other gates."
           }
         },
         "description": "Approve or reject a gate through the engine (FR-301): the same fields and limits as the project gate endpoints."
@@ -21071,7 +23294,8 @@
           "waiting_on_gate",
           "completed",
           "failed",
-          "cancelled"
+          "cancelled",
+          "waiting_on_input"
         ],
         "description": "§4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final."
       },
@@ -22092,7 +24316,7 @@
             "description": "FR-177: Tevrin credits the accountable person on later commits (default on)."
           }
         },
-        "description": "Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the\nproject branch, once the working copy has been prepared. `mode` is the 0.2.0 name of `provider` (always equal).\nFor `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else\n`null`). `appInstalledOnRepo` says whether the Tevrin GitHub App can access a `github_pat` project's repo\n(`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an\nOwner (\"Switch to GitHub App\"). `mergeStrategy` (FR-65: `aide_merges`, the default, or `manual`) and\n`tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings."
+        "description": "Git settings (FR-9, FR-35, FR-82, FR-83). The token is never returned, only `hasToken`. `branchName` is the\nproject branch, once the working copy has been prepared. `mode` is the 0.2.0 name of `provider` (always equal).\nFor `github_app`, `installationId`, `repoId` and `repoFullName` identify the repo (else\n`null`). `appInstalledOnRepo` says whether the Tevrin GitHub App can access a `github_pat` project's repo\n(`null`: not checked, no App, or not a PAT project); `canSwitchToApp` is true when it can and the caller is an\nOwner (\"Switch to GitHub App\"). `mergeStrategy` (FR-65: `tevrin_merges`, the default, or `manual`) and\n`tagPrefix` (§4.10, FR-64: default `v`, so tags read `v1.2.0`) are the project's release settings."
       },
       "GitTestResultDto": {
         "required": [
@@ -22243,7 +24467,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing."
+            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. SOURCE_ARTIFACT_MISSING: the missing artifact's title (FR-352; details holds its key)."
           },
           "installUrl": {
             "type": "string",
@@ -22787,6 +25011,21 @@
         ],
         "description": "Where a managed database lives (§5). Wire values: `supabase`, `render`, `railway`, `external`, `fake`."
       },
+      "MapItemFailure": {
+        "enum": [
+          "skip",
+          "fail"
+        ],
+        "description": "FR-355, §4.68: what a failed item does."
+      },
+      "MapItemStatus": {
+        "enum": [
+          "open",
+          "completed",
+          "failed"
+        ],
+        "description": "FR-355: where one map item execution is."
+      },
       "MemberDto": {
         "required": [
           "userId",
@@ -22875,7 +25114,7 @@
             "format": "date-time"
           }
         },
-        "description": "FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether Tevrin's token may merge it\nnow (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and\n`reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `aide_merges` strategy\n(\"Tevrin will merge automatically\"); otherwise \"A merge on GitHub will be needed\" with `reasons` (empty when\n`canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.\n`mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,\n`BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a GitLab project (FR-138)\n`mergeStateStatus` is the merge request's `detailed_merge_status` verbatim (e.g. `mergeable`,\n`not_approved`), `reviewDecision` is `null` and `checks` are the head's pipeline jobs and commit\nstatuses (FR-139). For a Local project\n`canMerge` is true with no checks. The merge itself stays authoritative (FR-65)."
+        "description": "FR-84 merge readiness of the version's PR, as of `checkedAt`. `canMerge` is whether Tevrin's token may merge it\nnow (repository permission and allowed merge methods, branch rules, the PR's `mergeStateStatus` and\n`reviewDecision`, required checks). `willAutoMerge` is `canMerge` under the `tevrin_merges` strategy\n(\"Tevrin will merge automatically\"); otherwise \"A merge on GitHub will be needed\" with `reasons` (empty when\n`canMerge`, except `manual_strategy`). `checks` are the PR head's check runs and commit statuses.\n`mergeStateStatus` and `reviewDecision` are GitHub's GraphQL values verbatim (e.g. `CLEAN`,\n`BLOCKED`; `APPROVED`, `REVIEW_REQUIRED`), `null` when unknown. For a GitLab project (FR-138)\n`mergeStateStatus` is the merge request's `detailed_merge_status` verbatim (e.g. `mergeable`,\n`not_approved`), `reviewDecision` is `null` and `checks` are the head's pipeline jobs and commit\nstatuses (FR-139). For a Local project\n`canMerge` is true with no checks. The merge itself stays authoritative (FR-65)."
       },
       "MergeReadinessReasonCode": {
         "enum": [
@@ -22913,12 +25152,12 @@
       },
       "MergeStrategy": {
         "enum": [
-          "aide_merges",
+          "tevrin_merges",
           "manual",
           "fast_forward",
           "squash"
         ],
-        "description": "FR-65 merge strategy. Wire values: `aide_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and\n`squash`, which are `aide_merges` with Bitbucket's `merge_strategy` of that name (`aide_merges` sends\n`merge_commit`)."
+        "description": "FR-65 merge strategy. Wire values: `tevrin_merges`, `manual`; FR-140 (Bitbucket only): `fast_forward` and\n`squash`, which are `tevrin_merges` with Bitbucket's `merge_strategy` of that name (`tevrin_merges`\nsends `merge_commit`). FR-326, D-0.8.0-10: `aide_merges` (0.7.0 and earlier) is still read as\n`tevrin_merges` until 0.9.0."
       },
       "MigrationFileDto": {
         "required": [
@@ -23304,6 +25543,121 @@
         ],
         "description": "The kind of an in-app notification (FR-47, FR-15). The project channel events (`NotificationEvent`) plus\n`gate_reminder`, the 24-hour reminder of a pending gate, and the personal `connection_invalid` (FR-92; also the\nFR-165 warning that a Jira or Linear token expires within 14 days).\nWire values are snake_case."
       },
+      "OutcomeScoreDto": {
+        "required": [
+          "id",
+          "pipelineRunId",
+          "target",
+          "metric",
+          "kind",
+          "value",
+          "prediction",
+          "score",
+          "observedAt",
+          "source",
+          "createdBy",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pipelineRunId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target": {
+            "$ref": "#/components/schemas/OutcomeTargetDto"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OutcomeScoreKind"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          },
+          "prediction": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "FR-353: a stored outcome score. `score` is the value for `number`, the Brier score for `probability_brier`."
+      },
+      "OutcomeScoreKind": {
+        "enum": [
+          "number",
+          "probability_brier"
+        ],
+        "description": "FR-353, §4.74: how an outcome score is computed. Wire values: `number`, `probability_brier`."
+      },
+      "OutcomeTargetDto": {
+        "type": "object",
+        "properties": {
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "An agent run of the run.",
+            "format": "uuid"
+          },
+          "artifactKey": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "An artifact key of the run (with int? OutcomeTargetDto.Version)."
+          },
+          "version": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "The artifact version (with string? OutcomeTargetDto.ArtifactKey).",
+            "format": "int32"
+          },
+          "variant": {
+            "maxLength": 50,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The variant label (FR-349) of the artifact version; the plain version when omitted."
+          }
+        },
+        "description": "FR-353: what an outcome score is about: `{ agentRunId }` or `{ artifactKey, version, variant? }`."
+      },
       "PagedResultOfAdminAgentRunDto": {
         "required": [
           "items",
@@ -23512,6 +25866,25 @@
           },
           "format": {
             "$ref": "#/components/schemas/ArtifactFormat"
+          },
+          "scope": {
+            "description": "FR-352: `project` for a source-of-truth artifact people edit and runs pin; `run` otherwise.",
+            "$ref": "#/components/schemas/ArtifactScope"
+          },
+          "input": {
+            "type": "boolean",
+            "description": "FR-335, FR-362: supplied from outside the run (at start, by Submit input or a trigger)."
+          },
+          "schema": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-279, FR-362: the JSON schema a JSON artifact is checked against (the pack's schema document), or\n            `null`. References to the pack's other schema files are left as written; the server checks inputs in full.",
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
           }
         },
         "description": "An artifact a definition produces or reads."
@@ -23670,9 +26043,79 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "variant": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-349, FR-354, FR-363: the variant label (`v1`…, a fan-out branch, `followup:&lt;duration&gt;`)."
+          },
+          "itemIndex": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "FR-355, FR-363: the map item index of an item's output.",
+            "format": "int32"
           }
         },
         "description": "One artifact version in a run's artifact list."
+      },
+      "PipelineBranchDefinitionDto": {
+        "required": [
+          "id",
+          "stages"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineStageDefinitionDto"
+            }
+          }
+        },
+        "description": "FR-343, FR-363: a parallel group's branch: its id (as stage executions' `branch`) and its stages in order."
+      },
+      "PipelineConversationDefinitionDto": {
+        "required": [
+          "participants",
+          "maxTurns"
+        ],
+        "type": "object",
+        "properties": {
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineConversationParticipantDto"
+            }
+          },
+          "maxTurns": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-356, FR-363: a turn-based conversation: its participants (agent and role) in turn order and its turn cap."
+      },
+      "PipelineConversationParticipantDto": {
+        "required": [
+          "agent",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "description": "FR-356: one participant of a conversation."
       },
       "PipelineDefinitionDto": {
         "required": [
@@ -23727,6 +26170,41 @@
             "items": {
               "$ref": "#/components/schemas/PipelineStatusDefinitionDto"
             }
+          },
+          "runControl": {
+            "description": "FR-330, FR-362: who controls the pipeline's runs (`engine` or `host`).",
+            "$ref": "#/components/schemas/RunControl"
+          },
+          "approvalModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalMode"
+            },
+            "description": "FR-331, FR-362: the approval modes a run may choose (empty: any), and the default."
+          },
+          "defaultApprovalMode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalMode"
+              }
+            ]
+          },
+          "triggers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineTriggerDefinitionDto"
+            },
+            "description": "FR-336, FR-337, FR-366: the triggers the definition declares."
+          },
+          "followUps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineFollowUpDefinitionDto"
+            },
+            "description": "FR-354, FR-363: the follow-up stages and when they run after completion."
           }
         },
         "description": "FR-299: a pipeline definition by hash: its stages, artifacts and statuses."
@@ -23770,6 +26248,48 @@
           }
         },
         "description": "A line of an artifact diff (FR-21); `skipped` counts the unchanged lines a `skipped` entry stands for."
+      },
+      "PipelineFanOutDefinitionDto": {
+        "required": [
+          "agents",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "count": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "FR-345, FR-363: a fan-out: one branch per agent key, or `count` branches (`#1`…) of the stage's agent."
+      },
+      "PipelineFollowUpDefinitionDto": {
+        "required": [
+          "stage",
+          "after"
+        ],
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "FR-354, FR-363: a follow-up stage and the durations after completion it runs at (e.g. `7d`)."
       },
       "PipelineGateDto": {
         "required": [
@@ -23886,6 +26406,112 @@
           },
           "overdue": {
             "type": "boolean"
+          },
+          "payload": {
+            "required": [
+              "kind"
+            ],
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "`variant_select`, `tool_call` or `external_handler`."
+              },
+              "stage": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "variants": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "required": [
+                    "label",
+                    "artifactId",
+                    "artifactKey",
+                    "artifactVersion"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "artifactId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "artifactKey": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "artifactVersion": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ],
+                      "format": "int32"
+                    }
+                  },
+                  "description": "FR-349, FR-364: one variant a `variant_select` gate offers; `artifactKey`/`artifactVersion`\n            fetch its content from the run's artifact endpoints."
+                }
+              },
+              "choice": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "tool": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "tier": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "arguments": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "agentRunId": {
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "format": "uuid"
+              },
+              "handler": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "payload": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "description": "            FR-364: what a gate asks the decider to approve, read from the gate's stored payload. One shape for every gate type,\n            told apart by `kind`, with the fields of that kind set and the rest `null`:\n            * variant_select (FR-349): stage, variants (label, artifact id, key and version; never the\n            content) and, once decided, choice.\n* tool_call (FR-359 tool_approval, FR-360 an external tool's external_action): tool,\n            tier, arguments (the redacted JSON the tool runs with), the agent's reason and its\n            agentRunId.\n* external_handler (FR-360 an external handler's external_action): handler, stage and\n            payload, the exact text that is sent once approved.\n            Internal bookkeeping (claims, send times, job and execution ids) is never shown."
           }
         },
         "description": "FR-301: a gate of a run. `stageId` is the stage that declares the gate type (when one does);\n`artifactKey`/`artifactVersion` name the gated artifact. Decided gates carry `decidedAt`,\n`decidedByUserId`, `comment` and an escalation's `decision`."
@@ -23939,6 +26565,365 @@
           }
         },
         "description": "A page of the gate inbox; `next` is the cursor of the following page, or `null`."
+      },
+      "PipelineGatePayloadDto": {
+        "required": [
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`variant_select`, `tool_call` or `external_handler`."
+          },
+          "stage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "variants": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PipelineGateVariantDto"
+            }
+          },
+          "choice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tier": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "arguments": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "handler": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "payload": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "            FR-364: what a gate asks the decider to approve, read from the gate's stored payload. One shape for every gate type,\n            told apart by `kind`, with the fields of that kind set and the rest `null`:\n            * variant_select (FR-349): stage, variants (label, artifact id, key and version; never the\n            content) and, once decided, choice.\n* tool_call (FR-359 tool_approval, FR-360 an external tool's external_action): tool,\n            tier, arguments (the redacted JSON the tool runs with), the agent's reason and its\n            agentRunId.\n* external_handler (FR-360 an external handler's external_action): handler, stage and\n            payload, the exact text that is sent once approved.\n            Internal bookkeeping (claims, send times, job and execution ids) is never shown."
+      },
+      "PipelineGateVariantDto": {
+        "required": [
+          "label",
+          "artifactId",
+          "artifactKey",
+          "artifactVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "artifactId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "artifactKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "FR-349, FR-364: one variant a `variant_select` gate offers; `artifactKey`/`artifactVersion`\n            fetch its content from the run's artifact endpoints."
+      },
+      "PipelineMapDefinitionDto": {
+        "required": [
+          "over",
+          "agent",
+          "handler",
+          "maxParallel",
+          "maxItems",
+          "onItemFailure",
+          "maxFailed",
+          "reduceAgent",
+          "reduceHandler"
+        ],
+        "type": "object",
+        "properties": {
+          "over": {
+            "type": "string"
+          },
+          "agent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "handler": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxParallel": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "onItemFailure": {
+            "$ref": "#/components/schemas/MapItemFailure"
+          },
+          "maxFailed": {
+            "type": "string"
+          },
+          "reduceAgent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reduceHandler": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-355, FR-363: a map over `over` by an agent or handler, its limits, and its reduce step."
+      },
+      "PipelineMapItemDto": {
+        "required": [
+          "executionId",
+          "itemIndex",
+          "status",
+          "enteredAt",
+          "exitedAt",
+          "agentRunId",
+          "agentRunStatus",
+          "error",
+          "artifactId",
+          "artifactKey",
+          "artifactVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "itemIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MapItemStatus"
+          },
+          "enteredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "agentRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "agentRunStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentRunStatus"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "artifactKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "artifactVersion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "FR-355, FR-363: one map item: its execution, index, status (`open`, `completed`, `failed`),\n            times, its newest agent run and its output version, when it has them."
+      },
+      "PipelineMapItemPageDto": {
+        "required": [
+          "progress",
+          "items",
+          "next"
+        ],
+        "type": "object",
+        "properties": {
+          "progress": {
+            "$ref": "#/components/schemas/PipelineMapProgressDto"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineMapItemDto"
+            }
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-363: a page of a map execution's items in index order, with the map's progress; `next` is the cursor\n            of the following page, or `null`."
+      },
+      "PipelineMapProgressDto": {
+        "required": [
+          "executionId",
+          "total",
+          "completed",
+          "failed"
+        ],
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are\n            open). `executionId` pages them (`ListPipelineRunMapItems`)."
+      },
+      "PipelineMapProgressMessage": {
+        "required": [
+          "projectId",
+          "runId",
+          "stageId",
+          "progress"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "The run's project (the hub group).",
+            "format": "uuid"
+          },
+          "runId": {
+            "type": "string",
+            "description": "The pipeline run.",
+            "format": "uuid"
+          },
+          "stageId": {
+            "type": "string",
+            "description": "The map stage (the stage list entry whose `map` this replaces)."
+          },
+          "progress": {
+            "required": [
+              "executionId",
+              "total",
+              "completed",
+              "failed"
+            ],
+            "type": "object",
+            "properties": {
+              "executionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "total": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "completed": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "failed": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "description": "FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are\n            open). `executionId` pages them (`ListPipelineRunMapItems`)."
+          }
+        },
+        "description": "FR-363 live (§6 hub events): a map execution's progress changed (items opened or ended), counted from its item rows\n(D-0.8.0-24). Throttled per map execution (at most one a second, then a trailing one with the latest counts)."
       },
       "PipelineRunDto": {
         "required": [
@@ -24002,7 +26987,8 @@
               "waiting_on_gate",
               "completed",
               "failed",
-              "cancelled"
+              "cancelled",
+              "waiting_on_input"
             ],
             "description": "§4.57: the generic run status. GenericRunStatus.Completed, GenericRunStatus.Failed and GenericRunStatus.Cancelled are final."
           },
@@ -24040,9 +27026,302 @@
           "agentRuns": {
             "type": "integer",
             "format": "int32"
+          },
+          "pinnedArtifacts": {
+            "type": "array",
+            "items": {
+              "required": [
+                "key",
+                "artifactId",
+                "version"
+              ],
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "artifactId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "description": "FR-352: a project-scope artifact version a run pinned."
+            },
+            "description": "FR-352, §4.76: the project-scope artifact versions the run pinned at its start (every stage reads them)."
+          },
+          "followUps": {
+            "type": "array",
+            "items": {
+              "required": [
+                "stage",
+                "label",
+                "dueAt",
+                "stageExecutionId",
+                "enteredAt",
+                "exitedAt",
+                "outcome"
+              ],
+              "type": "object",
+              "properties": {
+                "stage": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "dueAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "date-time"
+                },
+                "stageExecutionId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "uuid"
+                },
+                "enteredAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "date-time"
+                },
+                "exitedAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "date-time"
+                },
+                "outcome": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              },
+              "description": "FR-354, FR-363: one follow-up of a run: its stage and label (`followup:&lt;duration&gt;`), when it is due\n(`null` until the run completes, which schedules it) and, once it has run, its stage execution's times and outcome."
+            },
+            "description": "FR-354, FR-363: the run's follow-ups in declared order, with due times once the run completed."
           }
         },
         "description": "FR-300: a pipeline run. `status` is the generic status derived on read (§4.57); `packStatus` the pack's own.\n`hashShort` is the first 12 characters of the pinned definition hash. `cost` and the token totals sum the\nrun's agent runs."
+      },
+      "PipelineRunFollowUpDto": {
+        "required": [
+          "stage",
+          "label",
+          "dueAt",
+          "stageExecutionId",
+          "enteredAt",
+          "exitedAt",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "dueAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "stageExecutionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "enteredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-354, FR-363: one follow-up of a run: its stage and label (`followup:&lt;duration&gt;`), when it is due\n(`null` until the run completes, which schedules it) and, once it has run, its stage execution's times and outcome."
+      },
+      "PipelineRunPinDto": {
+        "required": [
+          "key",
+          "artifactId",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "artifactId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-352: a project-scope artifact version a run pinned."
+      },
+      "PipelineScheduleDto": {
+        "required": [
+          "id",
+          "pipelineId",
+          "cron",
+          "timezone",
+          "inputs",
+          "paused",
+          "nextFireAt",
+          "lastFireAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "cron": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "nextFireAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastFireAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "nextFireTimes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "FR-366: the next 3 fire times (UTC; show them in string PipelineScheduleDto.Timezone). Active: from\n            DateTimeOffset PipelineScheduleDto.NextFireAt; paused: from now, as a resume would."
+          }
+        },
+        "description": "FR-336: a project schedule (cron evaluated in string PipelineScheduleDto.Timezone, §4.71)."
+      },
+      "PipelineSchedulePreviewDto": {
+        "required": [
+          "cron",
+          "timezone",
+          "nextFireTimes"
+        ],
+        "type": "object",
+        "properties": {
+          "cron": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "nextFireTimes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "description": "FR-366: a cron and timezone's next fire times (UTC), before the schedule is saved."
+      },
+      "PipelineStageBranchUpdatedMessage": {
+        "required": [
+          "projectId",
+          "runId",
+          "executionId",
+          "stageId",
+          "branch",
+          "exitedAt",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "The run's project (the hub group).",
+            "format": "uuid"
+          },
+          "runId": {
+            "type": "string",
+            "description": "The pipeline run.",
+            "format": "uuid"
+          },
+          "executionId": {
+            "type": "string",
+            "description": "The branch's stage execution.",
+            "format": "uuid"
+          },
+          "stageId": {
+            "type": "string",
+            "description": "The stage the branch is in (a parallel branch's own stage, or the fan-out stage)."
+          },
+          "branch": {
+            "type": "string",
+            "description": "The branch id (`0`, `1`… for a parallel group; an agent key or `#n` for a fan-out)."
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When the branch left the stage; `null` while it is open.",
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "How it left (a transition kind, `completed` or `failed`); `null` while open."
+          }
+        },
+        "description": "FR-363 live (§6 hub events): a parallel-branch or fan-out-branch stage execution was entered or left. Ids and state\nonly, never content: the client refreshes the run's timeline, which the lanes read."
       },
       "PipelineStageDefinitionDto": {
         "required": [
@@ -24103,6 +27382,77 @@
             "items": {
               "$ref": "#/components/schemas/PipelineStageTransitionDto"
             }
+          },
+          "branches": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PipelineBranchDefinitionDto"
+            },
+            "description": "FR-343, FR-363: a parallel group's branches (lanes); `null` for other stages."
+          },
+          "fanOut": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-345, FR-363: the stage's fan-out, or `null`.",
+                "$ref": "#/components/schemas/PipelineFanOutDefinitionDto"
+              }
+            ]
+          },
+          "variants": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-349, FR-363: the stage's output variants, or `null`.",
+                "$ref": "#/components/schemas/PipelineVariantsDefinitionDto"
+              }
+            ]
+          },
+          "map": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-355, FR-363: the stage's map (and reduce), or `null`.",
+                "$ref": "#/components/schemas/PipelineMapDefinitionDto"
+              }
+            ]
+          },
+          "conversation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "FR-356, FR-363: the stage's conversation, or `null`.",
+                "$ref": "#/components/schemas/PipelineConversationDefinitionDto"
+              }
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "FR-347, FR-363: earlier stages the agent may route back to."
+          },
+          "veto": {
+            "type": "boolean",
+            "description": "FR-344, FR-363: whether the stage has veto checks, and where a veto goes (`null`: the run ends vetoed)."
+          },
+          "onVetoTo": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "A stage of a definition. `kind` is `agent`, `code` or `manual`; `transitions` lists\n            where it can go next."
@@ -24163,6 +27513,41 @@
               "integer"
             ],
             "format": "int64"
+          },
+          "map": {
+            "required": [
+              "executionId",
+              "total",
+              "completed",
+              "failed"
+            ],
+            "type": "object",
+            "properties": {
+              "executionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "total": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "completed": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "failed": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "description": "FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are\n            open). `executionId` pages them (`ListPipelineRunMapItems`)."
+          },
+          "chosenVariant": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-349, FR-363: the variant (`v1`…) a variants stage promoted on its newest entry; `null` before\n            one was chosen and for other stages."
           }
         },
         "description": "FR-300: a stage of a run (D-0.7.0-32: iterations count entries). `runId` identifies the run in live\n            `stageUpdated` messages."
@@ -24279,6 +27664,10 @@
           },
           "packId": {
             "type": "string"
+          },
+          "runControl": {
+            "description": "FR-330, FR-362: `engine` when the engine's run control starts and drives its runs (Start run);\n            `host` when the host does (the SDLC).",
+            "$ref": "#/components/schemas/RunControl"
           }
         },
         "description": "FR-299: a registered pipeline: id, title, version, current definition hash and pack."
@@ -24537,9 +27926,71 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "branch": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-343, FR-345, FR-363: the parallel or fan-out branch a stage execution ran in (a parallel branch's\n            0-based index, a fan-out's agent key or `#n`, a variant's `vn`); `null` outside a branch."
+          },
+          "variant": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-345, FR-349, FR-354, FR-363: a stage execution's or artifact version's variant label (`v1`…,\n            a fan-out branch label, or a follow-up's `followup:&lt;duration&gt;`); `null` otherwise."
+          },
+          "itemIndex": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "FR-355, FR-363: the 0-based map item index of an item's stage execution, agent run or artifact version.",
+            "format": "int32"
+          },
+          "parentExecutionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-355, FR-363: a map item's stage execution points at its map stage's execution.",
+            "format": "uuid"
+          },
+          "followUp": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-354, FR-363: the follow-up label (`followup:&lt;duration&gt;`) of a stage execution run after the\n            run completed; `null` for the main flow."
+          },
+          "vetoFindings": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "FR-344, FR-363: the veto findings (`&lt;check&gt;: &lt;reason&gt;`) of a stage execution a veto\n            stopped; `null` otherwise."
+          },
+          "turnIndex": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "FR-356, FR-363: a conversation turn's 1-based index and its participant's role.",
+            "format": "int32"
+          },
+          "turnRole": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "FR-356, FR-363: the role of the participant who spoke the turn."
           }
         },
-        "description": "            FR-300, FR-303: one timeline entry. Every entry has `id` (its source row), `at` and `kind`; the other\n            fields belong to kinds:\n            * transition: fromStage, toStage, transitionKind, checkpoint, reason.\n* stage_entered: stageId, iteration, checkpoint, exitedAt, outcome.\n* agent_run: stageId, agentKey, agentRunStatus, model, promptVersion,\n            tokens, cost, durationMs, latencyMs, error; in the replay also input,\n            inputTruncated, output and outputTruncated.\n* gate_created / gate_decided: gateId, gateType, gateStatus, decision,\n            comment.\n* artifact_version: artifactId, artifactKey, artifactVersion, artifactStatus,\n            contentHash, agentRunId."
+        "description": "            FR-300, FR-303: one timeline entry. Every entry has `id` (its source row), `at` and `kind`; the other\n            fields belong to kinds:\n            * transition: fromStage, toStage, transitionKind, checkpoint, reason.\n* stage_entered: stageId, iteration, checkpoint, exitedAt, outcome; FR-363:\n            branch, variant, itemIndex, parentExecutionId, followUp and vetoFindings.\n* agent_run: stageId, agentKey, agentRunStatus, model, promptVersion,\n            tokens, cost, durationMs, latencyMs, error; FR-363: itemIndex, turnIndex,\n            turnRole; in the replay also input, inputTruncated, output and outputTruncated.\n* gate_created / gate_decided: gateId, gateType, gateStatus, decision,\n            comment.\n* artifact_version: artifactId, artifactKey, artifactVersion, artifactStatus,\n            contentHash, agentRunId; FR-363: variant and itemIndex."
       },
       "PipelineTimelineKind": {
         "enum": [
@@ -24573,6 +28024,106 @@
           }
         },
         "description": "A page of a run's timeline (FR-300) or replay (FR-303); `next` is the cursor of the following page, or `null`."
+      },
+      "PipelineTriggerDefinitionDto": {
+        "required": [
+          "kind",
+          "input"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TriggerKind"
+          },
+          "input": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "FR-336, FR-337, FR-362: a trigger the definition declares (`manual`, `schedule` or `webhook`)\n            and, for a webhook, the input artifact its body becomes."
+      },
+      "PipelineVariantsDefinitionDto": {
+        "required": [
+          "count",
+          "selectAgent",
+          "labels"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "selectAgent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "FR-349, FR-363: output variants `v1`…`v{count}`, chosen by `selectAgent` or (when it is\n            `null`) a `variant_select` gate."
+      },
+      "PipelineWebhookAcceptedDto": {
+        "required": [
+          "runId"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "FR-337: the run a webhook call started or submitted to."
+      },
+      "PipelineWebhookDto": {
+        "required": [
+          "id",
+          "pipelineId",
+          "url",
+          "previousSecretExpiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "previousSecretExpiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "FR-337: a project webhook (never its secret)."
+      },
+      "PipelineWebhookSecretDto": {
+        "required": [
+          "secret"
+        ],
+        "type": "object",
+        "properties": {
+          "secret": {
+            "type": "string"
+          }
+        },
+        "description": "FR-337: a rotated webhook's new secret, shown only now (the old one stays valid for 24 hours)."
       },
       "PlanRunStatus": {
         "enum": [
@@ -25017,7 +28568,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing."
+            "description": "Machine-readable sub-reason for some codes. RESTORE_NOT_ALLOWED: stage_completed, stage_not_reached, other_release_version, corrupted or releasing. SOURCE_ARTIFACT_MISSING: the missing artifact's title (FR-352; details holds its key)."
           },
           "installUrl": {
             "type": "string",
@@ -25607,7 +29158,7 @@
             }
           }
         },
-        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once Tevrin has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:\nnone), for the overview and `aide status`. `productionUrls` (FR-151) is the production URL of each component\nwith a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now."
+        "description": "Deterministic project state for the overview page and the CLI (§6 `/api/projects/:id/state`). `tokensUsed`\ncounts every agent run's tokens; a `null` `tokenBudget` means unlimited (FR-26). `executionStatus` is the\nexecution runner's state over the current plan (FR-31, FR-37). `pullRequest` is the project PR once Tevrin has opened\nit (FR-36), else `null`. `latestRelease` is the latest release attempt of the current release version (FR-42,\nFR-43), else `null`. Artifacts, steps, review and gates are those of the current release version\n`releaseVersionId` (the version in development, else the latest released; §4.10). `checkpoint` was\n`projectVersion` (D-V2-11). `suggestedNextVersion` prefills \"Start new version\" (FR-60: the next minor of the\nreleased version). `latestDeployment` is the project's newest deployment of any target (FR-90, FR-91; `null`:\nnone), for the overview. `productionUrls` (FR-151) is the production URL of each component\nwith a deployment target: the target's production URL (its stable domain), else the URL of the deployment production serves now."
       },
       "ProjectStatus": {
         "enum": [
@@ -25722,6 +29273,28 @@
         },
         "description": "A row of the projects list (FR-6, FR-62). `myRole` is `null` for an Admin who isn't a member;\n`releasedVersion` / `developmentVersion` are the two version badges (`null` when not released / nothing in\ndevelopment); `checkpoint` was `projectVersion` (D-V2-11); `presetId`/`presetName`/`presetVersion`\nare history (FR-129: the retired preset the current version was migrated from; `null`: none); `stackPacks` the pack ids of the current version's\nstack composition (FR-117, the `pack` filter; empty: no stack)."
       },
+      "PromptOutcomeDto": {
+        "required": [
+          "metric",
+          "meanScore",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "meanScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "FR-353: an agent key and prompt version's mean outcome score on one metric, over its scored targets."
+      },
       "PromptStatsDto": {
         "required": [
           "agentKey",
@@ -25732,7 +29305,8 @@
           "avgCost",
           "avgLatencyMs",
           "avgDurationMs",
-          "failureRate"
+          "failureRate",
+          "outcomes"
         ],
         "type": "object",
         "properties": {
@@ -25772,9 +29346,15 @@
           "failureRate": {
             "type": "number",
             "format": "double"
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptOutcomeDto"
+            }
           }
         },
-        "description": "FR-298: one (agent key, prompt version) group of a pipeline's agent runs."
+        "description": "FR-298: one (agent key, prompt version) group of a pipeline's agent runs; FR-353: `outcomes`, the mean outcome score and scored-target count per metric."
       },
       "PullRequestCommitDto": {
         "required": [
@@ -27130,6 +30710,26 @@
         },
         "description": "A recorded rollback (FR-44, §4.8): from checkpoint `fromCheckpoint` to `toCheckpoint` of release version\n`releaseVersionId`, restoring `restoredPhase`. `invalidatedArtifactIds` are the artifacts created after the target checkpoint; `resetStepIds` the steps of\ninvalidated plans (now `invalidated`); `requeuedStepIds` the blocked or rejected steps of surviving plans\n(back to `pending`); `cancelledGateIds` and `cancelledJobIds` the pending gates and queued jobs it\ncancelled. `createdBy` is the Owner (or the system, for an escalation decision recorded by a worker)."
       },
+      "RollbackPipelineRunRequest": {
+        "required": [
+          "targetCheckpoint",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "targetCheckpoint": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "description": "FR-333: roll a run back to an earlier checkpoint."
+      },
       "RollbackRequest": {
         "required": [
           "targetCheckpoint",
@@ -27349,6 +30949,13 @@
           "skipped"
         ],
         "description": "The state of a rollout step. Wire values: `pending`, `running`, `succeeded`, `failed`, `skipped`."
+      },
+      "RunControl": {
+        "enum": [
+          "engine",
+          "host"
+        ],
+        "description": "FR-330: who starts and moves a pipeline's runs."
       },
       "RunInputArtifactDto": {
         "required": [
@@ -28794,7 +32401,7 @@
             }
           }
         },
-        "description": "§4.27: the structured profile, as in the `aide-stack-profile` block (the editor posts it back inside that block)."
+        "description": "§4.27: the structured profile, as in the `tevrin-stack-profile` block (the editor posts it back inside that block)."
       },
       "StackProfileEvidenceDto": {
         "required": [
@@ -29194,6 +32801,38 @@
           "skipped"
         ],
         "description": "FR-300: a stage's state in a run's stage list."
+      },
+      "StartPipelineRunRequest": {
+        "required": [
+          "pipelineId"
+        ],
+        "type": "object",
+        "properties": {
+          "pipelineId": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "The pipeline id (e.g. `fixture-linear`)."
+          },
+          "approvalMode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The run's approval mode; the project's when omitted.",
+                "$ref": "#/components/schemas/ApprovalMode"
+              }
+            ]
+          },
+          "inputs": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "description": "Input artifacts (declared `input: true`) by key, each stored as version 1."
+          }
+        },
+        "description": "FR-331: start a run of an engine-controlled pipeline."
       },
       "StartRefinementRequest": {
         "type": "object",
@@ -29836,6 +33475,14 @@
         },
         "description": "FR-165: one tracker for the Issue trackers section: whether it's `ready` to browse and, if not, why (`reason`:\n`not_connected`, `app_not_registered` or `issues_permission_missing`, with the App settings link in `settingsUrl`)."
       },
+      "TriggerKind": {
+        "enum": [
+          "manual",
+          "schedule",
+          "webhook"
+        ],
+        "description": "FR-284: 0.7.0 ran only TriggerKind.Manual (D-0.7.0-3); 0.8.0 adds schedules and webhooks (FR-336, FR-337)."
+      },
       "UnreadNotificationCountDto": {
         "required": [
           "unreadCount"
@@ -29983,7 +33630,7 @@
                 "type": "null"
               },
               {
-                "description": "FR-65: `aide_merges` (Tevrin merges the PR on release) or `manual` (Tevrin never merges; the release\n    marks the PR ready for review and waits for the merge on the Git host). FR-140, Bitbucket projects only (else 400\n    `VALIDATION`): `fast_forward` or `squash`, Tevrin merging with that Bitbucket merge strategy\n    (`aide_merges` merges with `merge_commit`); a project that leaves Bitbucket goes back to `aide_merges`.\n    Applies to the next release attempt.",
+                "description": "FR-65: `tevrin_merges` (Tevrin merges the PR on release) or `manual` (Tevrin never merges; the release\n    marks the PR ready for review and waits for the merge on the Git host). FR-140, Bitbucket projects only (else 400\n    `VALIDATION`): `fast_forward` or `squash`, Tevrin merging with that Bitbucket merge strategy\n    (`tevrin_merges` merges with `merge_commit`); a project that leaves Bitbucket goes back to `tevrin_merges`.\n    Applies to the next release attempt. FR-326 (D-0.8.0-10): `aide_merges`, the 0.7.0 name, is still accepted\n    as `tevrin_merges` until 0.9.0.",
                 "$ref": "#/components/schemas/MergeStrategy"
               }
             ]
@@ -30103,6 +33750,36 @@
           }
         },
         "description": "Replaces the project's notification channels (FR-47)."
+      },
+      "UpdatePipelineScheduleRequest": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "cron": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inputs": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        "description": "FR-336: pause or resume a schedule, or change its cron, timezone or inputs (omitted fields keep their value)."
       },
       "UpdatePlatformConnectionRequest": {
         "type": "object",
@@ -30417,6 +34094,9 @@
     },
     {
       "name": "Pipeline runs"
+    },
+    {
+      "name": "Pipeline triggers"
     },
     {
       "name": "Notifications"

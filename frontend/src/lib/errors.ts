@@ -20,7 +20,7 @@ function hostRateLimited(host: string, outcome?: string): string {
 
 /**
  * The ONE place that maps API `errorCode`s to user copy (CLAUDE.md rule 4). Mirrors
- * backend/src/Aide.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
+ * backend/src/Tevrin.Domain/Common/ErrorCodes.cs (endpoint codes and agent-run codes; Guardian codes are separate).
  */
 export const errorMessages = {
   // Common
@@ -115,6 +115,29 @@ export const errorMessages = {
   // Approval links
   LINK_EXPIRED: "This approval link has expired.",
   LINK_USED: "This approval link has already been used.",
+  // Engine run control and triggers (FR-330–FR-337, §6). SOURCE_ARTIFACT_MISSING's `{artifact}` is the artifact's title.
+  RUN_CONTROLLED_BY_HOST: "This pipeline is run from its own pages, not from here.",
+  RUN_ALREADY_ACTIVE: "This project already has a run in progress for this pipeline.",
+  RUN_NOT_ACTIVE: "This run has already finished.",
+  INPUT_INVALID: "Some input values aren't valid. Check the highlighted fields.",
+  SOURCE_ARTIFACT_MISSING: "Lock a version of {artifact} before starting a run.",
+  SCHEDULE_INVALID: "That schedule isn't valid. Check the cron expression and timezone.",
+  TRIGGER_NOT_SUPPORTED: "This pipeline can't be started that way.",
+  // §6 "(API only)": returned to webhook callers (FR-337, §4.72), never shown in the app. The copy is for completeness.
+  WEBHOOK_SIGNATURE_INVALID: "The webhook signature is missing, invalid or stale.",
+  WEBHOOK_REPLAY: "This webhook delivery was already received.",
+  // §6 job and run failure codes (not HTTP errors), shown on stage executions and in the timeline.
+  FANOUT_ISOLATION_BROKEN:
+    "A fan-out branch was stopped because its input contained another branch's output. Check the stage's context providers.",
+  VARIANT_CHOICE_INVALID: "That isn't one of the stage's variants. Pick one of v1 to vn.",
+  VALIDATOR_INVALID_OUTPUT:
+    "The stage's validator agent didn't return a valid verdict, so the attempt failed. Check the validator's prompt and model.",
+  MAP_TOO_MANY_ITEMS:
+    "The map stage has more items than its max_items limit, so no item ran. Raise the limit or split the input.",
+  TOOL_STATE_TOO_LARGE:
+    "The agent's conversation grew past 1 MB while waiting for a tool approval, so the stage failed. Shorten its inputs or split the stage.",
+  EXTERNAL_ACTION_REJECTED:
+    "The external action was rejected, so nothing was sent and the stage failed.",
   // Agent runs (shown on run details)
   MISSING_INPUT: "The agent was missing a required input.",
   INVALID_PLAN: "The agent produced an invalid plan.",
@@ -218,9 +241,9 @@ export const contextualErrorMessages = {
     /** `baseVersion` is no longer the latest version; `errorMessage` names it when the details carry `latestVersion: N`. */
     CONFLICT:
       "Someone saved a newer version while you were editing. Your text is kept here: copy it, then cancel and edit again to start from their version.",
-    /** FR-18, FR-29: an edited plan's `aide-plan` block breaks the plan rules; the reasons are in `details`. */
+    /** FR-18, FR-29: an edited plan's plan block breaks the plan rules; the reasons are in `details`. */
     INVALID_PLAN:
-      "The plan in the aide-plan block is invalid, so it wasn't saved. Fix these problems and save again.",
+      "The plan in the plan block is invalid, so it wasn't saved. Fix these problems and save again.",
   },
   /** POST /api/projects/:id/artifacts/:type/versions/:v/restore (FR-58); RESTORE_NOT_ALLOWED uses its `reason`. */
   restoreArtifact: {
@@ -262,9 +285,9 @@ export const contextualErrorMessages = {
       "This version is already approved and locked, so it can no longer be rejected.",
     WRONG_PHASE:
       "Artifacts of this type can't be decided in the project's current phase.",
-    /** FR-30: the plan's `aide-plan` block can't produce execution steps; the reasons are in `details`. */
+    /** FR-30: the plan's plan block can't produce execution steps; the reasons are in `details`. */
     INVALID_PLAN:
-      "This plan's aide-plan block is invalid, so it can't be approved. Edit it as a new draft and fix these problems.",
+      "This plan's plan block is invalid, so it can't be approved. Edit it as a new draft and fix these problems.",
   },
   /** POST /api/projects/:id/execution/start · /pause · /resume (FR-31, FR-37); the unmet conditions are in `details`. */
   /** POST /api/projects/:id/gates/:gateId/approve on a step_blocked escalation (FR-33): accept is refused there. */
@@ -755,6 +778,33 @@ export const contextualErrorMessages = {
     NOT_FOUND: "That user no longer exists. The list now shows the latest.",
     FORBIDDEN: "Only administrators can change system roles, and only from a browser session.",
   },
+  /** POST /api/projects/:id/pipeline-runs from the Pipeline tab's Start run dialog (0.8.0 FR-362). */
+  startPipelineRun: {
+    FORBIDDEN: "Only project Contributors and Owners can start runs.",
+    NOT_FOUND: "That pipeline isn't available any more. Pick another one.",
+    INPUT_INVALID: "Some inputs don't match their schema. Fix them and try again.",
+    VALIDATION: "One of the inputs isn't declared by this pipeline. Reload and try again.",
+  },
+  /** POST /api/pipeline-runs/:runId/inputs/:artifactKey from the Submit input dialog (0.8.0 FR-362). */
+  submitPipelineInput: {
+    FORBIDDEN: "Only project Contributors and Owners can submit input.",
+    NOT_FOUND: "This run no longer takes that input. Reload to see the run.",
+    INPUT_INVALID: "The input doesn't match its schema. Fix it and try again.",
+    RUN_NOT_ACTIVE: "This run isn't waiting for input any more. The page now shows its latest state.",
+  },
+  /** The Pipeline tab's Feedback section: add and delete agent feedback (0.8.0 FR-365). */
+  agentFeedback: {
+    FORBIDDEN: "You can delete only your own feedback, unless you're a project Owner.",
+    NOT_FOUND: "That feedback entry was already deleted. The list now shows the latest.",
+    VALIDATION: "Feedback must be 1 to 2,000 characters.",
+  },
+  /** The Pipeline tab's Triggers section: schedules and webhooks (0.8.0 FR-366). */
+  pipelineTriggers: {
+    FORBIDDEN: "Only project Owners can manage triggers.",
+    NOT_FOUND: "That schedule or webhook was already deleted. The list now shows the latest.",
+    TRIGGER_NOT_SUPPORTED: "This pipeline doesn't declare that trigger.",
+    CONFLICT: "This webhook's secret was just rotated elsewhere. Reload to see the webhook, then rotate again if you need to.",
+  },
   /** POST /api/pipeline-runs/:runId/gates/:gateId/approve|reject from the gate inbox (0.7.0 FR-307). */
   pipelineGateDecision: {
     FORBIDDEN: "Only project Owners can decide this gate.",
@@ -837,7 +887,7 @@ const gitHostNames: Readonly<Record<string, string>> = { gitlab: "GitLab", bitbu
 /**
  * FR-131, FR-134: `reason` on `?error=GIT_AUTH_FAILED&reason=…&provider=gitlab|bitbucket` (backend GitLab/GitLabSignIn.cs,
  * Bitbucket/BitbucketSignIn.cs,
- * Aide.Domain/GitHosts/GitSignInRules.cs). `{host}` is the Git host's name.
+ * Tevrin.Domain/GitHosts/GitSignInRules.cs). `{host}` is the Git host's name.
  */
 export const gitHostFailureMessages: Readonly<Record<string, string>> = {
   access_denied: "{host} authorization was cancelled.",
@@ -1363,6 +1413,11 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       return error.message.startsWith("Request failed with HTTP")
         ? trackerCopy(error.errorCode as TrackerCopyCode)
         : error.message;
+    }
+    if (error.errorCode === "SOURCE_ARTIFACT_MISSING") {
+      // D-0.8.0-19: the problem's `reason` is the missing artifact's title; no placeholder reaches the screen.
+      const artifact = error.reason?.trim() ?? "";
+      return messageFor("SOURCE_ARTIFACT_MISSING", context).replaceAll("{artifact}", artifact === "" ? "the source artifact" : artifact);
     }
     if (error.errorCode === "INVALID_STATE") {
       const reason = error.message.startsWith("Request failed with HTTP") ? "" : error.message.trim();

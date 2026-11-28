@@ -1,0 +1,339 @@
+using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Features.Git;
+using Tevrin.Api.Features.Lifecycle;
+using Tevrin.Domain.Access;
+using Tevrin.Domain.Common;
+using Tevrin.Domain.Entities;
+using Tevrin.Domain.Lifecycle;
+using Tevrin.Domain.Releases;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Infrastructure.Git;
+using Tevrin.Infrastructure.Persistence;
+using Tevrin.Infrastructure.Persistence.Conversion;
+using Tevrin.Pack.Sdlc;
+
+namespace Tevrin.Api.Features.Release;
+
+/// <summary>Payload of the <c>merge_poll</c> job (§4.14): the project, the awaiting attempt and the PR's last ETag.</summary>
+public sealed record MergePollJobPayload(Guid ProjectId, Guid ReleaseId, string? ETag = null);
+
+/// <summary>How a release lifecycle move refused in a job fails the job.</summary>
+public static class ReleaseMoveFailure
+{
+    /// <summary>
+    /// FR-277: <c>DEFINITION_UNAVAILABLE</c> fails the job permanently (no retry can succeed until a build that registers the
+    /// missing names is deployed; an Admin then retries the dead letter), with the missing names in the message. Any other
+    /// refusal stays transient, as in 0.6.1.
+    /// </summary>
+    public static JobFailedException Of(Tevrin.Engine.Domain.Common.DomainError error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        if (error.Code != ErrorCodes.DefinitionUnavailable)
+        {
+            return new JobFailedException(error.Message, transient: true, error.Code);
+        }
+
+        var missing = error.Details.Count > 0 ? $" Missing: {string.Join(", ", error.Details)}." : string.Empty;
+        return new JobFailedException(
+            $"{error.Message}{missing} Redeploy a build that registers them, then retry the dead letter.", transient: false, error.Code);
+    }
+}
+
+/// <summary>
+/// FR-64, FR-65: how a release attempt ends, shared by the release job and the merge poll. Each method writes one unit of
+/// work guarded by the project's <c>xmin</c> (a concurrent change retries the job) and goes through the lifecycle state
+/// machine for the project's status (CLAUDE.md rule 9); the release version and the project's denormalised versions
+/// change in the same transaction (§5).
+/// </summary>
+public sealed partial class ReleaseCompletion(
+    TevrinDbContext db,
+    LifecycleWriter writer,
+    JobEnqueuer jobs,
+    Deployments.RolloutScheduler rollouts,
+    Pipelines.SdlcLifecycle lifecycle,
+    TimeProvider time,
+    ILogger<ReleaseCompletion> logger)
+{
+    private static JobFailedException MoveFailed(Tevrin.Engine.Domain.Common.DomainError error) => ReleaseMoveFailure.Of(error);
+
+    public const string CompletedReason = "Release completed: merged and tagged";
+
+    public const string AwaitingReason = "Release awaiting merge on GitHub";
+
+    /// <summary>
+    /// Released: the attempt (in progress, or awaiting its merge) succeeds (tag, merge commit, GitHub Release URL,
+    /// completed_at), the version becomes <c>released</c>, the project <c>released</c> with this version as its released
+    /// version and nothing in development, and <c>RELEASE_COMPLETED</c> (after <c>RELEASE_MERGED_EXTERNALLY</c> when the merge
+    /// happened on GitHub). If the project moved on meanwhile, the Git facts are recorded on the attempt only. FR-91: with
+    /// Vercel set up, the production deployment of the merge commit is recorded and queued in the same transaction (a
+    /// failed deployment never undoes the release, D-V2-10). §4.21: <paramref name="unmigrated"/> writes
+    /// <c>MERGED_HEAD_MISMATCH</c> in the same transaction.
+    /// </summary>
+    public async Task SucceedAsync(
+        Guid releaseId, ReleaseOutcome outcome, string? githubReleaseUrl, bool mergedExternally, CancellationToken cancellationToken, UnmigratedMerge? unmigrated = null)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        db.ChangeTracker.Clear();
+        var now = time.GetUtcNow();
+        var release = await db.Releases.FirstAsync(r => r.Id == releaseId, cancellationToken);
+        if (!ReleaseAttemptRules.CanTransition(release.Status, ReleaseStatus.Succeeded))
+        {
+            LogSkipped(logger, "the release attempt was already recorded");
+            return;
+        }
+
+        release.Status = ReleaseStatus.Succeeded;
+        release.Tag = outcome.Tag ?? release.Tag;
+        release.MergeCommitSha = outcome.MergeCommitSha;
+        release.GithubReleaseUrl = githubReleaseUrl ?? release.GithubReleaseUrl;
+        release.CompletedAt = now;
+        var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
+        if (IsReleasing(project, release.Checkpoint))
+        {
+            var completed = await lifecycle.ApplyAsync(db, project, SdlcTransitions.ReleaseCompleted(CompletedReason), LifecycleSnapshot.Empty, cancellationToken);
+            if (completed.IsFailure)
+            {
+                throw MoveFailed(completed.Error!);
+            }
+
+            await writer.ApplyAsync(project, completed.Value, SystemActor.Name, now, cancellationToken);
+            var versions = await db.ReleaseVersions.Where(v => v.ProjectId == project.Id).ToListAsync(cancellationToken);
+            if (versions.FirstOrDefault(v => v.Id == release.ReleaseVersionId) is { } version
+                && ReleaseVersionRules.CanTransition(version.Status, ReleaseVersionStatus.Released))
+            {
+                version.Status = ReleaseVersionStatus.Released;
+                version.Tag = release.Tag;
+                version.MergeCommitSha = release.MergeCommitSha;
+                version.ReleasedAt = now;
+            }
+
+            Versions.ReleaseVersionScope.Refresh(project, versions);
+        }
+        else
+        {
+            LogProjectMoved(logger, project.Id, release.Checkpoint);
+        }
+
+        if (unmigrated is not null)
+        {
+            db.AddEvent(
+                EventTypes.MergedHeadMismatch,
+                release.ProjectId,
+                new { releaseId = release.Id, expectedHeadSha = unmigrated.ExpectedHeadSha, mergedHeadSha = unmigrated.MergedHeadSha, mergeCommitSha = release.MergeCommitSha },
+                SystemActor.Name,
+                now);
+        }
+
+        var provider = await ReleaseRecords.ProviderAsync(db, release.ProjectId, cancellationToken);
+        if (mergedExternally)
+        {
+            db.AddEvent(
+                EventTypes.ReleaseMergedExternally,
+                release.ProjectId,
+                new
+                {
+                    releaseId = release.Id,
+                    releaseVersionId = release.ReleaseVersionId,
+                    version = await VersionTextAsync(release.ReleaseVersionId, cancellationToken),
+                    checkpoint = release.Checkpoint,
+                    tag = release.Tag,
+                    mergeCommitSha = release.MergeCommitSha,
+                    githubReleaseUrl = release.GithubReleaseUrl,
+                    pullRequestUrl = release.PrUrl,
+                    provider,
+                },
+                SystemActor.Name,
+                now);
+        }
+
+        db.AddEvent(
+            EventTypes.ReleaseCompleted,
+            release.ProjectId,
+            new
+            {
+                releaseId = release.Id,
+                releaseVersionId = release.ReleaseVersionId,
+                checkpoint = release.Checkpoint,
+                tag = release.Tag,
+                attempt = release.Attempt,
+                mergeCommitSha = release.MergeCommitSha,
+                pullRequestUrl = release.PrUrl,
+                githubReleaseUrl = release.GithubReleaseUrl,
+                alreadyTagged = outcome.AlreadyTagged,
+                mergedExternally,
+                provider,
+            },
+            SystemActor.Name,
+            now);
+        var defaultBranch = await db.ProjectGitSettings.AsNoTracking()
+            .Where(s => s.ProjectId == release.ProjectId)
+            .Select(s => s.DefaultBranch)
+            .FirstOrDefaultAsync(cancellationToken) ?? "main";
+        // FR-149 (amends FR-91): the production rollout of the merge commit (migrations → backend → frontend).
+        await rollouts.EnqueueProductionAsync(release, defaultBranch, now, cancellationToken);
+        await SaveAsync(cancellationToken);
+        LogReleased(logger, release.ProjectId, release.Tag, outcome.AlreadyTagged, mergedExternally);
+    }
+
+    /// <summary>
+    /// FR-65: the merge was refused or the strategy is <c>manual</c>: the attempt becomes <c>awaiting_merge</c> (since now,
+    /// with <paramref name="reasons"/>), the version <c>awaiting_merge</c>, the project <c>awaiting_merge</c> (state
+    /// machine), <c>RELEASE_AWAITING_MERGE</c> (Owners notified with the PR link and reasons) and the merge poll is queued
+    /// for its first poll — all in one transaction.
+    /// </summary>
+    public async Task AwaitMergeAsync(Guid releaseId, MergeStrategy strategy, IReadOnlyList<MergeReadinessReasonDto> reasons, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reasons);
+        db.ChangeTracker.Clear();
+        var now = time.GetUtcNow();
+        var release = await db.Releases.FirstAsync(r => r.Id == releaseId, cancellationToken);
+        var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
+        if (!ReleaseAttemptRules.CanTransition(release.Status, ReleaseStatus.AwaitingMerge) || !IsReleasing(project, release.Checkpoint))
+        {
+            LogSkipped(logger, "the attempt or the project moved on before awaiting the merge");
+            return;
+        }
+
+        var awaiting = await lifecycle.ApplyAsync(db, project, SdlcTransitions.ReleaseAwaitingMerge(AwaitingReason), LifecycleSnapshot.Empty, cancellationToken);
+        if (awaiting.IsFailure)
+        {
+            throw MoveFailed(awaiting.Error!);
+        }
+
+        release.Status = ReleaseStatus.AwaitingMerge;
+        release.AwaitingMergeSince = now;
+        release.MergeReasons = TevrinJson.Serialize(reasons);
+        await writer.ApplyAsync(project, awaiting.Value, SystemActor.Name, now, cancellationToken);
+        var versions = await db.ReleaseVersions.Where(v => v.ProjectId == project.Id).ToListAsync(cancellationToken);
+        if (versions.FirstOrDefault(v => v.Id == release.ReleaseVersionId) is { } version
+            && ReleaseVersionRules.CanTransition(version.Status, ReleaseVersionStatus.AwaitingMerge))
+        {
+            version.Status = ReleaseVersionStatus.AwaitingMerge;
+        }
+
+        Versions.ReleaseVersionScope.Refresh(project, versions);
+        db.AddEvent(
+            EventTypes.ReleaseAwaitingMerge,
+            project.Id,
+            new
+            {
+                releaseId = release.Id,
+                releaseVersionId = release.ReleaseVersionId,
+                version = versions.FirstOrDefault(v => v.Id == release.ReleaseVersionId)?.Version,
+                checkpoint = release.Checkpoint,
+                tag = release.Tag,
+                attempt = release.Attempt,
+                pullRequestUrl = release.PrUrl,
+                mergeStrategy = strategy,
+                awaitingMerge = true,
+                reasons,
+                provider = await ReleaseRecords.ProviderAsync(db, project.Id, cancellationToken),
+            },
+            SystemActor.Name,
+            now);
+        jobs.Enqueue(SdlcJobTypes.MergePoll, new MergePollJobPayload(project.Id, release.Id), project.Id, now, MergePollRules.NextPollAt(now, now));
+        await SaveAsync(cancellationToken);
+        LogAwaiting(logger, project.Id, release.Tag, reasons.Count);
+    }
+
+    /// <summary>
+    /// FR-65, §4.14: the awaited merge won't happen (<c>PR_CLOSED</c>, <c>MERGE_TIMEOUT</c>) or the tag can't be made
+    /// (<c>TAG_EXISTS</c>): the attempt fails with <paramref name="errorCode"/> (<c>RELEASE_FAILED</c>), the version is back
+    /// in development and the project back to <c>releasing</c> (state machine), so an Owner can retry with
+    /// <c>POST /release</c>.
+    /// </summary>
+    public async Task AbandonAsync(Guid releaseId, string errorCode, string message, CancellationToken cancellationToken)
+    {
+        db.ChangeTracker.Clear();
+        var now = time.GetUtcNow();
+        var release = await db.Releases.FirstAsync(r => r.Id == releaseId, cancellationToken);
+        if (release.Status != ReleaseStatus.AwaitingMerge)
+        {
+            LogSkipped(logger, "the attempt is no longer awaiting its merge");
+            return;
+        }
+
+        ReleaseRecords.Fail(db, release, errorCode, message, [], SystemActor.Name, now, provider: await ReleaseRecords.ProviderAsync(db, release.ProjectId, cancellationToken));
+        var project = await db.Projects.FirstAsync(p => p.Id == release.ProjectId, cancellationToken);
+        if (project.Checkpoint == release.Checkpoint)
+        {
+            await BackToReleasingAsync(db, writer, lifecycle, project, $"Release failed: {errorCode}", now, cancellationToken);
+        }
+
+        await SaveAsync(cancellationToken);
+        LogAbandoned(logger, release.ProjectId, release.Tag, errorCode);
+    }
+
+    /// <summary>
+    /// FR-65: a project in <c>release/awaiting_merge</c> goes back to <c>releasing</c> through the state machine, and its
+    /// <c>awaiting_merge</c> version back to <c>in_development</c> (denormalised versions refreshed). Nothing is saved here.
+    /// Any other project state is left alone.
+    /// </summary>
+    public static async Task BackToReleasingAsync(
+        TevrinDbContext db, LifecycleWriter writer, Pipelines.SdlcLifecycle lifecycle, Project project, string reason, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(lifecycle);
+        ArgumentNullException.ThrowIfNull(project);
+        if (project.CurrentPhase != Phase.Release || project.Status != ProjectStatus.AwaitingMerge)
+        {
+            return;
+        }
+
+        var abandoned = await lifecycle.ApplyAsync(db, project, SdlcTransitions.ReleaseMergeAbandoned(reason), LifecycleSnapshot.Empty, cancellationToken);
+        if (abandoned.IsFailure)
+        {
+            throw MoveFailed(abandoned.Error!);
+        }
+
+        await writer.ApplyAsync(project, abandoned.Value, SystemActor.Name, now, cancellationToken);
+        var versions = await db.ReleaseVersions.Where(v => v.ProjectId == project.Id).ToListAsync(cancellationToken);
+        foreach (var version in versions.Where(v => v.Status == ReleaseVersionStatus.AwaitingMerge))
+        {
+            if (ReleaseVersionRules.CanTransition(version.Status, ReleaseVersionStatus.InDevelopment))
+            {
+                version.Status = ReleaseVersionStatus.InDevelopment;
+            }
+        }
+
+        Versions.ReleaseVersionScope.Refresh(project, versions);
+    }
+
+    private Task<string?> VersionTextAsync(Guid releaseVersionId, CancellationToken cancellationToken) =>
+        db.ReleaseVersions.AsNoTracking().Where(v => v.Id == releaseVersionId).Select(v => v.Version).FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>The project is still in release at the attempt's checkpoint, releasing or awaiting its merge.</summary>
+    public static bool IsReleasing(Project project, int checkpoint)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return project.CurrentPhase == Phase.Release
+            && project.Status is ProjectStatus.Releasing or ProjectStatus.AwaitingMerge
+            && project.Checkpoint == checkpoint;
+    }
+
+    private async Task SaveAsync(CancellationToken cancellationToken)
+    {
+        var saved = await LifecyclePersistence.SaveAsync(db, cancellationToken);
+        if (saved.IsFailure)
+        {
+            // A concurrent change (e.g. a rollback): retry; the next attempt checks again.
+            throw new JobFailedException(saved.Error!.Message, transient: true, saved.Error.Code);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Release completion did nothing: {Reason}")]
+    private static partial void LogSkipped(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Project {ProjectId} released as {Tag} (tag already existed: {AlreadyTagged}, merged outside Tevrin: {MergedExternally})")]
+    private static partial void LogReleased(ILogger logger, Guid projectId, string tag, bool alreadyTagged, bool mergedExternally);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Release {Tag} of project {ProjectId} awaits a merge on its Git host ({ReasonCount} reasons)")]
+    private static partial void LogAwaiting(ILogger logger, Guid projectId, string tag, int reasonCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Awaited merge of release {Tag} of project {ProjectId} abandoned ({ErrorCode})")]
+    private static partial void LogAbandoned(ILogger logger, Guid projectId, string tag, string errorCode);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Project {ProjectId} left release checkpoint {Checkpoint} while it was being released; the release is recorded, the project is unchanged")]
+    private static partial void LogProjectMoved(ILogger logger, Guid projectId, int checkpoint);
+}

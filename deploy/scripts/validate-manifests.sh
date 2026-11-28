@@ -12,8 +12,8 @@ SRC="$REPO_ROOT/deploy/k8s"
 
 command -v kubectl >/dev/null 2>&1 || { echo "ERROR: kubectl not found." >&2; exit 1; }
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/aide-k8s-validate.XXXXXX")"
-cleanup() { [[ -n "${WORK:-}" && -d "$WORK" && "$WORK" == *aide-k8s-validate.* ]] && rm -rf -- "$WORK"; }
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/tevrin-k8s-validate.XXXXXX")"
+cleanup() { [[ -n "${WORK:-}" && -d "$WORK" && "$WORK" == *tevrin-k8s-validate.* ]] && rm -rf -- "$WORK"; }
 trap cleanup EXIT
 
 # Copy without the real secrets file or generated output (tar keeps relative layout; works in Git Bash and Linux).
@@ -82,7 +82,7 @@ for overlay in overlays/local overlays/local-e2e; do
     exit 1
   fi
 
-  # FR-163: AIDE's own database is postgres:18 on the 18 data layout, with no 17 image or path left in the render.
+  # FR-163: Tevrin's own database is postgres:18 on the 18 data layout, with no 17 image or path left in the render.
   DB_STATEFULSET="$(doc_of StatefulSet db <<<"$RENDERED")"
   [[ -n "$DB_STATEFULSET" ]] || { echo "ERROR: $overlay has no StatefulSet 'db'." >&2; exit 1; }
   if grep -qE 'postgres:17|/var/lib/postgresql/data' <<<"$RENDERED"; then

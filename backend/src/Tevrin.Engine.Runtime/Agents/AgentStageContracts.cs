@@ -32,6 +32,12 @@ public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigge
     /// </summary>
     public int? JobAttempt { get; init; }
 
+    /// <summary>
+    /// FR-359: the job running this stage, or <c>null</c> when the caller doesn't say. A saved destructive call records it,
+    /// so a job that ends without succeeding closes its call (<see cref="Runs.ToolApprovalJobEndedHook"/>).
+    /// </summary>
+    public Guid? JobId { get; init; }
+
     /// <summary>FR-314: whether feedback goes into a template without <c>{{FEEDBACK}}</c> under the engine's heading (default <c>true</c>).</summary>
     public bool AppendFeedback { get; init; } = true;
 
@@ -42,6 +48,40 @@ public sealed record AgentStageRequest(Guid RunId, string StageId, string Trigge
     /// agent. A key the stage doesn't bind fails the job with <c>VALIDATION</c>. Retries keep it.
     /// </summary>
     public string? AgentKey { get; init; }
+
+    /// <summary>
+    /// FR-345: the fan-out branch this attempt runs (its variant label: the agent key, or <c>#i</c>), or <c>null</c>. The
+    /// output is stored as the stage's own artifact with this variant, context providers are called with it as
+    /// <see cref="AgentContextRequest.Branch"/>, and the rendered prompt must hold no sibling's output (§4.65,
+    /// <c>FANOUT_ISOLATION_BROKEN</c>).
+    /// </summary>
+    public string? Variant { get; init; }
+
+    /// <summary>
+    /// FR-355: the 0-based map item this attempt works on, or <c>null</c>. <see cref="AgentKey"/> is then the map's agent:
+    /// it reads the stage's declared inputs (its element comes in <see cref="PromptValues"/>), its output is stored as the
+    /// stage's own artifact with this item index (one collection), its agent run records the index, and the rendered
+    /// prompt must hold no other item's output (§4.65).
+    /// </summary>
+    public int? ItemIndex { get; init; }
+
+    /// <summary>FR-355: when the current map entry's items were opened; the isolation check compares only outputs stored
+    /// since (an earlier entry's outputs aren't siblings). Set with <see cref="ItemIndex"/>.</summary>
+    public DateTimeOffset? ItemsSince { get; init; }
+
+    /// <summary>FR-355: this attempt is the map stage's <c>reduce</c> agent (<see cref="AgentKey"/>): it reads the stage's
+    /// inputs and stores the stage's own output (the item outputs come in <see cref="PromptValues"/>).</summary>
+    public bool Reduce { get; init; }
+
+    /// <summary>
+    /// FR-356: the 1-based conversation turn this attempt speaks, or <c>null</c>. <see cref="AgentKey"/> is then a participant
+    /// (with role <see cref="TurnRole"/>): it reads the stage's declared inputs plus its binding's, stores no artifact (its
+    /// reply is the run's output text; the driver stores the transcript), and its agent run records the turn and role.
+    /// </summary>
+    public int? TurnIndex { get; init; }
+
+    /// <summary>FR-356: the participant's role for <see cref="TurnIndex"/>.</summary>
+    public string? TurnRole { get; init; }
 
     /// <summary>Whatever the host passes to its own <see cref="AgentStageExtension"/> (the engine never reads it).</summary>
     public object? HostState { get; init; }

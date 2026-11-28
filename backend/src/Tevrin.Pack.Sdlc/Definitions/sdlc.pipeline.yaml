@@ -1,6 +1,6 @@
 # FR-290: the SDLC lifecycle as a pipeline definition (SPEC §4.51 sketch, with keys fixed to 0.6.1 behaviour).
 # Since FR-292/FR-293 this definition is the SDLC lifecycle: stage order and statuses, gates (§4.53), start stages, guards
-# and the jobs queued on entering a stage (enqueue_on_enter, D-0.7.0-27) are 0.6.1's, pinned by Aide.UnitTests (FR290_*).
+# and the jobs queued on entering a stage (enqueue_on_enter, D-0.7.0-27) are 0.6.1's, pinned by Tevrin.UnitTests (FR290_*).
 # Changing any value changes the definition hash (§4.50).
 pipeline: sdlc
 # FR-321, D-0.7.0-41: version 2 adds plan validation (validate: on planning), the repo tools of the agents 0.6.1 gave them

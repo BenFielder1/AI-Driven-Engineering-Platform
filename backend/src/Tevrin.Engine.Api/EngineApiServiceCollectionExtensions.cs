@@ -18,6 +18,7 @@ public static class EngineApiServiceCollectionExtensions
         services.TryAddSingleton<Hosting.IRunActivityPolicy, Hosting.AllJobsCount>();
         services.TryAddScoped<PipelineDefinitionResolver>();
         services.TryAddScoped<PipelineRunReader>();
+        services.TryAddScoped<PipelineRunOutcomes>();
         services.TryAddScoped<PipelineTimelineReader>();
         services.TryAddScoped<PipelineGateInbox>();
         return services;

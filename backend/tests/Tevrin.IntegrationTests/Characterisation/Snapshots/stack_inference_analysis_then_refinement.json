@@ -1,0 +1,313 @@
+{
+  "agentRuns": [
+    {
+      "agent": "repository_analyst",
+      "id": "job#1",
+      "phase": "analysis",
+      "promptVersion": "3",
+      "status": "succeeded"
+    },
+    {
+      "agent": "stack_analyst",
+      "id": "job#2",
+      "phase": "analysis",
+      "promptVersion": "3",
+      "status": "succeeded"
+    }
+  ],
+  "artifacts": [
+    {
+      "agentRun": "job#1",
+      "checkpointAtCreation": 1,
+      "contentHash": "normalised:acc76b15479b09fbe20fb196c6f6683d132de94a5bd9567473452caec32c714f",
+      "createdBy": null,
+      "id": "artifact#1",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "locked",
+      "type": "codebase_summary",
+      "version": 1
+    },
+    {
+      "agentRun": "job#2",
+      "checkpointAtCreation": 1,
+      "contentHash": "normalised:eae2deda86ed26372288737843e5ed0be38297b0049d8e84d7dfd32fb438766e",
+      "createdBy": null,
+      "id": "artifact#2",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "locked",
+      "type": "stack_profile",
+      "version": 1
+    }
+  ],
+  "events": [
+    {
+      "actor": "user:owner",
+      "id": "event#1",
+      "payload": {
+        "actor": "user:owner",
+        "catalogVersion": null,
+        "developmentVersion": "0.1.0",
+        "importedTag": null,
+        "name": "Notes",
+        "projectId": "project#1",
+        "repoFullName": null,
+        "repoHasCode": null,
+        "source": "import",
+        "stackPacks": []
+      },
+      "type": "PROJECT_CREATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#2",
+      "payload": {
+        "agent": "repository_analyst",
+        "agentKey": null,
+        "jobId": "job#1",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "3",
+        "provider": "fake",
+        "runId": "job#1",
+        "stack": null,
+        "stepId": null
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#3",
+      "payload": {
+        "agent": "repository_analyst",
+        "runId": "job#1",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#4",
+      "payload": {
+        "agentRunId": "job#1",
+        "artifactId": "artifact#1",
+        "releaseVersionId": "release_version#1",
+        "type": "codebase_summary",
+        "version": 1
+      },
+      "type": "CODEBASE_SUMMARY_CREATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#5",
+      "payload": {
+        "baseCommitSha": "sha#1",
+        "conflictCandidates": [],
+        "conflicts": [],
+        "jobId": "job#2",
+        "mismatches": [],
+        "releaseVersionId": "release_version#1",
+        "suggestions": [
+          {
+            "choice": "frontend",
+            "evidence": [
+              "`vue` 3.5 in `frontend/package.json`",
+              "`vite` 7.0 in `frontend/package.json`"
+            ],
+            "mode": null,
+            "option": "fe-vue",
+            "path": "frontend"
+          },
+          {
+            "choice": "backend",
+            "evidence": [
+              "no backend manifest found"
+            ],
+            "mode": null,
+            "option": "none",
+            "path": null
+          },
+          {
+            "choice": "data",
+            "evidence": [
+              "`supabase/config.toml`",
+              "`supabase/migrations/`"
+            ],
+            "mode": "baas",
+            "option": "data-supabase",
+            "path": null
+          },
+          {
+            "choice": "vcs",
+            "evidence": [
+              "the repo is on GitHub"
+            ],
+            "mode": null,
+            "option": "vcs-github",
+            "path": null
+          },
+          {
+            "choice": "databaseHost",
+            "evidence": [
+              "`supabase/config.toml`",
+              "`supabase/migrations/`",
+              "Supabase (BaaS) is its own database host"
+            ],
+            "mode": null,
+            "option": "supabase",
+            "path": null
+          }
+        ],
+        "version": "0.1.0"
+      },
+      "type": "STACK_DETECTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#6",
+      "payload": {
+        "agent": "stack_analyst",
+        "agentKey": null,
+        "jobId": "job#2",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "3",
+        "provider": "fake",
+        "runId": "job#2",
+        "stack": null,
+        "stepId": null
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#7",
+      "payload": {
+        "agent": "stack_analyst",
+        "runId": "job#2",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#8",
+      "payload": {
+        "agentRunId": "job#2",
+        "artifactId": "artifact#2",
+        "author": "agent",
+        "parentVersion": null,
+        "type": "stack_profile",
+        "version": 1
+      },
+      "type": "ARTIFACT_CREATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#9",
+      "payload": {
+        "agentRunId": "job#2",
+        "artifactId": "artifact#2",
+        "releaseVersionId": "release_version#1",
+        "unresolvedLayers": [],
+        "version": 1
+      },
+      "type": "STACK_PROFILE_CREATED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#10",
+      "payload": {
+        "artifactId": "artifact#2",
+        "comment": null,
+        "createdStepCount": 0,
+        "invalidatedArtifactIds": [],
+        "resetStepIds": [],
+        "type": "stack_profile",
+        "version": 1
+      },
+      "type": "ARTIFACT_APPROVED"
+    },
+    {
+      "actor": "user:owner",
+      "id": "event#11",
+      "payload": {
+        "artifactId": "artifact#2",
+        "catalogHash": "2ce85919827274c51e994a2a7109deab28a5c8e76053fef0419a6b5e62e9b037",
+        "catalogVersion": "1.2.2",
+        "generalist": false,
+        "layersChanged": [],
+        "releaseVersionId": "release_version#1",
+        "stackPacks": [
+          "fe-vue",
+          "data-supabase",
+          "vcs-github",
+          "local-docker-desktop"
+        ],
+        "version": 1
+      },
+      "type": "STACK_PROFILE_APPROVED"
+    },
+    {
+      "actor": "user:contributor",
+      "id": "event#12",
+      "payload": {
+        "checkpoint": 2,
+        "from": "analysis",
+        "kind": "advance",
+        "reason": "Advanced to refinement",
+        "releaseVersionId": "release_version#1",
+        "status": "active",
+        "to": "refinement"
+      },
+      "type": "PHASE_CHANGED"
+    }
+  ],
+  "gates": [],
+  "jobs": [
+    {
+      "attempts": 1,
+      "id": "job#1",
+      "status": "succeeded",
+      "trigger": null,
+      "type": "repository_analysis"
+    },
+    {
+      "attempts": 1,
+      "id": "job#2",
+      "status": "succeeded",
+      "trigger": "stage_entered",
+      "type": "stack_analysis"
+    }
+  ],
+  "project": {
+    "approvalMode": "advisory",
+    "checkpoint": 2,
+    "developmentVersion": "0.1.0",
+    "extraReviewCycles": 0,
+    "phase": "refinement",
+    "releasedVersion": null,
+    "reviewCycle": 0,
+    "status": "active"
+  },
+  "scenario": "stack_inference_analysis_then_refinement",
+  "transitions": [
+    {
+      "actor": "user:owner",
+      "checkpoint": 1,
+      "from": null,
+      "id": "transition#1",
+      "reason": "project created",
+      "to": "analysis"
+    },
+    {
+      "actor": "user:contributor",
+      "checkpoint": 2,
+      "from": "analysis",
+      "id": "transition#2",
+      "reason": "Advanced to refinement",
+      "to": "refinement"
+    }
+  ]
+}

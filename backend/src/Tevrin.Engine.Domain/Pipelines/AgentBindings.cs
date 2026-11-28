@@ -21,6 +21,10 @@ public sealed record AgentBindingDefinition(
 
     /// <summary>D-0.7.0-44: the binding's <c>on_invalid:</c>, or <c>null</c>.</summary>
     public OnInvalidPolicy? OnInvalid { get; init; }
+
+    /// <summary>FR-358 (0.8.0): the binding's own <c>tool_policy</c>, or <c>null</c> (<c>write</c>). It doesn't inherit
+    /// the stage's.</summary>
+    public ToolPolicyDefinition? ToolPolicy { get; init; }
 }
 
 /// <summary>D-0.7.0-42: resolving the agent a request names on a stage.</summary>
@@ -30,7 +34,7 @@ public static class AgentBindings
     /// The stage as agent <paramref name="agentKey"/> sees it: <c>null</c> or the primary agent's key → the stage itself;
     /// a secondary binding's key → a view of the stage whose <see cref="StageDefinition.Agent"/>, inputs and output are the
     /// binding's, with the binding's own <c>validate:</c> and <c>on_invalid</c> (the stage's belong to its own output,
-    /// D-0.7.0-44) and no secondary bindings. <c>null</c> when the stage binds no such agent (or, for a <c>null</c> key, has no primary agent).
+    /// D-0.7.0-44), its own <c>tool_policy</c> (FR-358) and no secondary bindings. <c>null</c> when the stage binds no such agent (or, for a <c>null</c> key, has no primary agent).
     /// The view is for running the agent only; stages, transitions and gates always use the definition's stage.
     /// </summary>
     public static StageDefinition? ForAgent(this StageDefinition stage, string? agentKey)
@@ -56,6 +60,7 @@ public static class AgentBindings
             Output = binding.Output,
             Validate = binding.Validate,
             OnInvalid = binding.OnInvalid,
+            ToolPolicy = binding.ToolPolicy,
             Agents = [],
         };
     }

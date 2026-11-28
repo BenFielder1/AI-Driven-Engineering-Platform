@@ -1,0 +1,57 @@
+# Fixture pipeline (M68, FR-343, §4.64): a bull analyst and a bear analyst run at once in two branches of a parallel
+# group, each branch reading only the ticker and its own outputs; the portfolio manager decides after the join.
+pipeline: fixture-parallel
+version: 1
+title: Fixture parallel
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [analysts]
+
+artifacts:
+  ticker:     { title: Ticker, format: markdown, approval: auto_lock, cascade: none, input: true }
+  bull_case:  { title: Bull case, format: markdown, approval: auto_lock, cascade: downstream }
+  bull_risks: { title: Bull risks, format: markdown, approval: auto_lock, cascade: downstream }
+  bear_case:  { title: Bear case, format: markdown, approval: auto_lock, cascade: downstream }
+  decision:   { title: Decision, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  analysing: { generic: active }
+  deciding:  { generic: active }
+
+stages:
+  - id: analysts
+    title: Analysts
+    status: analysing
+    requires:
+      - { input: ticker }
+    parallel:
+      id: analysts
+      join: all
+      on_branch_failure: fail
+      branches:
+        - - id: bull
+            title: Bull analyst
+            status: analysing
+            agent: { key: bull-analyst, prompt: flow.bull }
+            inputs: [ticker]
+            output: bull_case
+          - id: bull_review
+            title: Bull risks
+            status: analysing
+            agent: { key: bull-reviewer, prompt: flow.bull-review }
+            inputs: [ticker, bull_case]
+            output: bull_risks
+        - - id: bear
+            title: Bear analyst
+            status: analysing
+            agent: { key: bear-analyst, prompt: flow.bear }
+            inputs: [ticker]
+            output: bear_case
+
+  - id: decide
+    title: Decide
+    status: deciding
+    agent: { key: portfolio-manager, prompt: flow.decide }
+    inputs: [bull_case, bull_risks, bear_case]
+    output: decision

@@ -41,6 +41,6 @@ dotnet_naming_style.underscore_camel.required_prefix = _
 dotnet_naming_style.underscore_camel.capitalization = camel_case
 
 # EF Core migrations are generated code
-[backend/src/Aide.Infrastructure/Migrations/*.cs]
+[backend/src/Tevrin.Infrastructure/Migrations/*.cs]
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none

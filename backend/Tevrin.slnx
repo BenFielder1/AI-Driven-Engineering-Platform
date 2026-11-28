@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Tevrin.Api/Tevrin.Api.csproj" />
+    <Project Path="src/Tevrin.Domain/Tevrin.Domain.csproj" />
+    <Project Path="src/Tevrin.Infrastructure/Tevrin.Infrastructure.csproj" />
+    <Project Path="src/Tevrin.Engine.Api/Tevrin.Engine.Api.csproj" />
+    <Project Path="src/Tevrin.Engine.Domain/Tevrin.Engine.Domain.csproj" />
+    <Project Path="src/Tevrin.Engine.Runtime/Tevrin.Engine.Runtime.csproj" />
+    <Project Path="src/Tevrin.Pack.Coach/Tevrin.Pack.Coach.csproj" />
+    <Project Path="src/Tevrin.Pack.Sdlc/Tevrin.Pack.Sdlc.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tevrin.IntegrationTests/Tevrin.IntegrationTests.csproj" />
+    <Project Path="tests/Tevrin.UnitTests/Tevrin.UnitTests.csproj" />
+    <Project Path="tests/Tevrin.Engine.Tests/Tevrin.Engine.Tests.csproj" />
+    <Project Path="tests/Tevrin.Pack.Coach.Tests/Tevrin.Pack.Coach.Tests.csproj" />
+  </Folder>
+</Solution>

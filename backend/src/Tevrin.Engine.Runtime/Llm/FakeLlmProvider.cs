@@ -18,6 +18,19 @@ public interface IFakeAgentResponder
 }
 
 /// <summary>
+/// Sees every request the Fake provider answers (tests count model calls and read what the model was sent, e.g. a tool
+/// result, FR-359). Register implementations in DI (<c>AddSingleton&lt;IFakeLlmObserver, …&gt;</c>); none by default.
+/// </summary>
+public interface IFakeLlmObserver
+{
+    /// <summary>A plain completion request.</summary>
+    void OnCompletion(LlmRequest request);
+
+    /// <summary>A tool-loop turn request, with the exchanges so far.</summary>
+    void OnTurn(LlmToolRequest toolRequest);
+}
+
+/// <summary>
 /// The deterministic, offline provider (FR-22, D13) for demos, E2E and tests: no network, no key. It answers with the
 /// agent's registered <see cref="IFakeAgentResponder"/>, else a generic Markdown reply naming the agent, the model and
 /// a digest of the prompt. Token counts are estimated as ⌈characters / 4⌉.
@@ -34,6 +47,7 @@ public sealed class FakeLlmProvider : ILlmProvider, IToolCallingLlmProvider
 
     private readonly Dictionary<string, IFakeAgentResponder> _responders;
     private readonly Dictionary<string, IFakeToolScript> _scripts;
+    private readonly IFakeLlmObserver[] _observers;
 
     public FakeLlmProvider(IEnumerable<IFakeAgentResponder> responders)
         : this(responders, [])
@@ -41,11 +55,18 @@ public sealed class FakeLlmProvider : ILlmProvider, IToolCallingLlmProvider
     }
 
     public FakeLlmProvider(IEnumerable<IFakeAgentResponder> responders, IEnumerable<IFakeToolScript> scripts)
+        : this(responders, scripts, [])
+    {
+    }
+
+    public FakeLlmProvider(IEnumerable<IFakeAgentResponder> responders, IEnumerable<IFakeToolScript> scripts, IEnumerable<IFakeLlmObserver> observers)
     {
         ArgumentNullException.ThrowIfNull(responders);
         ArgumentNullException.ThrowIfNull(scripts);
+        ArgumentNullException.ThrowIfNull(observers);
         _responders = responders.GroupBy(r => r.Agent).ToDictionary(g => g.Key, g => g.Last());
         _scripts = scripts.GroupBy(s => s.Agent).ToDictionary(g => g.Key, g => g.Last());
+        _observers = [.. observers];
     }
 
     public LlmProvider Kind => LlmProvider.Fake;
@@ -54,6 +75,10 @@ public sealed class FakeLlmProvider : ILlmProvider, IToolCallingLlmProvider
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+        foreach (var observer in _observers)
+        {
+            observer.OnCompletion(request);
+        }
 
         var prompt = Prompt(request);
         var text = Answer(request, prompt);
@@ -66,6 +91,10 @@ public sealed class FakeLlmProvider : ILlmProvider, IToolCallingLlmProvider
     {
         ArgumentNullException.ThrowIfNull(toolRequest);
         cancellationToken.ThrowIfCancellationRequested();
+        foreach (var observer in _observers)
+        {
+            observer.OnTurn(toolRequest);
+        }
 
         var prompt = Prompt(toolRequest.Request) + "\n" + string.Join(
             "\n",

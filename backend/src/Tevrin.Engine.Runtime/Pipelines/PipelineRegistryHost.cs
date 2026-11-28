@@ -62,6 +62,12 @@ public sealed partial class PipelineRegistryStartup(PipelineRegistryHost host, I
             LogDefinitionError(logger, source.PackId, source.Name, source.Definition?.Pipeline ?? "?", error.Code, error.Path, error.Message);
         }
 
+        // FR-358, D-0.8.0-28: a DI-only tool is write by default, so it runs without approval; say so rather than silently.
+        foreach (var tool in registry.UnclassifiedTools)
+        {
+            LogUnclassifiedTool(logger, tool);
+        }
+
         if (registry.IsValid)
         {
             LogLoaded(logger, registry.Definitions.Count);
@@ -77,6 +83,9 @@ public sealed partial class PipelineRegistryStartup(PipelineRegistryHost host, I
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Pipeline definition {PackId}/{Source} (pipeline {PipelineId}) is invalid: {Code} at {Path}: {Detail}")]
     private static partial void LogDefinitionError(ILogger logger, string packId, string source, string pipelineId, string code, string path, string detail);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pipeline tool {Tool} is bound in DI but no pack registers its tier; it counts as write and runs without approval")]
+    private static partial void LogUnclassifiedTool(ILogger logger, string tool);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Count} pipeline definition(s) loaded and valid")]
     private static partial void LogLoaded(ILogger logger, int count);

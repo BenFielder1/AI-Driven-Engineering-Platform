@@ -2,7 +2,7 @@
 
 Tevrin (formerly AIDE, the AI-Driven Engineering Framework) coordinates specialised AI agents through a governed software lifecycle — Refinement → Specification → Planning → Execution → Review → Release — turning an idea into released software with versioned artifacts, approval gates, rollback and human oversight. It is for engineers and project owners who want AI-driven delivery with deterministic state and an audit trail.
 
-**`SPEC.md` is the source of truth.** No version is being built, so there is no root `SPEC.md` or `PROGRESS.md`; the latest released spec is [`docs/0.7.0/SPEC.md`](docs/0.7.0/SPEC.md). The next version's spec is drafted in `docs/0.8.0/` on branch `build/tevrin-0.8.0`; when that version starts, its spec and build log go at the root. Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
+**`SPEC.md` is the source of truth.** **0.8.0 is being built**: its spec is the root [`SPEC.md`](SPEC.md), on branch `build/tevrin-0.8.0` (build notes in `docs/0.8.0/session-notes.md`). The latest released spec is [`docs/0.7.0/SPEC.md`](docs/0.7.0/SPEC.md). Between versions there is no root `SPEC.md`. Read the relevant section before building a feature. If code and spec disagree, flag it rather than silently picking one. Requirement IDs are referenced in commits and PRs.
 
 ## Versions
 
@@ -31,8 +31,8 @@ Packs and conventions are recorded in [`STACK.md`](STACK.md). The current stack:
   - Pages are client components (SPEC D-V3-2), and routing goes through `src/lib/navigation.ts`.
   - The web server is `frontend/server.ts`, a custom Node server run with Node 24 type stripping. It serves Next, proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL` read at runtime, sets the CSP nonce and security headers, and writes redacted JSON request logs.
 - **Backend** (`backend/`): C# / ASP.NET Core (.NET 10), minimal APIs, EF Core 10 (`dotnet-ef`, local tool manifest `backend/dotnet-tools.json`) + PostgreSQL 18 via Npgsql (SPEC D-V5-1) (snake_case naming, history table `__ef_migrations_history`), xUnit v3 on Microsoft.Testing.Platform (opted in via `global.json`), Testcontainers.PostgreSql; JSON console logs, OpenTelemetry (console exporter when `Telemetry:ConsoleExporter=true`, on in Development)
-- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; stay on 8.x, SPEC D-0.7.0-48). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references `Aide.*` or `Tevrin.Pack.*` (architecture test).
-- **Background work**: hosted services in `Aide.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
+- **Pipeline engine** (0.7.0): `Tevrin.Engine.Domain`, `Tevrin.Engine.Runtime` and `Tevrin.Engine.Api` run pipelines described by YAML definitions; the SDLC is the first pack (`Tevrin.Pack.Sdlc`). Definitions load with YamlDotNet 18.1.0 and artifact schemas are checked with JsonSchema.Net **8.0.5** (the last MIT release; stay on 8.x, SPEC D-0.7.0-48). Both are referenced by `Tevrin.Engine.Runtime` only. No `Tevrin.Engine.*` assembly references the product projects (`Tevrin.Api`/`Domain`/`Infrastructure`) or `Tevrin.Pack.*` (architecture test).
+- **Background work**: hosted services in `Tevrin.Api` reading a PostgreSQL-backed job/outbox table — no Redis, no message broker (SPEC.md §10 D1)
 - **Contract**: `backend/openapi/api.json` (generated, committed) → `frontend/src/api/generated/` (generated with `openapi-typescript` + `openapi-fetch`)
 - **Deploy**: Docker images. Local: Kustomize manifests (`deploy/k8s`) on the Docker Desktop Kubernetes cluster (context `docker-desktop`). Remote: Railway `preview` (after green CI on `main`) and `production` (when a GitHub release `x.y.z` is published, or by dispatch), deployed by `.github/workflows/deploy.yml`, defined as code in `.railway/railway.ts`
 - **VCS/CI**: Git, GitHub, GitHub Actions. `.github/workflows/docs.yml` builds the docs site (Jekyll, just-the-docs) from `docs/` and publishes it to GitHub Pages at <https://docs.tevrin.dev/> (custom domain, empty `baseurl`)
@@ -43,19 +43,21 @@ Router, auth and background-work choices come from SPEC.md; if SPEC.md changes t
 
 ```
 backend/
-  Aide.slnx
-  src/Aide.Api/             endpoints, DI, auth, ProblemDetails, OpenAPI, hosted background workers
+  Tevrin.slnx
+  src/Tevrin.Api/             endpoints, DI, auth, ProblemDetails, OpenAPI, hosted background workers
                             Agents/ — SDLC agent job handlers; every SDLC agent runs on the engine runner (`SdlcAgentStageJob` + `SdlcAgentExtension` hooks)
-  src/Aide.Domain/          pure SDLC rules: SDLC guards and machine adapter (`SdlcMachine`), review, gate and artifact rules, versioning (no EF, no ASP.NET)
-  src/Aide.Infrastructure/  Persistence/AideDbContext + entity configs, Migrations/, LLM providers, Git providers, notification channels
+  src/Tevrin.Domain/          pure SDLC rules: SDLC guards and machine adapter (`SdlcMachine`), review, gate and artifact rules, versioning (no EF, no ASP.NET)
+  src/Tevrin.Infrastructure/  Persistence/TevrinDbContext + entity configs, Migrations/, LLM providers, Git providers, notification channels
                             Agents/Prompts/*.md — versioned prompt templates (SPEC FR-24)
   src/Tevrin.Engine.Domain/   pure engine: definition model, validator, hash, `PipelineStateMachine`, cascade, gate and artifact rules
   src/Tevrin.Engine.Runtime/  YAML loader, pipeline registry, job queue, LLM providers, artifact store, gates, notifications, run log, `AgentStageRunner`
   src/Tevrin.Engine.Api/      generic endpoints (definitions, pipeline runs, timeline, replay, gate inbox) and hub events
   src/Tevrin.Pack.Sdlc/       the SDLC pack: Definitions/sdlc.pipeline.yaml, key constants (`SdlcAgents`, `SdlcArtifacts`, `SdlcGates`, `SdlcJobTypes`), `SdlcPack`
-  tests/Aide.UnitTests/     domain + application tests
+  src/Tevrin.Pack.Coach/      the coach pack (0.8.0): Definitions/, Schemas/, Prompts/, key constants (`CoachAgents`, `CoachArtifacts`, `CoachGates`), `CoachPack`, the `coach.velocity-load-rules` guard (`VelocityLoadRulesGuard`)
+  tests/Tevrin.UnitTests/     domain + application tests
+  tests/Tevrin.Pack.Coach.Tests/ coach pack tests: definition, velocity rules and the load-rules guard
   tests/Tevrin.Engine.Tests/ engine tests: definitions, state machine, agent stages, architecture rules; fixtures in Fixtures/ (`fixture-review.pipeline.yaml`)
-  tests/Aide.IntegrationTests/ WebApplicationFactory + Testcontainers
+  tests/Tevrin.IntegrationTests/ WebApplicationFactory + Testcontainers
     Characterisation/       SDLC end-to-end snapshots (Snapshots/*.json), frozen since 0.7.0 M54: CI runs scripts/ci/check-snapshots-frozen.sh
   openapi/api.json          GENERATED contract — commit, never hand-edit
   Directory.Build.props · Directory.Packages.props · global.json · dotnet-tools.json
@@ -96,17 +98,17 @@ docs/                       Jekyll + just-the-docs site (index.md, _config.yml, 
 ## Commands
 
 ```bash
-# Dev loop (one-off setup: cp .env.example .env, pick a password, then
-#   cd backend && dotnet tool restore && dotnet user-secrets set ConnectionStrings:Aide "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<from .env>" --project src/Aide.Api)
+# Dev loop (one-off setup: cp .env.example .env, pick a password, then the command below; the dev-loop database and user stay `aide`)
+#   cd backend && dotnet tool restore && dotnet user-secrets set ConnectionStrings:Tevrin "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<from .env>" --project src/Tevrin.Api
 docker compose up -d db                                   # dev database (PostgreSQL 18, values from .env)
-dotnet run --project backend/src/Aide.Api                 # http://localhost:5080
+dotnet run --project backend/src/Tevrin.Api                 # http://localhost:5080
 npm --prefix frontend run dev                             # http://localhost:3000 (proxies /api + WebSockets → BACKEND_URL, default 5080)
 
 # Backend
 cd backend && dotnet build -warnaserror && dotnet test && dotnet format --verify-no-changes
-dotnet ef migrations add <Name> --project src/Aide.Infrastructure --startup-project src/Aide.Api
-dotnet ef database update --project src/Aide.Infrastructure --startup-project src/Aide.Api   # apply to the dev DB
-dotnet build src/Aide.Api                                 # regenerates openapi/api.json
+dotnet ef migrations add <Name> --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api
+dotnet ef database update --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api   # apply to the dev DB
+dotnet build src/Tevrin.Api                                 # regenerates openapi/api.json
 
 # Frontend
 cd frontend && npm run typecheck && npm run lint && npm test && npm run build
@@ -143,7 +145,7 @@ For every phase or fix:
    tests, Docker or deploys. Fix its Critical and Major findings through the owning agent before committing. The point
    of this step is to catch what CI would catch.
 2. **Local commands are limited to:**
-   - producing files that must be committed: `dotnet build src/Aide.Api` (contract), `npm run gen:api`,
+   - producing files that must be committed: `dotnet build src/Tevrin.Api` (contract), `npm run gen:api`,
      `dotnet ef migrations add`, and Next.js/route generation if a tool writes committed files
    - optionally, single quick checks on the touched layer, one at a time: `npm run typecheck`, `npm run lint`, a single
      Vitest file, `dotnet build` of one project
@@ -213,9 +215,9 @@ never deploy. Promoting a pre-release to a full release doesn't deploy either (G
 
 1. `openapi/api.json` and `frontend/src/api/generated/` are generated. Regenerate them, and never hand-edit them. API changes are additive unless SPEC.md records a breaking-change decision.
 2. The frontend calls the backend only through the generated client, at same-origin `/api`. No hard-coded hosts.
-3. Business rules live in `Aide.Domain` (SDLC) and `Tevrin.Engine.Domain` (engine), pure and unit-tested. Endpoints stay thin.
+3. Business rules live in `Tevrin.Domain` (SDLC) and `Tevrin.Engine.Domain` (engine), pure and unit-tested. Endpoints stay thin.
 4. Errors are ProblemDetails with an `errorCode` from the spec's error table. The frontend maps those codes to copy in one place.
-5. Every schema change is an EF Core migration. Never edit a committed migration, and never use `EnsureCreated` outside tests.
+5. Every schema change is an EF Core migration. Never edit a committed migration (one exception, SPEC D-0.8.0-9: the 0.8.0 rename's namespace and type-name substitutions, checked by `scripts/ci/check-migrations-renamed.sh`), and never use `EnsureCreated` outside tests.
 6. Secrets are never committed: user-secrets for the dev loop, `deploy/k8s/overlays/local/secrets.env` (git-ignored) for Kubernetes. This includes LLM provider keys and GitHub credentials.
 7. Deploy scripts target only the `docker-desktop` Kubernetes context.
 8. Project lifecycle changes go only through the engine state machine running the SDLC definition (`sdlc.pipeline.yaml`). Every allowed and forbidden SDLC phase/status transition has a unit test (`SdlcLifecycleTransitionTests`).

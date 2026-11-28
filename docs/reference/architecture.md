@@ -16,7 +16,7 @@ flowchart LR
   Web -->|"/api (same origin, incl. WebSocket /api/hubs)"| Api["api: ASP.NET Core<br/>endpoints + hosted workers + SignalR"]
   Script["scripts"] -->|"Bearer API token"| Web
   Api --> Db[("PostgreSQL 18<br/>data + job/outbox table")]
-  Api --> Vol[/"aide-data volume<br/>working copies, Data Protection keys"/]
+  Api --> Vol[/"tevrin-data volume<br/>working copies, Data Protection keys"/]
   Api -.-> LLM["Anthropic / OpenAI / Ollama"]
   Api -.-> GH["GitHub / GitLab / Bitbucket (Git, API)"]
   Api -.-> Pl["Deployment platforms and Supabase APIs"]
@@ -34,13 +34,13 @@ flowchart LR
 
 ## Business rules and the contract
 
-Business rules live in `Aide.Domain`: pure, unit-tested, with no EF or ASP.NET. Endpoints stay thin. Project lifecycle changes go only through the domain state machine. Artifacts are immutable once locked. LLM calls sit behind one provider abstraction and are faked in tests.
+Business rules live in `Tevrin.Domain`: pure, unit-tested, with no EF or ASP.NET. Endpoints stay thin. Project lifecycle changes go only through the domain state machine. Artifacts are immutable once locked. LLM calls sit behind one provider abstraction and are faked in tests.
 
 The contract flows one way. The backend build writes `backend/openapi/api.json`, then `npm run gen:api` writes `frontend/src/api/generated/`. Never hand-edit either. See [API and contract](api-and-contract.md).
 
 ## Stack catalog and origin model
 
-Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. The stack catalog (`Aide.Infrastructure/Agents/Stack`: `catalog.json`, `packs/`, `agents/`, `core/`) is content-hashed, and each release version pins the composition and catalog version it was built with.
+Merge and deployment polls are self-deferring jobs in the same table, so a restart resumes them. The stack catalog (`Tevrin.Infrastructure/Agents/Stack`: `catalog.json`, `packs/`, `agents/`, `core/`) is content-hashed, and each release version pins the composition and catalog version it was built with.
 
 - The Domain owns the compatibility rules. `POST /api/stack/options` and `/validate` serve the wizard, Settings and the API.
 - The origin model says how the browser reaches the backend: `same-origin`, `proxy` or `cross-origin`. The options depend on the chosen frontend, backend and hosts.
@@ -53,4 +53,4 @@ Merge and deployment polls are self-deferring jobs in the same table, so a resta
 
 ## Internal names
 
-The product is called Tevrin, but identifiers that would break sessions, tokens, stored data or infrastructure keep the `aide` name: the `Aide.*` projects and namespaces, the `aide` database and user, `aide.*` cookies, `aide_pat_` tokens, `X-AIDE-*` webhook headers, server environment variables and the Kubernetes, Docker and Railway resource names.
+The product is called Tevrin. 0.8.0 renamed the projects, namespaces, config keys, cookie, API tokens (`tevrin_pat_`), webhook headers, images and Kubernetes and Railway resources. The old names are still read until 0.9.0, and `aide_pat_` tokens and `X-AIDE-*` headers still work. Kept: `AIDE_RUN_MIGRATIONS`, the Data Protection application name `aide`, the dev-loop database and user `aide`, the preview domain `aide.benfielder.com` and the seed admin `admin@aide.local`. See [Rename to Tevrin](../operations/rename-to-tevrin.md).

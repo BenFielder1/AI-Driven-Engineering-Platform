@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import { Badge } from '../../components/ui/badge'
 import type { PipelineDefinition, PipelineRun } from '../api/types'
+import { FollowUps } from '../constructs/follow-ups'
 import { formatCost, formatDateTime, formatNumber } from '../format'
 import { definitionLabels, runStatusLabels, runStatusTones } from '../labels'
 
@@ -21,7 +22,7 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
 
 /**
  * FR-306 run summary: the pipeline title, generic status, current stage (its definition title), checkpoint, cost,
- * tokens and the pinned definition's short hash.
+ * tokens and the pinned definition's short hash. FR-363: a run with follow-ups lists them with their due times.
  */
 export function RunSummary({ run, definition }: { run: PipelineRun; definition: PipelineDefinition | undefined }) {
   const labels = definitionLabels(definition)
@@ -54,6 +55,9 @@ export function RunSummary({ run, definition }: { run: PipelineRun; definition: 
           </code>
         </Fact>
       </dl>
+      {(run.followUps?.length ?? 0) > 0 && (
+        <FollowUps followUps={run.followUps ?? []} labels={labels} headingId={`run-follow-ups-${run.id}`} />
+      )}
     </section>
   )
 }

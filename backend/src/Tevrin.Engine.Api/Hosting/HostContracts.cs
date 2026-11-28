@@ -88,3 +88,62 @@ internal sealed class AllJobsCount : IRunActivityPolicy
 {
     public IReadOnlyCollection<string> IgnoredJobTypes { get; } = [];
 }
+
+/// <summary>FR-331, FR-333, FR-335: what a run-control call does, for the host's permission check.</summary>
+public enum RunControlAction
+{
+    /// <summary>Start a run (Contributor).</summary>
+    Start = 0,
+
+    /// <summary>Retry a failed stage (Contributor).</summary>
+    Retry = 1,
+
+    /// <summary>Submit an input (Contributor).</summary>
+    SubmitInput = 2,
+
+    /// <summary>Cancel a run (Owner).</summary>
+    Cancel = 3,
+
+    /// <summary>Roll a run back (Owner).</summary>
+    Rollback = 4,
+
+    /// <summary>FR-336, FR-337: list a project's schedules and webhooks (Viewer).</summary>
+    ViewTriggers = 5,
+
+    /// <summary>FR-336, FR-337: create, change, rotate and delete schedules and webhooks (Owner).</summary>
+    ManageTriggers = 6,
+
+    /// <summary>FR-352: read a project-scope artifact's versions (Viewer).</summary>
+    ViewArtifacts = 7,
+
+    /// <summary>FR-352: add a version of a project-scope artifact (Contributor).</summary>
+    EditArtifacts = 8,
+
+    /// <summary>FR-352: lock a version of a project-scope artifact (the artifact-approval role).</summary>
+    LockArtifacts = 9,
+
+    /// <summary>FR-351: list an agent's feedback entries (Viewer).</summary>
+    ViewFeedback = 10,
+
+    /// <summary>FR-351: add a feedback entry, and delete one's own (Contributor).</summary>
+    AddFeedback = 11,
+
+    /// <summary>FR-351: delete anyone's feedback entry (Owner).</summary>
+    ManageFeedback = 12,
+}
+
+/// <summary>
+/// FR-331–FR-335: the host's side of run control: its permission matrix (404 for a project the caller can't see, 403
+/// below the role), the caller and the project's approval mode.
+/// </summary>
+public interface IRunControlAccess
+{
+    /// <summary><c>null</c> when the caller may do <paramref name="action"/> on <paramref name="projectId"/>; else the error.</summary>
+    Task<DomainError?> CheckAsync(Guid projectId, RunControlAction action, CancellationToken cancellationToken);
+
+    /// <summary>The project's approval mode (a new run's default, FR-331).</summary>
+    Task<ApprovalMode> ProjectApprovalModeAsync(Guid projectId, CancellationToken cancellationToken);
+
+    /// <summary>The signed-in caller's user id, or <c>null</c>.</summary>
+    Guid? UserId { get; }
+}

@@ -1,0 +1,180 @@
+using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Features.Artifacts;
+using Tevrin.Api.Features.Stack;
+using Tevrin.Api.Features.Versions;
+using Tevrin.Api.Pipelines;
+using Tevrin.Domain.Access;
+using Tevrin.Domain.Agents;
+using Tevrin.Domain.Artifacts;
+using Tevrin.Domain.Common;
+using Tevrin.Domain.Releases;
+using Tevrin.Domain.Stack;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Jobs;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Infrastructure.Persistence;
+using Tevrin.Infrastructure.Persistence.Conversion;
+using Tevrin.Pack.Sdlc;
+
+namespace Tevrin.Api.Agents;
+
+/// <summary>
+/// FR-70: the Repository Analyst. Queued when a release version with existing code starts (a new version, an import's
+/// first version, a scratch project on a repository that has code). It explores the repository at the version's base
+/// commit with the repo tools (FR-71) and writes the <c>codebase_summary</c>, which must have the eight sections of
+/// <see cref="CodebaseSummaryRules"/>: a reply missing some is re-run once with their names; still missing → the run fails
+/// with <c>MISSING_SECTIONS</c> and no summary is stored (refinement then goes on without one). The summary is stored
+/// <b>locked</b> (no gate) in the version, with <c>CODEBASE_SUMMARY_CREATED</c>.
+/// <para>
+/// Nothing runs when the version is no longer the project's version in development, has no base commit (no code), or
+/// already has a summary. Redelivery is idempotent like the other agent jobs (run ids from the job id; the writer returns
+/// the summary a run already stored).
+/// </para>
+/// <para>
+/// FR-128: with a stack composition the analyst gets its summary and the stack detector's evidence at the base commit
+/// (<see cref="StackGuidance.Analysis"/>, <see cref="StackGuidance.DetectionInput"/>), and "Stack &amp; Dependencies" must name the
+/// detected packs and any mismatch with the composition (<see cref="StackAnalysis.Check"/>, validated and re-run like the
+/// sections).
+/// </para>
+/// <para>FR-318, FR-319: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), bound on <c>refinement</c>.</para>
+/// </summary>
+public sealed partial class RepositoryAnalysisJobHandler(
+    SdlcAgentStageJob agentJob,
+    AgentDraftWriter writer,
+    AgentJobInputs inputs,
+    TevrinDbContext db,
+    VersionStackLoader stacks,
+    ILogger<RepositoryAnalysisJobHandler> logger) : IJobHandler
+{
+    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        RepositoryAnalysisJobPayload payload;
+        try
+        {
+            payload = TevrinJson.Deserialize<RepositoryAnalysisJobPayload>(job.Payload);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            throw new JobFailedException($"The {job.Type} job payload can't be read: {ex.Message}", transient: false, ErrorCodes.Validation);
+        }
+
+        var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
+        var version = await db.ReleaseVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == payload.ReleaseVersionId && v.ProjectId == payload.ProjectId, cancellationToken);
+        if (project is null || version is null || project.CurrentReleaseVersionId != version.Id || !ReleaseVersionRules.IsDevelopment(version.Status))
+        {
+            LogSkipped(logger, "the version is no longer in development");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(version.BaseCommitSha))
+        {
+            LogSkipped(logger, "the version has no existing code");
+            return;
+        }
+
+        var runIds = new[] { AgentRunRules.RunId(job.Id), AgentRunRules.RunId(job.Id, AgentOutput.CorrectiveRunKey) };
+        if (await db.Artifacts.Sdlc().AsNoTracking().AnyAsync(
+                a => a.ProjectId == project.Id && a.ReleaseVersionId == version.Id && a.Type == SdlcArtifacts.CodebaseSummary
+                    && (a.AgentRunId == null || !runIds.Contains(a.AgentRunId.Value)),
+                cancellationToken))
+        {
+            LogSkipped(logger, "the version already has a codebase summary");
+            return;
+        }
+
+        var baseText = version.BaseTag is { } tag ? $"{tag} ({version.BaseCommitSha})" : $"commit {version.BaseCommitSha}";
+        var stack = (await stacks.ForVersionAsync(version, cancellationToken, detect: true)).ThrowIfUnresolvable();
+        var expectation = stack.Stack is { } composed && stack.Detection is { } detection ? StackAnalysis.Expectation(detection, composed.Composition) : null;
+        Result<string> Check(string text) => StackAnalysis.Check(AgentOutput.UnwrapFence(text), expectation);
+        AgentRunRequest Request(string? feedback) => new()
+        {
+            ProjectId = project.Id,
+            Agent = SdlcAgents.RepositoryAnalyst,
+            Job = job,
+            Inputs = new Dictionary<string, string?>
+            {
+                ["PROJECT_NAME"] = project.Name,
+                ["VERSION_REQUEST"] = version.Request,
+                ["BASE"] = baseText,
+                ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Analysis(resolution, stack.Detection) : null,
+                ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
+                [SdlcAgentRuns.FeedbackInput] = feedback,
+            },
+            Stack = stack.Stack,
+            UserFeedback = feedback,
+            Repo = RepoScope.BaseCommit,
+        };
+
+        // FR-318, FR-319: on the engine runner (bound on refinement, D-0.7.0-42): a reply missing sections is re-run once with
+        // their names; still missing fails with its code. The summary is stored locked below, as 0.6.1, not by the run.
+        var produced = await agentJob.RunReplyAsync(
+            Request(null),
+            new ArtifactAgentSpec(
+                SdlcArtifacts.CodebaseSummary,
+                Check,
+                (_, error) =>
+                {
+                    LogRejected(logger, error.Code, error.Message);
+                    return Request(StackAnalysis.CorrectiveFeedback(error));
+                })
+            {
+                LogsRejection = true,
+            },
+            JobTriggers.StageEntered,
+            cancellationToken);
+        var content = Check(produced.Text);
+        if (content.IsFailure)
+        {
+            // Only reachable if a stored succeeded run no longer passes (e.g. the rules changed).
+            throw new JobFailedException(content.Error!.Message, transient: false, content.Error.Code);
+        }
+
+        var summary = await writer.AddLockedAsync(project.Id, version.Id, SdlcArtifacts.CodebaseSummary, content.Value, produced.RunId, produced.CompletedAt, cancellationToken);
+        if (summary is null)
+        {
+            LogSkipped(logger, "the version stopped being the project's version in development while the analyst ran");
+            return;
+        }
+
+        // FR-155: saved with the summary it informed; a redelivery that finds its own stored summary doesn't repeat it.
+        if (stack.Detection is { } report && db.Entry(summary).State == EntityState.Added)
+        {
+            db.AddEvent(
+                EventTypes.StackDetected,
+                project.Id,
+                new
+                {
+                    releaseVersionId = version.Id,
+                    version = version.Version,
+                    baseCommitSha = version.BaseCommitSha,
+                    suggestions = report.Suggestions.Select(s => new { choice = s.Choice, option = s.Option, path = s.Path, mode = s.Mode }),
+                    conflicts = report.Conflicts.Select(c => c.Choice),
+                    mismatches = report.Mismatches,
+                },
+                SystemActor.Name,
+                produced.CompletedAt);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            throw new JobFailedException($"The codebase summary collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
+        }
+
+        LogStored(logger, summary.Version, version.Version);
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Repository analysis skipped: {Reason}")]
+    private static partial void LogSkipped(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The codebase summary was rejected with {ErrorCode}; re-running once with the missing sections: {Reason}")]
+    private static partial void LogRejected(ILogger logger, string errorCode, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stored codebase_summary v{ArtifactVersion} (locked) for version {ReleaseVersion}")]
+    private static partial void LogStored(ILogger logger, int artifactVersion, string releaseVersion);
+}

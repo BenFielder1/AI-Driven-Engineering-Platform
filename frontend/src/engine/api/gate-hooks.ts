@@ -45,6 +45,8 @@ export interface DecideGateVariables {
   gateId: string
   action: 'approve' | 'reject'
   comment: string | null
+  /** FR-349, FR-364: the picked variant label when approving a `variant_select` gate. */
+  choice?: string | null
 }
 
 /**
@@ -55,8 +57,8 @@ export interface DecideGateVariables {
 export function useDecidePipelineGate() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ runId, gateId, action, comment }: DecideGateVariables) => {
-      const init = { params: { path: { runId, gateId } }, body: { comment } }
+    mutationFn: async ({ runId, gateId, action, comment, choice }: DecideGateVariables) => {
+      const init = { params: { path: { runId, gateId } }, body: { comment, ...(choice ? { choice } : {}) } }
       return unwrap(
         action === 'approve'
           ? await api.POST('/api/pipeline-runs/{runId}/gates/{gateId}/approve', init)

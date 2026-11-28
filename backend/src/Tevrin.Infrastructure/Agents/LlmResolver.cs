@@ -1,0 +1,85 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Tevrin.Domain.Agents;
+using Tevrin.Domain.Entities;
+using Tevrin.Domain.Projects;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Llm;
+using Tevrin.Engine.Runtime.Security;
+using Tevrin.Infrastructure.Llm;
+using Tevrin.Infrastructure.Persistence;
+
+namespace Tevrin.Infrastructure.Agents;
+
+internal sealed partial class LlmResolver(
+    TevrinDbContext db,
+    ILlmProviderCatalog catalog,
+    ISecretProtector secrets,
+    IEnumerable<ILlmProvider> providers,
+    ILogger<LlmResolver> logger) : ILlmResolver
+{
+    public async Task<ResolvedLlm> ResolveAsync(Guid projectId, string agent, CancellationToken cancellationToken)
+    {
+        var (settings, bound) = await LoadAsync(projectId, cancellationToken);
+        LlmChoice choice;
+        if (settings is not null && !string.IsNullOrWhiteSpace(settings.DefaultModel))
+        {
+            choice = AgentModelRules.ChooseModel(agent, settings.Provider, settings.DefaultModel, settings.ModelsByAgent);
+        }
+        else
+        {
+            var provider = settings?.Provider ?? catalog.FallbackProvider;
+            choice = AgentModelRules.ChooseModel(agent, provider, catalog.DefaultModel(provider), catalog.DefaultAgentModels(provider));
+        }
+
+        var key = KeyFor(projectId, settings, bound, choice.Provider);
+        return new ResolvedLlm(choice.Provider, choice.Model, key.ApiKey, key.CredentialId);
+    }
+
+    public async Task<LlmKey> KeyAsync(Guid projectId, LlmProvider provider, CancellationToken cancellationToken)
+    {
+        var (settings, bound) = await LoadAsync(projectId, cancellationToken);
+        return KeyFor(projectId, settings, bound, provider);
+    }
+
+    public ILlmProvider ProviderFor(LlmProvider provider) =>
+        providers.LastOrDefault(p => p.Kind == provider)
+        ?? throw new InvalidOperationException($"No ILlmProvider is registered for {provider}.");
+
+    /// <summary>The project's settings and, if bound, its connection (FR-79).</summary>
+    private async Task<(ProjectLlmSettings? Settings, LlmCredential? Bound)> LoadAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var settings = await db.ProjectLlmSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ProjectId == projectId, cancellationToken);
+        var bound = settings?.CredentialId is { } credentialId
+            ? await db.LlmCredentials.AsNoTracking().FirstOrDefaultAsync(c => c.Id == credentialId, cancellationToken)
+            : null;
+        return (settings, bound);
+    }
+
+    private LlmKey KeyFor(Guid projectId, ProjectLlmSettings? settings, LlmCredential? bound, LlmProvider provider)
+    {
+        // A binding counts only for the provider the project is set to (bindings always match it, FR-79).
+        var boundProvider = settings is not null && bound is not null && settings.Provider == bound.Provider ? bound.Provider : (LlmProvider?)null;
+        switch (LlmConnectionRules.ChooseKey(provider, boundProvider, catalog.AllowSystemKeys, catalog.HasSystemKey(provider)))
+        {
+            case LlmKeySource.Connection:
+                if (secrets.TryUnprotect(bound!.SecretEncrypted, out var key) && !string.IsNullOrWhiteSpace(key))
+                {
+                    return new LlmKey(key, bound.Id);
+                }
+
+                LogUnreadableKey(logger, projectId, bound.Id);
+                return new LlmKey(null, bound.Id);
+
+            case LlmKeySource.System:
+                return new LlmKey(catalog.SystemApiKey(provider), null);
+
+            default:
+                return LlmKey.None;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The bound LLM connection {CredentialId} of project {ProjectId} can't be decrypted; runs fail as not configured until it is saved again")]
+    private static partial void LogUnreadableKey(ILogger logger, Guid projectId, Guid credentialId);
+}

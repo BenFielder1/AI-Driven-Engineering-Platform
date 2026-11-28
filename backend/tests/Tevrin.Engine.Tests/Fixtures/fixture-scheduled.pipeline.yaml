@@ -1,0 +1,22 @@
+# Fixture pipeline (M66 step c, FR-336, §4.71): a scheduled, engine-controlled run that waits at a gate, so a run stays
+# active between fires. Each fire starts it with the schedule's brief.
+pipeline: fixture-scheduled
+version: 1
+title: Fixture scheduled
+trigger: { kind: schedule }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [approve]
+
+artifacts:
+  brief: { title: Brief, format: json, schema: brief.schema.json, approval: auto_lock, cascade: downstream, input: true }
+
+statuses:
+  approving: { generic: active }
+  done:      { generic: completed }
+
+stages:
+  - id: approve
+    title: Approve
+    status: approving
+    gate: { type: publish_approval, modes: [strict, advisory] }

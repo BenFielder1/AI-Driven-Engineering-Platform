@@ -15,10 +15,10 @@
     <Deterministic>true</Deterministic>
     <!-- FR-229: the Tevrin release version (semver x.y.z), shared by every assembly. It must equal
          frontend/package.json and the newest changelog entry (scripts/ci/check-version.sh); a release tag must equal it. -->
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Aide.UnitTests' Or '$(MSBuildProjectName)' == 'Aide.IntegrationTests' Or '$(MSBuildProjectName)' == 'Tevrin.Engine.Tests'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Tevrin.UnitTests' Or '$(MSBuildProjectName)' == 'Tevrin.IntegrationTests' Or '$(MSBuildProjectName)' == 'Tevrin.Engine.Tests'">
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <!-- Test names follow the requirement-ID convention (FR3_locking_a_shipped_order_fails);

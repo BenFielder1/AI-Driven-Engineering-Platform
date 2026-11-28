@@ -34,7 +34,7 @@ export interface MockPlanStep {
   addedReason?: string;
 }
 
-/** A plan document as the backend renders it (PlanDocument.Render): a readable list, then the aide-plan block. */
+/** A plan document as the backend renders it (PlanDocument.Render): a readable list, then the plan block. */
 export function planMarkdown(
   steps: readonly MockPlanStep[],
   title = "Implementation plan",
@@ -43,7 +43,7 @@ export function planMarkdown(
     .map((s) => `## Step ${String(s.number)}: ${s.title}\n\n${s.task}`)
     .join("\n\n");
   const json = JSON.stringify({ format: 1, steps }, null, 2);
-  return `# ${title}\n\n${prose}\n\n## Plan data\n\n\`\`\`aide-plan\n${json}\n\`\`\`\n`;
+  return `# ${title}\n\n${prose}\n\n## Plan data\n\n\`\`\`tevrin-plan\n${json}\n\`\`\`\n`;
 }
 
 /** `count` valid steps; step n depends on step n − 1. */
@@ -61,6 +61,7 @@ export function planSteps(count: number): MockPlanStep[] {
 
 const protectedPrefixes = [
   ".git/",
+  ".tevrin/",
   ".aide/",
   ".github/workflows/",
   ".circleci/",
@@ -75,7 +76,7 @@ const lockFiles = [
   "poetry.lock",
 ];
 
-/** A subset of the backend's PathRules.IsProtected (§4.6): .git/.aide, CI workflows, lockfiles and env files. */
+/** A subset of the backend's PathRules.IsProtected (§4.6): .git/.tevrin/.aide, CI workflows, lockfiles and env files. */
 export function isProtectedPath(path: string): boolean {
   const p = path
     .trim()
@@ -91,7 +92,8 @@ export function isProtectedPath(path: string): boolean {
   );
 }
 
-const blockPattern = /^```aide-plan[ \t]*\n([\s\S]*?)\n```[ \t]*$/gm;
+// FR-326: both the tevrin-plan and the legacy aide-plan fence are read.
+const blockPattern = /^```(?:tevrin|aide)-plan[ \t]*\n([\s\S]*?)\n```[ \t]*$/gm;
 
 /**
  * A subset of the backend's PlanDocument.ParseMarkdown + PlanValidator (FR-29): exactly one block, readable JSON,
@@ -104,14 +106,14 @@ export function validatePlan(
   if (blocks.length === 0) {
     return {
       reasons: [
-        "The plan has no ```aide-plan block with the structured steps.",
+        "The plan has no ```tevrin-plan block with the structured steps.",
       ],
     };
   }
   if (blocks.length > 1) {
     return {
       reasons: [
-        `The plan has ${String(blocks.length)} \`\`\`aide-plan blocks; keep exactly one.`,
+        `The plan has ${String(blocks.length)} \`\`\`tevrin-plan blocks; keep exactly one.`,
       ],
     };
   }

@@ -1,0 +1,949 @@
+using System.Globalization;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Agents;
+using Tevrin.Api.Features.Artifacts;
+using Tevrin.Api.Features.Execution;
+using Tevrin.Api.Features.Lifecycle;
+using Tevrin.Api.Features.Stack;
+using Tevrin.Api.Jobs;
+using Tevrin.Api.Pipelines;
+using Tevrin.Domain.Access;
+using Tevrin.Domain.Agents;
+using Tevrin.Domain.Common;
+using Tevrin.Domain.Entities;
+using Tevrin.Domain.Gates;
+using Tevrin.Domain.Lifecycle;
+using Tevrin.Domain.Review;
+using Tevrin.Domain.Specs;
+using Tevrin.Domain.Stack;
+using Tevrin.Engine.Domain.Agents;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Infrastructure.Deployments;
+using Tevrin.Infrastructure.Git;
+using Tevrin.Infrastructure.Persistence;
+using Tevrin.Infrastructure.Persistence.Conversion;
+using Tevrin.Pack.Sdlc;
+
+namespace Tevrin.Api.Features.Review;
+
+/// <summary>What a review read from the project branch and the specification, and what the deterministic checks found.</summary>
+internal sealed record ReviewMaterial(
+    Artifact? Specification,
+    Artifact? ImplementationPlan,
+    Artifact? CurrentOptimizationPlan,
+    string Code,
+    IReadOnlyList<ReviewFinding> Findings,
+    string FindingsText)
+{
+    /// <summary>§4.13: the specification's requirements (tagged in iterations), which scope the review.</summary>
+    public IReadOnlyList<SpecRequirement> Requirements { get; init; } = [];
+
+    /// <summary>FR-70: the version's codebase summary, an input of the review.</summary>
+    public Artifact? CodebaseSummary { get; init; }
+
+    /// <summary>FR-126: the version's stack (checklist, deterministic checks, optimisation plan agents).</summary>
+    public VersionStackContext Stack { get; init; } = VersionStackContext.None;
+
+    /// <summary>
+    /// FR-243: the files on the reviewed branch, for the optimisation plan's missing deployment files; <c>null</c> when the
+    /// listing failed or was cut off (then no step is added).
+    /// </summary>
+    public IReadOnlySet<string>? BranchFiles { get; init; }
+
+    /// <summary>FR-240: this cycle's failure records (id, fingerprint, consecutive cycles), stored in <c>external_checks.failures</c>.</summary>
+    public IReadOnlyList<FailureRecord> FailureRecords { get; init; } = [];
+
+    /// <summary>FR-249: the waivers in force from earlier cycles of the version (the previous report's <c>external_checks.waivers</c>).</summary>
+    public IReadOnlyList<FindingWaiver> EarlierWaivers { get; init; } = [];
+
+    /// <summary>FR-247: the findings the previous cycle left unaddressed, with their consecutive cycles, by finding id.</summary>
+    public IReadOnlyDictionary<string, int> Carried { get; init; } = new Dictionary<string, int>();
+}
+
+/// <summary>
+/// FR-240: the previous cycle's failure records and optimisation plan steps (<c>null</c>: none or unreadable). FR-247,
+/// FR-249: also the waivers in force and the findings it left unaddressed.
+/// </summary>
+internal sealed record FailureHistoryInput(IReadOnlyList<FailureRecord> Previous, IReadOnlyList<Domain.Execution.PlanStep>? PreviousPlan)
+{
+    public IReadOnlyList<FindingWaiver> Waivers { get; init; } = [];
+
+    public IReadOnlyDictionary<string, int> Carried { get; init; } = new Dictionary<string, int>();
+}
+
+/// <summary>The succeeded run whose reply was accepted, and the reply as read.</summary>
+internal sealed record ReviewAgentOutcome(AgentRunOutcome Run, CodeReviewResult Result);
+
+/// <summary>
+/// FR-38–FR-40: one review cycle (job <see cref="SdlcJobTypes.Review"/>, queued on entering review, by
+/// <c>POST /review</c>, or by an escalation <c>continue</c> with no optimisation plan to run).
+/// <list type="number">
+/// <item>Start the cycle once per job: <c>projects.review_cycle</c> + 1, pending <c>pre_release</c> and escalation gates of the
+/// previous decision cancelled (superseded), and <c>REVIEW_STARTED</c>, in one transaction. A failure after this still shows
+/// as that cycle (<c>REVIEW_FAILED</c>, <see cref="ReviewJobEndedHook"/>).</item>
+/// <item>Read the project branch as committed (bounded: <see cref="ReviewLimits"/>; changed files first) and run the
+/// deterministic checks (§4.7): secret scan, the specification's dependency allowlist, its API endpoint paths.</item>
+/// <item>Run the Code Review agent with the specification, plan(s), code (secrets the scan flagged redacted), findings and
+/// previous cycle; an invalid reply — or a <c>review_required</c> one without optimisation steps — is re-run once with every
+/// reason (as FR-28/FR-29); still unreadable fails the run (<c>INVALID_OUTPUT</c> or <c>INVALID_PLAN</c>), still without
+/// steps escalates (<c>no_optimization_plan</c>).</item>
+/// <item>Apply the penalties and the §4.5 decision (previous score = the latest earlier cycle's report in the current
+/// review timeline, <see cref="ReviewTimeline"/>) and record, in one transaction guarded by the project's <c>xmin</c>: the compliance report, the optimisation plan
+/// draft (unless release-eligible or empty), the <c>pre_release</c> gate (release-eligible) or the escalation gate, and
+/// <c>REVIEW_COMPLETED</c>.</item>
+/// </list>
+/// An Owner rejecting the optimisation plan draft (FR-17) or its corruption (FR-20) queues this job to revise the plan for
+/// the same cycle: the agent runs again with the feedback and only its plan is used (a new draft linked to the report).
+/// §4.13: in iterations (a spec with tagged requirements) the reply is scoped by <see cref="IterationReviewScope"/> before
+/// scoring: feature coverage is over <c>[new]</c>/<c>[changed]</c> requirements, and broken <c>[unchanged]</c> ones become
+/// regressions (stored in <c>compliance_report.regressions</c>). The agent has the repo tools on the project branch (FR-71).
+/// FR-126, FR-127: with a stack composition the agent scores against the composed checklist (<see cref="StackGuidance.Review"/>,
+/// mapped by <see cref="StackReviewChecklist"/>, no penalty), the deterministic checks gain the packs' registered checks
+/// (<see cref="StackReviewFindings"/>, with the base commit's files, the branch tree and the backend's source for
+/// <c>health_endpoints</c>; a committed secret 0.1.0's scan already found is penalised once), <c>deploy_branch_control</c>
+/// replaces the 0.2.0 Vercel check, and optimisation steps may name the specialists. Failed CI freshness checks stay CI-status
+/// findings (FR-85).
+/// FR-90: the version's latest Vercel preview is waited for first (<see cref="PreviewCollector"/>); a failed build is a
+/// critical <c>architecture</c> finding and the preview is stored in <c>external_checks.preview</c>.
+/// Redelivery is idempotent: run ids derive from the job, a succeeded run is reused, the cycle is read back from the job's
+/// <c>REVIEW_STARTED</c>, and one report is recorded per job. A rollback (cycle reset) or another review in between makes
+/// the job record nothing.
+/// </summary>
+public sealed partial class ReviewJobHandler(
+    TevrinDbContext db,
+    SdlcAgentStageJob agentJob,
+    AgentJobInputs inputs,
+    IterationContextReader iterations,
+    AgentDraftWriter drafts,
+    WorkingCopyPreparer preparer,
+    IWorkingCopies workingCopies,
+    LifecycleWriter writer,
+    ExternalChecksCollector externalChecks,
+    PreviewCollector previews,
+    BuildChecks.BuildCheckService buildChecks,
+    VersionStackLoader stacks,
+    IDeploymentProviderResolver deploymentProviders,
+    TimeProvider time,
+    ILogger<ReviewJobHandler> logger) : IJobHandler
+{
+    /// <summary>Cap on the changed files read from the branch comparison.</summary>
+    public const int MaxComparedFiles = 5000;
+
+    /// <summary>Cap on the files listed from the project branch.</summary>
+    public const int MaxTreeEntries = 20_000;
+
+    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var payload = AgentJobInputs.Payload(job);
+        var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
+        if (project is null || project.CurrentPhase != Phase.Review)
+        {
+            LogSkipped(logger, "the project is gone or not in review");
+            return;
+        }
+
+        if (payload.Trigger is LifecycleJobPayload.ArtifactRejected or LifecycleJobPayload.ArtifactCorrupted)
+        {
+            await ReviseOptimizationPlanAsync(job, payload, project, cancellationToken);
+            return;
+        }
+
+        if (await ReportExistsAsync(job.Id, cancellationToken))
+        {
+            LogSkipped(logger, "this job already recorded its report");
+            return;
+        }
+
+        if (await BeginCycleAsync(job, payload, cancellationToken) is not { } cycle)
+        {
+            LogSkipped(logger, "the project left review before the cycle started");
+            return;
+        }
+
+        using var scope = logger.BeginScope(new Dictionary<string, object?> { ["ReviewCycle"] = cycle });
+
+        // FR-90: the preview of the PR head is waited for (the job defers itself) and a failed build is a finding.
+        var preview = await previews.CollectAsync(project, payload, cancellationToken);
+
+        // FR-85, FR-139: the PR/MR head's checks are a deterministic input; pending ones are waited for (the job defers itself) first.
+        var checks = await externalChecks.CollectAsync(project, payload, cancellationToken);
+
+        // §4.5 row 4: the previous score is the latest earlier cycle's report in the current review timeline (§4.8).
+        var previous = await ReviewTimeline.Current(db, project)
+            .Where(r => r.ReviewCycle < cycle)
+            .NewestFirst()
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // FR-240: failures repeated from the previous cycle (same fingerprint) are marked, with that cycle's fix step text.
+        var history = await HistoryAsync(previous, cancellationToken);
+        var material = await GatherAsync(
+            project,
+            cancellationToken,
+            [.. checks is null ? [] : checks.Findings(), .. preview?.Findings ?? []],
+            history);
+        var previousText = previous is null
+            ? null
+            : CodeReviewOutput.PreviousReviewSummary(previous.ReviewCycle, previous.Score, previous.Decision, previous.Violations, previous.MissingFeatures, previous.DriftAreas);
+
+        // A review_required reply must propose optimisation steps, or the cycle could never continue: it is re-run once
+        // with that reason, and a reply still without steps escalates (RecordAsync).
+        DomainError? MissingPlan(CodeReviewResult result)
+        {
+            var decision = Assess(result, material, project, cycle, previous?.Score).Assessment.Decision.Decision;
+            return ReviewAssessment.LacksOptimizationPlan(decision, result.OptimizationPlan.Count) ? ReviewAssessment.MissingOptimizationPlanError() : null;
+        }
+
+        var outcome = await RunAgentAsync(job, payload.Trigger, project, cycle, material, previousText, payload.Feedback, MissingPlan, cancellationToken);
+        await RecordAsync(job, cycle, material, outcome, previous?.Score, checks, preview, cancellationToken);
+    }
+
+    /// <summary>FR-249, FR-250: the deterministic findings with the handling the reply's plan gave them (waived ones carry no penalty).</summary>
+    private static IReadOnlyList<ReviewFinding> Handled(CodeReviewResult result, ReviewMaterial material) =>
+        FindingSteps.Annotate(material.Findings, result.FindingOutcomes, material.Carried);
+
+    private static IterationReviewResult Assess(CodeReviewResult result, ReviewMaterial material, Project project, int cycle, decimal? previousScore) =>
+        IterationReviewScope.Assess(
+            new ReviewAssessmentInput(
+                result,
+                Handled(result, material),
+                project.ComplianceThreshold,
+                cycle,
+                project.MaxReviewCycles,
+                project.ExtraReviewCycles,
+                previousScore),
+            material.Requirements);
+
+    /// <summary>
+    /// FR-258: the <c>REVIEW_CYCLE</c> input: the cycle number, and when the build check before this review (the one run in
+    /// the previous cycle's execution) ended exhausted, a line saying so with its fix attempts.
+    /// </summary>
+    private async Task<string> ReviewCycleTextAsync(Project project, int cycle, CancellationToken cancellationToken)
+    {
+        var text = cycle.ToString(CultureInfo.InvariantCulture);
+        var versionId = project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(project.Id, cancellationToken);
+        if (versionId is not { } id)
+        {
+            return text;
+        }
+
+        // Only checks in force: a rollback or invalidation supersedes the earlier ones (§4.47), so no stale note is added.
+        var latest = await buildChecks.InForce(id, cycle - 1).AsNoTracking()
+            .Where(c => c.Status != Domain.Execution.BuildCheckStatus.Cancelled)
+            .OrderByDescending(c => c.Attempt)
+            .FirstOrDefaultAsync(cancellationToken);
+        return latest is { Status: Domain.Execution.BuildCheckStatus.Exhausted }
+            ? text + "\n" + Domain.Execution.BuildCheckText.Exhausted(await buildChecks.FixesUsedAsync(latest, cancellationToken))
+            : text;
+    }
+
+    /// <summary>The cycle this job reviews: read back from its <c>REVIEW_STARTED</c>, or started now; <c>null</c> if the project left review.</summary>
+    private async Task<int?> BeginCycleAsync(JobExecution job, LifecycleJobPayload payload, CancellationToken cancellationToken)
+    {
+        if (await ReviewEvents.StartedCycleAsync(db, payload.ProjectId, job.Id, cancellationToken) is { } started)
+        {
+            return started;
+        }
+
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == payload.ProjectId, cancellationToken);
+        if (project is null || project.CurrentPhase != Phase.Review)
+        {
+            return null;
+        }
+
+        var now = time.GetUtcNow();
+        project.ReviewCycle = ReviewCycleRules.NextCycle(project.ReviewCycle);
+        project.UpdatedAt = now;
+
+        // The decision gates of an earlier cycle no longer describe the code being reviewed: a new decision replaces them.
+        var superseded = await db.ApprovalGates.Sdlc()
+            .Where(g => g.ProjectId == project.Id && g.Status == GateStatus.Pending && (g.Type == SdlcGates.PreRelease || g.Type == EngineGates.Escalation))
+            .ToListAsync(cancellationToken);
+        foreach (var gate in Artifacts.EventOrder.Cancelled(superseded))
+        {
+            gate.Status = GateRules.Cancel(gate.Status);
+            gate.DecidedAt = now;
+            gate.Comment = $"Cancelled: review cycle {project.ReviewCycle.ToString(CultureInfo.InvariantCulture)} started.";
+            db.AddEvent(EventTypes.GateCancelled, project.Id, new { gateId = gate.Id, type = gate.Type, cause = "review_started", cycle = project.ReviewCycle }, SystemActor.Name, now);
+        }
+
+        db.AddEvent(
+            EventTypes.ReviewStarted,
+            project.Id,
+            new { jobId = job.Id, cycle = project.ReviewCycle, trigger = AgentJobTriggerWire.ToWire(payload.Trigger), checkpoint = project.Checkpoint, releaseVersionId = project.CurrentReleaseVersionId },
+            SystemActor.Name,
+            now);
+        await SaveAsync("starting the review cycle", cancellationToken);
+        LogCycleStarted(logger, project.ReviewCycle, payload.Trigger);
+        return project.ReviewCycle;
+    }
+
+    /// <param name="project">The project in review.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <param name="externalFindings">FR-85: findings from failed required checks, added to the deterministic ones.</param>
+    /// <param name="history">FR-240: the previous cycle's failure records and optimisation plan steps, or <c>null</c>.</param>
+    private async Task<ReviewMaterial> GatherAsync(
+        Project project, CancellationToken cancellationToken, IReadOnlyList<ReviewFinding>? externalFindings = null, FailureHistoryInput? history = null)
+    {
+        var preparation = await preparer.TryPrepareAsync(project.Id, cancellationToken);
+        if (preparation.Result.IsFailure)
+        {
+            var error = preparation.Result.Error!;
+            throw new JobFailedException(error.Message, preparation.Transient, error.Code);
+        }
+
+        var working = preparation.Result.Value;
+        var limits = ReviewLimits.Default;
+        var tree = await Git(() => workingCopies.ListFilesAsync(project.Id, working.Branch, MaxTreeEntries, cancellationToken)) ?? [];
+        BranchComparison? comparison = null;
+        try
+        {
+            comparison = await workingCopies.CompareAsync(
+                project.Id, working.Provider.ComparisonBaseRef(working.Connection), working.Branch, 1, MaxComparedFiles, cancellationToken);
+        }
+        catch (Exception ex) when (ex is GitCommandException or WorkingCopyException or IOException)
+        {
+            // Without the comparison every file is reviewed in path order.
+            LogCompareFailed(logger, ex.GetType().Name);
+        }
+
+        var changed = (comparison?.Files ?? []).GroupBy(f => f.Path, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Status, StringComparer.Ordinal);
+        var selected = ReviewCode.SelectForReading(tree, changed.Keys, limits);
+        var contents = await Git(() => workingCopies.ReadCommittedAsync(project.Id, working.Branch, selected, cancellationToken)) ?? [];
+
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var implementation = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ImplementationPlan, cancellationToken);
+        var currentPlanId = await ExecutionQueries.CurrentPlanIdAsync(db, project.Id, cancellationToken);
+        var optimization = currentPlanId is { } planId && planId != implementation?.Id
+            ? await inputs.CurrentAsync(project.Id, SdlcArtifacts.OptimizationPlan, cancellationToken)
+            : null;
+
+        var specText = spec?.Content ?? string.Empty;
+        var allowlist = SpecReading.AllowedDependencies(specText);
+        // FR-251, §4.44: a path left with an unclosed bracket is dropped with a warning, never reported.
+        var endpointRead = SpecReading.ReadEndpointPaths(specText);
+        var endpoints = endpointRead.Paths;
+        if (endpointRead.Dropped.Count > 0)
+        {
+            LogEndpointPathsDropped(logger, string.Join(", ", endpointRead.Dropped));
+        }
+
+        var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
+        var secrets = DeterministicChecks.SecretScan(contents);
+        // FR-233, §4.36: branch control must block every prefix the project uses (aide/ too for projects with an aide/ branch).
+        var branchPrefixes = await ExecutionQueries.BranchControlPrefixesAsync(db, project.Id, cancellationToken);
+        var stackFindings = version.Stack is { } stack
+            ? StackReviewFindings.Run(
+                stack,
+                new StackReviewInput(
+                    [.. contents, .. await BackendSourceAsync(project.Id, working.Branch, stack, tree, contents, cancellationToken)],
+                    version.BaseFiles,
+                    [.. tree.Select(f => f.Path)],
+                    branchPrefixes),
+                secrets)
+            : [];
+        var vercelChecked = version.Stack?.ReviewChecks.Contains(StackReviewChecks.DeployBranchControl, StringComparer.Ordinal) ?? false;
+        // FR-237: failure ids are unique within the cycle (a second failure with the same id gets -2, so none loses its evidence);
+        // FR-246: so are finding ids, in report order.
+        var findings = FindingIds.Disambiguate(FailureIds.Disambiguate(secrets
+            .Concat(allowlist is null ? [] : DeterministicChecks.DependencyAllowlist(allowlist, DependencyManifests.Used(contents), DependencyManifests.Manifests(contents)))
+            // FR-252: file-based routes come from every path in the tree, also files not read for review.
+            .Concat(DeterministicChecks.EndpointCoverage(endpoints, contents, tree.Select(f => f.Path)))
+            .Concat(stackFindings)
+            .Concat(vercelChecked ? [] : await VercelConfigFindingsAsync(project.Id, working.Branch, contents, branchPrefixes, cancellationToken))
+            .Concat(externalFindings ?? [])
+            .ToList()));
+        var failureRecords = FailureHistory.Records(findings, history?.Previous);
+        var repeats = FailureHistory.Repeats(failureRecords, history?.PreviousPlan);
+        // FR-247: findings an earlier waiver still covers are shown waived; those the previous cycle left unaddressed, carried.
+        var earlierWaivers = history?.Waivers ?? [];
+        var carried = history?.Carried ?? new Dictionary<string, int>();
+        LogGathered(logger, tree.Count, contents.Count, findings.Count);
+        var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
+        return new ReviewMaterial(
+            spec,
+            implementation,
+            optimization,
+            // NFR-SEC: secrets the scan flagged never reach the provider; the markers keep the line numbers.
+            ReviewCode.RenderForPrompt(tree, changed, ReviewCode.RedactSecrets(contents), limits),
+            findings,
+            // §4.38 step 5: the 18,000-character total cap applies to the prompt only; stored evidence, external_checks.failures and
+            // the FR-239 blocks keep each failure's own excerpt (at most 6,000 characters).
+            ReviewCode.RenderFindings(FailureExcerpt.CapAll(findings), allowlist is not null, endpoints.Count, repeats, FindingSteps.Marks(findings, earlierWaivers, carried)))
+        {
+            FailureRecords = failureRecords,
+            EarlierWaivers = earlierWaivers,
+            Carried = carried,
+            Requirements = RequirementParser.Parse(specText).Requirements,
+            CodebaseSummary = iteration.CodebaseSummary,
+            Stack = version,
+            BranchFiles = tree.Count is > 0 and < MaxTreeEntries ? tree.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase) : null,
+        };
+    }
+
+    /// <summary>
+    /// Runs the Code Review agent. A reply that can't be read, or that fails <paramref name="requirement"/> (which returns the
+    /// reason), is re-run once with the reasons as feedback; an unreadable second reply fails the job, a readable one is used.
+    /// </summary>
+    private async Task<ReviewAgentOutcome> RunAgentAsync(
+        JobExecution job,
+        string trigger,
+        Project project,
+        int cycle,
+        ReviewMaterial material,
+        string? previousReview,
+        string? feedback,
+        Func<CodeReviewResult, DomainError?> requirement,
+        CancellationToken cancellationToken)
+    {
+        var maxFiles = project.MaxFilesPerStep;
+        var stack = material.Stack.Stack;
+        var agents = material.Stack.PlanAgents(SdlcArtifacts.OptimizationPlan);
+
+        // FR-243: an optimisation plan that leaves out a required deployment file the branch lacks gets that step first.
+        var deployFiles = stack is null
+            ? null
+            : new Domain.Execution.DeployFileCheck(StackRequiredFiles.For(stack), material.BranchFiles, Optimisation: true);
+
+        // FR-239: each failure's evidence block goes to the step naming its failure id (or a new fix step).
+        var failureEvidence = FailureEvidenceSteps.From(material.Findings);
+        var failures = failureEvidence.Count == 0 ? null : new FailureEvidenceCheck(failureEvidence, material.BranchFiles, maxFiles);
+
+        // FR-248, §4.43: then every deterministic finding gets a step or a valid waiver.
+        var findingCheck = new FindingStepCheck(material.Findings, material.EarlierWaivers, cycle);
+        var reviewCycle = await ReviewCycleTextAsync(project, cycle, cancellationToken);
+        var plans = material.CurrentOptimizationPlan is { } optimization
+            ? $"{material.ImplementationPlan?.Content}\n\n---\n\n# Optimization plan v{optimization.Version.ToString(CultureInfo.InvariantCulture)} (the latest cycle's steps)\n\n{optimization.Content}"
+            : material.ImplementationPlan?.Content;
+        AgentRunRequest Request(string? runFeedback) => new()
+        {
+            ProjectId = project.Id,
+            Agent = SdlcAgents.CodeReview,
+            Job = job,
+            Inputs = new Dictionary<string, string?>
+            {
+                ["REVIEW_CYCLE"] = reviewCycle,
+                ["TECHNICAL_SPECIFICATION"] = material.Specification?.Content,
+                ["IMPLEMENTATION_PLAN"] = plans,
+                ["CODEBASE_SUMMARY"] = material.CodebaseSummary?.Content,
+                ["DETERMINISTIC_FINDINGS"] = material.FindingsText,
+                ["PREVIOUS_REVIEW"] = previousReview,
+                ["CODE"] = material.Code,
+                ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
+                ["STACK_GUIDANCE"] = stack is null ? null : StackGuidance.Review(stack),
+            },
+            Stack = stack,
+            InputArtifacts = [.. new[] { material.Specification, material.ImplementationPlan, material.CurrentOptimizationPlan, material.CodebaseSummary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            UserFeedback = runFeedback,
+            Repo = RepoScope.WorkingTree,
+        };
+
+        // FR-126: checklist violations take their item's category and severity (still agent violations: no penalty).
+        Result<CodeReviewResult> Parse(string text)
+        {
+            var read = CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures, findingCheck);
+            return read.IsSuccess
+                ? Result.Success(read.Value with
+                {
+                    Violations = stack is null ? read.Value.Violations : StackReviewChecklist.Apply(read.Value.Violations, stack),
+                })
+                : read;
+        }
+
+        // FR-318: on the engine runner. The first reply must read and meet the requirement; the one corrective
+        // re-run only has to read (0.6.1's check). The optimisation plan draft is stored by RecordAsync, after scoring.
+        var spec = new ArtifactAgentSpec(
+            SdlcArtifacts.OptimizationPlan,
+            text =>
+            {
+                var parsed = Parse(text);
+                var problem = parsed.IsSuccess ? requirement(parsed.Value) : parsed.Error!;
+                return problem is null ? Result.Success(text) : Result.Failure<string>(problem);
+            },
+            (_, problem) =>
+            {
+                LogRejected(logger, problem.Code, problem.Message);
+                return Request(ArtifactAgentSpec.JoinFeedback(feedback, CodeReviewOutput.CorrectiveFeedback(problem)));
+            })
+        {
+            CorrectiveToContent = text => CodeReviewOutput.Parse(text, maxFiles, agents, deployFiles, failures, findingCheck) is { IsFailure: true } failed
+                ? Result.Failure<string>(failed.Error!)
+                : Result.Success(text),
+            StoresDraft = false,
+            LogsRejection = true,
+        };
+        var run = await agentJob.RunReplyAsync(Request(feedback), spec, trigger, cancellationToken);
+        var reparsed = Parse(run.Text);
+        if (reparsed.IsFailure)
+        {
+            // Only reachable if a stored succeeded run no longer reads (e.g. the rules changed).
+            throw new JobFailedException(reparsed.Error!.Message, transient: false, reparsed.Error.Code);
+        }
+
+        LogDroppedEvidence(reparsed.Value);
+        LogRefusedWaivers(project.Id, cycle, reparsed.Value, material.Findings);
+        return new ReviewAgentOutcome(run, reparsed.Value);
+    }
+
+    /// <summary>
+    /// FR-239: a warning naming each failure whose evidence block couldn't be attached to the plan; §4.43 step 5: one naming
+    /// each findings step Tevrin couldn't add (its findings are "No step").
+    /// </summary>
+    /// <summary>§8 observability (FR-249): each refused waiver, with why it was refused (critical, secret or failure).</summary>
+    private void LogRefusedWaivers(Guid projectId, int cycle, CodeReviewResult result, IReadOnlyList<ReviewFinding> findings)
+    {
+        foreach (var outcome in result.FindingOutcomes.Values.Where(o => o.Handling == FindingHandling.WaiverRefused))
+        {
+            var finding = findings.FirstOrDefault(f => FindingSteps.IdOf(f) == outcome.Id);
+            var reason = outcome.Id.StartsWith(FailureIds.Prefix, StringComparison.Ordinal) || finding?.FailureId is not null
+                ? "failure"
+                : FindingIds.KindOf(outcome.Id) == FindingIds.Secret ? "secret" : "critical";
+            LogWaiverRefused(logger, projectId, cycle, outcome.Id, reason);
+        }
+    }
+
+    private void LogDroppedEvidence(CodeReviewResult result)
+    {
+        if (result.DroppedFailureEvidence.Count > 0)
+        {
+            LogEvidenceDropped(logger, string.Join(", ", result.DroppedFailureEvidence));
+        }
+
+        if (result.DroppedFindingSteps.Count > 0)
+        {
+            LogFindingStepsDropped(logger, string.Join(", ", result.DroppedFindingSteps));
+        }
+    }
+
+    /// <summary>
+    /// FR-240: <paramref name="report"/>'s failure records and optimisation plan steps, or <c>null</c> without a report.
+    /// FR-247, FR-249: also its waivers in force and the findings it left unaddressed.
+    /// </summary>
+    private async Task<FailureHistoryInput?> HistoryAsync(ComplianceReport? report, CancellationToken cancellationToken) =>
+        report is null
+            ? null
+            : new FailureHistoryInput(CollectedChecks.StoredFailures(report.ExternalChecks), await PlanStepsAsync(report.OptimizationPlanArtifactId, cancellationToken))
+            {
+                Waivers = CollectedChecks.StoredWaivers(report.ExternalChecks),
+                Carried = FindingSteps.Carried(report.Violations),
+            };
+
+    private async Task RecordAsync(
+        JobExecution job,
+        int cycle,
+        ReviewMaterial material,
+        ReviewAgentOutcome outcome,
+        decimal? previousScore,
+        CollectedChecks? checks,
+        CollectedPreview? preview,
+        CancellationToken cancellationToken)
+    {
+        // The run's completion bumped the project row (tokens used): re-read it so its xmin is current.
+        db.ChangeTracker.Clear();
+        var utcNow = time.GetUtcNow();
+        var now = utcNow.AddTicks(-(utcNow.Ticks % EventLog.Step.Ticks));
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == job.ProjectId, cancellationToken);
+        if (project is null || project.CurrentPhase != Phase.Review || project.ReviewCycle != cycle)
+        {
+            // A rollback (which resets the cycle) or another review happened meanwhile: this result is stale.
+            LogSkipped(logger, "the review was superseded while it ran");
+            return;
+        }
+
+        if (await ReportExistsAsync(job.Id, cancellationToken))
+        {
+            LogSkipped(logger, "this job already recorded its report");
+            return;
+        }
+
+        project.UpdatedAt = now;
+        // Still no optimisation steps after the corrective re-run: a human decides (escalation no_optimization_plan).
+        // §4.13: scored on the reply as scoped to the iteration; its regressions are stored with the report.
+        var scoped = Assess(outcome.Result, material, project, cycle, previousScore);
+        var assessment = ReviewAssessment.RequireOptimizationPlan(scoped.Assessment, outcome.Result.OptimizationPlan.Count);
+        var decision = assessment.Decision;
+
+        Artifact? draft = null;
+        if (ReviewAssessment.DraftsOptimizationPlan(decision.Decision, outcome.Result.OptimizationPlan.Count))
+        {
+            draft = await drafts.AddAsync(project.Id, SdlcArtifacts.OptimizationPlan, outcome.Result.OptimizationPlanMarkdown!, outcome.Run.RunId, now, cancellationToken);
+        }
+
+        var report = new ComplianceReport
+        {
+            ProjectId = project.Id,
+            ReleaseVersionId = project.CurrentReleaseVersionId ?? Guid.Empty,
+            ReviewCycle = cycle,
+            Checkpoint = project.Checkpoint,
+            Score = assessment.Overall,
+            CategoryScores = assessment.Categories,
+            Violations = assessment.Violations,
+            MissingFeatures = scoped.ScopedAgent.MissingFeatures,
+            DriftLevel = assessment.Drift,
+            DriftAreas = scoped.ScopedAgent.DriftAreas,
+            Regressions = TevrinJson.Serialize(scoped.Regressions),
+            Decision = decision.Decision,
+            EscalationReason = decision.Reason,
+            AgentRunId = outcome.Run.RunId,
+            Threshold = project.ComplianceThreshold,
+            OptimizationPlanArtifactId = draft?.Id,
+            // FR-249: the waivers in force after this cycle (earlier ones not voided by a changed message, and the new ones).
+            ExternalChecks = CollectedChecks.Compose(
+                checks,
+                preview?.Check,
+                material.Findings,
+                material.FailureRecords,
+                FindingSteps.Active(material.EarlierWaivers, material.Findings, outcome.Result.NewWaivers)),
+            CreatedAt = now,
+        };
+        db.ComplianceReports.Add(report);
+
+        var score = assessment.Overall.ToString("0.000", CultureInfo.InvariantCulture);
+        var threshold = project.ComplianceThreshold.ToString("0.00", CultureInfo.InvariantCulture);
+        switch (decision.Decision)
+        {
+            case ReviewDecision.ReleaseEligible:
+                // FR-39: release still needs the pre_release gate, in every approval mode (§4.2).
+                writer.AddGate(project, SdlcGates.PreRelease, null, SystemActor.Name, now, $"Review cycle {cycle.ToString(CultureInfo.InvariantCulture)}: score {score} meets the threshold {threshold}");
+                break;
+            case ReviewDecision.EscalationRequired:
+                writer.AddGate(
+                    project,
+                    EngineGates.Escalation,
+                    null,
+                    SystemActor.Name,
+                    now,
+                    $"Review cycle {cycle.ToString(CultureInfo.InvariantCulture)}: score {score}, drift {assessment.Drift.ToWire()} ({decision.Reason?.ToWire()})",
+                    escalationReason: decision.Reason);
+                break;
+            default:
+                break;
+        }
+
+        db.AddEvent(
+            EventTypes.ReviewCompleted,
+            project.Id,
+            new
+            {
+                jobId = job.Id,
+                reportId = report.Id,
+                cycle,
+                checkpoint = project.Checkpoint,
+                releaseVersionId = project.CurrentReleaseVersionId,
+                overallScore = assessment.Overall,
+                threshold = project.ComplianceThreshold,
+                driftLevel = assessment.Drift,
+                decision = decision.Decision,
+                decisionReason = decision.Reason,
+                optimizationPlanArtifactId = draft?.Id,
+                runId = outcome.Run.RunId,
+                regressionCount = scoped.Regressions.Count,
+                checksTimedOut = checks?.TimedOut ?? false,
+                previewDeploymentId = preview?.Check.DeploymentId,
+                previewStatus = preview?.Check.Status,
+            },
+            SystemActor.Name,
+            now);
+        await SaveAsync("recording the review", cancellationToken);
+        LogRecorded(logger, cycle, assessment.Overall, decision.Decision, decision.Reason);
+    }
+
+    /// <summary>FR-17/FR-20 for the optimisation plan: revise the plan of the latest report's cycle with the feedback.</summary>
+    private async Task ReviseOptimizationPlanAsync(JobExecution job, LifecycleJobPayload payload, Project project, CancellationToken cancellationToken)
+    {
+        var report = await ReviewTimeline.Current(db, project).NewestFirst().FirstOrDefaultAsync(cancellationToken);
+        if (report is null || report.Decision == ReviewDecision.ReleaseEligible || report.ReviewCycle != project.ReviewCycle)
+        {
+            LogSkipped(logger, "there is no current review whose optimisation plan can be revised");
+            return;
+        }
+
+        // FR-239, FR-240: the cycle's failure findings (as recorded) still get their evidence blocks in the revised plan, and
+        // the failures repeated from the cycle before keep their marks.
+        var before = await ReviewTimeline.Current(db, project)
+            .Where(r => r.ReviewCycle < report.ReviewCycle)
+            .NewestFirst()
+            .FirstOrDefaultAsync(cancellationToken);
+        // FR-249: the cycle's own waivers (stored with its report) still hold for the revised plan.
+        var beforeHistory = await HistoryAsync(before, cancellationToken);
+        // §4.43: the findings the checks don't recompute from the branch (failures, Supabase advisors) are passed back as recorded.
+        var material = await GatherAsync(
+            project,
+            cancellationToken,
+            [
+                .. report.Violations
+                    .Where(v => v.Source == FindingSource.Deterministic && (v.FailureId is not null || FindingIds.KindOf(v.FindingId) == FindingIds.Advisor))
+                    .Select(v => v with { Handling = null, StepNumber = null, WaivedReason = null, UnaddressedCycles = null }),
+            ],
+            (beforeHistory ?? new FailureHistoryInput([], null)) with { Waivers = CollectedChecks.StoredWaivers(report.ExternalChecks) });
+        var summary = CodeReviewOutput.PreviousReviewSummary(report.ReviewCycle, report.Score, report.Decision, report.Violations, report.MissingFeatures, report.DriftAreas);
+        var rejected = payload.ArtifactId is { } id
+            ? await db.Artifacts.Sdlc().AsNoTracking().Where(a => a.Id == id && a.ProjectId == project.Id).Select(a => (int?)a.Version).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        var feedback = ArtifactAgentSpec.JoinFeedback(
+            payload.Trigger == LifecycleJobPayload.ArtifactRejected
+                ? $"The optimization plan{(rejected is { } v ? $" v{v.ToString(CultureInfo.InvariantCulture)}" : string.Empty)} of this cycle was rejected. Revise the optimization plan; the rest of the review stands."
+                : "The optimization plan of this cycle was lost to an integrity failure. Produce it again.",
+            payload.Feedback);
+        var outcome = await RunAgentAsync(
+            job,
+            payload.Trigger,
+            project,
+            report.ReviewCycle,
+            material,
+            summary,
+            feedback,
+            result => result.OptimizationPlan.Count == 0 ? ReviewAssessment.MissingOptimizationPlanError() : null,
+            cancellationToken);
+        if (outcome.Result.OptimizationPlan.Count == 0)
+        {
+            LogSkipped(logger, "the revised review proposes no optimisation steps");
+            return;
+        }
+
+        db.ChangeTracker.Clear();
+        var now = time.GetUtcNow();
+        now = now.AddTicks(-(now.Ticks % EventLog.Step.Ticks));
+        var draft = await drafts.AddAsync(project.Id, SdlcArtifacts.OptimizationPlan, outcome.Result.OptimizationPlanMarkdown!, outcome.Run.RunId, now, cancellationToken);
+        if (draft is null)
+        {
+            LogSkipped(logger, "the project's phase no longer allows an optimisation plan draft");
+            return;
+        }
+
+        var tracked = await db.ComplianceReports.FirstAsync(r => r.Id == report.Id, cancellationToken);
+        tracked.OptimizationPlanArtifactId = draft.Id;
+
+        // FR-250: the report's handling labels, waivers and carried counts follow the revised plan. The scores and the
+        // decision stand ("the rest of the review stands"), so a waiver granted only by the revision lifts no penalty.
+        tracked.Violations = FindingSteps.Revise(tracked.Violations, outcome.Result.FindingOutcomes, material.Carried);
+        tracked.ExternalChecks = CollectedChecks.ReplaceWaivers(
+            tracked.ExternalChecks, FindingSteps.Active(material.EarlierWaivers, material.Findings, outcome.Result.NewWaivers));
+        await SaveAsync("saving the revised optimisation plan", cancellationToken);
+    }
+
+    /// <summary>FR-240: the steps of the optimisation plan <paramref name="artifactId"/> (the previous cycle's), or <c>null</c>.</summary>
+    private async Task<IReadOnlyList<Domain.Execution.PlanStep>?> PlanStepsAsync(Guid? artifactId, CancellationToken cancellationToken)
+    {
+        if (artifactId is not { } id)
+        {
+            return null;
+        }
+
+        var content = await db.Artifacts.Sdlc().AsNoTracking().Where(a => a.Id == id).Select(a => a.Content).FirstOrDefaultAsync(cancellationToken);
+        return content is null ? null : Domain.Execution.PlanDocument.ReadSteps(content);
+    }
+
+    private Task<bool> ReportExistsAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        var runIds = new[] { AgentRunRules.RunId(jobId), AgentRunRules.RunId(jobId, AgentOutput.CorrectiveRunKey) };
+        return db.ComplianceReports.AnyAsync(r => runIds.Contains(r.AgentRunId), cancellationToken);
+    }
+
+    private async Task SaveAsync(string what, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            // A rollback, settings change or concurrent writer changed the project: retry, which re-checks everything.
+            throw new JobFailedException($"{char.ToUpperInvariant(what[0])}{what[1..]} collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
+        }
+    }
+
+    /// <summary>The most backend source files read for <c>health_endpoints</c> beyond the review's own selection.</summary>
+    public const int MaxBackendSourceFiles = 300;
+
+    private static readonly string[] SourceExtensions = [".cs", ".java", ".kt", ".py", ".ts", ".js", ".mjs", ".cjs"];
+
+    /// <summary>
+    /// FR-126 <c>health_endpoints</c>: the backend's source files the review's selection left out (non-test, by extension,
+    /// path order, at most <see cref="MaxBackendSourceFiles"/> within the review's size limits), so a health endpoint in an
+    /// unread file isn't reported missing. Read only for the deterministic checks, never sent to the agent.
+    /// </summary>
+    private async Task<IReadOnlyList<SourceFile>> BackendSourceAsync(
+        Guid projectId, string branch, Domain.Stack.StackResolution stack, IReadOnlyList<RepositoryFile> tree, IReadOnlyList<SourceFile> contents, CancellationToken cancellationToken)
+    {
+        if (stack.Paths.Backend is not { } backend || !stack.ReviewChecks.Contains(StackReviewChecks.HealthEndpoints, StringComparer.Ordinal))
+        {
+            return [];
+        }
+
+        var limits = ReviewLimits.Default;
+        var read = contents.Select(c => c.Path).ToHashSet(StringComparer.Ordinal);
+        var prefix = backend == Domain.Stack.StackPaths.Root ? string.Empty : backend + "/";
+        long total = 0;
+        var wanted = new List<string>();
+        foreach (var file in tree.OrderBy(f => f.Path, StringComparer.Ordinal))
+        {
+            if (wanted.Count >= MaxBackendSourceFiles || read.Contains(file.Path) || !file.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                || !SourceExtensions.Any(e => file.Path.EndsWith(e, StringComparison.OrdinalIgnoreCase))
+                || StackReviewChecks.IsTestPath(file.Path) || file.Size > limits.MaxFileBytes || total + file.Size > limits.MaxTotalBytes)
+            {
+                continue;
+            }
+
+            total += file.Size;
+            wanted.Add(file.Path);
+        }
+
+        return wanted.Count == 0 ? [] : await Git(() => workingCopies.ReadCommittedAsync(projectId, branch, wanted, cancellationToken)) ?? [];
+    }
+
+    /// <summary>
+    /// FR-89: for a project deploying with Vercel, the branch's <c>vercel.json</c> (in the Vercel root directory) must stop
+    /// Vercel's automatic deploys of every Tevrin prefix the project uses (FR-233, §4.36: <c>tevrin/**</c>, and <c>aide/**</c> for
+    /// a project with an <c>aide/</c> branch; <see cref="Domain.Deployments.VercelConfigRules.ReviewFindings"/>). The
+    /// file is read even when the review's file selection or listed tree left it out. No real Vercel deployment (no settings,
+    /// Fake settings, or the Fake provider in use): no finding.
+    /// </summary>
+    private async Task<IReadOnlyList<ReviewFinding>> VercelConfigFindingsAsync(
+        Guid projectId, string branch, IReadOnlyList<SourceFile> contents, IReadOnlyList<string> branchPrefixes, CancellationToken cancellationToken)
+    {
+        // Only real Vercel deploys on its own: the Fake provider (Deployments:Provider=Fake) and Fake settings never do.
+        if (deploymentProviders.UsesFake)
+        {
+            return [];
+        }
+
+        var rootDirectory = await db.DeploymentTargets.AsNoTracking()
+            .Where(t => t.ProjectId == projectId && t.Component == DeploymentComponent.Frontend && t.Provider == DeploymentProvider.Vercel)
+            .Select(s => s.RootDirectory)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (rootDirectory is null)
+        {
+            return [];
+        }
+
+        var path = Domain.Deployments.VercelConfigRules.ConfigPath(rootDirectory);
+        var file = contents.FirstOrDefault(f => Domain.Deployments.VercelConfigRules.IsConfigPath(f.Path, path));
+        if (file is null)
+        {
+            // Not read for review (too large, over the budget, or beyond the listed tree): read it on its own.
+            var read = await Git(() => workingCopies.ReadCommittedAsync(projectId, branch, [path], cancellationToken)) ?? [];
+            file = read.Count > 0 ? read[0] : null;
+        }
+
+        // FR-246, §4.42: finding:vercel:<rule>-<path>.
+        return
+        [
+            .. Domain.Deployments.VercelConfigRules.ReviewFindings(path, file?.Content, branchPrefixes)
+                .Select(f => f with { FindingId = FindingIds.ForVercel(StackReviewChecks.DeployBranchControl, f.Path ?? path) }),
+        ];
+    }
+
+    /// <summary>Git and working-copy failures retry the job; an unsafe working copy fails it.</summary>
+    private static async Task<T?> Git<T>(Func<Task<T>> action)
+    {
+        try
+        {
+            return await action();
+        }
+        catch (GitCommandException ex)
+        {
+            throw new JobFailedException(ex.Message, transient: true);
+        }
+        catch (WorkingCopyException ex)
+        {
+            throw new JobFailedException(ex.Message, transient: false);
+        }
+        catch (IOException ex)
+        {
+            throw new JobFailedException($"Working copy I/O failed: {ex.GetType().Name}.", transient: true);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The failure evidence of {FailureIds} couldn't be attached to the optimisation plan (the plan would be invalid or the step text too long)")]
+    private static partial void LogEvidenceDropped(ILogger logger, string failureIds);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Tevrin couldn't add {Steps} to the optimisation plan (the plan would be invalid); their deterministic findings have no step")]
+    private static partial void LogFindingStepsDropped(ILogger logger, string steps);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Review of project {ProjectId} cycle {ReviewCycle} refused the waiver of {FindingId} ({Reason} findings can't be waived)")]
+    private static partial void LogWaiverRefused(ILogger logger, Guid projectId, int reviewCycle, string findingId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Specification endpoint paths dropped (unclosed bracket): {Paths}")]
+    private static partial void LogEndpointPathsDropped(ILogger logger, string paths);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Review job did nothing: {Reason}")]
+    private static partial void LogSkipped(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Review cycle {Cycle} started ({Trigger})")]
+    private static partial void LogCycleStarted(ILogger logger, int cycle, string trigger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Review read {TreeCount} files ({ReadCount} with content); deterministic checks found {FindingCount}")]
+    private static partial void LogGathered(ILogger logger, int treeCount, int readCount, int findingCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The code_review reply was rejected with {ErrorCode}; re-running once with the reasons as feedback: {Reason}")]
+    private static partial void LogRejected(ILogger logger, string errorCode, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Review cycle {Cycle} recorded: score {Score}, decision {Decision} ({Reason})")]
+    private static partial void LogRecorded(ILogger logger, int cycle, decimal score, ReviewDecision decision, EscalationReason? reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Comparing the project branch with the default branch failed ({ErrorType}); reviewing without it")]
+    private static partial void LogCompareFailed(ILogger logger, string errorType);
+}
+
+/// <summary>Reads of the review events.</summary>
+public static class ReviewEvents
+{
+    /// <summary>The cycle recorded by the <c>REVIEW_STARTED</c> event of <paramref name="jobId"/>, or <c>null</c>.</summary>
+    public static async Task<int?> StartedCycleAsync(TevrinDbContext db, Guid projectId, Guid jobId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var match = JsonSerializer.Serialize(new { jobId });
+        var payload = await db.Events.AsNoTracking()
+            .Where(e => e.ProjectId == projectId && e.Type == EventTypes.ReviewStarted && EF.Functions.JsonContains(e.Payload, match))
+            .OrderBy(e => e.CreatedAt)
+            .Select(e => e.Payload)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (payload is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(payload);
+        return doc.RootElement.TryGetProperty("cycle", out var cycle) && cycle.TryGetInt32(out var value) ? value : null;
+    }
+}
+
+/// <summary>
+/// A review job that ended without succeeding (failed for good, or dead-lettered) records <c>REVIEW_FAILED</c> with the
+/// cycle it started (else the project's current cycle) and its redacted last error, so the failure shows in the activity
+/// feed and the review status (FR-38).
+/// </summary>
+public sealed class ReviewJobEndedHook(TimeProvider time) : IJobEndedHook
+{
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
+    {
+        var db = engineDb.AsTevrin();
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(job);
+        if (job.JobType != SdlcJobTypes.Review || job.ProjectId is not { } projectId)
+        {
+            return;
+        }
+
+        var cycle = await ReviewEvents.StartedCycleAsync(db, projectId, job.JobId, cancellationToken)
+            ?? await db.Projects.AsNoTracking().Where(p => p.Id == projectId).Select(p => (int?)p.ReviewCycle).FirstOrDefaultAsync(cancellationToken);
+        if (cycle is null)
+        {
+            return; // the project is gone
+        }
+
+        var reason = string.IsNullOrWhiteSpace(job.Error) ? "The review job failed." : SecretRedaction.SanitizeProviderError(job.Error);
+        db.AddEvent(
+            EventTypes.ReviewFailed,
+            projectId,
+            new { jobId = job.JobId, cycle, reason, deadLettered = job.DeadLettered },
+            SystemActor.Name,
+            time.GetUtcNow());
+    }
+}

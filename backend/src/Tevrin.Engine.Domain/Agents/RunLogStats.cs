@@ -34,7 +34,11 @@ public sealed record PromptStats(
     decimal AvgCost,
     double? AvgLatencyMs,
     double AvgDurationMs,
-    double FailureRate);
+    double FailureRate)
+{
+    /// <summary>FR-353: the mean outcome score and scored-target count per metric (sorted by metric); empty when none.</summary>
+    public IReadOnlyList<Tevrin.Engine.Domain.Outcomes.PromptOutcomeMean> Outcomes { get; init; } = [];
+}
 
 /// <summary>FR-298: pure math for the prompt comparison.</summary>
 public static class RunLogStats

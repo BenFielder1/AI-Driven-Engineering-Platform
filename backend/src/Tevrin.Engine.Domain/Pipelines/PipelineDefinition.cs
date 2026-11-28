@@ -19,8 +19,23 @@ public sealed record PipelineDefinition
 
     public string Title { get; init; } = string.Empty;
 
-    /// <summary>FR-284: defaults to <c>{ kind: manual }</c> when omitted.</summary>
+    /// <summary>FR-284: defaults to <c>{ kind: manual }</c> when omitted. Unused when <see cref="Triggers"/> is set.</summary>
     public PipelineTrigger Trigger { get; init; } = PipelineTrigger.Manual;
+
+    /// <summary>
+    /// FR-339 (0.8.0, §4.49 amended): <c>triggers: [ { kind: … }, … ]</c>, the list form of <see cref="Trigger"/>, or
+    /// <c>null</c> when the definition uses the single <c>trigger:</c> (or neither). A definition declares one form or the
+    /// other, and at most one <c>webhook</c> and one <c>schedule</c> entry. Absent from the canonical form when <c>null</c>,
+    /// so existing hashes don't change.
+    /// </summary>
+    public IReadOnlyList<PipelineTrigger>? Triggers { get; init; }
+
+    /// <summary>Every trigger the definition declares: <see cref="Triggers"/>, else the single <see cref="Trigger"/>.</summary>
+    public IReadOnlyList<PipelineTrigger> DeclaredTriggers => Triggers ?? [Trigger];
+
+    /// <summary>FR-336, FR-337, FR-339: the declared trigger of <paramref name="kind"/> (the first, if a list repeats it), or
+    /// <c>null</c> when the definition doesn't declare one. Manual starts don't depend on it.</summary>
+    public PipelineTrigger? TriggerOf(TriggerKind kind) => DeclaredTriggers.FirstOrDefault(t => t.Kind == kind);
 
     public IReadOnlyList<ApprovalMode> ApprovalModes { get; init; } = [];
 
@@ -50,6 +65,18 @@ public sealed record PipelineDefinition
 
     public IReadOnlyList<StageDefinition> Stages { get; init; } = [];
 
+    /// <summary>FR-348 (0.8.0): the run-wide revision cap, or <c>null</c> for none. Absent from the canonical form when
+    /// <c>null</c>.</summary>
+    public RunLimits? Limits { get; init; }
+
+    /// <summary>FR-354 (0.8.0): <c>followups:</c>, the stages run after the run completes (§4.70). Empty when not declared,
+    /// and then absent from the canonical form.</summary>
+    public IReadOnlyList<FollowUpDefinition> FollowUps { get; init; } = [];
+
+    /// <summary>FR-343 (0.8.0): every stage in declared order, each parallel group followed by its branch stages (branch by
+    /// branch).</summary>
+    public IEnumerable<StageDefinition> AllStages => Stages.SelectMany(s => s.WithBranchStages());
+
     /// <summary>The position of stage <paramref name="stageId"/> in <see cref="Stages"/> (first match), or -1.</summary>
     public int IndexOfStage(string? stageId)
     {
@@ -71,13 +98,17 @@ public sealed record PipelineDefinition
         return index < 0 ? null : Stages[index];
     }
 
+    /// <summary>FR-343: stage <paramref name="stageId"/> at the top level or in a parallel group's branch, or <c>null</c>.</summary>
+    public StageDefinition? FindAnyStage(string? stageId) =>
+        FindStage(stageId) ?? AllStages.FirstOrDefault(s => string.Equals(s.Id, stageId, StringComparison.Ordinal));
+
     /// <summary>Artifact <paramref name="key"/>, or <c>null</c>.</summary>
     public ArtifactDefinition? FindArtifact(string? key) =>
         Artifacts.FirstOrDefault(a => string.Equals(a.Key, key, StringComparison.Ordinal));
 
     /// <summary>
     /// FR-281: where a successful stage goes: its <c>on_success</c>, else the following stage (linear by default), else
-    /// <c>null</c> for the last stage.
+    /// <c>null</c> for the last stage. FR-354: the linear default skips follow-up stages, which sit outside the main flow.
     /// </summary>
     public string? SuccessorOf(string stageId)
     {
@@ -88,7 +119,21 @@ public sealed record PipelineDefinition
         }
 
         var stage = Stages[index];
-        return stage.OnSuccess ?? (index + 1 < Stages.Count ? Stages[index + 1].Id : null);
+        return stage.OnSuccess ?? NextInFlow(index);
+    }
+
+    /// <summary>The first stage after position <paramref name="index"/> that isn't a follow-up stage (FR-354), or <c>null</c>.</summary>
+    public string? NextInFlow(int index)
+    {
+        for (var i = index + 1; i < Stages.Count; i++)
+        {
+            if (!FollowUpRules.IsFollowUpStage(this, Stages[i].Id))
+            {
+                return Stages[i].Id;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The generic status a pack status maps to (§4.57): its <see cref="Statuses"/> entry, else the generic
@@ -105,18 +150,58 @@ public sealed record PipelineDefinition
     }
 }
 
-/// <summary>FR-284: <c>trigger</c>. <see cref="Options"/> holds the kind's other scalar keys (e.g. a schedule's cron).</summary>
+/// <summary>
+/// FR-284: <c>trigger</c>. <see cref="Options"/> holds the kind's other scalar keys. FR-336, FR-337 (0.8.0): a
+/// <c>schedule</c> or <c>webhook</c> trigger takes <c>input: &lt;artifactKey&gt;</c> (required for a webhook; an artifact
+/// declared <c>input: true</c>) and <c>on_active: submit | skip</c> (what a fire or call does while a run is active;
+/// <c>skip</c> when omitted). Absent options are left out of the canonical form (§4.49 amended), so the hash is unchanged.
+/// </summary>
 public sealed record PipelineTrigger(TriggerKind Kind, IReadOnlyDictionary<string, string> Options)
 {
+    /// <summary>The <c>input</c> option key.</summary>
+    public const string InputOption = "input";
+
+    /// <summary>The <c>on_active</c> option key.</summary>
+    public const string OnActiveOption = "on_active";
+
     public static PipelineTrigger Manual { get; } = new(TriggerKind.Manual, new Dictionary<string, string>(StringComparer.Ordinal));
+
+    /// <summary>FR-337: the artifact a webhook body (or a schedule's inputs) is stored as, or <c>null</c>.</summary>
+    public string? Input => Options.TryGetValue(InputOption, out var input) ? input : null;
+
+    /// <summary>FR-336, FR-337: <c>on_active</c>; <see cref="TriggerOnActive.Skip"/> when omitted or not a known value
+    /// (the validator reports an unknown value).</summary>
+    public TriggerOnActive OnActive =>
+        Options.TryGetValue(OnActiveOption, out var value) && EnumStrings.TryParse(value, out TriggerOnActive parsed)
+            ? parsed
+            : TriggerOnActive.Skip;
 }
 
-/// <summary>FR-284: only <see cref="Manual"/> runs in 0.7.0 (D-0.7.0-3).</summary>
+/// <summary>FR-284: 0.7.0 ran only <see cref="Manual"/> (D-0.7.0-3); 0.8.0 adds schedules and webhooks (FR-336, FR-337).</summary>
 public enum TriggerKind
 {
     Manual = 0,
     Schedule = 1,
     Webhook = 2,
+}
+
+/// <summary>FR-336, FR-337: what a schedule fire or a webhook call does while a run of the pipeline is active.</summary>
+public enum TriggerOnActive
+{
+    /// <summary>The fire is skipped and recorded; a webhook call is refused (<c>RUN_ALREADY_ACTIVE</c>).</summary>
+    Skip = 0,
+
+    /// <summary>The payload is submitted to the active run as a new version of the trigger's input (FR-335).</summary>
+    Submit = 1,
+}
+
+/// <summary>FR-331: how many non-final runs of the pipeline a project may have at once.</summary>
+public enum RunConcurrency
+{
+    /// <summary>At most one (the default; <c>RUN_ALREADY_ACTIVE</c> otherwise).</summary>
+    One = 0,
+
+    Many = 1,
 }
 
 /// <summary>FR-279: an artifact the definition produces or reads.</summary>
@@ -126,7 +211,31 @@ public sealed record ArtifactDefinition(
     ArtifactFormat Format,
     string? Schema,
     ArtifactApproval Approval,
-    CascadeMode Cascade);
+    CascadeMode Cascade)
+{
+    /// <summary>
+    /// FR-335 (0.8.0): <c>input: true</c>, the artifact is supplied from outside the run (at start, by a submit or by a
+    /// trigger) rather than produced by a stage. Omitted from the canonical form when <c>false</c> (the hash is unchanged).
+    /// </summary>
+    public bool Input { get; init; }
+
+    /// <summary>
+    /// FR-352 (0.8.0): <c>scope: project</c>, one version history per project shared by every run, edited by people
+    /// through the artifact endpoints; a run pins its newest locked version when it starts (§4.76). Omitted from the
+    /// canonical form when <see cref="ArtifactScope.Run"/> (the default), so the hash is unchanged.
+    /// </summary>
+    public ArtifactScope Scope { get; init; }
+}
+
+/// <summary>FR-352: whose version history an artifact has.</summary>
+public enum ArtifactScope
+{
+    /// <summary>Each run (or SDLC release version) has its own versions (the default).</summary>
+    Run = 0,
+
+    /// <summary>One history per project, pinned by each run at its start (§4.76).</summary>
+    Project = 1,
+}
 
 public enum ArtifactFormat
 {
@@ -160,6 +269,10 @@ public enum GenericRunStatus
     Completed = 3,
     Failed = 4,
     Cancelled = 5,
+
+    /// <summary>FR-335 (0.8.0): an engine-controlled run stopped at a stage that requires an input it doesn't have yet.
+    /// Stored (unlike <see cref="WaitingOnGate"/>); only the run driver enters and leaves it (<see cref="Entities.PipelineRunRules"/>).</summary>
+    WaitingOnInput = 6,
 }
 
 /// <summary>FR-285: a custom pack status and the generic status it maps to.</summary>
@@ -209,6 +322,10 @@ public sealed record StatusChangeDefinition(
 public sealed record ConcurrencyDefinition(IReadOnlyList<ExclusiveJob> Exclusive)
 {
     public static ConcurrencyDefinition None { get; } = new([]);
+
+    /// <summary>FR-331 (0.8.0): <c>runs: one | many</c>, default <see cref="RunConcurrency.One"/>. Omitted from the
+    /// canonical form when it's the default (the hash is unchanged).</summary>
+    public RunConcurrency Runs { get; init; } = RunConcurrency.One;
 }
 
 public sealed record ExclusiveJob(string JobType, ConcurrencyScope Scope);
@@ -289,6 +406,54 @@ public sealed record StageDefinition
     /// </summary>
     public IReadOnlyList<string> Handlers { get; init; } = [];
 
+    /// <summary>FR-343 (0.8.0): the parallel group this entry is, or <c>null</c>.</summary>
+    public ParallelDefinition? Parallel { get; init; }
+
+    /// <summary>FR-344 (0.8.0): checks that stop the path when they veto the stage's output.</summary>
+    public IReadOnlyList<VetoDefinition> Veto { get; init; } = [];
+
+    /// <summary>FR-344 (0.8.0): where a veto goes; required when <see cref="Veto"/> is set.</summary>
+    public OnVetoDefinition? OnVeto { get; init; }
+
+    /// <summary>FR-345 (0.8.0): the agent stage's fan-out, or <c>null</c>.</summary>
+    public FanOutDefinition? FanOut { get; init; }
+
+    /// <summary>FR-346 (0.8.0): the branch outputs this stage aggregates, or <c>null</c>.</summary>
+    public AggregateDefinition? Aggregate { get; init; }
+
+    /// <summary>FR-347 (0.8.0): earlier stages the agent may route back to.</summary>
+    public IReadOnlyList<string> Routes { get; init; } = [];
+
+    /// <summary>FR-349 (0.8.0): the agent stage's output variants, or <c>null</c>.</summary>
+    public VariantsDefinition? Variants { get; init; }
+
+    /// <summary>FR-351 (0.8.0): <c>feedback: { inject, limit }</c> on an agent stage, or <c>null</c> (no injection).</summary>
+    public FeedbackInjectionDefinition? Feedback { get; init; }
+
+    /// <summary>FR-351 (0.8.0): <c>writes_feedback: { agent, from }</c>, or <c>null</c>.</summary>
+    public WritesFeedbackDefinition? WritesFeedback { get; init; }
+
+    /// <summary>FR-355 (0.8.0): the stage's map over an artifact array, or <c>null</c>.</summary>
+    public MapDefinition? Map { get; init; }
+
+    /// <summary>FR-355 (0.8.0): the reduce step after <see cref="Map"/>, or <c>null</c>.</summary>
+    public ReduceDefinition? Reduce { get; init; }
+
+    /// <summary>FR-356 (0.8.0): the stage's turn-based conversation, or <c>null</c>.</summary>
+    public ConversationDefinition? Conversation { get; init; }
+
+    /// <summary>FR-357 (0.8.0): the <c>{ from_runs: … }</c> entries of <c>inputs:</c>, in order (each with its
+    /// position); <see cref="Inputs"/> holds the plain artifact keys.</summary>
+    public IReadOnlyList<RunsInputDefinition> FromRuns { get; init; } = [];
+
+    /// <summary>FR-358 (0.8.0): <c>tool_policy: { max_tier }</c> for the stage's agent, or <c>null</c> (<c>write</c>,
+    /// <see cref="ToolTierRules.DefaultMaxTier"/>). An <c>agents:</c> binding sets its own.</summary>
+    public ToolPolicyDefinition? ToolPolicy { get; init; }
+
+    /// <summary>This stage, then (for a parallel group) every branch stage, branch by branch.</summary>
+    public IEnumerable<StageDefinition> WithBranchStages() =>
+        Parallel is null ? [this] : [this, .. Parallel.Branches.SelectMany(b => b).SelectMany(s => s.WithBranchStages())];
+
     /// <summary>The stage's kind; a stage with both an agent and a handler is invalid (<see cref="DefinitionErrorCodes.StageKind"/>)
     /// and reads as an agent stage.</summary>
     public StageKind Kind => Agent is not null ? StageKind.Agent : Handler is not null ? StageKind.Code : StageKind.Manual;
@@ -318,8 +483,21 @@ public sealed record NoPendingGatesRequirement(IReadOnlyList<string> Except) : S
 /// <summary><c>{ guard: &lt;pack&gt;.&lt;name&gt; }</c>: a registered <see cref="IGuard"/> passes.</summary>
 public sealed record GuardRequirement(string Guard) : StageRequirement;
 
-/// <summary>FR-282: one <c>validate:</c> entry, <c>{ guard: &lt;pack&gt;.&lt;name&gt; }</c>.</summary>
-public sealed record StageValidation(string Guard);
+/// <summary>
+/// FR-335 (0.8.0): <c>{ input: &lt;key&gt; }</c>: the run has a version of the input artifact <paramref name="ArtifactKey"/>
+/// (declared <c>input: true</c>). Unmet, the run driver waits (<see cref="GenericRunStatus.WaitingOnInput"/>).
+/// </summary>
+public sealed record InputRequirement(string ArtifactKey) : StageRequirement;
+
+/// <summary>
+/// FR-282: one <c>validate:</c> entry, <c>{ guard: &lt;pack&gt;.&lt;name&gt; }</c>; FR-350 (0.8.0): or
+/// <c>{ agent: &lt;key&gt; }</c>, a validator agent the stage binds under <c>agents:</c> (<see cref="Guard"/> is then <c>null</c>).
+/// </summary>
+public sealed record StageValidation(string? Guard)
+{
+    /// <summary>FR-350: the bound validator agent's key, or <c>null</c> for a guard.</summary>
+    public string? Agent { get; init; }
+}
 
 /// <summary>FR-282, §4.55: what happens when validation fails.</summary>
 public sealed record OnInvalidPolicy(bool RetryWithFeedback, int MaxAttempts, InvalidOutcome Then);
@@ -389,3 +567,9 @@ public static class KeyWords
 /// <c>on_reject</c> pointing backwards is a loop and needs the cap (<see cref="DefinitionErrorCodes.UncappedLoop"/>).
 /// </summary>
 public sealed record RejectTransition(string To, IterationCap? MaxIterations);
+
+/// <summary>FR-351, §4.75: <c>feedback: { inject: true, limit: n }</c> (limit 1–50, default 10).</summary>
+public sealed record FeedbackInjectionDefinition(bool Inject, int Limit);
+
+/// <summary>FR-351: <c>writes_feedback: { agent: &lt;key&gt;, from: &lt;output field&gt; }</c>.</summary>
+public sealed record WritesFeedbackDefinition(string Agent, string From);

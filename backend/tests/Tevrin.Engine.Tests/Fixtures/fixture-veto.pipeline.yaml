@@ -1,0 +1,50 @@
+# Fixture pipeline (M68, FR-344): the risk manager (an agent) and a position-limit guard can veto the sized position.
+# A veto doesn't retry: the run routes back to the trader's proposal.
+pipeline: fixture-veto
+version: 1
+title: Fixture veto
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [propose]
+
+artifacts:
+  signal:   { title: Signal, format: markdown, approval: auto_lock, cascade: none, input: true }
+  proposal: { title: Trade proposal, format: markdown, approval: auto_lock, cascade: downstream }
+  position: { title: Sized position, format: json, approval: auto_lock, cascade: downstream }
+  order:    { title: Order, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  proposing: { generic: active }
+  sizing:    { generic: active }
+  ordering:  { generic: active }
+
+stages:
+  - id: propose
+    title: Propose trade
+    status: proposing
+    agent: { key: trader, prompt: flow.trade }
+    inputs: [signal]
+    output: proposal
+    requires:
+      - { input: signal }
+
+  - id: size
+    title: Size position
+    status: sizing
+    agent: { key: sizer, prompt: flow.size }
+    inputs: [proposal]
+    output: position
+    agents:
+      - { key: risk-manager, job_type: flow.risk-review, prompt: flow.risk }
+    veto:
+      - { guard: flow.position-limit }
+      - { agent: risk-manager }
+    on_veto: { to: propose }
+
+  - id: order
+    title: Place order
+    status: ordering
+    agent: { key: executor, prompt: flow.order }
+    inputs: [position]
+    output: order

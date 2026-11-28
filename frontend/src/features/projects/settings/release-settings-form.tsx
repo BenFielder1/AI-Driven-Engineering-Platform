@@ -17,7 +17,7 @@ import { useProjectState, useUpdateGitSettings, type GitSettings } from '../proj
 import { checkTagPrefix, TAG_PREFIX_MAX, tagPrefixLockReason } from './release-settings-rules'
 
 const releaseSchema = z
-  .object({ mergeStrategy: z.enum(['aide_merges', 'manual', 'fast_forward', 'squash']), tagPrefix: z.string().optional() })
+  .object({ mergeStrategy: z.enum(['tevrin_merges', 'manual', 'fast_forward', 'squash']), tagPrefix: z.string().optional() })
   .superRefine((v, ctx) => {
     // A disabled (locked) field may read as undefined.
     const problem = checkTagPrefix(v.tagPrefix ?? '')
@@ -44,7 +44,7 @@ const strategyOptions = (git: GitSettings) => {
 const heldUnavailable = (g: GitSettings) => !mergeStrategiesFor(g.mode).includes(g.mergeStrategy)
 
 const toValues = (g: GitSettings): ReleaseValues => ({
-  mergeStrategy: heldUnavailable(g) ? 'aide_merges' : g.mergeStrategy,
+  mergeStrategy: heldUnavailable(g) ? 'tevrin_merges' : g.mergeStrategy,
   tagPrefix: g.tagPrefix,
 })
 

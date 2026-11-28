@@ -19,30 +19,29 @@ public static partial class PipelineDefinitionValidator
         {
             var keys = new HashSet<string>(StringComparer.Ordinal);
             var jobTypes = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage0, at) in _allStages)
             {
-                if (definition.Stages[i].Agent is not { } agent)
+                if (stage0.Agent is not { } agent)
                 {
                     continue;
                 }
 
                 if (!string.IsNullOrEmpty(agent.Key) && !keys.Add(agent.Key))
                 {
-                    Add(DefinitionErrorCodes.DuplicateId, $"stages[{i}].agent.key", $"Agent '{agent.Key}' is already bound in this pipeline; agent keys are unique.");
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.agent.key", $"Agent '{agent.Key}' is already bound in this pipeline; agent keys are unique.");
                 }
 
                 if (!string.IsNullOrEmpty(agent.JobType) && !jobTypes.Add(agent.JobType) && agent.JobType != EngineJobTypes.AgentRun)
                 {
-                    Add(DefinitionErrorCodes.DuplicateId, $"stages[{i}].agent.job_type", $"Job type '{agent.JobType}' already runs another agent in this pipeline.");
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.agent.job_type", $"Job type '{agent.JobType}' already runs another agent in this pipeline.");
                 }
             }
 
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage, at) in _allStages)
             {
-                var stage = definition.Stages[i];
                 for (var j = 0; j < stage.Agents.Count; j++)
                 {
-                    ValidateBinding(stage, stage.Agents[j], $"stages[{i}].agents[{j}]", keys, jobTypes);
+                    ValidateBinding(stage, stage.Agents[j], $"{at}.agents[{j}]", keys, jobTypes);
                 }
             }
         }
@@ -80,6 +79,7 @@ public static partial class PipelineDefinitionValidator
             if (binding.Output is { } output)
             {
                 CheckArtifactRef(output, path + ".output");
+                CheckNotProjectScoped(output, path + ".output");
             }
 
             for (var t = 0; t < binding.Tools.Count; t++)
@@ -93,16 +93,48 @@ public static partial class PipelineDefinitionValidator
                 {
                     Add(DefinitionErrorCodes.UnknownTool, $"{path}.tools[{t}]", $"No pack registered tool '{tool}'.");
                 }
+                else
+                {
+                    CheckToolTier(tool, binding.ToolPolicy, $"{path}.tools[{t}]"); // FR-358
+                }
             }
 
-            // A duplicate key's prompt is checked at its first binding only.
+            // A duplicate key's prompt is checked at its first binding only (FR-350: a validator agent's prompt also gets
+            // {{OUTPUT}} and the stage output's own placeholder, the output under validation).
             if (keyValid && stage.ForAgent(binding.Key) is { Agent: { } agent } view)
             {
-                CheckPrompt(view, agent, path);
+                // FR-355: a map's item agent also gets {{MAP_ITEM}} and {{MAP_INDEX}}, its reduce agent {{<OUTPUT>_ALL}}.
+                IReadOnlyCollection<string>? supplied = ValidatorPlaceholders(stage, binding.Key);
+                if (MapRules.SuppliedPlaceholders(stage, binding.Key) is { Count: > 0 } map)
+                {
+                    supplied = [.. supplied ?? [], .. map];
+                }
+
+                // FR-356: a conversation participant also gets {{TRANSCRIPT}}, {{ROLE}} and the stage's inputs.
+                if (ConversationRules.SuppliedPlaceholders(stage, binding.Key) is { Count: > 0 } conversation)
+                {
+                    supplied = [.. supplied ?? [], .. conversation];
+                }
+
+                CheckPrompt(view, agent, path, supplied);
 
                 // D-0.7.0-44: the binding's own validate: and on_invalid:, checked as a stage's.
                 ValidateGuards(view, path);
+                if (binding.Validate.Any(v => v.Agent is not null))
+                {
+                    // FR-350: validator agents run on the stage's output; a binding's own validation stays guards only.
+                    Add(DefinitionErrorCodes.Parse, path + ".validate", "A binding's 'validate' takes guards only; declare validator agents on the stage.");
+                }
             }
         }
+
+        /// <summary>FR-350: the placeholders the runner fills for validator agent <paramref name="key"/> of
+        /// <paramref name="stage"/>; <c>null</c> when it isn't one of the stage's validators.</summary>
+        private static string[]? ValidatorPlaceholders(StageDefinition stage, string? key) =>
+            stage.Validate.Any(v => v.Agent is not null && string.Equals(v.Agent, key, StringComparison.Ordinal))
+                ? string.IsNullOrEmpty(stage.Output)
+                    ? [Agents.ValidatorAgentRules.OutputPlaceholder]
+                    : [Agents.ValidatorAgentRules.OutputPlaceholder, Agents.AgentPromptPlaceholders.Of(stage.Output)]
+                : null;
     }
 }

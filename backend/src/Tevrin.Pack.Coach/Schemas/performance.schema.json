@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Performance",
+  "type": "object",
+  "required": ["summary", "lastWeekVolume"],
+  "properties": {
+    "summary": { "type": "string", "minLength": 1 },
+    "lastWeekVolume": { "type": "number", "minimum": 0 },
+    "fatigue": { "enum": ["low", "moderate", "high"] },
+    "trends": { "type": "array", "items": { "type": "string" } },
+    "risks": { "type": "array", "items": { "type": "string" } }
+  }
+}

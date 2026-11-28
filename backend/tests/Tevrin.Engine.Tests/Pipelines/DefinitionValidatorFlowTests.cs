@@ -75,13 +75,13 @@ public class DefinitionValidatorFlowTests
     public void FR276_DEF_UNKNOWN_SETTING_for_a_setting_no_pack_provides() =>
         Assert.Equal([(DefinitionErrorCodes.UnknownSetting, "settings[0]")], Errors(Minimal, Catalog with { Settings = [] }));
 
-    [Theory]
-    [InlineData("schedule, cron: '0 6 * * *'")]
-    [InlineData("webhook")]
-    public void FR276_FR284_DEF_TRIGGER_NOT_SUPPORTED(string kind) =>
-        Assert.Equal([(DefinitionErrorCodes.TriggerNotSupported, "trigger.kind")], Errors(Edit("{ kind: manual }", $"{{ kind: {kind} }}")));
+    /// <summary>FR-336 (0.8.0) lifts D-0.7.0-3: schedule and webhook kinds are supported; an option the kind doesn't take is
+    /// <c>DEF_TRIGGER_NOT_SUPPORTED</c> (more cases in <see cref="RunControlDefinitionTests"/>).</summary>
+    [Fact]
+    public void FR276_FR284_DEF_TRIGGER_NOT_SUPPORTED() =>
+        Assert.Equal([(DefinitionErrorCodes.TriggerNotSupported, "trigger.cron")], Errors(Edit("{ kind: manual }", "{ kind: schedule, cron: '0 6 * * *' }")));
 
     [Fact]
     public void FR276_every_code_in_the_table_is_exercised() =>
-        Assert.Equal(18, DefinitionErrorCodes.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(26, DefinitionErrorCodes.All.Distinct(StringComparer.Ordinal).Count()); // FR-355, FR-356: DEF_MAP_SOURCE, DEF_CONVERSATION_PARTICIPANTS; FR-358: DEF_TOOL_TIER
 }

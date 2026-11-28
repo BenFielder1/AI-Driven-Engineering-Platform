@@ -1,0 +1,31 @@
+# Fixture pipeline (M69, FR-350): the writer drafts an article and a fact-checker validator agent checks it. Its error
+# findings reject the draft (retried with the findings as feedback, then the run fails); warnings are kept only.
+pipeline: fixture-factcheck
+version: 1
+title: Fixture fact-check
+trigger: { kind: manual }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [write]
+
+artifacts:
+  topic:   { title: Topic, format: markdown, approval: auto_lock, cascade: none, input: true }
+  article: { title: Article, format: markdown, approval: auto_lock, cascade: none }
+
+statuses:
+  writing: { generic: active }
+
+stages:
+  - id: write
+    title: Write article
+    status: writing
+    agent: { key: writer, prompt: flow.factwrite }
+    inputs: [topic]
+    output: article
+    requires:
+      - { input: topic }
+    agents:
+      - { key: fact-checker, job_type: flow.fact-check, prompt: flow.fact-check }
+    validate:
+      - { agent: fact-checker }
+    on_invalid: { retry_with_feedback: true, max_attempts: 2, then: fail }

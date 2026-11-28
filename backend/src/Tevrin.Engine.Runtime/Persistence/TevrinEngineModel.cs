@@ -14,7 +14,7 @@ namespace Tevrin.Engine.Runtime.Persistence;
 /// <summary>
 /// D-0.7.0-12: the engine's part of the one Tevrin database. The host's DbContext applies
 /// <see cref="ApplyTevrinEngineConventions"/> in <c>ConfigureConventions</c> and <see cref="ApplyTevrinEngineModel"/> in
-/// <c>OnModelCreating</c>; migrations stay with the host (Aide.Infrastructure). The engine configures its tables, columns
+/// <c>OnModelCreating</c>; migrations stay with the host (Tevrin.Infrastructure). The engine configures its tables, columns
 /// and indexes; relationships to host tables (projects, users, gates) and host-only indexes stay in the host's
 /// configurations of the same entities.
 /// </summary>
@@ -40,12 +40,16 @@ public static class TevrinEngineModel
         MapEnum<NotificationDeliveryStatus>(configurationBuilder);
         MapEnum<ApprovalLinkDecision>(configurationBuilder);
         MapEnum<GenericRunStatus>(configurationBuilder);
+        MapEnum<ArtifactScope>(configurationBuilder);
+        MapEnum<AgentFeedbackSource>(configurationBuilder);
+        MapEnum<OutcomeScoreKind>(configurationBuilder);
         return configurationBuilder;
     }
 
     /// <summary>The engine's tables: <c>events</c>, <c>jobs</c>, <c>notifications</c>, <c>notification_deliveries</c>,
     /// <c>approval_links</c>, <c>artifacts</c>, <c>approval_gates</c>, <c>pipeline_definitions</c>, <c>pipeline_runs</c>,
-    /// <c>agent_runs</c> and <c>stage_executions</c>.</summary>
+    /// <c>agent_runs</c>, <c>stage_executions</c>, <c>pipeline_schedules</c>, <c>pipeline_webhooks</c>,
+    /// <c>webhook_deliveries</c>, <c>agent_feedback</c> and <c>outcome_scores</c>.</summary>
     public static ModelBuilder ApplyTevrinEngineModel(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -146,7 +150,26 @@ public static class TevrinEngineModel
             XminRowVersion(b.Property(a => a.RowVersion));
 
             // Artifact versions keep counting across release versions (FR-58, FR-59), so uniqueness stays per project.
-            b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }).IsUnique();
+            // FR-334: that holds for rows with a release version (the SDLC); a subject-less run's artifacts count per run.
+            b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }, "ix_artifacts_project_id_type_version")
+                .IsUnique()
+                .HasFilter("release_version_id IS NOT NULL");
+            // FR-343–FR-349: variants of one version coexist; NULLS NOT DISTINCT so two rows without a variant still collide.
+            // FR-355, §5: so do a map stage's item outputs (one collection, one row per item index).
+            b.Property(a => a.Variant).HasMaxLength(IdMaxLength);
+            b.HasIndex(a => new { a.PipelineRunId, a.Type, a.Version, a.Variant, a.ItemIndex }, "ux_artifacts_pipeline_run_id_type_version")
+                .IsUnique()
+                .AreNullsDistinct(false)
+                .HasFilter("release_version_id IS NULL AND scope = 'run'")
+                .HasDatabaseName("ux_artifacts_pipeline_run_id_type_version");
+
+            // FR-352: a project-scope (source-of-truth) artifact has one version history per project: no run, no release
+            // version. Existing rows are run scope (the column default).
+            b.Property(a => a.Scope).HasDefaultValue(ArtifactScope.Run);
+            b.HasIndex(a => new { a.ProjectId, a.Type, a.Version }, "ux_artifacts_project_id_type_version_project_scope")
+                .IsUnique()
+                .HasFilter("scope = 'project'")
+                .HasDatabaseName("ux_artifacts_project_id_type_version_project_scope");
             b.HasIndex(a => new { a.ProjectId, a.Type, a.Status });
             b.HasIndex(a => new { a.ProjectId, a.ReleaseVersionId });
             b.HasIndex(a => a.ReleaseVersionId);
@@ -169,6 +192,8 @@ public static class TevrinEngineModel
 
             // FR-271, FR-274: the gate key (EngineGates and a pack's gate keys), the same column as the 0.6.1 enum.
             b.Property(g => g.Type).HasMaxLength(EnumMaxLength);
+            // §5: redacted gate payload (variant labels for variant_select).
+            b.Property(g => g.Payload).HasColumnType("jsonb");
             XminRowVersion(b.Property(g => g.RowVersion));
 
             b.HasOne<Artifact>().WithMany().HasForeignKey(g => g.ArtifactId).OnDelete(DeleteBehavior.NoAction);
@@ -180,11 +205,16 @@ public static class TevrinEngineModel
             // Kept explicitly: the composite index would otherwise replace the foreign-key index (expand only).
             b.HasIndex(g => g.PipelineRunId);
 
-            // At most one pending gate per (project, type) — enforced by the database (§4.2).
+            // At most one pending gate per (project, type) — enforced by the database (§4.2). FR-334: for gates with a
+            // release version (the SDLC); a subject-less run's gates are unique per (run, type).
             b.HasIndex(g => new { g.ProjectId, g.Type })
                 .IsUnique()
-                .HasFilter("status = 'pending'")
+                .HasFilter("status = 'pending' AND release_version_id IS NOT NULL")
                 .HasDatabaseName("ux_approval_gates_project_id_type_pending");
+            b.HasIndex(g => new { g.PipelineRunId, g.Type }, "ux_approval_gates_pipeline_run_id_type_pending")
+                .IsUnique()
+                .HasFilter("status = 'pending' AND release_version_id IS NULL")
+                .HasDatabaseName("ux_approval_gates_pipeline_run_id_type_pending");
             b.HasIndex(g => new { g.ProjectId, g.Status });
             b.HasIndex(g => new { g.ProjectId, g.ReleaseVersionId });
             b.HasIndex(g => g.ReleaseVersionId);
@@ -229,6 +259,16 @@ public static class TevrinEngineModel
             b.Property(r => r.Input).HasColumnType("text");
             b.Property(r => r.InputTruncated).HasDefaultValue(false).IsRequired();
 
+            // FR-350, FR-351 (M69): additive and nullable; rows recorded before 0.8.0 have neither.
+            b.Property(r => r.ValidatorFindings).HasColumnType("jsonb");
+            b.PrimitiveCollection(r => r.FeedbackIds).HasColumnType("uuid[]");
+
+            // FR-355, FR-356 (M70): additive and nullable; a map item's index, a conversation turn and its role.
+            b.Property(r => r.TurnRole).HasMaxLength(IdMaxLength);
+
+            // FR-359, §4.73 (M71): additive and nullable; the saved tool loop of a destructive call awaiting its gate.
+            b.Property(r => r.ToolLoopState).HasColumnType("jsonb");
+
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(r => r.PipelineRunId).OnDelete(DeleteBehavior.NoAction);
 
             // §8: the run timeline reads by run in time order (FR-300).
@@ -253,6 +293,21 @@ public static class TevrinEngineModel
             b.Property(e => e.Id).ValueGeneratedNever();
             b.Property(e => e.StageId).HasMaxLength(IdMaxLength).IsRequired();
             b.Property(e => e.Outcome).HasMaxLength(EnumMaxLength);
+            // FR-343–FR-349, §5: flow constructs (item_index is filled from M70).
+            b.Property(e => e.Branch).HasMaxLength(IdMaxLength);
+            b.Property(e => e.Variant).HasMaxLength(IdMaxLength);
+            b.Property(e => e.VetoFindings).HasColumnType("jsonb");
+            // FR-354: the follow-up label (followup:<duration>), null for the main flow.
+            b.Property(e => e.FollowUp).HasColumnName("followup").HasMaxLength(IdMaxLength);
+            b.HasIndex(e => new { e.PipelineRunId, e.StageId, e.Branch, e.ItemIndex });
+
+            // FR-355: a map item execution points at its map stage's own execution. One row per (parent, item) keeps the
+            // driver idempotent, and the index serves the done/failed/total counts (grouped by outcome).
+            b.HasOne<StageExecution>().WithMany().HasForeignKey(e => e.ParentExecutionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(e => new { e.ParentExecutionId, e.ItemIndex }, "ux_stage_executions_parent_execution_id_item_index")
+                .IsUnique()
+                .HasFilter("parent_execution_id IS NOT NULL")
+                .HasDatabaseName("ux_stage_executions_parent_execution_id_item_index");
 
             // A run's timings go with the run (and the run with its project).
             b.HasOne<PipelineRun>().WithMany().HasForeignKey(e => e.PipelineRunId).OnDelete(DeleteBehavior.Cascade);
@@ -301,24 +356,137 @@ public static class TevrinEngineModel
                 .HasConversion(IterationsConverter, IterationsComparer)
                 .HasColumnType("jsonb")
                 .IsRequired();
+            // FR-352: key → { artifactId, version } of each project-scope artifact pinned at start; '{}' for older rows.
+            b.Property(r => r.PinnedArtifacts)
+                .HasConversion(PinsConverter, PinsComparer)
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'{}'::jsonb")
+                .IsRequired();
+            // FR-343–FR-349, §5: revision count (0 for older rows) and a terminal outcome such as vetoed.
+            b.Property(r => r.Revisions).HasDefaultValue(0);
+            b.Property(r => r.Outcome).HasMaxLength(EnumMaxLength);
             XminRowVersion(b.Property(r => r.RowVersion));
 
             // FR-277: a run is pinned to a stored definition, which is never deleted.
             b.HasOne<PipelineDefinitionRecord>().WithMany().HasForeignKey(r => r.DefinitionHash).OnDelete(DeleteBehavior.Restrict);
 
-            // D-0.7.0-10: one run per subject (the SDLC's release version) and pipeline.
+            // D-0.7.0-10: one run per subject (the SDLC's release version) and pipeline. FR-334: only for runs with a
+            // subject; subject-less runs are limited by the open-run index below (and concurrency.runs) alone.
             b.HasIndex(r => new { r.PipelineId, r.SubjectId })
                 .IsUnique()
+                .HasFilter("subject_id IS NOT NULL")
                 .HasDatabaseName("ux_pipeline_runs_pipeline_id_subject_id");
 
-            // §5: at most one run per project and pipeline that hasn't ended (final statuses, §4.57).
+            // §5: at most one run per project and pipeline that hasn't ended (final statuses, §4.57), for runs with a
+            // subject (the SDLC). FR-331, FR-334: subject-less engine runs apply the rule in code
+            // (PipelineRunRules.MayStart, concurrency.runs), under an advisory lock on (project, pipeline).
             b.HasIndex(r => new { r.ProjectId, r.PipelineId })
                 .IsUnique()
-                .HasFilter("status NOT IN ('completed', 'failed', 'cancelled')")
+                .HasFilter("status NOT IN ('completed', 'failed', 'cancelled') AND subject_id IS NOT NULL")
                 .HasDatabaseName("ux_pipeline_runs_project_id_pipeline_id_open");
 
             // The project cascade and per-project lookups (the partial index covers open runs only).
             b.HasIndex(r => r.ProjectId, "ix_pipeline_runs_project_id");
+        });
+
+        ApplyTriggers(builder);
+    }
+
+    /// <summary>FR-336, FR-337, §5: <c>pipeline_schedules</c>, <c>pipeline_webhooks</c> and <c>webhook_deliveries</c>. The
+    /// host adds the schedule's and webhook's relationships to its projects and users tables.</summary>
+    private static void ApplyTriggers(ModelBuilder builder)
+    {
+        builder.Entity<PipelineSchedule>(b =>
+        {
+            b.ToTable("pipeline_schedules");
+            b.HasKey(s => s.Id);
+            b.Property(s => s.Id).ValueGeneratedNever();
+            b.Property(s => s.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(s => s.Cron).HasMaxLength(100).IsRequired();
+            b.Property(s => s.Timezone).HasMaxLength(100).IsRequired();
+            b.Property(s => s.Inputs).HasColumnType("jsonb").IsRequired();
+
+            // §5: trigger.fire reads due schedules (WHERE NOT paused AND next_fire_at <= now).
+            b.HasIndex(s => s.NextFireAt).HasFilter("NOT paused");
+
+            // The project cascade and per-project lists.
+            b.HasIndex(s => s.ProjectId);
+        });
+
+        builder.Entity<PipelineWebhook>(b =>
+        {
+            b.ToTable("pipeline_webhooks");
+            b.HasKey(w => w.Id);
+            b.Property(w => w.Id).ValueGeneratedNever();
+            b.Property(w => w.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+
+            // Encrypted with ISecretProtector (text: the protected payload's length isn't fixed).
+            b.Property(w => w.Secret).HasColumnType("text").IsRequired();
+            b.Property(w => w.PreviousSecret).HasColumnType("text");
+            XminRowVersion(b.Property(w => w.RowVersion));
+
+            b.HasIndex(w => w.ProjectId);
+        });
+
+        builder.Entity<AgentFeedback>(b =>
+        {
+            b.ToTable("agent_feedback");
+            b.HasKey(f => f.Id);
+            b.Property(f => f.Id).ValueGeneratedNever();
+            b.Property(f => f.PipelineId).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(f => f.AgentKey).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(f => f.Text).HasMaxLength(AgentFeedback.TextMaxLength).IsRequired();
+
+            // FR-351: an entry outlives the run and agent run it came from.
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(f => f.RunId).OnDelete(DeleteBehavior.SetNull);
+            b.HasOne<AgentRun>().WithMany().HasForeignKey(f => f.AgentRunId).OnDelete(DeleteBehavior.SetNull);
+
+            // §5, §4.75: injection reads an agent key's entries newest first.
+            b.HasIndex(f => new { f.ProjectId, f.PipelineId, f.AgentKey, f.CreatedAt })
+                .IsDescending(false, false, false, true);
+            b.HasIndex(f => f.RunId);
+            b.HasIndex(f => f.AgentRunId);
+        });
+
+        builder.Entity<OutcomeScore>(b =>
+        {
+            b.ToTable("outcome_scores", t => t.HasCheckConstraint(
+                "ck_outcome_scores_one_target",
+                "(agent_run_id IS NULL) <> (artifact_id IS NULL)"));
+            b.HasKey(o => o.Id);
+            b.Property(o => o.Id).ValueGeneratedNever();
+            b.Property(o => o.Metric).HasMaxLength(IdMaxLength).IsRequired();
+            b.Property(o => o.Source).HasMaxLength(200).IsRequired();
+
+            // FR-353: scores go with their run; a target is never deleted on its own (it goes with the run's project).
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(o => o.PipelineRunId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<AgentRun>().WithMany().HasForeignKey(o => o.AgentRunId).OnDelete(DeleteBehavior.NoAction);
+            b.HasOne<Artifact>().WithMany().HasForeignKey(o => o.ArtifactId).OnDelete(DeleteBehavior.NoAction);
+
+            // FR-353: listed per run and target.
+            b.HasIndex(o => new { o.PipelineRunId, o.ObservedAt });
+            b.HasIndex(o => o.PipelineRunId);
+            b.HasIndex(o => o.ArtifactId);
+
+            // FR-353, FR-298: the prompt comparison's mean per metric joins agent_runs (agent key, prompt version) on
+            // agent_run_id and groups by metric.
+            b.HasIndex(o => new { o.AgentRunId, o.Metric });
+        });
+
+        builder.Entity<WebhookDelivery>(b =>
+        {
+            b.ToTable("webhook_deliveries");
+            // FR-337, §4.72: a delivery id is unique per webhook; an older row of the same pair is reused (upsert).
+            b.HasKey(d => new { d.WebhookId, d.DeliveryId });
+            b.Property(d => d.Status).HasMaxLength(EnumMaxLength).IsRequired();
+
+            // A webhook's deliveries go with it; a delivery outlives a deleted run only as a log line.
+            b.HasOne<PipelineWebhook>().WithMany().HasForeignKey(d => d.WebhookId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<PipelineRun>().WithMany().HasForeignKey(d => d.RunId).OnDelete(DeleteBehavior.SetNull);
+
+            // §5: the 30-day retention purge reads by time.
+            b.HasIndex(d => d.ReceivedAt);
+            b.HasIndex(d => d.RunId);
         });
     }
 
@@ -342,6 +510,27 @@ public static class TevrinEngineModel
         JsonSerializer.Deserialize<Dictionary<string, int>>(json, IterationsJson) is { } parsed
             ? new Dictionary<string, int>(parsed, StringComparer.Ordinal)
             : new Dictionary<string, int>(StringComparer.Ordinal);
+
+    private static readonly JsonSerializerOptions PinsJson = new(JsonSerializerDefaults.Web);
+
+    private static readonly ValueConverter<IReadOnlyDictionary<string, PinnedArtifact>, string> PinsConverter = new(
+        v => SerializePins(v),
+        s => DeserializePins(s));
+
+    private static readonly ValueComparer<IReadOnlyDictionary<string, PinnedArtifact>> PinsComparer = new(
+        (a, b) => SerializePins(a!) == SerializePins(b!),
+        v => SerializePins(v).GetHashCode(StringComparison.Ordinal),
+        v => DeserializePins(SerializePins(v)));
+
+    private static string SerializePins(IReadOnlyDictionary<string, PinnedArtifact> pins) =>
+        JsonSerializer.Serialize(
+            new SortedDictionary<string, PinnedArtifact>(pins.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal), StringComparer.Ordinal),
+            PinsJson);
+
+    private static Dictionary<string, PinnedArtifact> DeserializePins(string json) =>
+        JsonSerializer.Deserialize<Dictionary<string, PinnedArtifact>>(json, PinsJson) is { } parsed
+            ? new Dictionary<string, PinnedArtifact>(parsed, StringComparer.Ordinal)
+            : new Dictionary<string, PinnedArtifact>(StringComparer.Ordinal);
 
     /// <summary>A definition hash: SHA-256, lower-case hex, <c>character(64)</c>.</summary>
     private static void HashColumn(PropertyBuilder<string> property) =>

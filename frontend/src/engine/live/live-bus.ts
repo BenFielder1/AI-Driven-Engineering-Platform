@@ -11,8 +11,8 @@ type Listener = (signal: PipelineLiveSignal) => void
 
 /**
  * The engine's side of the live connection (FR-302). The engine doesn't own the hub: the host publishes its project
- * group's `pipelineRunUpdated`, `stageUpdated` and `gateUpdated` messages here, and engine views subscribe while they
- * are mounted, so pages that show no pipeline do no pipeline work.
+ * group's `pipelineRunUpdated`, `stageUpdated`, `gateUpdated` and (FR-363) `stageBranchUpdated` and `mapProgress`
+ * messages here, and engine views subscribe while they are mounted, so pages that show no pipeline do no pipeline work.
  */
 export function createPipelineLiveBus() {
   const listeners = new Map<string, Set<Listener>>()

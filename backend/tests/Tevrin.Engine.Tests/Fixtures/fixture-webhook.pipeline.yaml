@@ -1,0 +1,22 @@
+# Fixture pipeline (M66 step c, FR-337, §4.72): a webhook-triggered, engine-controlled run. The signed body is the input
+# payload; while a run is active a call submits a new payload version to it (on_active: submit).
+pipeline: fixture-webhook
+version: 1
+title: Fixture webhook
+trigger: { kind: webhook, input: payload, on_active: submit }
+approval_modes: [strict, advisory, autonomous]
+default_approval_mode: advisory
+start: [approve]
+
+artifacts:
+  payload: { title: Payload, format: json, schema: payload.schema.json, approval: auto_lock, cascade: downstream, input: true }
+
+statuses:
+  approving: { generic: active }
+  done:      { generic: completed }
+
+stages:
+  - id: approve
+    title: Approve
+    status: approving
+    gate: { type: publish_approval, modes: [strict, advisory] }

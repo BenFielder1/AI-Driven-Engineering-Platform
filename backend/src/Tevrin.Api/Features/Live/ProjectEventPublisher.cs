@@ -1,0 +1,166 @@
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.SignalR;
+using Tevrin.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Infrastructure.Persistence;
+
+namespace Tevrin.Api.Features.Live;
+
+/// <summary>
+/// Which connection views which project as which user (FR-46). Used to drop a removed member's connections from the
+/// project's group as soon as the removal commits, so they stop receiving its events without reconnecting.
+/// Single replica: the registry and SignalR groups are in-process (PROGRESS.md Decisions).
+/// </summary>
+public sealed class ProjectViewerRegistry
+{
+    private readonly Lock _lock = new();
+    private readonly Dictionary<string, (Guid UserId, HashSet<Guid> Projects)> _connections = new(StringComparer.Ordinal);
+
+    public void Add(string connectionId, Guid userId, Guid projectId)
+    {
+        lock (_lock)
+        {
+            if (!_connections.TryGetValue(connectionId, out var entry))
+            {
+                entry = (userId, []);
+                _connections[connectionId] = entry;
+            }
+
+            entry.Projects.Add(projectId);
+        }
+    }
+
+    public void Remove(string connectionId, Guid projectId)
+    {
+        lock (_lock)
+        {
+            if (_connections.TryGetValue(connectionId, out var entry))
+            {
+                entry.Projects.Remove(projectId);
+            }
+        }
+    }
+
+    public void RemoveConnection(string connectionId)
+    {
+        lock (_lock)
+        {
+            _connections.Remove(connectionId);
+        }
+    }
+
+    /// <summary>Whether any connection views <paramref name="projectId"/> (FR-302: live reads are skipped otherwise).</summary>
+    public bool HasViewers(Guid projectId)
+    {
+        lock (_lock)
+        {
+            return _connections.Values.Any(c => c.Projects.Contains(projectId));
+        }
+    }
+
+    /// <summary>Whether any connection views any project (FR-363: branch and map pushes skip every read otherwise).</summary>
+    public bool HasAnyViewers()
+    {
+        lock (_lock)
+        {
+            return _connections.Values.Any(c => c.Projects.Count > 0);
+        }
+    }
+
+    /// <summary>Removes and returns the connections of <paramref name="userId"/> viewing <paramref name="projectId"/>.</summary>
+    public IReadOnlyList<string> RemoveViewer(Guid userId, Guid projectId)
+    {
+        lock (_lock)
+        {
+            var removed = _connections
+                .Where(c => c.Value.UserId == userId && c.Value.Projects.Remove(projectId))
+                .Select(c => c.Key)
+                .ToList();
+            return removed;
+        }
+    }
+}
+
+/// <summary>
+/// FR-46: pushes committed project events to the project's SignalR group as <c>projectEvent</c> messages. Called by
+/// <see cref="ProjectEventPublishingInterceptor"/> after commit, for every writer (endpoints and background jobs). Only
+/// categorised events are pushed (internal markers aren't). A failed push is logged and never fails the write.
+/// </summary>
+public sealed partial class SignalRProjectEventPublisher(
+    IHubContext<ProjectsHub> hub,
+    ProjectViewerRegistry viewers,
+    PipelineLivePublisher pipelineLive,
+    ILogger<SignalRProjectEventPublisher> logger) : IProjectEventPublisher
+{
+    public async Task PublishAsync(IReadOnlyList<AuditEvent> events, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        foreach (var entry in events)
+        {
+            var category = EventTypes.CategoryOf(entry.Type);
+            if (entry.ProjectId is not { } projectId || (category is null && entry.Type != EventTypes.BuildCheckUpdated))
+            {
+                continue;
+            }
+
+            try
+            {
+                var payload = JsonNode.Parse(entry.Payload) as JsonObject ?? [];
+                if (category is { } known)
+                {
+                    var message = new ProjectEventMessage(entry.Id, projectId, entry.Type, known, payload, entry.CreatedAt);
+                    // Sent by name: the typed-client proxy would use the C# name "ProjectEvent", and only the JS client matches
+                    // method names case-insensitively.
+                    await hub.Clients.Group(ProjectsHub.GroupFor(projectId)).SendAsync(ProjectsHub.ProjectEventMethod, message, cancellationToken);
+                }
+
+                // FR-259: a build check change also goes out as buildCheckUpdated with the build check item (D-0.6.1-23: alone for
+                // BUILD_CHECK_UPDATED, the uncategorised progress event).
+                if (BuildCheckOf(entry.Type, payload) is { } check)
+                {
+                    await hub.Clients.Group(ProjectsHub.GroupFor(projectId)).SendAsync(
+                        ProjectsHub.BuildCheckUpdatedMethod, new BuildChecks.BuildCheckUpdatedMessage(projectId, check), cancellationToken);
+                }
+
+                if (entry.Type == EventTypes.MemberRemoved && RemovedUser(payload) is { } userId)
+                {
+                    foreach (var connectionId in viewers.RemoveViewer(userId, projectId))
+                    {
+                        await hub.Groups.RemoveFromGroupAsync(connectionId, ProjectsHub.GroupFor(projectId), cancellationToken);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogPublishFailed(logger, ex, projectId, entry.Type);
+            }
+        }
+
+        // FR-302: the engine's pipelineRunUpdated, stageUpdated and gateUpdated messages, after the projectEvent messages.
+        await pipelineLive.PublishAsync(events, cancellationToken);
+    }
+
+    private static BuildChecks.BuildCheckDto? BuildCheckOf(string type, JsonObject payload)
+    {
+        if (type is not (EventTypes.BuildCheckStarted or EventTypes.BuildCheckCompleted or EventTypes.BuildFixPlanned or EventTypes.BuildCheckUpdated)
+            || payload["check"] is not JsonObject check)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Infrastructure.Persistence.Conversion.TevrinJson.Deserialize<BuildChecks.BuildCheckDto>(check.ToJsonString());
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static Guid? RemovedUser(JsonObject payload) =>
+        payload["userId"] is JsonValue value && value.TryGetValue<string>(out var text) && Guid.TryParse(text, out var id) ? id : null;
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Live update for project {ProjectId} ({EventType}) could not be pushed")]
+    private static partial void LogPublishFailed(ILogger logger, Exception exception, Guid projectId, string eventType);
+}

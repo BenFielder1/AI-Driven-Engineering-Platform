@@ -15,8 +15,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TIMEOUT="${DEPLOY_TIMEOUT:-180}"
 E2E=0
-# --e2e is the only switch: a stray AIDE_E2E in the environment must never turn a plain deploy into an E2E one.
-[[ -n "${AIDE_E2E:-}" ]] && AIDE_E2E_SET=1 || AIDE_E2E_SET=0
+# --e2e is the only switch: a stray TEVRIN_E2E (or the pre-0.8.0 name AIDE_E2E) in the environment must never turn a
+# plain deploy into an E2E one.
+[[ -n "${TEVRIN_E2E:-}${AIDE_E2E:-}" ]] && TEVRIN_E2E_SET=1 || TEVRIN_E2E_SET=0
 for arg in "$@"; do
   case "$arg" in
     --e2e) E2E=1 ;;
@@ -24,8 +25,8 @@ for arg in "$@"; do
     *) die "Unknown argument: $arg (see --help)" ;;
   esac
 done
-if [[ $AIDE_E2E_SET -eq 1 && $E2E -eq 0 ]]; then
-  die "AIDE_E2E is set but is not a switch. Pass --e2e for an E2E deploy, or unset AIDE_E2E for a normal deploy."
+if [[ $TEVRIN_E2E_SET -eq 1 && $E2E -eq 0 ]]; then
+  die "TEVRIN_E2E (or AIDE_E2E) is set but is not a switch. Pass --e2e for an E2E deploy, or unset it for a normal deploy."
 fi
 if [[ $E2E -eq 1 ]]; then MODE=e2e; OVERLAY_REF="../overlays/local-e2e"; else MODE=normal; OVERLAY_REF="../overlays/local"; fi
 
@@ -35,6 +36,20 @@ docker info >/dev/null 2>&1 || die "Docker is not running. Start Docker Desktop.
 require_context
 RUNTIME="$($K get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}')"
 info "node runtime: $RUNTIME"
+# FR-327: before 0.8.0 the app ran in namespace 'aide'. It is never touched or deleted here; its data stays put.
+if $K -n aide get service web >/dev/null 2>&1; then
+  # Its web LoadBalancer holds localhost:8080, so the new one would stay pending and the smoke test would reach 0.7.0.
+  die "The pre-0.8.0 namespace 'aide' still serves web on localhost:8080, so '$NS' can't take the port.
+       Stop it and free the port (its database volume and data are kept):
+         kubectl --context $CTX -n aide scale deploy --all --replicas=0
+         kubectl --context $CTX -n aide scale statefulset --all --replicas=0
+         kubectl --context $CTX -n aide delete service web
+       Then run this script again. See docs/operations/rename-to-tevrin.md (Local Docker Desktop)."
+fi
+if $K get namespace aide >/dev/null 2>&1; then
+  warn "The pre-0.8.0 namespace 'aide' still exists. This deploy uses '$NS' (a new, empty database) and leaves 'aide' alone.
+       Once you've checked you no longer need its data, remove it with: kubectl --context $CTX delete namespace aide"
+fi
 
 # ---------------------------------------------------------------------------
 step "Checking the database volume's PostgreSQL version"
@@ -58,12 +73,12 @@ if [[ ! -f "$SECRETS_FILE" ]]; then
   signing_key="$(rand_hex 32)"
   # Hex values are safe in sed replacements and connection strings.
   sed -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${db_password}|" \
-      -e "s|^ConnectionStrings__Aide=.*|ConnectionStrings__Aide=Host=db;Port=5432;Database=aide;Username=aide;Password=${db_password}|" \
+      -e "s|^ConnectionStrings__Tevrin=.*|ConnectionStrings__Tevrin=Host=db;Port=5432;Database=tevrin;Username=tevrin;Password=${db_password}|" \
       -e "s|^Approvals__SigningKey=.*|Approvals__SigningKey=${signing_key}|" \
       "$SECRETS_EXAMPLE" > "$SECRETS_FILE"
   unset db_password signing_key
   info "Created $SECRETS_FILE (git-ignored) from the example."
-  info "Generated: POSTGRES_PASSWORD, ConnectionStrings__Aide (matching password), Approvals__SigningKey."
+  info "Generated: POSTGRES_PASSWORD, ConnectionStrings__Tevrin (matching password), Approvals__SigningKey."
   info "Optional keys (LLM, GitHub OAuth, SMTP) are blank or commented out; edit the file and re-run to set them."
 else
   info "Using existing $SECRETS_FILE"
@@ -71,11 +86,17 @@ fi
 if grep -q $'\r' "$SECRETS_FILE"; then
   die "$SECRETS_FILE has Windows (CRLF) line endings; values would contain a stray CR. Convert it to LF and re-run."
 fi
-for key in POSTGRES_PASSWORD ConnectionStrings__Aide; do
+# FR-327: a pre-0.8.0 secrets.env names the key ConnectionStrings__Aide and points at database/user 'aide'. The
+# '$NS' namespace starts a new database 'tevrin' (user 'tevrin'), so stop with the fix rather than rewrite values.
+if grep -qE '^ConnectionStrings__Aide=' "$SECRETS_FILE" && ! grep -qE '^ConnectionStrings__Tevrin=.+' "$SECRETS_FILE"; then
+  die "$SECRETS_FILE uses the pre-0.8.0 key ConnectionStrings__Aide. Rename it to ConnectionStrings__Tevrin and set
+       Database=tevrin;Username=tevrin in it (keep Password equal to POSTGRES_PASSWORD), then re-run."
+fi
+for key in POSTGRES_PASSWORD ConnectionStrings__Tevrin; do
   grep -qE "^${key}=.+" "$SECRETS_FILE" || die "$SECRETS_FILE: $key is missing or empty."
 done
 grep -qE '^POSTGRES_PASSWORD=change-me$' "$SECRETS_FILE" \
-  && die "$SECRETS_FILE still contains the 'change-me' POSTGRES_PASSWORD placeholder. Set a real value (it must match the password in ConnectionStrings__Aide and, if the DB volume exists, the database's current password)."
+  && die "$SECRETS_FILE still contains the 'change-me' POSTGRES_PASSWORD placeholder. Set a real value (it must match the password in ConnectionStrings__Tevrin and, if the DB volume exists, the database's current password)."
 
 # FR-48: Approvals__SigningKey must be >= 32 characters (after trimming). Replace a missing, 'change-me' or too-short
 # key with a random one; every other line of the file is kept byte-for-byte. Values are never printed.
@@ -115,8 +136,8 @@ git check-ignore -q "$SECRETS_FILE" || die "$SECRETS_FILE is not git-ignored. Re
 step "Building images"
 SHA="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
 if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then TAG="${SHA}-dirty"; else TAG="$SHA"; fi
-API_IMAGE="aide-api:$TAG"
-WEB_IMAGE="aide-web:$TAG"
+API_IMAGE="tevrin-api:$TAG"
+WEB_IMAGE="tevrin-web:$TAG"
 info "tag: $TAG"
 docker build -f backend/Dockerfile -t "$API_IMAGE" backend
 docker build -f frontend/Dockerfile -t "$WEB_IMAGE" frontend
@@ -145,9 +166,9 @@ kind: Kustomization
 resources:
   - $OVERLAY_REF
 images:
-  - name: aide-api
+  - name: tevrin-api
     newTag: "$TAG"
-  - name: aide-web
+  - name: tevrin-web
     newTag: "$TAG"
 EOF
 
@@ -156,7 +177,7 @@ PREV_API_IMAGE="$($K -n "$NS" get deploy api -o jsonpath='{.spec.template.spec.c
 PREV_WEB_IMAGE="$($K -n "$NS" get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
 
 # ---------------------------------------------------------------------------
-# Two passes, split by the label aide.deploy/stage=app (api + web Deployments/Services):
+# Two passes, split by the label tevrin.deploy/stage=app (api + web Deployments/Services):
 #   1. everything else (namespace, config, secret, PVCs, db, db-migrate Job) -> wait for migrations
 #   2. api + web, only after the Job succeeded. A failed migration leaves the running api/web untouched.
 RENDERED="$GENERATED_DIR/rendered.yaml"
@@ -166,7 +187,7 @@ kubectl kustomize "$GENERATED_DIR" > "$RENDERED"
 step "Applying infrastructure + migration Job (pass 1)"
 # Jobs are immutable; remove the previous migration Job so this deploy's runs.
 $K -n "$NS" delete job db-migrate --ignore-not-found --wait=true >/dev/null 2>&1 || true
-$K apply -f "$RENDERED" -l 'aide.deploy/stage!=app'
+$K apply -f "$RENDERED" -l 'tevrin.deploy/stage!=app'
 
 step "Waiting for the database"
 $K -n "$NS" rollout status statefulset/db --timeout="${TIMEOUT}s"
@@ -191,7 +212,7 @@ $K -n "$NS" logs job/db-migrate -c migrate --tail=20 || true
 
 # ---------------------------------------------------------------------------
 step "Applying api + web (pass 2) and rolling out"
-$K apply -f "$RENDERED" -l 'aide.deploy/stage=app'
+$K apply -f "$RENDERED" -l 'tevrin.deploy/stage=app'
 [[ "$PREV_API_IMAGE" == "$API_IMAGE" ]] && { info "api tag unchanged; restarting to pick up the rebuilt image"; $K -n "$NS" rollout restart deploy/api; }
 [[ "$PREV_WEB_IMAGE" == "$WEB_IMAGE" ]] && { info "web tag unchanged; restarting to pick up the rebuilt image"; $K -n "$NS" rollout restart deploy/web; }
 for d in api web; do

@@ -1,0 +1,1026 @@
+{
+  "agentRuns": [
+    {
+      "agent": "code_generator",
+      "id": "agent_run#1",
+      "phase": "execution",
+      "promptVersion": "5",
+      "status": "succeeded"
+    },
+    {
+      "agent": "code_generator",
+      "id": "agent_run#2",
+      "phase": "execution",
+      "promptVersion": "5",
+      "status": "succeeded"
+    },
+    {
+      "agent": "build_fix",
+      "id": "agent_run#3",
+      "phase": "execution",
+      "promptVersion": "1",
+      "status": "succeeded"
+    },
+    {
+      "agent": "code_generator",
+      "id": "agent_run#4",
+      "phase": "execution",
+      "promptVersion": "5",
+      "status": "succeeded"
+    },
+    {
+      "agent": "code_review",
+      "id": "job#14",
+      "phase": "review",
+      "promptVersion": "10",
+      "status": "succeeded"
+    }
+  ],
+  "artifacts": [
+    {
+      "agentRun": null,
+      "checkpointAtCreation": 1,
+      "contentHash": "6bee0d9a3d21627105f8217bbf5893955835bbaf0972f7ad9e3fd24c52e28b81",
+      "createdBy": null,
+      "id": "artifact#1",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "locked",
+      "type": "project_request",
+      "version": 1
+    },
+    {
+      "agentRun": null,
+      "checkpointAtCreation": 1,
+      "contentHash": "a1d6e115f3287d4d2ea2537079e0e0f6c3cc7cd3175676ecad0182b38ccd74b1",
+      "createdBy": null,
+      "id": "artifact#2",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "locked",
+      "type": "technical_specification",
+      "version": 1
+    },
+    {
+      "agentRun": null,
+      "checkpointAtCreation": 1,
+      "contentHash": "4d107221f6805ece53b66c5f05dca935351f19500c5929d96639d37e07fa87f2",
+      "createdBy": null,
+      "id": "artifact#3",
+      "parentVersion": null,
+      "restoredFromVersion": null,
+      "status": "locked",
+      "type": "implementation_plan",
+      "version": 1
+    }
+  ],
+  "events": [
+    {
+      "actor": "user:owner",
+      "id": "event#1",
+      "payload": {
+        "actor": "user:owner",
+        "catalogVersion": null,
+        "developmentVersion": "0.1.0",
+        "importedTag": null,
+        "name": "Todo API",
+        "projectId": "project#1",
+        "repoFullName": null,
+        "repoHasCode": null,
+        "source": "scratch",
+        "stackPacks": []
+      },
+      "type": "PROJECT_CREATED"
+    },
+    {
+      "actor": "user:contributor",
+      "id": "event#2",
+      "payload": {
+        "branch": "tevrin/<slug>/v0.1.0"
+      },
+      "type": "EXECUTION_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#3",
+      "payload": {
+        "attempt": 1,
+        "planArtifactId": "artifact#3",
+        "stepId": "step#1",
+        "stepNumber": 1,
+        "title": "Step 1"
+      },
+      "type": "STEP_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#4",
+      "payload": {
+        "agent": "code_generator",
+        "agentKey": null,
+        "jobId": "job#1",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "5",
+        "provider": "fake",
+        "runId": "agent_run#1",
+        "stack": null,
+        "stepId": "step#1"
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#5",
+      "payload": {
+        "agent": "code_generator",
+        "runId": "agent_run#1",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#6",
+      "payload": {
+        "attempt": 1,
+        "branch": "tevrin/<slug>/v0.1.0",
+        "commitSha": "sha#1",
+        "fileCount": 1,
+        "pushed": true,
+        "stepId": "step#1",
+        "stepNumber": 1,
+        "warningCount": 0
+      },
+      "type": "STEP_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#7",
+      "payload": {
+        "attempt": 1,
+        "planArtifactId": "artifact#3",
+        "stepId": "step#2",
+        "stepNumber": 2,
+        "title": "Step 2"
+      },
+      "type": "STEP_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#8",
+      "payload": {
+        "agent": "code_generator",
+        "agentKey": null,
+        "jobId": "job#2",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "5",
+        "provider": "fake",
+        "runId": "agent_run#2",
+        "stack": null,
+        "stepId": "step#2"
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#9",
+      "payload": {
+        "agent": "code_generator",
+        "runId": "agent_run#2",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#10",
+      "payload": {
+        "attempt": 1,
+        "branch": "tevrin/<slug>/v0.1.0",
+        "commitSha": "sha#2",
+        "fileCount": 2,
+        "pushed": true,
+        "stepId": "step#2",
+        "stepNumber": 2,
+        "warningCount": 0
+      },
+      "type": "STEP_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#11",
+      "payload": {
+        "branch": "tevrin/<slug>/v0.1.0",
+        "commitSha": "sha#2",
+        "planArtifactId": "artifact#3",
+        "stepCount": 2
+      },
+      "type": "EXECUTION_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#12",
+      "payload": {
+        "baseBranch": "main",
+        "baseSha": "sha#3",
+        "commitCount": 2,
+        "fileCount": 3,
+        "headBranch": "tevrin/<slug>/v0.1.0",
+        "headSha": "sha#2",
+        "number": null,
+        "planArtifactId": "artifact#3",
+        "provider": "local",
+        "reused": false,
+        "stepCount": 2,
+        "url": null
+      },
+      "type": "PULL_REQUEST_OPENED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#13",
+      "payload": {
+        "attempt": 0,
+        "buildCheckId": "build_check#1",
+        "check": {
+          "attempt": 0,
+          "endReason": null,
+          "failures": [],
+          "fixPlanning": "none",
+          "fixStepNumbers": [],
+          "headSha": "sha#2",
+          "id": "build_check#1",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [],
+          "status": "waiting"
+        },
+        "headSha": "sha#2",
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0
+      },
+      "type": "BUILD_CHECK_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#14",
+      "payload": {
+        "deploymentId": "deployment#1",
+        "gitRef": "tevrin/<slug>/v0.1.0",
+        "gitSha": "sha#2",
+        "promotedFromDeploymentId": null,
+        "provider": "fake",
+        "releaseId": null,
+        "releaseVersion": "0.1.0",
+        "releaseVersionId": "release_version#1",
+        "status": "queued",
+        "target": "preview",
+        "trigger": "auto",
+        "url": null
+      },
+      "type": "DEPLOYMENT_CREATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#15",
+      "payload": {
+        "attempt": 0,
+        "buildCheckId": "build_check#1",
+        "check": {
+          "attempt": 0,
+          "endReason": null,
+          "failures": [],
+          "fixPlanning": "none",
+          "fixStepNumbers": [],
+          "headSha": "sha#2",
+          "id": "build_check#1",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [
+            {
+              "conclusion": null,
+              "informational": false,
+              "kind": "preview",
+              "message": null,
+              "name": "Vercel preview",
+              "status": "queued",
+              "url": null
+            }
+          ],
+          "status": "waiting"
+        },
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0
+      },
+      "type": "BUILD_CHECK_UPDATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#16",
+      "payload": {
+        "deploymentId": "deployment#1",
+        "errorCode": null,
+        "gitSha": "sha#2",
+        "releaseVersion": "0.1.0",
+        "status": "building",
+        "target": "preview",
+        "url": "https://fake-sha#2:8-frontend.vercel.test"
+      },
+      "type": "DEPLOYMENT_UPDATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#17",
+      "payload": {
+        "deploymentId": "deployment#1",
+        "errorCode": "PLATFORM_ERROR",
+        "gitSha": "sha#2",
+        "releaseVersion": "0.1.0",
+        "status": "error",
+        "target": "preview",
+        "url": "https://fake-sha#2:8-frontend.vercel.test"
+      },
+      "type": "DEPLOYMENT_UPDATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#18",
+      "payload": {
+        "components": [
+          {
+            "component": "frontend",
+            "status": "error",
+            "url": "https://fake-sha#2:8-frontend.vercel.test"
+          }
+        ],
+        "errorCode": "PLATFORM_ERROR",
+        "gitSha": "sha#2",
+        "message": "The Fake build failed: the commit contains .tevrin-fake/fail-build.",
+        "migrationRunId": null,
+        "releaseVersionId": "release_version#1",
+        "rolloutId": "job#4",
+        "state": "failed"
+      },
+      "type": "PREVIEW_ROLLOUT_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#19",
+      "payload": {
+        "attempt": 0,
+        "buildCheckId": "build_check#1",
+        "check": {
+          "attempt": 0,
+          "endReason": null,
+          "failures": [
+            {
+              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .tevrin-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
+              "failureId": "failure:preview:vercel",
+              "message": "Vercel preview build failed",
+              "source": "preview"
+            }
+          ],
+          "fixPlanning": "planning",
+          "fixStepNumbers": [],
+          "headSha": "sha#2",
+          "id": "build_check#1",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [
+            {
+              "conclusion": "failure",
+              "informational": false,
+              "kind": "preview",
+              "message": null,
+              "name": "Vercel preview",
+              "status": "error",
+              "url": "https://fake-sha#2:8-frontend.vercel.test"
+            }
+          ],
+          "status": "failed"
+        },
+        "endReason": null,
+        "failureIds": [
+          "failure:preview:vercel"
+        ],
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0,
+        "status": "failed"
+      },
+      "type": "BUILD_CHECK_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#20",
+      "payload": {
+        "attempt": 0,
+        "buildCheckId": "build_check#1",
+        "check": {
+          "attempt": 0,
+          "endReason": null,
+          "failures": [
+            {
+              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .tevrin-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
+              "failureId": "failure:preview:vercel",
+              "message": "Vercel preview build failed",
+              "source": "preview"
+            }
+          ],
+          "fixPlanning": "planning",
+          "fixStepNumbers": [],
+          "headSha": "sha#2",
+          "id": "build_check#1",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [
+            {
+              "conclusion": "failure",
+              "informational": false,
+              "kind": "preview",
+              "message": null,
+              "name": "Vercel preview",
+              "status": "error",
+              "url": "https://fake-sha#2:8-frontend.vercel.test"
+            }
+          ],
+          "status": "failed"
+        },
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0
+      },
+      "type": "BUILD_CHECK_UPDATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#21",
+      "payload": {
+        "agent": "build_fix",
+        "agentKey": null,
+        "jobId": "job#7",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "1",
+        "provider": "fake",
+        "runId": "agent_run#3",
+        "stack": null,
+        "stepId": null
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#22",
+      "payload": {
+        "agent": "build_fix",
+        "runId": "agent_run#3",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#23",
+      "payload": {
+        "attempt": 0,
+        "buildCheckId": "build_check#1",
+        "check": {
+          "attempt": 0,
+          "endReason": null,
+          "failures": [
+            {
+              "excerpt": "Running \"npm run build\"\n> next build\n   Creating an optimized production build ...\nFailed to compile.\n\n./app/page.tsx:1:7\nType error: Type 'number' is not assignable to type 'string'.\n\nThe Fake deployment provider fails builds of commits containing .tevrin-fake/fail-build.\nError: Command \"npm run build\" exited with 1",
+              "failureId": "failure:preview:vercel",
+              "message": "Vercel preview build failed",
+              "source": "preview"
+            }
+          ],
+          "fixPlanning": "planned",
+          "fixStepNumbers": [
+            3
+          ],
+          "headSha": "sha#2",
+          "id": "build_check#1",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [
+            {
+              "conclusion": "failure",
+              "informational": false,
+              "kind": "preview",
+              "message": null,
+              "name": "Vercel preview",
+              "status": "error",
+              "url": "https://fake-sha#2:8-frontend.vercel.test"
+            }
+          ],
+          "status": "failed"
+        },
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0,
+        "stepNumbers": [
+          3
+        ]
+      },
+      "type": "BUILD_FIX_PLANNED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#24",
+      "payload": {
+        "attempt": 1,
+        "planArtifactId": "artifact#3",
+        "stepId": "step#3",
+        "stepNumber": 3,
+        "title": "Fix failure:preview:vercel"
+      },
+      "type": "STEP_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#25",
+      "payload": {
+        "agent": "code_generator",
+        "agentKey": null,
+        "jobId": "job#8",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "5",
+        "provider": "fake",
+        "runId": "agent_run#4",
+        "stack": null,
+        "stepId": "step#3"
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#26",
+      "payload": {
+        "agent": "code_generator",
+        "runId": "agent_run#4",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#27",
+      "payload": {
+        "attempt": 1,
+        "branch": "tevrin/<slug>/v0.1.0",
+        "commitSha": "sha#4",
+        "fileCount": 1,
+        "pushed": true,
+        "stepId": "step#3",
+        "stepNumber": 3,
+        "warningCount": 0
+      },
+      "type": "STEP_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#28",
+      "payload": {
+        "branch": "tevrin/<slug>/v0.1.0",
+        "commitSha": "sha#4",
+        "planArtifactId": "artifact#3",
+        "stepCount": 3
+      },
+      "type": "EXECUTION_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#29",
+      "payload": {
+        "attempt": 1,
+        "buildCheckId": "build_check#2",
+        "check": {
+          "attempt": 1,
+          "endReason": null,
+          "failures": [],
+          "fixPlanning": "none",
+          "fixStepNumbers": [],
+          "headSha": "sha#4",
+          "id": "build_check#2",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [],
+          "status": "waiting"
+        },
+        "headSha": "sha#4",
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0
+      },
+      "type": "BUILD_CHECK_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#30",
+      "payload": {
+        "deploymentId": "deployment#2",
+        "gitRef": "tevrin/<slug>/v0.1.0",
+        "gitSha": "sha#4",
+        "promotedFromDeploymentId": null,
+        "provider": "fake",
+        "releaseId": null,
+        "releaseVersion": "0.1.0",
+        "releaseVersionId": "release_version#1",
+        "status": "queued",
+        "target": "preview",
+        "trigger": "auto",
+        "url": null
+      },
+      "type": "DEPLOYMENT_CREATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#31",
+      "payload": {
+        "attempt": 1,
+        "buildCheckId": "build_check#2",
+        "check": {
+          "attempt": 1,
+          "endReason": null,
+          "failures": [],
+          "fixPlanning": "none",
+          "fixStepNumbers": [],
+          "headSha": "sha#4",
+          "id": "build_check#2",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [
+            {
+              "conclusion": null,
+              "informational": false,
+              "kind": "preview",
+              "message": null,
+              "name": "Vercel preview",
+              "status": "queued",
+              "url": null
+            }
+          ],
+          "status": "waiting"
+        },
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0
+      },
+      "type": "BUILD_CHECK_UPDATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#32",
+      "payload": {
+        "deploymentId": "deployment#2",
+        "errorCode": null,
+        "gitSha": "sha#4",
+        "releaseVersion": "0.1.0",
+        "status": "building",
+        "target": "preview",
+        "url": "https://fake-sha#4:8-frontend.vercel.test"
+      },
+      "type": "DEPLOYMENT_UPDATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#33",
+      "payload": {
+        "deploymentId": "deployment#2",
+        "errorCode": null,
+        "gitSha": "sha#4",
+        "releaseVersion": "0.1.0",
+        "status": "ready",
+        "target": "preview",
+        "url": "https://fake-sha#4:8-frontend.vercel.test"
+      },
+      "type": "DEPLOYMENT_UPDATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#34",
+      "payload": {
+        "deploymentId": "deployment#2",
+        "gitSha": "sha#4",
+        "previewReady": true,
+        "releaseVersion": "0.1.0",
+        "status": "ready",
+        "target": "preview",
+        "url": "https://fake-sha#4:8-frontend.vercel.test"
+      },
+      "type": "DEPLOYMENT_PREVIEW_READY"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#35",
+      "payload": {
+        "components": [
+          {
+            "component": "frontend",
+            "status": "ready",
+            "url": "https://fake-sha#4:8-frontend.vercel.test"
+          }
+        ],
+        "errorCode": null,
+        "gitSha": "sha#4",
+        "message": null,
+        "migrationRunId": null,
+        "releaseVersionId": "release_version#1",
+        "rolloutId": "job#10",
+        "state": "succeeded"
+      },
+      "type": "PREVIEW_ROLLOUT_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#36",
+      "payload": {
+        "attempt": 1,
+        "buildCheckId": "build_check#2",
+        "check": {
+          "attempt": 1,
+          "endReason": null,
+          "failures": [],
+          "fixPlanning": "none",
+          "fixStepNumbers": [],
+          "headSha": "sha#4",
+          "id": "build_check#2",
+          "releaseVersionId": "release_version#1",
+          "reviewCycle": 0,
+          "sources": [
+            {
+              "conclusion": "success",
+              "informational": false,
+              "kind": "preview",
+              "message": null,
+              "name": "Vercel preview",
+              "status": "ready",
+              "url": "https://fake-sha#4:8-frontend.vercel.test"
+            }
+          ],
+          "status": "passed"
+        },
+        "endReason": null,
+        "failureIds": [],
+        "releaseVersionId": "release_version#1",
+        "reviewCycle": 0,
+        "status": "passed"
+      },
+      "type": "BUILD_CHECK_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#37",
+      "payload": {
+        "checkpoint": 5,
+        "from": "execution",
+        "kind": "advance",
+        "reason": "Build check finished; pull request opened",
+        "releaseVersionId": "release_version#1",
+        "status": "reviewing",
+        "to": "review"
+      },
+      "type": "PHASE_CHANGED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#38",
+      "payload": {
+        "checkpoint": 5,
+        "cycle": 1,
+        "jobId": "job#14",
+        "releaseVersionId": "release_version#1",
+        "trigger": "stage_entered"
+      },
+      "type": "REVIEW_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#39",
+      "payload": {
+        "agent": "code_review",
+        "agentKey": null,
+        "jobId": "job#14",
+        "legacyAgentKey": null,
+        "model": "fake-1",
+        "promptVersion": "10",
+        "provider": "fake",
+        "runId": "job#14",
+        "stack": null,
+        "stepId": null
+      },
+      "type": "RUN_STARTED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#40",
+      "payload": {
+        "agent": "code_review",
+        "runId": "job#14",
+        "warnings": []
+      },
+      "type": "RUN_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#41",
+      "payload": {
+        "artifactId": null,
+        "checkpoint": 5,
+        "gateId": "gate#1",
+        "reason": "Review cycle 1: score 0.930 meets the threshold 0.90",
+        "type": "pre_release"
+      },
+      "type": "GATE_CREATED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#42",
+      "payload": {
+        "checkpoint": 5,
+        "checksTimedOut": false,
+        "cycle": 1,
+        "decision": "release_eligible",
+        "decisionReason": null,
+        "driftLevel": "none",
+        "jobId": "job#14",
+        "optimizationPlanArtifactId": null,
+        "overallScore": 0.930,
+        "previewDeploymentId": "deployment#2",
+        "previewStatus": "ready",
+        "regressionCount": 0,
+        "releaseVersionId": "release_version#1",
+        "reportId": "report#1",
+        "runId": "job#14",
+        "threshold": 0.90
+      },
+      "type": "REVIEW_COMPLETED"
+    },
+    {
+      "actor": "tevrin-system",
+      "id": "event#43",
+      "payload": {
+        "provider": "local",
+        "readiness": {
+          "canMerge": true,
+          "checks": [],
+          "mergeStateStatus": null,
+          "mergeStrategy": "tevrin_merges",
+          "reasons": [],
+          "reviewDecision": null,
+          "willAutoMerge": true
+        },
+        "releaseVersionId": "release_version#1"
+      },
+      "type": "MERGE_READINESS_CHECKED"
+    }
+  ],
+  "gates": [
+    {
+      "artifact": null,
+      "decision": null,
+      "hasComment": false,
+      "id": "gate#1",
+      "reviewer": null,
+      "status": "pending",
+      "targetCheckpoint": null,
+      "type": "pre_release"
+    }
+  ],
+  "jobs": [
+    {
+      "attempts": 1,
+      "id": "job#1",
+      "status": "succeeded",
+      "trigger": "start",
+      "type": "execution"
+    },
+    {
+      "attempts": 1,
+      "id": "job#2",
+      "status": "succeeded",
+      "trigger": "continue",
+      "type": "execution"
+    },
+    {
+      "attempts": 1,
+      "id": "job#3",
+      "status": "succeeded",
+      "trigger": "execution_completed",
+      "type": "pull_request"
+    },
+    {
+      "attempts": 1,
+      "id": "job#4",
+      "status": "succeeded",
+      "trigger": "auto",
+      "type": "preview_rollout"
+    },
+    {
+      "attempts": 1,
+      "id": "job#5",
+      "status": "succeeded",
+      "trigger": null,
+      "type": "build_check"
+    },
+    {
+      "attempts": 1,
+      "id": "job#6",
+      "status": "succeeded",
+      "trigger": null,
+      "type": "deployment"
+    },
+    {
+      "attempts": 1,
+      "id": "job#7",
+      "status": "succeeded",
+      "trigger": null,
+      "type": "build_fix"
+    },
+    {
+      "attempts": 1,
+      "id": "job#8",
+      "status": "succeeded",
+      "trigger": "build_fix",
+      "type": "execution"
+    },
+    {
+      "attempts": 1,
+      "id": "job#9",
+      "status": "succeeded",
+      "trigger": "execution_completed",
+      "type": "pull_request"
+    },
+    {
+      "attempts": 1,
+      "id": "job#10",
+      "status": "succeeded",
+      "trigger": "auto",
+      "type": "preview_rollout"
+    },
+    {
+      "attempts": 1,
+      "id": "job#11",
+      "status": "succeeded",
+      "trigger": null,
+      "type": "build_check"
+    },
+    {
+      "attempts": 1,
+      "id": "job#12",
+      "status": "succeeded",
+      "trigger": null,
+      "type": "deployment"
+    },
+    {
+      "attempts": 1,
+      "id": "job#13",
+      "status": "succeeded",
+      "trigger": "phase_advanced",
+      "type": "pull_request"
+    },
+    {
+      "attempts": 1,
+      "id": "job#14",
+      "status": "succeeded",
+      "trigger": "stage_entered",
+      "type": "review"
+    },
+    {
+      "attempts": 1,
+      "id": "job#15",
+      "status": "succeeded",
+      "trigger": null,
+      "type": "merge_readiness"
+    }
+  ],
+  "project": {
+    "approvalMode": "advisory",
+    "checkpoint": 5,
+    "developmentVersion": "0.1.0",
+    "extraReviewCycles": 0,
+    "phase": "review",
+    "releasedVersion": null,
+    "reviewCycle": 1,
+    "status": "reviewing"
+  },
+  "scenario": "build_check_failed_once_then_fixed",
+  "transitions": [
+    {
+      "actor": "user:owner",
+      "checkpoint": 1,
+      "from": null,
+      "id": "transition#1",
+      "reason": "project created",
+      "to": "refinement"
+    },
+    {
+      "actor": "tevrin-system",
+      "checkpoint": 5,
+      "from": "execution",
+      "id": "transition#2",
+      "reason": "Build check finished; pull request opened",
+      "to": "review"
+    }
+  ]
+}

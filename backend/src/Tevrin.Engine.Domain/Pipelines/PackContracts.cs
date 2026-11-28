@@ -19,6 +19,24 @@ public interface IPipelinePack
     string Id { get; }
 
     void Register(IPackRegistry registry);
+
+    /// <summary>
+    /// FR-330 (0.8.0): who starts and moves runs of the pack's pipeline <paramref name="pipelineId"/>:
+    /// <see cref="RunControl.Engine"/> (the default) or <see cref="RunControl.Host"/>. The engine's run-control endpoints
+    /// refuse a host-controlled pipeline (<c>RUN_CONTROLLED_BY_HOST</c>). Declared in code, not in the definition, so the
+    /// definition and its hash don't change.
+    /// </summary>
+    RunControl RunControlOf(string pipelineId) => RunControl.Engine;
+}
+
+/// <summary>FR-330: who starts and moves a pipeline's runs.</summary>
+public enum RunControl
+{
+    /// <summary>The engine: its run-control endpoints and the run driver (FR-331–FR-337).</summary>
+    Engine = 0,
+
+    /// <summary>The host's own pages and endpoints (the SDLC); the engine only records and shows the run.</summary>
+    Host = 1,
 }
 
 /// <summary>
@@ -51,11 +69,26 @@ public interface IPackRegistry
     /// <summary>An <see cref="IGuard"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>).</summary>
     void AddGuard(string name);
 
-    /// <summary>An <see cref="IStageHandler"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>).</summary>
-    void AddStageHandler(string name);
+    /// <summary>An <see cref="IStageHandler"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>), not external.</summary>
+    void AddStageHandler(string name) => AddStageHandler(name, external: false);
 
-    /// <summary>An <see cref="IAgentTool"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>).</summary>
-    void AddTool(string name);
+    /// <summary>
+    /// An <see cref="IStageHandler"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>). FR-360 (0.8.0): <paramref name="external"/>
+    /// marks a handler that sends, publishes, submits or pays outside Tevrin; it runs only after an approved
+    /// <c>external_action</c> gate. Declared in code, so no definition or hash changes.
+    /// </summary>
+    void AddStageHandler(string name, bool external);
+
+    /// <summary>An <see cref="IAgentTool"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>) registered without a tier: it gets
+    /// <see cref="ToolTierRules.DefaultRegisteredTier"/> (<c>write</c>) and isn't external.</summary>
+    void AddTool(string name) => AddTool(name, ToolTierRules.DefaultRegisteredTier, external: false);
+
+    /// <summary>
+    /// An <see cref="IAgentTool"/> name (<c>&lt;pack&gt;.&lt;name&gt;</c>) with its FR-358 <paramref name="tier"/> (0.8.0);
+    /// FR-360: <paramref name="external"/> marks a tool that acts outside Tevrin (it runs only after an approved
+    /// <c>external_action</c> gate). Declared in code, so no definition or hash changes.
+    /// </summary>
+    void AddTool(string name, ToolTier tier, bool external = false);
 
     /// <summary>A job type the pack handles (its job handler is registered in the host's DI).</summary>
     void AddJobType(string jobType);
@@ -151,12 +184,47 @@ public sealed record StageHandlerResult(StageHandlerOutcome Outcome, string? Mes
     /// <summary>D-0.7.0-43: a <see cref="StageHandlerOutcome.Failed"/> result's error code (the job fails with it);
     /// <c>null</c> means <c>VALIDATION</c>.</summary>
     public string? ErrorCode { get; init; }
+
+    /// <summary>FR-355: a completed map item or reduce handler's output, stored as a version of the map stage's
+    /// <c>output</c> (an item's with its index); <c>null</c> stores nothing. Other handlers' outputs are ignored.</summary>
+    public string? Output { get; init; }
 }
 
 /// <summary>FR-280: the work of a code stage (<c>handler: &lt;pack&gt;.&lt;name&gt;</c>).</summary>
 public interface IStageHandler
 {
     Task<StageHandlerResult> ExecuteAsync(StageHandlerContext context, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// FR-360 (0.8.0): exactly what an external handler will send (<see cref="Content"/>, e.g. a JSON body), as prepared before
+/// anything is sent. It is shown on the <c>external_action</c> gate and, once approved, handed back to
+/// <see cref="IExternalStageHandler.SendAsync"/> unchanged. It must not carry credentials (D-0.8.0-31).
+/// </summary>
+public sealed record ExternalActionPayload(string Content);
+
+/// <summary>
+/// FR-360 (0.8.0): the work of a code stage whose handler is registered <c>external: true</c> (it sends, publishes, submits
+/// or pays outside Tevrin). The engine never calls <see cref="IStageHandler.ExecuteAsync"/> on it. It first calls
+/// <see cref="PreparePayloadAsync"/>, which must not act outside Tevrin, and raises an <c>external_action</c> gate showing
+/// that payload. After an Owner approves it, the engine calls <see cref="SendAsync"/> once with the approved payload, which
+/// the handler sends as given (recomputing it would send something nobody approved). Credentials come from the
+/// handler's own configuration at send time.
+/// </summary>
+public interface IExternalStageHandler : IStageHandler
+{
+    /// <summary>What the handler would send for this stage, with no effect outside Tevrin.</summary>
+    Task<ExternalActionPayload> PreparePayloadAsync(StageHandlerContext context, CancellationToken cancellationToken);
+
+    /// <summary>Sends <paramref name="approved"/>, the payload an Owner approved, exactly as given.</summary>
+    Task<StageHandlerResult> SendAsync(StageHandlerContext context, ExternalActionPayload approved, CancellationToken cancellationToken);
+
+    /// <summary>Never used for an external handler: it runs only through its approved gate.</summary>
+    Task<StageHandlerResult> IStageHandler.ExecuteAsync(StageHandlerContext context, CancellationToken cancellationToken) =>
+        Task.FromResult(new StageHandlerResult(StageHandlerOutcome.Failed, "An external handler runs only after its external_action gate is approved.")
+        {
+            ErrorCode = Common.EngineErrorCodes.DefinitionUnavailable,
+        });
 }
 
 /// <summary>A tool's description for the model: name, what it does, and its arguments as a JSON Schema object.</summary>
@@ -182,6 +250,10 @@ public sealed record AgentContextRequest(Guid RunId, Guid ProjectId, string Pipe
     /// sections that only fill these.
     /// </summary>
     public IReadOnlySet<string> SuppliedPlaceholders { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>FR-345, §4.65: the fan-out branch (variant label) the context is for; <c>null</c> outside a fan-out. A
+    /// provider must not return a sibling branch's output.</summary>
+    public string? Branch { get; init; }
 }
 
 /// <summary>One named block of context for the prompt.</summary>

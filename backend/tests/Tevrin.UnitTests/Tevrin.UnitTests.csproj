@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Tevrin.UnitTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Tevrin.Domain/Tevrin.Domain.csproj" />
+    <!-- LLM providers and prompt templates are tested against fake HTTP handlers, without a database (FR-22, FR-24). -->
+    <ProjectReference Include="../../src/Tevrin.Infrastructure/Tevrin.Infrastructure.csproj" />
+    <!-- FR-272, FR-273: the SDLC's job handler registrations and payload triggers, read without a host or a database. -->
+    <ProjectReference Include="../../src/Tevrin.Api/Tevrin.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FR-295: the golden prompts the SDLC agents render today. -->
+    <None Include="Agents/Golden/*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

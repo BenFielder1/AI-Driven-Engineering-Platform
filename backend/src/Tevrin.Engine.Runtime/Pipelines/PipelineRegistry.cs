@@ -16,6 +16,9 @@ public sealed record LoadedPipelineDefinition(
     IReadOnlyList<DefinitionError> Errors)
 {
     public bool IsValid => Definition is not null && Errors.Count == 0;
+
+    /// <summary>FR-330: who controls the pipeline's runs, as its pack declares (<see cref="IPipelinePack.RunControlOf"/>).</summary>
+    public RunControl RunControl { get; init; } = RunControl.Engine;
 }
 
 /// <summary>
@@ -40,6 +43,7 @@ public sealed class PipelineRegistry
         ArgumentNullException.ThrowIfNull(jobHandlers);
 
         var registrations = new List<PackRegistration>();
+        var packById = new Dictionary<string, IPipelinePack>(StringComparer.Ordinal);
         foreach (var pack in packs)
         {
             if (registrations.Any(r => r.PackId == pack.Id))
@@ -50,6 +54,7 @@ public sealed class PipelineRegistry
             var registration = new PackRegistration(pack.Id);
             pack.Register(registration);
             registrations.Add(registration);
+            packById[pack.Id] = pack;
         }
 
         Packs = registrations;
@@ -63,6 +68,12 @@ public sealed class PipelineRegistry
         var jobTypes = jobHandlers.Select(j => j.JobType).ToList();
         Definitions = [.. registrations.SelectMany(r => r.Definitions.Select(d => Load(d, CatalogFor(r, registrations, componentList, jobTypes))))];
         Definitions = RejectDuplicateIds(Definitions);
+        Definitions = RejectScopeMismatches(Definitions, registrations);
+
+        // FR-330: each parsed definition carries its pack's run-control mode.
+        Definitions = [.. Definitions.Select(d => d.Definition is null
+            ? d
+            : d with { RunControl = packById[d.PackId].RunControlOf(d.Definition.Pipeline) })];
 
         foreach (var loaded in Definitions.Where(d => d.IsValid))
         {
@@ -90,6 +101,10 @@ public sealed class PipelineRegistry
     public bool TryGet(string pipelineId, out LoadedPipelineDefinition definition) =>
         _byId.TryGetValue(pipelineId, out definition!);
 
+    /// <summary>FR-330: who controls runs of <paramref name="pipelineId"/>; <c>null</c> when no valid definition has that id.</summary>
+    public RunControl? RunControlOf(string pipelineId) =>
+        _byId.TryGetValue(pipelineId, out var loaded) ? loaded.RunControl : null;
+
     /// <summary>The valid definition whose hash is <paramref name="hash"/>, or <c>null</c> (M58 falls back to the stored
     /// canonical content for older hashes).</summary>
     public LoadedPipelineDefinition? GetByHash(string hash) => _byHash.GetValueOrDefault(hash);
@@ -103,6 +118,43 @@ public sealed class PipelineRegistry
             PipelineComponentKind.StageHandler => p.Handlers,
             _ => p.Tools,
         }).Contains(name));
+
+    /// <summary>
+    /// FR-358: the tier the packs registered <paramref name="tool"/> with; <see cref="ToolTierRules.DefaultRegisteredTier"/>
+    /// for a tool registered without one or bound only in DI; <c>null</c> when nothing registers it. For the runner's
+    /// call-time check, which also covers runs pinned before a pack re-tiered a tool.
+    /// </summary>
+    public ToolTier? ToolTierOf(string tool)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        if (!Registers(PipelineComponentKind.Tool, tool))
+        {
+            return null;
+        }
+
+        return Packs.Select(p => p.ToolTiers.TryGetValue(tool, out var tier) ? tier : (ToolTier?)null).Max()
+            ?? ToolTierRules.DefaultRegisteredTier;
+    }
+
+    /// <summary>
+    /// FR-358, D-0.8.0-28: the tools bound in DI (<c>AddPipelineTool</c>) that no pack registers with <c>AddTool</c>, so
+    /// they have no registered tier and count as <see cref="ToolTierRules.DefaultRegisteredTier"/> (<c>write</c>), running
+    /// without approval. Distinct, in binding order; the startup logs a warning for each.
+    /// </summary>
+    public IReadOnlyList<string> UnclassifiedTools =>
+        [.. Components
+            .Where(c => c.Kind == PipelineComponentKind.Tool && !Packs.Any(p => p.ToolTiers.ContainsKey(c.Name)))
+            .Select(c => c.Name)
+            .Distinct(StringComparer.Ordinal)];
+
+    /// <summary>FR-360: whether a pack registered handler or tool <paramref name="name"/> with <c>external: true</c>.</summary>
+    public bool IsExternal(PipelineComponentKind kind, string name) =>
+        kind switch
+        {
+            PipelineComponentKind.StageHandler => Packs.Any(p => p.ExternalHandlers.Contains(name)),
+            PipelineComponentKind.Tool => Packs.Any(p => p.ExternalTools.Contains(name)),
+            _ => false,
+        };
 
     /// <summary>The DI implementation type bound to <paramref name="name"/>, or <c>null</c>.</summary>
     public Type? ImplementationOf(PipelineComponentKind kind, string name) =>
@@ -125,6 +177,8 @@ public sealed class PipelineRegistry
             Guards = Names(p => p.Guards, PipelineComponentKind.Guard),
             Handlers = Names(p => p.Handlers, PipelineComponentKind.StageHandler),
             Tools = Names(p => p.Tools, PipelineComponentKind.Tool),
+            ToolTiers = ToolTiers(all),
+            ExternalTools = [.. all.SelectMany(p => p.ExternalTools).Distinct(StringComparer.Ordinal)],
             JobTypes = [.. all.SelectMany(p => p.JobTypes).Concat(jobTypes).Distinct(StringComparer.Ordinal)],
             Settings = [.. pack.Settings],
             Schemas = [.. pack.Schemas.Keys],
@@ -133,6 +187,18 @@ public sealed class PipelineRegistry
             Prompts = pack.Prompts.Count == 0 ? null : pack.Prompts,
             ContextNames = [.. pack.ContextNames],
         };
+    }
+
+    /// <summary>FR-358: every pack-registered tool's tier (the highest, if two packs name one tool).</summary>
+    private static Dictionary<string, ToolTier> ToolTiers(List<PackRegistration> all)
+    {
+        var tiers = new Dictionary<string, ToolTier>(StringComparer.Ordinal);
+        foreach (var (tool, tier) in all.SelectMany(p => p.ToolTiers))
+        {
+            tiers[tool] = tiers.TryGetValue(tool, out var earlier) && earlier > tier ? earlier : tier;
+        }
+
+        return tiers;
     }
 
     private static LoadedPipelineDefinition Load(PackDefinitionSource source, PackCatalog catalog)
@@ -145,6 +211,51 @@ public sealed class PipelineRegistry
 
         var canonical = DefinitionHash.CanonicalJson(definition);
         return new LoadedPipelineDefinition(source.PackId, source.Name, definition, DefinitionHash.Compute(definition), canonical, result.Errors);
+    }
+
+    /// <summary>
+    /// FR-352, D-0.8.0-19: a project-scope history is shared by (project, key) across pipelines, so every pipeline that
+    /// declares a project-scope key declares it with the same <c>format</c> and the same schema (by content, as schemas are
+    /// per pack). Each definition after the first that differs gets <c>DEF_SCOPE_INPUT</c> at <c>artifacts.&lt;key&gt;</c>,
+    /// naming both pipelines.
+    /// </summary>
+    private static List<LoadedPipelineDefinition> RejectScopeMismatches(
+        IReadOnlyList<LoadedPipelineDefinition> definitions, IReadOnlyList<PackRegistration> registrations)
+    {
+        var schemasByPack = registrations.ToDictionary(r => r.PackId, r => r.Schemas, StringComparer.Ordinal);
+        string? SchemaOf(string packId, string? schema) =>
+            schema is null ? null : schemasByPack.GetValueOrDefault(packId)?.GetValueOrDefault(schema) ?? schema;
+
+        var first = new Dictionary<string, (string Pipeline, ArtifactFormat Format, string? Schema)>(StringComparer.Ordinal);
+        var result = new List<LoadedPipelineDefinition>(definitions.Count);
+        foreach (var loaded in definitions)
+        {
+            if (loaded.Definition is not { } definition)
+            {
+                result.Add(loaded);
+                continue;
+            }
+
+            var errors = new List<DefinitionError>();
+            foreach (var artifact in definition.Artifacts.Where(a => a.Scope == ArtifactScope.Project))
+            {
+                var schema = SchemaOf(loaded.PackId, artifact.Schema);
+                if (!first.TryGetValue(artifact.Key, out var earlier))
+                {
+                    first[artifact.Key] = (definition.Pipeline, artifact.Format, schema);
+                }
+                else if (earlier.Format != artifact.Format || !string.Equals(earlier.Schema, schema, StringComparison.Ordinal))
+                {
+                    errors.Add(new DefinitionError(DefinitionErrorCodes.ScopeInput, $"artifacts.{artifact.Key}",
+                        $"Project-scope artifact '{artifact.Key}' is declared by pipelines '{earlier.Pipeline}' and '{definition.Pipeline}' "
+                        + "with a different format or schema; pipelines sharing a project-scope key share its history, so they must declare it the same way."));
+                }
+            }
+
+            result.Add(errors.Count == 0 ? loaded : loaded with { Errors = [.. loaded.Errors, .. errors] });
+        }
+
+        return result;
     }
 
     /// <summary>A pipeline id is unique across packs (§4.49): every definition after the first with an id gets

@@ -125,4 +125,48 @@ export const fixtureReviewDefinition: Definition = {
   ],
 }
 
-export const pipelineDefinitions: readonly Definition[] = [sdlcDefinition, fixtureReviewDefinition]
+const next = (to: string): Stage['transitions'][number] => ({ kind: 'next', to, on: null, title: null, maxIterations: null, maxIterationsSetting: null })
+
+/**
+ * FR-339: the Impulse coaching pack's definition (backend src/Tevrin.Pack.Coach/Definitions/impulse-coach.pipeline.yaml),
+ * as GET /definitions/{hash} returns it (PipelineDtoMapper: implicit `next` transitions, artifact `scope`). analyse →
+ * plan (Velocity-guarded, retry then escalate) → review (`plan_approval` gate on the plan draft) → write. The engine UI
+ * renders it with no coach-specific code in src/engine.
+ */
+export const impulseCoachDefinition = {
+  pipelineId: 'impulse-coach',
+  title: 'Impulse coaching',
+  version: 1,
+  hash: 'c0a1c2c3c4c5c6c7c8c9cacbcccdcecf00112233445566778899aabbccddeeff',
+  packId: 'coach',
+  start: ['analyse'],
+  stages: [
+    stage({ id: 'analyse', title: 'Analyse', status: 'analysing', agentKey: 'performance-analyst', inputs: ['session_log', 'athlete_profile'], output: 'performance', transitions: [next('plan')] }),
+    stage({ id: 'plan', title: 'Plan', status: 'planning', agentKey: 'programme-planner', inputs: ['performance', 'athlete_profile'], output: 'plan_draft', transitions: [next('review')] }),
+    stage({
+      id: 'review',
+      title: 'Review',
+      status: 'reviewing',
+      kind: 'manual',
+      gate: { type: 'plan_approval', modes: ['strict', 'advisory'], approves: 'plan_draft' },
+      transitions: [next('write')],
+    }),
+    stage({ id: 'write', title: 'Write', status: 'writing', agentKey: 'coach-voice', inputs: ['plan_draft'], output: 'coach_message' }),
+  ],
+  artifacts: [
+    { key: 'athlete_profile', title: 'Athlete profile', format: 'json', scope: 'project' },
+    { key: 'session_log', title: 'Session log', format: 'json', scope: 'run' },
+    { key: 'performance', title: 'Performance', format: 'json', scope: 'run' },
+    { key: 'plan_draft', title: 'Plan draft', format: 'json', scope: 'run' },
+    { key: 'coach_message', title: 'Coach message', format: 'json', scope: 'run' },
+  ],
+  statuses: [
+    { name: 'analysing', generic: 'active' },
+    { name: 'planning', generic: 'active' },
+    { name: 'reviewing', generic: 'active' },
+    { name: 'writing', generic: 'active' },
+    { name: 'coached', generic: 'completed' },
+  ],
+} satisfies Definition
+
+export const pipelineDefinitions: readonly Definition[] = [sdlcDefinition, fixtureReviewDefinition, impulseCoachDefinition]

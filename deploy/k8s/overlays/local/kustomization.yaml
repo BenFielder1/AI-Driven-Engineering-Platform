@@ -4,12 +4,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: aide
+namespace: tevrin
 
 # Also labels the generated Secret (teardown-local.sh deletes by this label).
 labels:
   - pairs:
-      app.kubernetes.io/part-of: aide
+      app.kubernetes.io/part-of: tevrin
     includeSelectors: false
 
 resources:
@@ -20,9 +20,9 @@ patches:
   - path: app-config-local.yaml
 
 images:
-  - name: aide-api
+  - name: tevrin-api
     newTag: dev
-  - name: aide-web
+  - name: tevrin-web
     newTag: dev
 
 secretGenerator:

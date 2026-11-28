@@ -1,0 +1,52 @@
+# FR-329 (0.8.0): the `aide` names Tevrin keeps, checked by scripts/ci/check-aide-names.py.
+# One entry per line, four TAB-separated fields: <path regex> <token regex> <removal version> <reason>.
+# Both regexes must match in full. "never" = kept for good; a version = remove the entry (and the name) then.
+# An entry no hit uses fails the check, so remove entries as names go.
+
+# --- History and the rename itself ---
+SPEC\.md|PROGRESS\.md	.*	never	the 0.8.0 spec and build log describe the rename and its compatibility rules
+docs/operations/rename-to-tevrin\.md	.*	never	Ben's runbook for renaming the aide deployments
+docs/operations/postgres-18-upgrade\.md	.*	never	0.5.0 runbook for clusters from before 0.8.0, which use the aide names
+docs/reference/retired-cli\.md	.*	never	archived source and docs of the aide CLI, retired in 0.7.0
+backend/src/Tevrin\.Infrastructure/Migrations/.*	.*	never	committed migrations are never edited (CLAUDE.md rule 5; D-0.8.0-9 renamed only namespaces and types)
+scripts/ci/check-(migrations-renamed|snapshots-rebaseline)(\.test)?\.sh|scripts/ci/check-aide-names\.py	.*	never	the rename checks map between the old and new names
+CLAUDE\.md|STACK\.md|README\.md|docs/index\.md|frontend/src/features/marketing/.*	AIDE|AS_AIDE|(entry\.)?asAide|aide|build/aide-v5	never	the product was called AIDE for 0.1.0-0.5.0 (FR-219 changelog, FAQ, history lines)
+
+# --- Tests ---
+backend/tests/.*|frontend/e2e/.*|frontend/src/test/.*|frontend/src/mocks/.*|frontend/src/.*\.test\.tsx?|frontend/src/server/.*\.test\.ts	.*	0.9.0	tests of the old names still read (FR-325, FR-326) and of the product-name rules (FR-197-FR-201), and test names and fixtures from before the rename; trim with the legacy reads in 0.9.0
+
+# --- Old names still read until 0.9.0 (FR-325, FR-326) ---
+.*	aide_pat_.*|tevrin_aide_pat_.*	0.9.0	API tokens issued before 0.8.0 still authenticate
+.*	aide\.(auth|authC\d+|af|external|mode|link_user|github_app)|aide\.(gitlab|bitbucket)\.(oauth|link)	0.9.0	cookies and sign-in properties from before 0.8.0 are still read
+.*	aide-plan|aide-stack-profile|```aide-plan	0.9.0	plan blocks and stack profiles stored before 0.8.0 are still parsed
+.*	aide_merges	0.9.0	merge strategy accepted as input and in stored payloads (D-0.8.0-10)
+.*	X-AIDE-.*|X-Aide-.*	0.9.0	webhook receivers check the old headers; both sets are sent through 0.8.x
+.*	AIDE-Step-Id	0.9.0	step trailer: commits made before 0.8.0 carry it, and it is still written beside Tevrin-Step-Id
+.*	aide-preview|https://[a-z0-9-]*aide-preview[a-z0-9.-]*	0.9.0	Railway preview environments created before 0.8.0 are still found
+.*	aide-system	0.9.0	the system actor of stored audit records
+.*	\.aide(/.*)?	never	the project rules folder in users' repositories: still protected and read beside .tevrin/
+.*	\.aide-fake/fail-(build|migration)|aide-fake:fail	0.9.0	Fake failure markers in plans and repositories from before 0.8.0
+.*	aide-approval-link/v1	0.9.0	approval links emailed before 0.8.0 still verify
+.*	aide:token_id	0.9.0	API-token claim of sessions issued before 0.8.0
+.*	aideDeploymentId	0.9.0	Vercel deployment metadata written before 0.8.0
+.*	aide\.(theme|sidebar|home\.checklist-dismissed|new-project-wizard\.draft)	0.9.0	browser storage keys from before 0.8.0, migrated on read
+.*	ConnectionStrings(__|:)Aide|\$?AIDE_(DATA_DIR|IMPORT_ROOT|E2E)(:-.*)?	0.9.0	config names from before 0.8.0, read with a warning (FR-325)
+.*	1\.0\.0\+aide\.\d+|[a-z-]+@1\.0\.0\+aide\.\d+|\+aide|\+aide\..*	next pack version	bundled catalog pack versions; +aide.<n> is still read, new versions use +tevrin.<n>
+
+# --- Kept for good ---
+.*	\$?AIDE_RUN_MIGRATIONS	never	D-0.8.0-16: the variable generated projects' own scripts read
+.*	Aide\.Secrets(\..*)?|Aide\.(GitHub|Bitbucket|GitLab)\.[A-Za-z]+\.v1	never	D-0.8.0-16 and PROGRESS: data-protection purposes; renaming breaks decryption of stored secrets and in-flight sign-ins
+.*	aide_supabase_migrations	never	migration lock shared by old and new deploys of generated projects
+.*	aide/.*|aide/|AIDE-branch|v\d+-aide(\.\d+)?|-aide	never	pre-0.6.1 branches (aide/...) and 0.1.0 release tags (vN-aide) recorded on projects (FR-232, FR-233)
+.*	(https://)?aide\.benfielder\.com.*	never	the preview custom domain (DNS)
+.*	admin@aide\.local|aide@aide\.local	never	dev seed admin and dev SMTP sender: existing dev and local databases sign in with them
+.*	aide-api-7c1f0b8e-3d4a-4e8e-9a51-2b6f5d0c9e11	never	the API's UserSecretsId: renaming loses the dev loop's stored user-secrets
+docker-compose\.yml|\.env\.example	.*	never	the dev loop is unchanged (existing dev database volume, project, database and user)
+
+# --- Readers of the old names, and where the kept names are set or explained ---
+backend/src/Tevrin\.Api/Auth/(GitHubAuth|LegacyCookies)\.cs|backend/src/Tevrin\.Domain/Deployments/NetlifyRules\.cs|backend/src/Tevrin\.Domain/Execution/(PlanDocument|SecretScanner)\.cs|backend/src/Tevrin\.Domain/Stack/StackCatalogLoader\.cs|backend/src/Tevrin\.Infrastructure/Configuration/LegacyConfigNames\.cs|backend/src/Tevrin\.Infrastructure/DependencyInjection\.cs|frontend/src/features/artifacts/plan-block\.ts|frontend/src/features/home/home-page\.tsx	aide|Aide	0.9.0	readers of the names renamed in 0.8.0 (FR-325, FR-326)
+backend/src/Tevrin\.Api/Auth/AccountService\.cs|backend/src/Tevrin\.Api/Features/Trackers/TrackerConnectionExpirySweep\.cs	AIDE	never	advisory lock keys are the bytes of "AIDE"; changing them would let old and new instances take the same lock work at once
+\.railway/railway\.ts|deploy/k8s/overlays/local/secrets\.env\.example|deploy/railway/variables\.md|backend/src/Tevrin\.Infrastructure/(Security/DataProtectionSetup|Git/Workspaces)\.cs|docs/reference/configuration\.md	aide|/aide/keys|/aide/workspaces|~/\.local/share/aide/keys	never	the data-protection application name (D-0.8.0-16) and the dev loop's local data folders beside its key ring
+deploy/scripts/deploy-local\.sh|deploy/railway/README\.md|docs/getting-started/(dev-loop|prerequisites)\.md|docs/operations/local-kubernetes\.md|docs/reference/(architecture|configuration)\.md	aide	never	the pre-0.8.0 namespace and Railway project, and the dev loop's database and user, named where the docs and deploy script handle them
+.github/workflows/ci.yml	aide|scripts/ci/check-aide-names\.py	never	the CI step that runs this check
+backend/src/Tevrin\.Infrastructure/Agents/Stack/core/composition-summary\.md	Aide\.Domain\.Agents\.PromptTemplate	next pack version	bundled catalog content: its text feeds the catalog hash frozen in the characterisation snapshots (FR-328), so it changes only with the next catalog version

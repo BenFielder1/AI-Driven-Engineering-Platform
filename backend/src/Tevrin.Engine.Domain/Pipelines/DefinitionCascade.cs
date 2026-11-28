@@ -77,7 +77,7 @@ public static class DefinitionCascade
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
-            foreach (var stage in definition.Stages)
+            foreach (var stage in definition.AllStages)
             {
                 if (stage.Output is { } output
                     && !string.Equals(output, artifactKey, StringComparison.Ordinal)
@@ -93,11 +93,12 @@ public static class DefinitionCascade
         return [.. declared, .. found.Except(declared, StringComparer.Ordinal).Order(StringComparer.Ordinal)];
     }
 
-    /// <summary>The first stage whose <c>output</c> is <paramref name="artifactKey"/>, or <c>null</c> (an artifact a pack
-    /// job produces outside any stage).</summary>
+    /// <summary>The first stage whose <c>output</c> is <paramref name="artifactKey"/> (FR-343: for a parallel branch stage,
+    /// its group, the top-level stage the run is in), or <c>null</c> (an artifact a pack job produces outside any stage).</summary>
     public static string? ProducingStage(string artifactKey, PipelineDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        return definition.Stages.FirstOrDefault(s => string.Equals(s.Output, artifactKey, StringComparison.Ordinal))?.Id;
+        return definition.Stages.FirstOrDefault(top => top.WithBranchStages()
+            .Any(s => string.Equals(s.Output, artifactKey, StringComparison.Ordinal)))?.Id;
     }
 }

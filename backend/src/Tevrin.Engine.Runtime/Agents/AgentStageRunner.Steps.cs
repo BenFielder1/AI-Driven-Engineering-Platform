@@ -38,9 +38,19 @@ public sealed partial class AgentStageRunner
     /// <see cref="AgentRunPolicy.CommitRunSeparately"/> or for a run under the caller's id, where the run is left
     /// <c>running</c> for the queue's retry (as 0.6.1). After the answer, the token hook gets
     /// <see cref="CancellationToken.None"/>: the call was paid for.
+    /// <para>
+    /// FR-359: a destructive call stops the loop: its turns so far are recorded, the loop's state saved and the gate raised
+    /// (<see cref="SuspendAsync"/>), and the job deferred. <paramref name="resume"/> continues a saved loop.
+    /// </para>
     /// </summary>
     private async Task<LlmToolLoopResult> CallAsync(
-        AgentAttempt attempt, AgentStageExtension extension, LlmRequest request, AgentToolExecutor? executor, AgentCallOptions options, CancellationToken cancellationToken)
+        AgentAttempt attempt,
+        AgentStageExtension extension,
+        LlmRequest request,
+        AgentToolExecutor? executor,
+        AgentCallOptions options,
+        CancellationToken cancellationToken,
+        LlmToolLoopResume? resume = null)
     {
         var (agentRun, resolved) = (attempt.AgentRun!, attempt.Llm!);
         using var firstToken = LlmFirstTokenProbe.Start(time);
@@ -59,7 +69,15 @@ public sealed partial class AgentStageRunner
         {
             // FR-317: the host's tools, else the stage's; an executor with no tools (AgentToolExecutor.None) is a plain call.
             var tools = options.Tools ?? executor;
-            answer = await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, tools is { Definitions.Count: 0 } ? null : tools, cancellationToken, OnTurn);
+            answer = resume is null
+                ? await LlmToolLoop.RunAsync(llm.ProviderFor(resolved.Provider), request, tools is { Definitions.Count: 0 } ? null : tools, cancellationToken, OnTurn)
+                : await LlmToolLoop.ResumeAsync(llm.ProviderFor(resolved.Provider), request, executor!, resume, cancellationToken, OnTurn);
+        }
+        catch (LlmToolLoopSuspendedException ex) when (options.Tools is null && executor is not null && ex.Snapshot is not null)
+        {
+            // FR-359: the paid turns are recorded first; the destructive call is saved, never run.
+            await RecordCallAsync(attempt, started, firstToken, executor, options, ex.Tokens);
+            throw await SuspendAsync(attempt, extension, request, executor, ex);
         }
         catch (LlmToolLoopStoppedException ex)
         {
@@ -184,15 +202,18 @@ public sealed partial class AgentStageRunner
             .With(new StageAttemptFact(attempt.Request.Attempt, reply, attempt.Request.HostState));
         var (run, stage) = (attempt.Run, attempt.Stage);
         var guardContext = new GuardContext(run.Id, run.ProjectId, stage.Id, run.ApprovalMode, facts);
-        foreach (var validation in stage.Validate)
+        foreach (var validation in stage.Validate.Where(v => v.Agent is null))
         {
-            var guard = services.GetPipelineGuard(validation.Guard) ?? throw Permanent($"Guard '{validation.Guard}' is not bound.");
+            var guard = services.GetPipelineGuard(validation.Guard!) ?? throw Permanent($"Guard '{validation.Guard}' is not bound.");
             var result = await guard.EvaluateAsync(guardContext, cancellationToken);
             if (!result.Ok)
             {
                 reasons.AddRange(result.Reasons.Count > 0 ? result.Reasons : [$"{validation.Guard} rejected the output."]);
             }
         }
+
+        // FR-350: validator agents' rejecting findings count as the guards' reasons do (none declared: no call).
+        reasons.AddRange(await RunValidatorAgentsAsync(attempt, content, cancellationToken));
 
         // FR-314: the host's own checks come after the guards' reasons.
         reasons.AddRange(await extension.ValidateOutputAsync(attempt, content, cancellationToken));
@@ -203,14 +224,34 @@ public sealed partial class AgentStageRunner
     /// A new version of the artifact: numbered project-wide (FR-58); only open drafts of the run's own subject are
     /// superseded (§4.10), never another subject's.
     /// </summary>
-    private async Task<Artifact> StoreAsync(PipelineRun run, ArtifactDefinition definition, string content, AgentRun agentRun, CancellationToken cancellationToken)
+    private async Task<Artifact> StoreAsync(
+        PipelineRun run, ArtifactDefinition definition, string content, AgentRun agentRun, string? variant, int? itemIndex, CancellationToken cancellationToken)
     {
-        var plan = ArtifactRules.NewDraft(await store.VersionsAsync(run.ProjectId, definition.Key, cancellationToken));
-        var drafts = await store.SubjectVersionsAsync(run, definition.Key, plan.SupersededVersions, cancellationToken);
-        foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
+        NewDraftPlan plan;
+        if (itemIndex is { } index)
         {
-            draft.Status = ArtifactStatus.Superseded;
-            await hooks.OnArtifactSupersededAsync(run, draft, plan.Version, cancellationToken);
+            // FR-355: a map item numbers its own index's versions in the run (one collection; the run-scope unique index
+            // includes the item index), so concurrent items never collide or supersede each other.
+            var latest = await store.MaxItemVersionAsync(run, definition.Key, index, cancellationToken);
+            plan = new NewDraftPlan((latest ?? 0) + 1, latest, []);
+        }
+        else if (variant is null)
+        {
+            plan = ArtifactRules.NewDraft(await store.VersionsAsync(run.ProjectId, definition.Key, cancellationToken));
+            var drafts = await store.SubjectVersionsAsync(run, definition.Key, plan.SupersededVersions, cancellationToken);
+            foreach (var draft in drafts.Where(d => ArtifactRules.CanTransition(d.Status, ArtifactStatus.Superseded)))
+            {
+                draft.Status = ArtifactStatus.Superseded;
+                await hooks.OnArtifactSupersededAsync(run, draft, plan.Version, cancellationToken);
+            }
+        }
+        else
+        {
+            // FR-345: a fan-out branch numbers its own variant's versions in the run, so concurrent branches never collide
+            // (the run-scope unique index includes the variant) and never supersede each other.
+            var own = (await store.RunVariantsAsync(run, definition.Key, cancellationToken))
+                .FirstOrDefault(a => string.Equals(a.Variant, variant, StringComparison.Ordinal));
+            plan = new NewDraftPlan((own?.Version ?? 0) + 1, own?.Version, []);
         }
 
         var now = time.GetUtcNow();
@@ -229,6 +270,8 @@ public sealed partial class AgentStageRunner
             ReleaseVersionId = AgentStageScope.ReleaseVersionOf(run),
             PipelineRunId = run.Id,
             AgentRunId = agentRun.Id,
+            Variant = variant,
+            ItemIndex = itemIndex,
             CreatedAt = now,
         };
         store.Add(artifact);

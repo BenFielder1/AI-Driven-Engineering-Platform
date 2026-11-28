@@ -32,12 +32,13 @@ public static class RunViewRules
 {
     /// <summary>
     /// §4.57, D-0.7.0-28: the generic status of a run from its stored status (<c>active</c> or a final one):
-    /// final stays final; otherwise <c>waiting_on_gate</c> with a pending gate on the run, <c>running</c> with a queued or
+    /// final stays final, and so does the stored <c>waiting_on_input</c> (FR-335); otherwise <c>waiting_on_gate</c> with a pending gate on the run, <c>running</c> with a queued or
     /// running job for it, else <c>active</c>.
     /// </summary>
     public static GenericRunStatus DeriveStatus(GenericRunStatus stored, bool hasPendingGate, bool hasActiveJob)
     {
-        if (PipelineRunRules.IsFinal(stored))
+        // FR-335: waiting_on_input is stored by the driver, and kept as is.
+        if (PipelineRunRules.IsFinal(stored) || stored == GenericRunStatus.WaitingOnInput)
         {
             return stored;
         }

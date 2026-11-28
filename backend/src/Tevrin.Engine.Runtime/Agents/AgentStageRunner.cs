@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Common;
 using Tevrin.Engine.Domain.Entities;
@@ -28,6 +29,8 @@ public sealed partial class AgentStageRunner(
     IEnumerable<IAgentContextProvider> contextProviders,
     IEnumerable<AgentStageExtension> extensions,
     IServiceProvider services,
+    PipelineRegistryHost registryHost,
+    ILogger<AgentStageRunner> logger,
     TimeProvider time)
 {
     /// <summary>The longest provider error stored on a run (as the SDLC's runner).</summary>
@@ -44,6 +47,12 @@ public sealed partial class AgentStageRunner(
             var outcome = await RunAttemptAsync(request, activity, cancellationToken);
             activity?.SetTag(EngineTelemetry.OutcomeTag, outcome.Valid ? "valid" : "invalid");
             return outcome;
+        }
+        catch (JobDeferredException)
+        {
+            // FR-359: the attempt waits on a tool_approval gate; not an error.
+            activity?.SetTag(EngineTelemetry.OutcomeTag, "waiting");
+            throw;
         }
         catch (JobFailedException ex)
         {
@@ -71,7 +80,7 @@ public sealed partial class AgentStageRunner(
             observer?.Completed(outcome);
             return outcome;
         }
-        catch (Exception ex) when (observer is not null)
+        catch (Exception ex) when (observer is not null && ex is not JobDeferredException)
         {
             observer.Failed(ex);
             throw;
@@ -90,12 +99,51 @@ public sealed partial class AgentStageRunner(
         }
 
         var definition = loaded.Definition;
-        var defined = definition.FindStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
+        var defined = definition.FindAnyStage(request.StageId) ?? throw Permanent($"Pipeline '{definition.Pipeline}' has no stage '{request.StageId}'.");
 
         // D-0.7.0-42: the agent the request names (default: the primary), as a view of the stage with its binding.
         var stage = defined.ForAgent(request.AgentKey) ?? throw Permanent(request.AgentKey is null
             ? $"Stage '{defined.Id}' is not an agent stage."
             : $"Stage '{defined.Id}' binds no agent '{request.AgentKey}'.");
+        if (request.Variant is { } variant)
+        {
+            // FR-345, §4.65: a fan-out branch reads the stage's declared inputs and stores the stage's own output (checked
+            // by the stage's validate guards), labelled with its variant; only the agent (prompt, model, tools) is its own.
+            // FR-354: a follow-up's label (followup:<duration>) is the variant its outputs are stored with.
+            if (!FollowUpRules.IsDeclared(definition, defined.Id, variant) && FanOutRules.BranchOf(defined, variant) is null)
+            {
+                throw Permanent($"Stage '{defined.Id}' has no fan-out branch '{variant}'.");
+            }
+
+            stage = stage with { Inputs = defined.Inputs, Output = defined.Output, Validate = defined.Validate, OnInvalid = defined.OnInvalid };
+        }
+
+        if (request.ItemIndex is not null || request.Reduce)
+        {
+            // FR-355: a map item, or the reduce step, reads the stage's declared inputs and stores the stage's own output
+            // (an item with its index); the binding gives only the agent (prompt, tools, job type) and its own checks.
+            var role = MapRules.RoleOf(defined, request.AgentKey, request.ItemIndex);
+            if (role == MapAgentRole.None || (role == MapAgentRole.Item) == request.Reduce)
+            {
+                throw Permanent($"Stage '{defined.Id}' has no map {(request.Reduce ? "reduce" : "item")} agent '{request.AgentKey}'.");
+            }
+
+            stage = stage with { Inputs = defined.Inputs, Output = defined.Output };
+        }
+
+        if (request.TurnIndex is not null)
+        {
+            // FR-356: a conversation turn: the participant reads the stage's inputs (and its binding's) and stores no
+            // artifact; its reply is the run's output, and the driver stores the transcript as the stage's output.
+            if (request.ItemIndex is not null || request.Reduce || request.Variant is not null
+                || ConversationRules.ParticipantOf(defined, request.AgentKey, request.TurnRole) is null)
+            {
+                throw Permanent($"Stage '{defined.Id}' has no conversation participant '{request.AgentKey}' as '{request.TurnRole}'.");
+            }
+
+            stage = stage with { Inputs = [.. defined.Inputs.Union(stage.Inputs, StringComparer.Ordinal)], Output = null };
+        }
+
         var agent = stage.Agent!;
         activity?.SetTag(EngineTelemetry.AgentTag, agent.Key);
         var existing = request.AgentRunId is { } runId ? await store.FindAgentRunAsync(runId, cancellationToken) : null;
@@ -108,6 +156,13 @@ public sealed partial class AgentStageRunner(
 
         var separate = extension.Policy.CommitRunSeparately;
         var attempt = new AgentAttempt(request, run, loaded.PackId, definition, stage, agent, existing);
+
+        // FR-359, §4.73: a run holding a saved destructive call goes on from it, before anything else: while its gate is
+        // pending this re-defers the job with no model call and nothing saved.
+        if (existing is { Status: AgentRunStatus.Running, ToolLoopState: not null })
+        {
+            return await ContinueToolLoopAsync(attempt, extension, existing, cancellationToken);
+        }
 
         // 1. FR-316: the host's pre-run check.
         if (await extension.CheckBeforeRunAsync(attempt, cancellationToken) is { } refusal)
@@ -170,7 +225,9 @@ public sealed partial class AgentStageRunner(
 
         // FR-312: what the host prepares just before the call (after the run, with its attempt, is saved).
         options = await extension.PrepareCallAsync(attempt, options, cancellationToken);
-        var executor = prepared.Tools.Count > 0 ? new AgentToolExecutor(prepared.Tools, options.ToolSession) : null;
+        // FR-358: the stage's tools within its max_tier are offered; FR-359: a destructive one stops the loop for approval,
+        // and an external one is refused when called (FR-360, until its gate).
+        var executor = prepared.Tools.Count > 0 ? AgentToolExecutor.ForStage(prepared.Tools, prepared.MaxTier, options.ToolSession, logger) : null;
 
         var llmRequest = new LlmRequest
         {

@@ -77,6 +77,29 @@ public sealed class AgentRun
     /// <summary>FR-297: <see cref="Input"/> was cut at the cap.</summary>
     public bool InputTruncated { get; set; }
 
+    /// <summary>FR-350: the validator findings on this attempt's output (JSON array of
+    /// <c>{ path?, claim?, reason, severity }</c>); <c>null</c> when the stage has no validator.</summary>
+    public string? ValidatorFindings { get; set; }
+
+    /// <summary>FR-351: the agent feedback entries injected into this run's prompt (<c>agent_feedback</c> ids, newest
+    /// first); <c>null</c> when the stage doesn't inject feedback.</summary>
+    public IReadOnlyList<Guid>? FeedbackIds { get; set; }
+
+    /// <summary>FR-355: the 0-based map item index the run worked on; null outside a map.</summary>
+    public int? ItemIndex { get; set; }
+
+    /// <summary>FR-356, §4.69: the 1-based conversation turn this run produced; null outside a conversation.</summary>
+    public int? TurnIndex { get; set; }
+
+    /// <summary>FR-356: the participant role that spoke this turn (the definition's <c>role</c>); null outside a
+    /// conversation.</summary>
+    public string? TurnRole { get; set; }
+
+    /// <summary>FR-359, §4.73: the saved tool loop (messages so far and the pending destructive call) as redacted JSON, at
+    /// most 1 MB; null when no destructive call is waiting. The call's state (pending_approval, approved/denied, resumed)
+    /// is read from this and the run's <c>tool_approval</c> gate.</summary>
+    public string? ToolLoopState { get; set; }
+
     /// <summary>FR-297: milliseconds from the call to the first streamed token of the last attempt; null when the provider
     /// didn't stream (or before 0.7.0).</summary>
     public long? LatencyMs { get; set; }

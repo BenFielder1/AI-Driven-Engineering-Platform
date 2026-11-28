@@ -85,7 +85,7 @@ public sealed partial class ApprovalLinkService(
         var reject = links.FirstOrDefault(l => l.Decision == ApprovalLinkDecision.Reject);
         return approve is null || reject is null
             ? null
-            : new ApprovalLinkUrls(Url(approve.Id), Url(reject.Id));
+            : new ApprovalLinkUrls(Url(approve), Url(reject));
     }
 
     /// <summary>The link a token names, if the token is genuine (MAC and stored hash match, constant time); else <c>null</c>.</summary>
@@ -100,7 +100,8 @@ public sealed partial class ApprovalLinkService(
         return link is not null && ApprovalTokens.Verify(_key, linkId, nonce, link.NonceHash) ? link : null;
     }
 
-    private string Url(Guid linkId) => app.Value.Absolute($"/approvals/{ApprovalTokens.Create(_key!, linkId)}");
+    // FR-326: a link created before 0.8.0 keeps its pre-0.8.0 token (its stored hash is of that nonce).
+    private string Url(ApprovalLink link) => app.Value.Absolute($"/approvals/{ApprovalTokens.Create(_key!, link.Id, link.NonceHash)}");
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No one-click approval links for gate {GateId}: Approvals:SigningKey is not set (or shorter than 32 characters).")]
     private static partial void LogNoSigningKey(ILogger logger, Guid gateId);

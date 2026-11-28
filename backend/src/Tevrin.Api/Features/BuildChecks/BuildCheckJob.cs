@@ -1,0 +1,319 @@
+using Microsoft.EntityFrameworkCore;
+using Tevrin.Api.Agents;
+using Tevrin.Api.Features.Deployments;
+using Tevrin.Api.Features.Execution;
+using Tevrin.Api.Features.Lifecycle;
+using Tevrin.Api.Features.Review;
+using Tevrin.Domain.Access;
+using Tevrin.Domain.Common;
+using Tevrin.Domain.Deployments;
+using Tevrin.Domain.Entities;
+using Tevrin.Domain.Execution;
+using Tevrin.Domain.Lifecycle;
+using Tevrin.Domain.Review;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Engine.Runtime.Persistence;
+using Tevrin.Infrastructure.Persistence;
+using Tevrin.Infrastructure.Persistence.Conversion;
+using Tevrin.Pack.Sdlc;
+
+namespace Tevrin.Api.Features.BuildChecks;
+
+/// <summary>
+/// The <c>build_check</c> job (FR-255, §4.47): one poll of a build check. Its queueing, deferral and end hook
+/// (<see cref="BuildCheckJobEndedHook"/>) are unchanged; the poll itself is the stage handler
+/// <see cref="SdlcBuildCheckStageHandler"/> (FR-319, D-0.7.0-43), run through the engine when the run's definition declares
+/// it, else directly (<see cref="SdlcStageHandlerJob"/>).
+/// </summary>
+public sealed class BuildCheckJobHandler(SdlcStageHandlerJob stages, SdlcBuildCheckStageHandler handler) : IJobHandler
+{
+    public const string AdvanceReason = "Build check finished; pull request opened";
+
+    public Task HandleAsync(JobExecution job, CancellationToken cancellationToken) =>
+        stages.RunAsync(job, handler, cancellationToken);
+}
+
+/// <summary>
+/// FR-255, §4.47: one poll of a build check. It reads the same sources review reads — the version's newest preview rollout
+/// (<see cref="PreviewCollector"/>) and the PR head's checks with their required marks (<see cref="ExternalChecksCollector"/>)
+/// — and lets <see cref="BuildCheckRules.Decide"/> rule:
+/// <list type="bullet">
+/// <item><c>waiting</c>: the job defers itself to the re-check time (never sleeps), keeping when the waits started in its
+/// payload. Results for an older SHA count as not there yet. D-0.6.1-23: the sources are stored only when they changed, and
+/// then pushed live (<c>BUILD_CHECK_UPDATED</c> → <c>buildCheckUpdated</c>).</item>
+/// <item><c>failed</c>: the failures (failure id, fingerprint, message, excerpt, error summary) are stored and the build-fix
+/// job is queued (FR-256).</item>
+/// <item><c>passed</c>, <c>skipped</c>, <c>exhausted</c>: the pull request job's advance to Review runs (expected from
+/// execution) with no new rollout; review's collectors read the same rollout and checks.</item>
+/// </list>
+/// A project that left execution, or moved to another version, cancels the check. Redelivery is safe: a final or failed
+/// check is left alone. D-0.6.1-23: the Git host never ends the check early. Branch rules it refuses (403/404) mean no
+/// required check (one warning per check), and checks it can't serve (5xx, 429, network, timeout) count as not reported yet:
+/// the check keeps waiting and, at the checks timeout, goes on without them. Only unexpected errors fail the job.
+/// FR-319, D-0.7.0-43: the poll is the stage handler <c>sdlc.build-check</c> (declared in the <c>execution</c> stage's
+/// <c>handlers:</c>), which <see cref="BuildCheckJobHandler"/> runs through the engine. It logs as the job handler did
+/// (category <see cref="BuildCheckJobHandler"/>).
+/// </summary>
+public sealed partial class SdlcBuildCheckStageHandler(
+    TevrinDbContext db,
+    BuildCheckService buildChecks,
+    JobEnqueuer jobs,
+    PreviewCollector previews,
+    ExternalChecksCollector externalChecks,
+    RolloutScheduler rollouts,
+    LifecycleService lifecycle,
+    TimeProvider time,
+    ILogger<BuildCheckJobHandler> logger) : SdlcJobStageHandler
+{
+    public override string Name => SdlcStageHandlerNames.BuildCheck;
+
+    public override async Task RunJobAsync(JobExecution job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var payload = BuildCheckService.Payload<BuildCheckJobPayload>(job, "build check");
+        var check = await db.BuildChecks.FirstOrDefaultAsync(c => c.Id == payload.BuildCheckId, cancellationToken);
+        if (check is null || check.Status != BuildCheckStatus.Waiting || check.SupersededAt is not null)
+        {
+            LogSkipped(logger, "the check is gone or no longer waiting");
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == check.ProjectId, cancellationToken);
+        if (project is null || project.CurrentPhase != Phase.Execution
+            || (project.CurrentReleaseVersionId ?? await db.CurrentReleaseVersionIdAsync(project.Id, cancellationToken)) != check.ReleaseVersionId)
+        {
+            // §4.47: execution was stopped (the project left execution) or the version changed.
+            buildChecks.Complete(check, BuildCheckStatus.Cancelled, [], [], now, endReason: BuildCheckEndReason.CancelledByChange);
+            await SaveAsync(cancellationToken);
+            return;
+        }
+
+        var (preview, rollout) = await PreviewAsync(project.Id, check.ReleaseVersionId, cancellationToken);
+        var collected = await externalChecks.ReadAsync(project, excerpts: false, cancellationToken);
+        payload = Warn(project.Id, check.Id, payload, collected);
+        var observation = new BuildCheckObservation(check.HeadSha, preview, ChecksOf(collected))
+        {
+            PreviewWaitSince = payload.PreviewWaitSince,
+            ChecksWaitSince = payload.ChecksWaitSince,
+        };
+        var decision = BuildCheckRules.Decide(observation, await buildChecks.FixesUsedAsync(check, cancellationToken), project.MaxBuildFixAttempts, now);
+        if (decision.Wait)
+        {
+            // D-0.6.1-23: an unchanged poll saves and pushes nothing.
+            if (buildChecks.Progress(check, decision.Sources, now))
+            {
+                await SaveAsync(cancellationToken);
+            }
+
+            LogWaiting(logger, project.Id, check.Id, check.Attempt);
+            throw new JobDeferredException(
+                "Waiting for the preview build and the required checks of the head commit (build check).",
+                decision.RecheckAt!.Value,
+                TevrinJson.Serialize(payload with { PreviewWaitSince = decision.PreviewWaitSince, ChecksWaitSince = decision.ChecksWaitSince }));
+        }
+
+        IReadOnlyList<BuildCheckFailure> failures = [];
+        if (decision.Status is BuildCheckStatus.Failed or BuildCheckStatus.Exhausted)
+        {
+            // The failed checks' excerpts and logs are fetched once, now that the decision is final (not on every poll).
+            if (collected is { Unreadable: null } && collected.Checks.Any(c => c.Required && Domain.Releases.MergeReadinessRules.IsFailing(c))
+                && await externalChecks.ReadAsync(project, excerpts: true, cancellationToken) is { Unreadable: null } withExcerpts)
+            {
+                collected = withExcerpts;
+            }
+
+            failures = await FailuresAsync(check.HeadSha, rollout, collected, decision, cancellationToken);
+        }
+
+        buildChecks.Complete(check, decision.Status, decision.Sources, failures, now, endReason: decision.EndReason);
+        if (decision.PlanFix)
+        {
+            jobs.Enqueue(SdlcJobTypes.BuildFix, new BuildFixJobPayload(project.Id, check.Id), project.Id, now);
+            await SaveAsync(cancellationToken);
+            return;
+        }
+
+        await AdvanceAsync(project.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// D-0.6.1-23: the checks as the rules see them: <c>null</c> without a checks host or PR, not read on this poll when the
+    /// Git host failed, else the head's checks with whether the branch rules were readable.
+    /// </summary>
+    private static BuildCheckChecks? ChecksOf(CollectedChecks? collected) => collected switch
+    {
+        null => null,
+        { Unreadable: { } reason } => BuildCheckChecks.NotRead(reason),
+        _ => new BuildCheckChecks(collected.HeadSha, collected.Checks) { RulesUnavailable = collected.RulesUnavailable },
+    };
+
+    /// <summary>D-0.6.1-23: one warning per check about unreadable branch rules, and one about unreadable checks (kept in the payload).</summary>
+    private BuildCheckJobPayload Warn(Guid projectId, Guid checkId, BuildCheckJobPayload payload, CollectedChecks? collected)
+    {
+        if (collected?.RulesUnavailable is { } rules && !payload.RulesWarned)
+        {
+            LogRulesUnavailable(logger, projectId, checkId, rules);
+            payload = payload with { RulesWarned = true };
+        }
+
+        if (collected?.Unreadable is { } reason && !payload.UnreadableWarned)
+        {
+            LogChecksUnreadable(logger, projectId, checkId, reason);
+            payload = payload with { UnreadableWarned = true };
+        }
+
+        return payload;
+    }
+
+    /// <summary>The PR job's advance to Review (expected from execution), committing the check with the transition.</summary>
+    private async Task AdvanceAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var advanced = await lifecycle.AdvanceAsync(projectId, BuildCheckJobHandler.AdvanceReason, SystemActor.Name, cancellationToken, expectedFrom: Phase.Execution);
+        if (advanced.IsSuccess)
+        {
+            return;
+        }
+
+        switch (advanced.Error!.Code)
+        {
+            case ErrorCodes.Conflict:
+                throw new JobFailedException("The advance to review collided with a concurrent change.", transient: true, ErrorCodes.Conflict);
+            default:
+                // The check's result stands; the state machine refused (e.g. a precondition): keep the check.
+                LogAdvanceRefused(logger, advanced.Error.Code, advanced.Error.Message);
+                await SaveAsync(cancellationToken);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// The version's preview as the build check sees it: the newest rollout's commit, state and components (hosts without
+    /// previews left out), or no rollout yet while one would have steps; <c>null</c> without a preview target.
+    /// </summary>
+    private async Task<(BuildCheckPreview? Preview, RolloutDto? Rollout)> PreviewAsync(Guid projectId, Guid versionId, CancellationToken cancellationToken)
+    {
+        if (await previews.NewestRolloutJobAsync(projectId, versionId, cancellationToken) is not { } job)
+        {
+            return await rollouts.HasStepsAsync(projectId, DeploymentEnvironment.Preview, cancellationToken)
+                ? (new BuildCheckPreview(null, null, []), null)
+                : (null, null);
+        }
+
+        var rollout = await previews.RolloutAsync(job, cancellationToken);
+        var components = rollout.Steps
+            .Where(s => s.Step != RolloutStepKind.Migrations && s.State != RolloutStepState.Skipped && s.Provider is not null)
+            .Select(s => new BuildCheckPreviewComponent(RolloutRules.ComponentOf(s.Step), s.Provider!.Value, s.Status, s.Url))
+            .ToList();
+        return (new BuildCheckPreview(rollout.GitSha, rollout.State, components), rollout);
+    }
+
+    /// <summary>
+    /// FR-256: the failures of the head's sources (preview findings with their build log tails, failed required checks with
+    /// their excerpts) plus the timed-out sources; a failing source without a finding gets a plain failure.
+    /// </summary>
+    private async Task<IReadOnlyList<BuildCheckFailure>> FailuresAsync(
+        string head, RolloutDto? rollout, CollectedChecks? checks, BuildCheckDecision decision, CancellationToken cancellationToken)
+    {
+        var inputs = new List<BuildCheckFailureInput>();
+        if (rollout is not null && BuildCheckRules.SameSha(rollout.GitSha, head))
+        {
+            var outcomes = rollout.Steps
+                .Where(s => s.Step != RolloutStepKind.Migrations && s.Status is { } && s.Provider is { })
+                .Select(s => new RolloutComponentOutcome(RolloutRules.ComponentOf(s.Step), s.Provider!.Value, s.Status!.Value, s.ErrorCode, s.ErrorMessage, s.BuildLogTail, s.Url))
+                .ToList();
+            var logs = outcomes.ToDictionary(o => RolloutFindings.FailureId(o, outcomes), o => o.BuildLogTail, StringComparer.Ordinal);
+            foreach (var finding in await previews.FindingsAsync(rollout, cancellationToken))
+            {
+                inputs.Add(new BuildCheckFailureInput(finding, finding.FailureId is { } id ? logs.GetValueOrDefault(id) : null));
+            }
+        }
+
+        if (checks is not null && BuildCheckRules.SameSha(checks.HeadSha, head))
+        {
+            inputs.AddRange(checks.Findings().Select(f => new BuildCheckFailureInput(f, null)));
+        }
+
+        var failures = BuildCheckFailures.Collect(inputs, decision.TimedOut).ToList();
+        if (failures.Count == 0)
+        {
+            // A failing source the collectors gave no finding for (e.g. a blocked rollout): name it, so a fix can be planned.
+            foreach (var name in decision.Failing)
+            {
+                var preview = decision.Sources.Any(s => s.Name == name && s.Kind == BuildCheckSourceKind.Preview);
+                var id = preview ? FailureIds.Of(FailureIds.Preview, "preview") : FailureIds.Of(FailureIds.Check, name);
+                if (failures.All(f => f.FailureId != id))
+                {
+                    failures.Add(new BuildCheckFailure(id, id, $"{name} failed", preview ? FailureIds.Preview : FailureIds.Check, null));
+                }
+            }
+        }
+
+        return failures;
+    }
+
+    private async Task SaveAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            throw new JobFailedException($"The build check collided with a concurrent change: {ex.GetType().Name}.", transient: true, ErrorCodes.Conflict);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Build check job did nothing: {Reason}")]
+    private static partial void LogSkipped(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Build check {BuildCheckId} of project {ProjectId} (attempt {Attempt}) waits for its sources")]
+    private static partial void LogWaiting(ILogger logger, Guid projectId, Guid buildCheckId, int attempt);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The build check finished but the advance to review was refused ({ErrorCode}): {Reason}")]
+    private static partial void LogAdvanceRefused(ILogger logger, string errorCode, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Build check {BuildCheckId} of project {ProjectId} goes on without required checks: the branch rules couldn't be read: {Reason}")]
+    private static partial void LogRulesUnavailable(ILogger logger, Guid projectId, Guid buildCheckId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Build check {BuildCheckId} of project {ProjectId} couldn't read the Git host's checks and keeps waiting: {Reason}")]
+    private static partial void LogChecksUnreadable(ILogger logger, Guid projectId, Guid buildCheckId, string reason);
+}
+
+/// <summary>
+/// A build-check or build-fix job that ended without succeeding must not leave the project waiting in execution forever:
+/// its check ends <c>exhausted</c> (§4.47 "any → exhausted") with the end reason <c>job_failed</c> (D-0.6.1-23), its
+/// unfinished fix steps are dropped and the pull request job is queued, which advances to Review with the failures.
+/// </summary>
+public sealed class BuildCheckJobEndedHook(BuildCheckService buildChecks, TimeProvider time) : IJobEndedHook
+{
+    public async Task OnJobEndedAsync(IEngineDbContext engineDb, JobEnded job, CancellationToken cancellationToken)
+    {
+        var db = engineDb.AsTevrin();
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(job);
+        if (job.JobType is not (SdlcJobTypes.BuildCheck or SdlcJobTypes.BuildFix) || job.ProjectId is not { } projectId)
+        {
+            return;
+        }
+
+        var payload = await db.Jobs.AsNoTracking().Where(j => j.Id == job.JobId).Select(j => j.Payload).FirstOrDefaultAsync(cancellationToken);
+        Guid? checkId;
+        try
+        {
+            checkId = payload is null ? null : TevrinJson.Deserialize<BuildFixJobPayload>(payload).BuildCheckId;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            checkId = null;
+        }
+
+        if (checkId is null || await db.BuildChecks.FirstOrDefaultAsync(c => c.Id == checkId && c.ProjectId == projectId, cancellationToken) is not { } check)
+        {
+            return;
+        }
+
+        var planId = await ExecutionQueries.CurrentPlanIdAsync(db, projectId, cancellationToken);
+        await buildChecks.ExhaustAsync(check, planId, SystemActor.Name, BuildCheckEndReason.JobFailed, time.GetUtcNow(), cancellationToken);
+    }
+}

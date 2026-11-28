@@ -15,8 +15,8 @@ cp .env.example .env                 # pick your own POSTGRES_PASSWORD (git-igno
 docker compose up -d db              # PostgreSQL 18 on 127.0.0.1:5432
 cd backend
 dotnet tool restore
-dotnet user-secrets set "ConnectionStrings:Aide" "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<POSTGRES_PASSWORD from .env>" --project src/Aide.Api
-dotnet ef database update --project src/Aide.Infrastructure --startup-project src/Aide.Api
+dotnet user-secrets set "ConnectionStrings:Tevrin" "Host=localhost;Port=5432;Database=aide;Username=aide;Password=<POSTGRES_PASSWORD from .env>" --project src/Tevrin.Api
+dotnet ef database update --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api
 cd ../frontend && npm ci
 ```
 
@@ -24,7 +24,7 @@ cd ../frontend && npm ci
 
 ```bash
 docker compose up -d db                                   # dev database (PostgreSQL 18, values from .env)
-dotnet run --project backend/src/Aide.Api                 # http://localhost:5080
+dotnet run --project backend/src/Tevrin.Api                 # http://localhost:5080
 npm --prefix frontend run dev                             # http://localhost:3000 (proxies /api + WebSockets → BACKEND_URL, default 5080)
 ```
 
@@ -42,7 +42,7 @@ The Development environment enables the seed. On first start it creates the Admi
 
 ## Change the schema
 
-New migration: `dotnet ef migrations add <Name> --project src/Aide.Infrastructure --startup-project src/Aide.Api` (from `backend/`). Never edit a committed migration.
+New migration: `dotnet ef migrations add <Name> --project src/Tevrin.Infrastructure --startup-project src/Tevrin.Api` (from `backend/`). Never edit a committed migration.
 
 If you used the dev loop before the move to PostgreSQL 18, `docker compose up` now starts on a new, empty volume. See [Upgrade local data from PostgreSQL 17 to 18](../operations/postgres-18-upgrade.md).
 

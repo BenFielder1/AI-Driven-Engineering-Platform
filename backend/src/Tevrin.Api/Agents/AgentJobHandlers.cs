@@ -1,0 +1,340 @@
+using System.Globalization;
+using Tevrin.Api.Features.Stack;
+using Tevrin.Domain.Agents;
+using Tevrin.Domain.Artifacts;
+using Tevrin.Domain.Execution;
+using Tevrin.Domain.Specs;
+using Tevrin.Domain.Stack;
+using Tevrin.Domain.Trackers;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Runtime.Jobs;
+using Tevrin.Pack.Sdlc;
+
+namespace Tevrin.Api.Agents;
+
+/// <summary>
+/// FR-27 (and the FR-17/FR-20 re-runs of the project request): one idea refinement round. Inputs: the project name and
+/// idea, the draft to improve (the rejected draft on an artifact rejection, else the latest intact version), the answers
+/// given for this round and any reviewer feedback. The reply (<c>{"projectRequest", "questions"}</c>) becomes a new
+/// <c>project_request</c> draft; the questions stay in the run's output and the answers in its <c>user_feedback</c>
+/// (and the job payload), where <c>GET /refinement</c> reads them. An unreadable reply is re-run once, then fails the run
+/// with <c>INVALID_OUTPUT</c>.
+/// <para>
+/// FR-70, FR-72: in a version with existing code the agent also gets the codebase summary, the previous released
+/// version's locked project request and spec (all listed as input artifacts) and the repo tools at the base commit. If
+/// the summary doesn't exist yet the job waits for it (<see cref="SummaryWaiter"/>), then continues without it.
+/// </para>
+/// FR-318: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), with 0.6.1's records and order.
+/// </summary>
+public sealed class IdeaRefinementJobHandler(
+    SdlcAgentStageJob agentJob,
+    AgentJobInputs inputs,
+    IterationContextReader iterations,
+    VersionStackLoader stacks,
+    TimeProvider time,
+    ILogger<IdeaRefinementJobHandler> logger) : IJobHandler
+{
+    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var payload = AgentJobInputs.Payload(job);
+        var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
+        if (project is null || !AgentJobInputs.ShouldRun(payload, SdlcArtifacts.ProjectRequest, project))
+        {
+            AgentJobLog.Skipped(logger, job.Type, payload.Trigger, project?.CurrentPhase);
+            return;
+        }
+
+        var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
+        var waitWarning = await SummaryWaiter.WaitAsync(iterations, iteration, project.Id, time, cancellationToken);
+
+        // FR-172: a queued or running import is waited for like the summary (re-queued, up to 10 minutes).
+        var sourceWarning = await SourceItemsWaiter.WaitAsync(inputs, iteration.Version?.Id, time, cancellationToken);
+        var sourceItems = await inputs.CurrentAsync(project.Id, SdlcArtifacts.SourceItems, cancellationToken);
+        var draft = await inputs.PreviousAsync(payload, SdlcArtifacts.ProjectRequest, cancellationToken)
+            ?? await inputs.LatestIntactAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
+        var answers = RefinementRules.FormatAnswers(payload.Answers);
+
+        // FR-128: the composition and, for a version with existing code, the detector's evidence and mismatches.
+        var stack = (await stacks.CurrentAsync(project.Id, cancellationToken, readBase: iteration.HasExistingCode, detect: iteration.HasExistingCode)).ThrowIfUnresolvable();
+        AgentRunRequest Request(string? feedback) => new()
+        {
+            ProjectId = project.Id,
+            Agent = SdlcAgents.IdeaRefinement,
+            Job = job,
+            Inputs = new Dictionary<string, string?>
+            {
+                ["PROJECT_NAME"] = project.Name,
+                ["IDEA"] = project.Idea,
+                ["SOURCE_ITEMS"] = sourceItems?.Content,
+                ["CURRENT_DRAFT"] = draft?.Content,
+                ["ANSWERS"] = answers,
+                ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
+                ["PREVIOUS_PROJECT_REQUEST"] = iteration.BaselineProjectRequest?.Content,
+                ["PREVIOUS_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
+                ["STACK_GUIDANCE"] = stack.Stack is { } resolution ? StackGuidance.Refinement(resolution, stack.Detection) : null,
+                ["STACK_DETECTION"] = StackGuidance.DetectionInput(stack.Detection),
+                [SdlcAgentRuns.FeedbackInput] = feedback,
+            },
+            Stack = stack.Stack,
+            InputArtifacts = [.. new[] { draft, sourceItems }.OfType<Artifact>().Concat(iteration.Artifacts).Select(AgentJobInputs.Ref)],
+            UserFeedback = RefinementRules.RunFeedback(payload.Answers, feedback),
+            Repo = RepoScope.BaseCommit,
+            Warnings = [.. new[] { waitWarning, sourceWarning }.OfType<string>()],
+            SourceItemsBytes = SourceItemsWaiter.ByteCount(sourceItems),
+        };
+
+        await agentJob.RunAsync(
+            Request(payload.Feedback),
+            new ArtifactAgentSpec(
+                SdlcArtifacts.ProjectRequest,
+                text =>
+                {
+                    var parsed = RefinementRules.Parse(text);
+                    return parsed.IsSuccess ? Result.Success(parsed.Value.ProjectRequest) : Result.Failure<string>(parsed.Error!);
+                },
+                (_, error) => Request(ArtifactAgentSpec.JoinFeedback(
+                    payload.Feedback,
+                    $"Your previous reply was rejected: {error.Message} Respond with only the JSON object described above."))),
+            payload.Trigger,
+            cancellationToken);
+    }
+}
+
+/// <summary>
+/// FR-28 (with the FR-13/FR-17/FR-20 re-runs): generates the technical specification from the current approved project
+/// request (none → the run fails with <c>MISSING_INPUT</c>). On a rejection re-run the rejected version and the comment are
+/// given to revise. The reply is validated by <see cref="SpecValidator"/> (FR-75, §4.13) in the version's context
+/// (<see cref="IterationContext.SpecContext"/>: first version, new version against the baseline spec's ids, or an import's
+/// first version); a failure (<c>MISSING_SECTIONS</c>, <c>MISSING_REQUIREMENT_IDS</c>, <c>INVALID_REQUIREMENT_TAGS</c>) is
+/// re-run once with every problem as feedback; still failing → the run fails with that code and no draft is created.
+/// Iterations also get the codebase summary, the baseline spec and the repo tools at the base commit. FR-123: with a stack
+/// composition the prompt gets its summary, extra sections with guidance and conventions (<see cref="StackGuidance.Spec"/>),
+/// and validation requires those sections (a missing one is named in the corrective re-run).
+/// FR-318: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>), with 0.6.1's records and order.
+/// </summary>
+public sealed class SpecGenerationJobHandler(
+    SdlcAgentStageJob agentJob,
+    AgentJobInputs inputs,
+    IterationContextReader iterations,
+    VersionStackLoader stacks,
+    ILogger<SpecGenerationJobHandler> logger) : IJobHandler
+{
+    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var payload = AgentJobInputs.Payload(job);
+        var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
+        if (project is null || !AgentJobInputs.ShouldRun(payload, SdlcArtifacts.TechnicalSpecification, project))
+        {
+            AgentJobLog.Skipped(logger, job.Type, payload.Trigger, project?.CurrentPhase);
+            return;
+        }
+
+        var projectRequest = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
+        var previous = await inputs.PreviousAsync(payload, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var iteration = await iterations.ReadAsync(project.Id, cancellationToken);
+        var sourceItems = await inputs.CurrentAsync(project.Id, SdlcArtifacts.SourceItems, cancellationToken);
+
+        // FR-123, FR-128: with a composition, its required sections (with "Stack Migration" for a stack change, or when the
+        // imported code doesn't match it).
+        var stack = (await stacks.CurrentAsync(project.Id, cancellationToken, readBase: iteration.HasExistingCode, detect: iteration.HasExistingCode)).ThrowIfUnresolvable();
+        var mismatches = stack.Detection?.Mismatches;
+        if (stack.Stack is { } composed)
+        {
+            iteration = iteration with { StackSections = [.. StackGuidance.SpecSections(composed, mismatches).Select(s => s.Title)] };
+        }
+
+        var context = iteration.SpecContext;
+        var guidance = stack.Stack is { } resolution ? StackGuidance.Spec(resolution, mismatches) : null;
+        AgentRunRequest Request(string? previousSpec, string? feedback) => new()
+        {
+            ProjectId = project.Id,
+            Agent = SdlcAgents.SpecGenerator,
+            Job = job,
+            Inputs = new Dictionary<string, string?>
+            {
+                ["PROJECT_REQUEST"] = projectRequest?.Content,
+                ["SOURCE_ITEMS"] = sourceItems?.Content,
+                ["SPEC_MODE"] = context.Mode,
+                ["BASELINE_SPECIFICATION"] = iteration.BaselineSpecification?.Content,
+                ["CODEBASE_SUMMARY"] = iteration.CodebaseSummary?.Content,
+                ["PREVIOUS_SPECIFICATION"] = previousSpec,
+                ["STACK_GUIDANCE"] = guidance,
+            },
+            Stack = stack.Stack,
+            InputArtifacts = [.. new[] { projectRequest, previous, sourceItems, iteration.CodebaseSummary, iteration.BaselineSpecification }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            UserFeedback = feedback,
+            Repo = RepoScope.BaseCommit,
+            SourceItemsBytes = SourceItemsWaiter.ByteCount(sourceItems),
+        };
+
+        await agentJob.RunAsync(
+            Request(previous?.Content, payload.Feedback),
+            new ArtifactAgentSpec(
+                SdlcArtifacts.TechnicalSpecification,
+                text => SpecValidator.Check(AgentOutput.UnwrapFence(text), context),
+                (rejected, error) => Request(
+                    AgentOutput.UnwrapFence(rejected),
+                    ArtifactAgentSpec.JoinFeedback(payload.Feedback, SpecValidator.CorrectiveFeedback(error, context)))),
+            payload.Trigger,
+            cancellationToken);
+    }
+}
+
+/// <summary>
+/// FR-29 (with the FR-13/FR-17/FR-20 re-runs): generates the implementation plan from the current approved project request
+/// and specification. The reply is structured JSON, read and validated by the plan rules (<see cref="PlanValidator"/>, with
+/// the project's max files per step, and no protected paths: a generated plan may not declare them, §4.6); the draft is the
+/// plan rendered by <see cref="PlanDocument.RenderChecked"/> (Markdown plus the canonical <c>```tevrin-plan</c> block, proven
+/// to read back to the same steps). An invalid plan is re-run once with every reason as feedback; still invalid → the run
+/// fails with <c>INVALID_PLAN</c> and no draft is created. Steps carry <c>agent</c> and <c>covers</c> (FR-76); an
+/// iteration plan that leaves a <c>[new]</c>/<c>[changed]</c> requirement uncovered is a warning, shown with the plan
+/// (<see cref="PlanScope"/>, §4.13). Iterations also get the codebase summary and the repo tools at the base commit.
+/// FR-124: with a stack composition the prompt gets its specialists and plan rules (<see cref="StackGuidance.Plan"/>), and
+/// the plan is validated with them (<see cref="PlanAgents.ForStack"/>: specialist keys, ordering/exclusive/file-limit rules,
+/// scaffold first on an empty repository, the protected-path ownership exception); its warnings are shown with the draft.
+/// FR-242, FR-243: the guidance lists the deploy targets' required files, and a step is added for each one the plan and the
+/// base commit both lack (<see cref="DeployFileSteps"/>) before the plan is validated and stored.
+/// FR-318, FR-314: the agent runs on the engine runner (<see cref="SdlcAgentStageJob"/>); until the definition declares
+/// <c>validate:</c> (FR-321), the plan check and its one corrective re-run are the SDLC extension's host hooks.
+/// </summary>
+public sealed class PlanGenerationJobHandler(
+    SdlcAgentStageJob agentJob,
+    AgentJobInputs inputs,
+    IterationContextReader iterations,
+    VersionStackLoader stacks,
+    SdlcPlanChecks planChecks,
+    ILogger<PlanGenerationJobHandler> logger) : IJobHandler
+{
+    public async Task HandleAsync(JobExecution job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var payload = AgentJobInputs.Payload(job);
+        var project = await inputs.ProjectAsync(payload.ProjectId, cancellationToken);
+        if (project is null || !AgentJobInputs.ShouldRun(payload, SdlcArtifacts.ImplementationPlan, project))
+        {
+            AgentJobLog.Skipped(logger, job.Type, payload.Trigger, project?.CurrentPhase);
+            return;
+        }
+
+        var projectRequest = await inputs.CurrentAsync(project.Id, SdlcArtifacts.ProjectRequest, cancellationToken);
+        var spec = await inputs.CurrentAsync(project.Id, SdlcArtifacts.TechnicalSpecification, cancellationToken);
+        var previous = await inputs.PreviousAsync(payload, SdlcArtifacts.ImplementationPlan, cancellationToken);
+        var summary = (await iterations.ReadAsync(project.Id, cancellationToken)).CodebaseSummary;
+        var maxFiles = project.MaxFilesPerStep;
+        var version = (await stacks.CurrentAsync(project.Id, cancellationToken)).ThrowIfUnresolvable();
+        var agents = version.PlanAgents(SdlcArtifacts.ImplementationPlan);
+
+        // FR-124: the composition's specialists and composed rules, else none (generalist).
+        var guidance = version.Stack is { } stack ? StackGuidance.Plan(stack, version.RepoEmpty, version.BaseFiles) : null;
+        // FR-321: the same check backs the content and the planning stage's sdlc.plan-valid guard (no second stack read).
+        var check = SdlcPlanCheck.Of(maxFiles, version);
+        planChecks.Set(project.Id, check);
+        AgentRunRequest Request(string? previousPlan, string? feedback) => new()
+        {
+            ProjectId = project.Id,
+            Agent = SdlcAgents.PlanGenerator,
+            Job = job,
+            Inputs = new Dictionary<string, string?>
+            {
+                ["PROJECT_REQUEST"] = projectRequest?.Content,
+                ["TECHNICAL_SPECIFICATION"] = spec?.Content,
+                ["CODEBASE_SUMMARY"] = summary?.Content,
+                ["PREVIOUS_PLAN"] = previousPlan,
+                ["MAX_FILES_PER_STEP"] = maxFiles.ToString(CultureInfo.InvariantCulture),
+                ["STACK_GUIDANCE"] = guidance,
+            },
+            Stack = version.Stack,
+            InputArtifacts = [.. new[] { projectRequest, spec, previous, summary }.OfType<Artifact>().Select(AgentJobInputs.Ref)],
+            UserFeedback = feedback,
+            Repo = RepoScope.BaseCommit,
+        };
+
+        await agentJob.RunAsync(
+            Request(previous is null ? null : PreviousPlanJson(previous.Content, agents), payload.Feedback),
+            new ArtifactAgentSpec(
+                SdlcArtifacts.ImplementationPlan,
+                check.ToContent,
+                (rejected, error) => Request(
+                    AgentOutput.ExtractJsonObject(rejected) ?? rejected,
+                    ArtifactAgentSpec.JoinFeedback(payload.Feedback, PlanDocument.CorrectiveFeedback(error)))),
+            payload.Trigger,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// A stored plan as the agent's JSON (the canonical block), or the Markdown when it has no valid block. FR-244: without
+    /// <c>addedBy</c>/<c>addedReason</c>, so a step the agent keeps on regeneration is agent-written.
+    /// </summary>
+    private static string PreviousPlanJson(string markdown, PlanAgents agents)
+    {
+        var parsed = PlanDocument.ParseMarkdown(markdown, maxFilesPerStep: null, agents);
+        return parsed.IsSuccess
+            ? PlanDocument.ToJson([.. parsed.Value.Select(s => s with { AddedBy = null, AddedReason = null })])
+            : markdown;
+    }
+}
+
+/// <summary>
+/// FR-70: a refinement run in a version with existing code waits for the Repository Analyst's summary: the job is
+/// deferred (<see cref="JobDeferredException"/>, re-queued without counting an attempt) while the analyst is queued or
+/// running, up to 10 minutes after the version started (<see cref="CodebaseSummaryWait"/>); then the run goes on
+/// without it and records the warning.
+/// </summary>
+internal static class SummaryWaiter
+{
+    public const string WaitingMessage = "Waiting for the Repository Analyst's codebase summary (FR-70).";
+
+    /// <summary>The warning to record (<c>null</c>: none), or throws <see cref="JobDeferredException"/> to wait.</summary>
+    public static async Task<string?> WaitAsync(IterationContextReader reader, IterationContext iteration, Guid projectId, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (iteration.Version is not { } version || !iteration.HasExistingCode || iteration.CodebaseSummary is not null)
+        {
+            return null;
+        }
+
+        var state = await reader.AnalysisStateAsync(projectId, version.Id, cancellationToken);
+        var decision = CodebaseSummaryWait.Decide(hasExistingCode: true, summaryExists: false, state, version.CreatedAt, time.GetUtcNow());
+        return decision.Wait ? throw new JobDeferredException(WaitingMessage, decision.RetryAt!.Value) : decision.Warning;
+    }
+}
+
+/// <summary>
+/// FR-172: a refinement run with a queued or running import waits (<see cref="JobDeferredException"/>, no attempt counted), up to 10 minutes after
+/// the oldest such import was queued (<see cref="SourceItemsWait"/>); then it goes on with <c>source_items_unavailable</c>.
+/// </summary>
+internal static class SourceItemsWaiter
+{
+    public const string WaitingMessage = "Waiting for the tracker import (FR-172).";
+
+    public static async Task<string?> WaitAsync(AgentJobInputs inputs, Guid? releaseVersionId, TimeProvider time, CancellationToken cancellationToken)
+    {
+        if (releaseVersionId is not { } id)
+        {
+            return null;
+        }
+
+        var (oldest, failed) = await inputs.ImportStateAsync(id, cancellationToken);
+        var decision = SourceItemsWait.Decide(oldest, failed, time.GetUtcNow());
+        return decision.Wait ? throw new JobDeferredException(WaitingMessage, decision.RetryAt!.Value) : decision.Warning;
+    }
+
+    /// <summary>The snapshot's size, for the run-time budget check.</summary>
+    public static int? ByteCount(Artifact? sourceItems) => sourceItems is null ? null : System.Text.Encoding.UTF8.GetByteCount(sourceItems.Content);
+}
+
+public static class AgentJobServiceCollectionExtensions
+{
+    /// <summary>The refinement, spec and plan job handlers (FR-27–FR-29) and what they share.</summary>
+    public static IServiceCollection AddAgentJobs(this IServiceCollection services)
+    {
+        services.AddScoped<AgentJobInputs>();
+        services.AddScoped<IterationContextReader>();
+
+        // FR-317, FR-318: the engine runner with the SDLC context providers, repo tools and extension.
+        services.AddSdlcAgentExtensions();
+        return services;
+    }
+}

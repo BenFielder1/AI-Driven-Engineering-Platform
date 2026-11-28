@@ -61,17 +61,27 @@ public static class PipelineDefinitionLoader
     {
         private static readonly string[] TopKeys =
         [
-            "pipeline", "version", "title", "trigger", "approval_modes", "default_approval_mode", "start", "artifacts",
+            "pipeline", "version", "title", "trigger", "triggers", "approval_modes", "default_approval_mode", "start", "artifacts",
             "stages", "statuses", "status_changes", "concurrency", "settings", "rollback_status",
+            "limits", "followups",
         ];
 
         private static readonly string[] StageKeys =
         [
             "id", "title", "status", "agent", "handler", "inputs", "output", "requires", "validate", "on_invalid", "gate",
             "on_success", "on_reject", "loop", "enqueue_on_enter", "agents", "handlers",
+
+            // FR-343–FR-349 (0.8.0): the flow constructs.
+            "parallel", "veto", "on_veto", "fan_out", "aggregate", "routes", "variants", "feedback", "writes_feedback",
+
+            // FR-355, FR-356 (0.8.0): map-reduce and conversation.
+            "map", "reduce", "conversation",
+
+            // FR-358 (0.8.0): the agent's tool tier ceiling.
+            "tool_policy",
         ];
 
-        private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid"];
+        private static readonly string[] BindingKeys = ["key", "job_type", "prompt", "inputs", "output", "tools", "validate", "on_invalid", "tool_policy"];
 
         public PipelineDefinition Definition(YamlMapping map)
         {
@@ -82,6 +92,7 @@ public static class PipelineDefinitionLoader
                 Version = obj.Int("version") ?? 0,
                 Title = obj.String("title"),
                 Trigger = Trigger(obj),
+                Triggers = Triggers(obj),
                 ApprovalModes = obj.List("approval_modes", (node, path) => Enum<ApprovalMode>(node, path)).OfType<ApprovalMode>().ToList(),
                 DefaultApprovalMode = obj.Enum<ApprovalMode>("default_approval_mode"),
                 Start = obj.StringList("start"),
@@ -92,17 +103,44 @@ public static class PipelineDefinitionLoader
                 RollbackStatus = obj.OptionalString("rollback_status"),
                 Concurrency = Concurrency(obj),
                 Stages = obj.List("stages", Stage).OfType<StageDefinition>().ToList(),
+                Limits = Limits(obj),
+                FollowUps = FollowUps(obj),
             };
         }
 
-        private PipelineTrigger Trigger(Obj top)
+        private PipelineTrigger Trigger(Obj top) =>
+            top.Mapping("trigger") is { } trigger ? TriggerEntry(trigger.Map, trigger.Path) : PipelineTrigger.Manual;
+
+        /// <summary>FR-339: <c>triggers:</c>, a list of trigger mappings, or <c>null</c> when absent. Declaring it with
+        /// <c>trigger:</c> is an error.</summary>
+        private List<PipelineTrigger>? Triggers(Obj top)
         {
-            if (top.Mapping("trigger") is not { } trigger)
+            if (top.Entries.All(e => e.Key != "triggers"))
             {
-                return PipelineTrigger.Manual;
+                return null;
             }
 
+            if (top.Entries.Any(e => e.Key == "trigger"))
+            {
+                Error("triggers", "Declare either 'trigger' or 'triggers', not both.");
+            }
+
+            return [.. top.List("triggers", (node, path) =>
+            {
+                if (node is YamlMapping map)
+                {
+                    return TriggerEntry(map, path);
+                }
+
+                Error(path, "Expected a mapping.");
+                return null;
+            }).OfType<PipelineTrigger>()];
+        }
+
+        private PipelineTrigger TriggerEntry(YamlMapping map, string path)
+        {
             // Every key besides 'kind' is the kind's option (a schedule's cron, a webhook's path), kept as text.
+            var trigger = (Map: map, Path: path);
             var obj = Object(trigger.Map, trigger.Path, null);
             var kind = obj.Enum<TriggerKind>("kind", required: true) ?? TriggerKind.Manual;
             var options = new SortedDictionary<string, string>(StringComparer.Ordinal);
@@ -128,7 +166,7 @@ public static class PipelineDefinitionLoader
 
         private ArtifactDefinition? Artifact(string key, YamlNode node, string path)
         {
-            if (AsObject(node, path, ["title", "format", "schema", "approval", "cascade"]) is not { } obj)
+            if (AsObject(node, path, ["title", "format", "schema", "approval", "cascade", "input", "scope"]) is not { } obj)
             {
                 return new ArtifactDefinition(key, string.Empty, ArtifactFormat.Markdown, null, ArtifactApproval.Required, CascadeMode.Downstream);
             }
@@ -139,7 +177,14 @@ public static class PipelineDefinitionLoader
                 obj.Enum<ArtifactFormat>("format") ?? ArtifactFormat.Markdown,
                 obj.OptionalString("schema"),
                 obj.Enum<ArtifactApproval>("approval") ?? ArtifactApproval.Required,
-                obj.Enum<CascadeMode>("cascade") ?? CascadeMode.Downstream);
+                obj.Enum<CascadeMode>("cascade") ?? CascadeMode.Downstream)
+            {
+                // FR-335: supplied from outside the run.
+                Input = obj.Bool("input") ?? false,
+
+                // FR-352: one version history per project, pinned at run start.
+                Scope = obj.Enum<ArtifactScope>("scope") ?? ArtifactScope.Run,
+            };
         }
 
         private StatusDefinition? Status(string name, YamlNode node, string path)
@@ -176,7 +221,7 @@ public static class PipelineDefinitionLoader
                 return ConcurrencyDefinition.None;
             }
 
-            var obj = Object(concurrency.Map, concurrency.Path, ["exclusive"]);
+            var obj = Object(concurrency.Map, concurrency.Path, ["exclusive", "runs"]);
             var exclusive = obj.List("exclusive", (node, path) =>
             {
                 var item = AsObject(node, path, ["job_type", "scope"]);
@@ -184,7 +229,11 @@ public static class PipelineDefinitionLoader
                     ? null
                     : new ExclusiveJob(item.String("job_type"), item.Enum<ConcurrencyScope>("scope", required: true) ?? ConcurrencyScope.Project);
             });
-            return new ConcurrencyDefinition(exclusive.OfType<ExclusiveJob>().ToList());
+            return new ConcurrencyDefinition(exclusive.OfType<ExclusiveJob>().ToList())
+            {
+                // FR-331: runs per project, default one.
+                Runs = obj.Enum<RunConcurrency>("runs") ?? RunConcurrency.One,
+            };
         }
 
         private StageDefinition? Stage(YamlNode node, string path)
@@ -194,10 +243,11 @@ public static class PipelineDefinitionLoader
                 return new StageDefinition { Id = string.Empty };
             }
 
-            var inputs = obj.StringList("inputs");
+            var (inputs, fromRuns) = Inputs(obj);
+            var parallel = Parallel(obj, out var parallelId);
             return new StageDefinition
             {
-                Id = obj.String("id"),
+                Id = obj.OptionalString("id") ?? parallelId ?? string.Empty,
                 Title = obj.String("title"),
                 Status = obj.String("status"),
                 Agent = Agent(obj),
@@ -216,7 +266,346 @@ public static class PipelineDefinitionLoader
                 OnReject = OnReject(obj),
                 Loop = Loop(obj),
                 EnqueueOnEnter = obj.OptionalString("enqueue_on_enter"),
+                Parallel = parallel,
+                Veto = obj.List("veto", Veto).OfType<VetoDefinition>().ToList(),
+                OnVeto = OnVeto(obj),
+                FanOut = FanOut(obj),
+                Aggregate = Aggregate(obj),
+                Routes = obj.StringList("routes"),
+                Variants = Variants(obj),
+                Feedback = Feedback(obj),
+                WritesFeedback = WritesFeedback(obj),
+                Map = Map(obj),
+                Reduce = Reduce(obj),
+                Conversation = Conversation(obj),
+                FromRuns = fromRuns,
+                ToolPolicy = ToolPolicy(obj),
             };
+        }
+
+        /// <summary>A stage's <c>inputs:</c>: artifact keys, and (FR-357) <c>{ from_runs: { pipeline, artifact, window, status } }</c>
+        /// entries, each kept with its position. <c>status</c> defaults to <c>completed</c>; the rest is checked by the validator.</summary>
+        private (List<string> Inputs, List<RunsInputDefinition> FromRuns) Inputs(Obj stage)
+        {
+            var keys = new List<string>();
+            var fromRuns = new List<RunsInputDefinition>();
+            var entries = stage.List("inputs", (node, path) => (Node: node, Path: path));
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var (node, path) = entries[i];
+                if (node is not YamlMapping map)
+                {
+                    keys.Add(Text(node, path) ?? string.Empty);
+                    continue;
+                }
+
+                var entry = Object(map, path, ["from_runs"]);
+                if (entry.Mapping("from_runs") is not { } runs)
+                {
+                    if (entry.Entries.Count > 0)
+                    {
+                        Error(Join(path, "from_runs"), "Expected a mapping.");
+                    }
+                    else
+                    {
+                        Error(path, "An input is an artifact key or '{ from_runs: { pipeline, artifact, window } }'.");
+                    }
+
+                    continue;
+                }
+
+                var obj = Object(runs.Map, runs.Path, ["pipeline", "artifact", "window", "status"]);
+                fromRuns.Add(new RunsInputDefinition(obj.String("pipeline"), obj.String("artifact"), obj.String("window"))
+                {
+                    Status = obj.Enum<GenericRunStatus>("status") ?? GenericRunStatus.Completed,
+                    Position = i,
+                });
+            }
+
+            return (keys, fromRuns);
+        }
+
+        /// <summary>FR-355: <c>map: { over, agent | handler, max_parallel, max_items, on_item_failure, max_failed }</c>, the
+        /// defaults filled (8, 1000, skip, 5%).</summary>
+        private MapDefinition? Map(Obj stage)
+        {
+            if (stage.Mapping("map") is not { } map)
+            {
+                return null;
+            }
+
+            var obj = Object(map.Map, map.Path, ["over", "agent", "handler", "max_parallel", "max_items", "on_item_failure", "max_failed"]);
+            var maxFailed = MapFailureLimit.Default;
+            if (obj.OptionalString("max_failed") is { } text)
+            {
+                if (MapFailureLimit.Parse(text) is { } parsed)
+                {
+                    maxFailed = parsed;
+                }
+                else
+                {
+                    Error(Join(map.Path, "max_failed"), $"'max_failed' must be a count (5) or a percentage (5%), not '{text}'.");
+                }
+            }
+
+            return new MapDefinition(obj.String("over"), obj.OptionalString("agent"), obj.OptionalString("handler"))
+            {
+                MaxParallel = obj.Int("max_parallel") ?? MapDefinition.DefaultMaxParallel,
+                MaxItems = obj.Int("max_items") ?? MapDefinition.DefaultMaxItems,
+                OnItemFailure = obj.Enum<MapItemFailure>("on_item_failure") ?? MapItemFailure.Skip,
+                MaxFailed = maxFailed,
+            };
+        }
+
+        /// <summary>FR-355: <c>reduce: { agent | handler }</c>.</summary>
+        private ReduceDefinition? Reduce(Obj stage)
+        {
+            if (stage.Mapping("reduce") is not { } reduce)
+            {
+                return null;
+            }
+
+            var obj = Object(reduce.Map, reduce.Path, ["agent", "handler"]);
+            return new ReduceDefinition(obj.OptionalString("agent"), obj.OptionalString("handler"));
+        }
+
+        /// <summary>FR-356: <c>conversation: { participants: [{ agent, role }…], opener, max_turns, stop: { guard } | { phrase } }</c>;
+        /// <c>max_turns</c> defaults to 20, <c>stop</c> is optional.</summary>
+        private ConversationDefinition? Conversation(Obj stage)
+        {
+            if (stage.Mapping("conversation") is not { } conversation)
+            {
+                return null;
+            }
+
+            var obj = Object(conversation.Map, conversation.Path, ["participants", "opener", "max_turns", "stop"]);
+            var participants = obj.List("participants", (node, path) =>
+                AsObject(node, path, ["agent", "role"]) is { } p ? new ConversationParticipant(p.String("agent"), p.String("role")) : null);
+            ConversationStop? stop = null;
+            if (obj.Mapping("stop") is { } stopMap)
+            {
+                var s = Object(stopMap.Map, stopMap.Path, ["guard", "phrase"]);
+                stop = new ConversationStop(s.OptionalString("guard"), s.OptionalString("phrase"));
+            }
+
+            return new ConversationDefinition([.. participants.OfType<ConversationParticipant>()], obj.String("opener"))
+            {
+                TurnLimit = obj.Int("max_turns") ?? ConversationDefinition.DefaultMaxTurns,
+                Stop = stop,
+            };
+        }
+
+        /// <summary>FR-354: <c>followups: [ { stage, after: [duration…] } ]</c>; both keys required (durations are checked by
+        /// the validator).</summary>
+        private List<FollowUpDefinition> FollowUps(Obj top) =>
+        [
+            .. top.List("followups", (node, path) =>
+            {
+                if (node is not YamlMapping map)
+                {
+                    Error(path, "Expected a mapping.");
+                    return null;
+                }
+
+                var obj = Object(map, path, ["stage", "after"]);
+                if (obj.Get("stage") is null)
+                {
+                    Error(Join(path, "stage"), "'stage' is required.");
+                }
+
+                if (obj.Get("after") is null)
+                {
+                    Error(Join(path, "after"), "'after' is required.");
+                }
+
+                return new FollowUpDefinition(obj.String("stage"), obj.StringList("after", allowSingle: true));
+            }).OfType<FollowUpDefinition>(),
+        ];
+
+        /// <summary>FR-348: <c>limits: { revisions, then }</c>; both required.</summary>
+        private RunLimits? Limits(Obj top)
+        {
+            if (top.Mapping("limits") is not { } limits)
+            {
+                return null;
+            }
+
+            var obj = Object(limits.Map, limits.Path, ["revisions", "then"]);
+            if (obj.Get("revisions") is null)
+            {
+                Error(Join(limits.Path, "revisions"), "'revisions' is required.");
+            }
+
+            return new RunLimits(obj.Int("revisions") ?? 0, obj.Enum<InvalidOutcome>("then", required: true) ?? InvalidOutcome.Fail);
+        }
+
+        /// <summary>FR-343: <c>parallel: { id, branches: [[stage…], …], join, on_branch_failure }</c>. <paramref name="id"/> is
+        /// <c>parallel.id</c>; it must match the entry's own <c>id</c> when both are given.</summary>
+        private ParallelDefinition? Parallel(Obj stage, out string? id)
+        {
+            id = null;
+            if (stage.Mapping("parallel") is not { } parallel)
+            {
+                return null;
+            }
+
+            var obj = Object(parallel.Map, parallel.Path, ["id", "branches", "join", "on_branch_failure"]);
+            id = obj.OptionalString("id");
+            if (id is not null && stage.OptionalString("id") is { } own && !string.Equals(own, id, StringComparison.Ordinal))
+            {
+                Error(Join(parallel.Path, "id"), $"'parallel.id' '{id}' must match the stage id '{own}'.");
+            }
+
+            var branches = obj.List("branches", (node, path) =>
+            {
+                if (node is not YamlSequence sequence)
+                {
+                    Error(path, "Expected a list of stages.");
+                    return null;
+                }
+
+                IReadOnlyList<StageDefinition> branch = [.. sequence.Items.Select((item, i) => Stage(item, $"{path}[{i}]")).OfType<StageDefinition>()];
+                return branch;
+            });
+            return new ParallelDefinition([.. branches.OfType<IReadOnlyList<StageDefinition>>()])
+            {
+                Join = obj.Enum<ParallelJoin>("join") ?? ParallelJoin.All,
+                OnBranchFailure = obj.Enum<BranchFailurePolicy>("on_branch_failure") ?? BranchFailurePolicy.Fail,
+            };
+        }
+
+        /// <summary>FR-344: one <c>veto:</c> entry; the validator checks that exactly one of <c>guard</c> and <c>agent</c> is set.</summary>
+        private VetoDefinition? Veto(YamlNode node, string path) =>
+            AsObject(node, path, ["guard", "agent"]) is { } obj ? new VetoDefinition(obj.OptionalString("guard"), obj.OptionalString("agent")) : null;
+
+        /// <summary>FR-344: <c>on_veto: { to: &lt;stage&gt; }</c> or <c>on_veto: { end: vetoed }</c>.</summary>
+        private OnVetoDefinition? OnVeto(Obj stage)
+        {
+            if (stage.Mapping("on_veto") is not { } onVeto)
+            {
+                return null;
+            }
+
+            var obj = Object(onVeto.Map, onVeto.Path, ["to", "end"]);
+            var to = obj.OptionalString("to");
+            var end = obj.OptionalString("end");
+            if ((to is null) == (end is null))
+            {
+                Error(onVeto.Path, "'on_veto' needs exactly one of 'to: <earlier stage>' and 'end: vetoed'.");
+            }
+            else if (end is not null && end != OnVetoDefinition.Vetoed)
+            {
+                Error(Join(onVeto.Path, "end"), $"'end' must be '{OnVetoDefinition.Vetoed}', not '{end}'.");
+            }
+
+            return to is null ? OnVetoDefinition.EndVetoed : new OnVetoDefinition(to);
+        }
+
+        /// <summary>FR-345: <c>fan_out: { agents: [...] }</c> or <c>fan_out: { count: n }</c>.</summary>
+        private FanOutDefinition? FanOut(Obj stage)
+        {
+            if (stage.Mapping("fan_out") is not { } fanOut)
+            {
+                return null;
+            }
+
+            var obj = Object(fanOut.Map, fanOut.Path, ["agents", "count"]);
+            var hasAgents = obj.Get("agents") is not null;
+            var hasCount = obj.Get("count") is not null;
+            if (hasAgents == hasCount)
+            {
+                Error(fanOut.Path, "'fan_out' needs exactly one of 'agents: [<key>…]' and 'count: n'.");
+            }
+
+            return new FanOutDefinition(obj.StringList("agents"), hasCount ? obj.Int("count") ?? 0 : null);
+        }
+
+        /// <summary>FR-346: <c>aggregate: { from, disagreement: { guard } }</c>.</summary>
+        private AggregateDefinition? Aggregate(Obj stage)
+        {
+            if (stage.Mapping("aggregate") is not { } aggregate)
+            {
+                return null;
+            }
+
+            var obj = Object(aggregate.Map, aggregate.Path, ["from", "disagreement"]);
+            string? guard = null;
+            if (obj.Mapping("disagreement") is { } disagreement)
+            {
+                guard = Object(disagreement.Map, disagreement.Path, ["guard"]).String("guard");
+            }
+
+            return new AggregateDefinition(obj.String("from"), guard);
+        }
+
+        /// <summary>FR-351, §4.75: <c>feedback: { inject, limit }</c>; <c>limit</c> defaults to 10.</summary>
+        private FeedbackInjectionDefinition? Feedback(Obj stage)
+        {
+            if (stage.Mapping("feedback") is not { } feedback)
+            {
+                return null;
+            }
+
+            var obj = Object(feedback.Map, feedback.Path, ["inject", "limit"]);
+            return new FeedbackInjectionDefinition(obj.Bool("inject") ?? false, obj.Int("limit") ?? FeedbackInjectionRules.DefaultLimit);
+        }
+
+        /// <summary>FR-358: <c>tool_policy: { max_tier: read | write | destructive }</c>; <c>max_tier</c> is required.</summary>
+        private ToolPolicyDefinition? ToolPolicy(Obj owner)
+        {
+            if (owner.Mapping("tool_policy") is not { } policy)
+            {
+                return null;
+            }
+
+            var obj = Object(policy.Map, policy.Path, ["max_tier"]);
+            return new ToolPolicyDefinition(obj.Enum<ToolTier>("max_tier", required: true) ?? ToolTierRules.DefaultMaxTier);
+        }
+
+        /// <summary>FR-351: <c>writes_feedback: { agent, from }</c>.</summary>
+        private WritesFeedbackDefinition? WritesFeedback(Obj stage)
+        {
+            if (stage.Mapping("writes_feedback") is not { } writes)
+            {
+                return null;
+            }
+
+            var obj = Object(writes.Map, writes.Path, ["agent", "from"]);
+            return new WritesFeedbackDefinition(obj.String("agent"), obj.String("from"));
+        }
+
+        /// <summary>FR-349: <c>variants: { count, select: gate | { agent: &lt;key&gt; } }</c>.</summary>
+        private VariantsDefinition? Variants(Obj stage)
+        {
+            if (stage.Mapping("variants") is not { } variants)
+            {
+                return null;
+            }
+
+            var obj = Object(variants.Map, variants.Path, ["count", "select"]);
+            if (obj.Get("count") is null)
+            {
+                Error(Join(variants.Path, "count"), "'count' is required.");
+            }
+
+            string? agent = null;
+            var selectPath = Join(variants.Path, "select");
+            switch (obj.Get("select"))
+            {
+                case null or YamlScalar { IsNull: true }:
+                    Error(selectPath, "'select' is required: 'gate' or '{ agent: <key> }'.");
+                    break;
+                case YamlScalar { Value: "gate" }:
+                    break;
+                case YamlMapping map:
+                    agent = Object(map, selectPath, ["agent"]).String("agent");
+                    break;
+                default:
+                    Error(selectPath, "'select' must be 'gate' or '{ agent: <key> }'.");
+                    break;
+            }
+
+            return new VariantsDefinition(obj.Int("count") ?? 0, agent);
         }
 
         private AgentStageDefinition? Agent(Obj stage)
@@ -256,14 +645,25 @@ public static class PipelineDefinitionLoader
                     // D-0.7.0-44: the binding's own output checks.
                     Validate = Validations(obj),
                     OnInvalid = OnInvalid(obj),
+
+                    // FR-358: the binding's own tool tier ceiling.
+                    ToolPolicy = ToolPolicy(obj),
                 };
             }).OfType<AgentBindingDefinition>().ToList();
 
         private List<StageValidation> Validations(Obj owner) =>
             owner.List("validate", (item, itemPath) =>
             {
-                var v = AsObject(item, itemPath, ["guard"]);
-                return v is null ? null : new StageValidation(v.String("guard"));
+                // FR-350: { agent: <key> } names a validator agent; otherwise the entry is a guard, as before.
+                var v = AsObject(item, itemPath, ["guard", "agent"]);
+                if (v is null)
+                {
+                    return null;
+                }
+
+                return v.OptionalString("agent") is { } agent
+                    ? new StageValidation(v.OptionalString("guard")) { Agent = agent }
+                    : new StageValidation(v.String("guard"));
             }).OfType<StageValidation>().ToList();
 
         private List<StageRequirement> Requirements(Obj owner, string key) =>
@@ -271,7 +671,7 @@ public static class PipelineDefinitionLoader
             {
                 if (node is not YamlMapping map || map.Entries.Count != 1)
                 {
-                    Error(path, "A requirement is one of { artifact_locked: <key> }, { no_pending_gates: { except: [...] } } or { guard: <name> }.");
+                    Error(path, "A requirement is one of { artifact_locked: <key> }, { no_pending_gates: { except: [...] } }, { guard: <name> } or { input: <key> }.");
                     return null;
                 }
 
@@ -283,6 +683,9 @@ public static class PipelineDefinitionLoader
                         return new ArtifactLockedRequirement(Text(value, valuePath) ?? string.Empty);
                     case "guard":
                         return new GuardRequirement(Text(value, valuePath) ?? string.Empty);
+                    case "input":
+                        // FR-335: the run waits for a version of this input artifact.
+                        return new InputRequirement(Text(value, valuePath) ?? string.Empty);
                     case "no_pending_gates":
                         if (value is YamlScalar { IsNull: true })
                         {

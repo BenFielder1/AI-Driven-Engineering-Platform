@@ -6,7 +6,9 @@ import { hostSecretFields } from './wizard-host-fields'
  * state, kept in session storage (this tab only, cleared when the tab closes). The Git access token and External
  * connection strings are never stored.
  */
-export const WIZARD_DRAFT_KEY = 'aide.new-project-wizard.draft'
+export const WIZARD_DRAFT_KEY = 'tevrin.new-project-wizard.draft'
+/** FR-326: the pre-0.8.0 key, read when WIZARD_DRAFT_KEY is missing; saving or clearing removes it. */
+export const LEGACY_WIZARD_DRAFT_KEY = 'aide.new-project-wizard.draft'
 
 export interface WizardDraft {
   values: WizardValues
@@ -24,7 +26,8 @@ function storage(): Storage | null {
 
 function read(): string | null {
   try {
-    return storage()?.getItem(WIZARD_DRAFT_KEY) ?? null
+    const s = storage()
+    return s?.getItem(WIZARD_DRAFT_KEY) ?? s?.getItem(LEGACY_WIZARD_DRAFT_KEY) ?? null
   } catch {
     return null
   }
@@ -39,7 +42,9 @@ const withoutSecrets = (values: WizardValues): WizardValues => ({
 /** Saves the wizard's values (without the access token or connection strings) and step. */
 export function saveWizardDraft(values: WizardValues, step: number): void {
   try {
-    storage()?.setItem(WIZARD_DRAFT_KEY, JSON.stringify({ values: withoutSecrets(values), step }))
+    const s = storage()
+    s?.setItem(WIZARD_DRAFT_KEY, JSON.stringify({ values: withoutSecrets(values), step }))
+    s?.removeItem(LEGACY_WIZARD_DRAFT_KEY)
   } catch {
     // Quota or blocked storage: nothing is kept.
   }
@@ -51,7 +56,9 @@ export const hasWizardDraft = (): boolean => read() !== null
 /** Removes the saved wizard (once the wizard has restored it). */
 export function clearWizardDraft(): void {
   try {
-    storage()?.removeItem(WIZARD_DRAFT_KEY)
+    const s = storage()
+    s?.removeItem(WIZARD_DRAFT_KEY)
+    s?.removeItem(LEGACY_WIZARD_DRAFT_KEY)
   } catch {
     // Blocked storage: nothing to remove.
   }

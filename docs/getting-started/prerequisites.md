@@ -25,7 +25,7 @@ Docker Desktop's default (kubeadm) cluster shares Docker's image store, so built
 Connect a database GUI:
 
 - Dev loop: `localhost:5432`, database, user and password from your `.env`.
-- Kubernetes: `kubectl --context docker-desktop -n aide port-forward svc/db 15432:5432`, then `localhost:15432`. The user is `aide`. The password is `POSTGRES_PASSWORD` in `deploy/k8s/overlays/local/secrets.env`.
+- Kubernetes: `kubectl --context docker-desktop -n tevrin port-forward svc/db 15432:5432`, then `localhost:15432`. The user is `tevrin` (`aide` on a cluster from before 0.8.0). The password is `POSTGRES_PASSWORD` in `deploy/k8s/overlays/local/secrets.env`.
 
 ## For Railway deploys only
 

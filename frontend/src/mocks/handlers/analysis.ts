@@ -6,6 +6,7 @@ import {
   parseStackProfile,
   profileLayers,
   renderStackProfile,
+  STACK_PROFILE_FENCE,
   unresolvedLayers,
   type StackProfileDocument,
 } from '../../features/analysis/stack-profile-format'
@@ -386,7 +387,7 @@ function analysisDto(p: StoredProject, releaseVersionId: string | null): Analysi
           createdAt: latest.createdAt,
           narrative: parsed?.narrative ?? '',
           document: doc,
-          errors: parsed ? [] : ['content: needs a fenced ```aide-stack-profile block holding the profile.'],
+          errors: parsed ? [] : [`content: needs a fenced \`\`\`${STACK_PROFILE_FENCE} block holding the profile.`],
         }
       : null,
     needsInput: doc
@@ -506,7 +507,7 @@ export const analysisHandlers = [
     }
     const parsed = parseStackProfile(body?.content ?? '')
     if (!parsed) {
-      return validation({ content: ['needs a fenced ```aide-stack-profile block holding the profile.'] })
+      return validation({ content: [`needs a fenced \`\`\`${STACK_PROFILE_FENCE} block holding the profile.`] })
     }
     const errors = checkProfile(parsed.document)
     if (errors) {

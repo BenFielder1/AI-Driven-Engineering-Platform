@@ -5,10 +5,16 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states
 import { cn } from '../../lib/utils'
 import { useRunArtifacts } from '../api/hooks'
 import type { PipelineDefinition, RunArtifact } from '../api/types'
-import { definitionLabels } from '../labels'
+import { definitionLabels, followUpLabel, itemLabel } from '../labels'
 import { ArtifactDiff, ArtifactViewer } from './artifact-viewer'
 
 type View = 'content' | 'changes'
+
+/** FR-363: a version's construct label (its variant, follow-up or map item), for the version picker. */
+function versionLabel(v: RunArtifact['versions'][number]): string {
+  const parts = [v.variant ? followUpLabel(v.variant) : null, v.itemIndex != null ? itemLabel(v.itemIndex) : null].filter(Boolean)
+  return parts.length > 0 ? `v${String(v.version)} (${parts.join(', ')})` : `v${String(v.version)}`
+}
 
 function ArtifactDetail({ runId, artifact, definition }: { runId: string; artifact: RunArtifact; definition: PipelineDefinition | undefined }) {
   const labels = definitionLabels(definition)
@@ -49,7 +55,7 @@ function ArtifactDetail({ runId, artifact, definition }: { runId: string; artifa
         >
           {artifact.versions.map((v) => (
             <option key={v.version} value={v.version}>
-              v{v.version}
+              {versionLabel(v)}
             </option>
           ))}
         </SelectField>

@@ -9,7 +9,7 @@ namespace Tevrin.Engine.Tests.Common;
 
 /// <summary>
 /// FR-264–FR-268: the enums that moved to the engine keep their stored and wire values (snake_case of the member name,
-/// <see cref="EnumStrings"/>). The engine-assembly counterpart of Aide.UnitTests' round-trip test.
+/// <see cref="EnumStrings"/>). The engine-assembly counterpart of Tevrin.UnitTests' round-trip test.
 /// </summary>
 public class EngineEnumStringsTests
 {

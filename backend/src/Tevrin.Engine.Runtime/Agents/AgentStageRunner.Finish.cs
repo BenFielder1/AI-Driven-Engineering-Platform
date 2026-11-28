@@ -69,7 +69,7 @@ public sealed partial class AgentStageRunner
             }
             else if (await extension.ShouldStoreAsync(attempt, stored, cancellationToken))
             {
-                artifact = await StoreAsync(run, artifactDefinition, stored, agentRun, cancellationToken);
+                artifact = await StoreAsync(run, artifactDefinition, stored, agentRun, attempt.Request.Variant, attempt.Request.ItemIndex, cancellationToken);
                 await extension.OnArtifactStoredAsync(attempt, artifact, cancellationToken);
             }
         }

@@ -37,22 +37,43 @@ public static class DefinitionHash
             ["pipeline"] = d.Pipeline,
             ["version"] = d.Version,
             ["title"] = d.Title,
-            ["trigger"] = Trigger(d.Trigger),
             ["approval_modes"] = d.ApprovalModes.Select(m => (object?)m.ToWire()).ToList(),
             ["start"] = Strings(d.Start),
             ["settings"] = Strings(d.Settings),
             ["artifacts"] = Keyed(d.Artifacts.Select(a => (a.Key, (object?)Artifact(a)))),
             ["statuses"] = Keyed(d.Statuses.Select(s => (s.Name, (object?)new Obj { ["generic"] = s.Generic.ToWire() }))),
             ["status_changes"] = Keyed(d.StatusChanges.Select(c => (c.Name, (object?)StatusChange(c)))),
-            ["concurrency"] = new Obj
-            {
-                ["exclusive"] = d.Concurrency.Exclusive
-                    .Select(e => (object?)new Obj { ["job_type"] = e.JobType, ["scope"] = e.Scope.ToWire() }).ToList(),
-            },
+            ["concurrency"] = Concurrency(d.Concurrency),
             ["stages"] = d.Stages.Select(s => (object?)Stage(s)).ToList(),
         };
+        // FR-339: the single 'trigger' as before, or the 'triggers' list instead (absent unless declared, so existing
+        // hashes are unchanged).
+        if (d.Triggers is { } triggers)
+        {
+            root["triggers"] = triggers.Select(t => (object?)Trigger(t)).ToList();
+        }
+        else
+        {
+            root["trigger"] = Trigger(d.Trigger);
+        }
+
         root.AddIfSet("default_approval_mode", d.DefaultApprovalMode?.ToWire());
         root.AddIfSet("rollback_status", d.RollbackStatus);
+
+        // FR-348: omitted unless declared, so existing hashes are unchanged.
+        if (d.Limits is { } limits)
+        {
+            root["limits"] = new Obj { ["revisions"] = limits.Revisions, ["then"] = limits.Then.ToWire() };
+        }
+
+        // FR-354: omitted unless declared, so existing hashes are unchanged.
+        if (d.FollowUps.Count > 0)
+        {
+            root["followups"] = d.FollowUps
+                .Select(f => (object?)new Obj { ["stage"] = f.Stage, ["after"] = Strings(f.After) })
+                .ToList();
+        }
+
         return root;
     }
 
@@ -68,6 +89,22 @@ public static class DefinitionHash
         return obj;
     }
 
+    /// <summary>FR-331: <c>runs</c> only when it isn't the default <c>one</c>, so a definition without it hashes as before.</summary>
+    private static Obj Concurrency(ConcurrencyDefinition concurrency)
+    {
+        var obj = new Obj
+        {
+            ["exclusive"] = concurrency.Exclusive
+                .Select(e => (object?)new Obj { ["job_type"] = e.JobType, ["scope"] = e.Scope.ToWire() }).ToList(),
+        };
+        if (concurrency.Runs != RunConcurrency.One)
+        {
+            obj["runs"] = concurrency.Runs.ToWire();
+        }
+
+        return obj;
+    }
+
     private static Obj Artifact(ArtifactDefinition a)
     {
         var obj = new Obj
@@ -78,6 +115,19 @@ public static class DefinitionHash
             ["cascade"] = a.Cascade.ToWire(),
         };
         obj.AddIfSet("schema", a.Schema);
+
+        // FR-335: omitted unless set, so a definition without input artifacts hashes as before.
+        if (a.Input)
+        {
+            obj["input"] = true;
+        }
+
+        // FR-352: omitted for the default run scope, so a definition without project-scope artifacts hashes as before.
+        if (a.Scope != ArtifactScope.Run)
+        {
+            obj["scope"] = a.Scope.ToWire();
+        }
+
         return obj;
     }
 
@@ -97,6 +147,15 @@ public static class DefinitionHash
         return obj;
     }
 
+    /// <summary>A <c>validate:</c> entry; FR-350's <c>agent</c> is omitted when unset, so a guard entry hashes as before.</summary>
+    private static object? Validation(StageValidation v)
+    {
+        var o = new Obj();
+        o.AddIfSet("guard", v.Guard);
+        o.AddIfSet("agent", v.Agent);
+        return o;
+    }
+
     private static Obj Stage(StageDefinition s)
     {
         var obj = new Obj
@@ -104,9 +163,9 @@ public static class DefinitionHash
             ["id"] = s.Id,
             ["title"] = s.Title,
             ["status"] = s.Status,
-            ["inputs"] = Strings(s.Inputs),
+            ["inputs"] = Inputs(s),
             ["requires"] = Requirements(s.Requires),
-            ["validate"] = s.Validate.Select(v => (object?)new Obj { ["guard"] = v.Guard }).ToList(),
+            ["validate"] = s.Validate.Select(Validation).ToList(),
         };
         if (s.Agent is { } agent)
         {
@@ -115,6 +174,8 @@ public static class DefinitionHash
             a.AddIfSet("model", agent.Model);
             obj["agent"] = a;
         }
+
+        AddToolPolicy(obj, s.ToolPolicy);
 
         // D-0.7.0-42: omitted when empty, so a definition without secondary agents hashes as before.
         if (s.Agents.Count > 0)
@@ -165,7 +226,159 @@ public static class DefinitionHash
             obj["loop"] = l;
         }
 
+        AddFlowConstructs(obj, s);
         return obj;
+    }
+
+    /// <summary>FR-343–FR-349 (0.8.0): each construct only when used, so a definition without them hashes as before.</summary>
+    private static void AddFlowConstructs(Obj obj, StageDefinition s)
+    {
+        if (s.Parallel is { } parallel)
+        {
+            obj["parallel"] = new Obj
+            {
+                ["branches"] = parallel.Branches.Select(b => (object?)b.Select(st => (object?)Stage(st)).ToList()).ToList(),
+                ["join"] = parallel.Join.ToWire(),
+                ["on_branch_failure"] = parallel.OnBranchFailure.ToWire(),
+            };
+        }
+
+        if (s.Veto.Count > 0)
+        {
+            obj["veto"] = s.Veto.Select(v =>
+            {
+                var o = new Obj();
+                o.AddIfSet("guard", v.Guard);
+                o.AddIfSet("agent", v.Agent);
+                return (object?)o;
+            }).ToList();
+        }
+
+        if (s.OnVeto is { } onVeto)
+        {
+            obj["on_veto"] = onVeto.To is { } to ? new Obj { ["to"] = to } : new Obj { ["end"] = OnVetoDefinition.Vetoed };
+        }
+
+        if (s.FanOut is { } fanOut)
+        {
+            var f = new Obj();
+            if (fanOut.Count is { } count)
+            {
+                f["count"] = count;
+            }
+            else
+            {
+                f["agents"] = Strings(fanOut.Agents);
+            }
+
+            obj["fan_out"] = f;
+        }
+
+        if (s.Aggregate is { } aggregate)
+        {
+            var g = new Obj { ["from"] = aggregate.From };
+            if (aggregate.DisagreementGuard is { } guard)
+            {
+                g["disagreement"] = new Obj { ["guard"] = guard };
+            }
+
+            obj["aggregate"] = g;
+        }
+
+        if (s.Routes.Count > 0)
+        {
+            obj["routes"] = Strings(s.Routes);
+        }
+
+        if (s.Variants is { } variants)
+        {
+            obj["variants"] = new Obj
+            {
+                ["count"] = variants.Count,
+                ["select"] = variants.SelectAgent is { } agent ? new Obj { ["agent"] = agent } : "gate",
+            };
+        }
+
+        // FR-351: left out when unused, so existing hashes are unchanged.
+        if (s.Feedback is { } feedback)
+        {
+            obj["feedback"] = new Obj { ["inject"] = feedback.Inject, ["limit"] = feedback.Limit };
+        }
+
+        if (s.WritesFeedback is { } writes)
+        {
+            obj["writes_feedback"] = new Obj { ["agent"] = writes.Agent, ["from"] = writes.From };
+        }
+
+        AddScaleConstructs(obj, s);
+    }
+
+    /// <summary>FR-357: the plain input keys, with each <c>{ from_runs: … }</c> entry back at its position (clamped to the
+    /// end), so a stage without one hashes as before.</summary>
+    private static List<object?> Inputs(StageDefinition s)
+    {
+        var list = Strings(s.Inputs);
+        foreach (var runs in s.FromRuns.OrderBy(r => r.Position))
+        {
+            var from = new Obj
+            {
+                ["pipeline"] = runs.Pipeline,
+                ["artifact"] = runs.Artifact,
+                ["window"] = runs.Window,
+                ["status"] = runs.Status.ToWire(),
+            };
+            list.Insert(Math.Clamp(runs.Position, 0, list.Count), new Obj { ["from_runs"] = from });
+        }
+
+        return list;
+    }
+
+    /// <summary>FR-355, FR-356 (0.8.0): map, reduce and conversation only when used, with their defaults filled, so a
+    /// definition without them hashes as before.</summary>
+    private static void AddScaleConstructs(Obj obj, StageDefinition s)
+    {
+        if (s.Map is { } map)
+        {
+            var m = new Obj
+            {
+                ["over"] = map.Over,
+                ["max_parallel"] = map.MaxParallel,
+                ["max_items"] = map.MaxItems,
+                ["on_item_failure"] = map.OnItemFailure.ToWire(),
+                ["max_failed"] = map.MaxFailed.IsPercent ? map.MaxFailed.ToWire() : map.MaxFailed.Value,
+            };
+            m.AddIfSet("agent", map.Agent);
+            m.AddIfSet("handler", map.Handler);
+            obj["map"] = m;
+        }
+
+        if (s.Reduce is { } reduce)
+        {
+            var r = new Obj();
+            r.AddIfSet("agent", reduce.Agent);
+            r.AddIfSet("handler", reduce.Handler);
+            obj["reduce"] = r;
+        }
+
+        if (s.Conversation is { } conversation)
+        {
+            var c = new Obj
+            {
+                ["participants"] = conversation.Participants
+                    .Select(p => (object?)new Obj { ["agent"] = p.Agent, ["role"] = p.Role }).ToList(),
+                ["opener"] = conversation.Opener,
+                ["max_turns"] = conversation.TurnLimit,
+            };
+            if (conversation.Stop is { } stop)
+            {
+                var st = new Obj();
+                st.AddIfSet("guard", stop.Guard);
+                st.AddIfSet("phrase", stop.Phrase);
+                c["stop"] = st;
+            }
+
+            obj["conversation"] = c;
+        }
     }
 
     /// <summary>D-0.7.0-42: a secondary binding with its defaults filled (inputs, tools); prompt and output only when set.</summary>
@@ -185,7 +398,7 @@ public static class DefinitionHash
         // D-0.7.0-44: omitted when unset, so a binding without its own validation hashes as before.
         if (b.Validate.Count > 0)
         {
-            obj["validate"] = b.Validate.Select(v => (object?)new Obj { ["guard"] = v.Guard }).ToList();
+            obj["validate"] = b.Validate.Select(Validation).ToList();
         }
 
         if (b.OnInvalid is { } onInvalid)
@@ -193,7 +406,18 @@ public static class DefinitionHash
             obj["on_invalid"] = OnInvalid(onInvalid);
         }
 
+        AddToolPolicy(obj, b.ToolPolicy);
         return obj;
+    }
+
+    /// <summary>FR-358 (0.8.0): <c>tool_policy</c> only when it isn't the default (<c>max_tier: write</c>), so a definition
+    /// without one, or writing the default out, hashes as before.</summary>
+    private static void AddToolPolicy(Obj obj, ToolPolicyDefinition? policy)
+    {
+        if (!ToolTierRules.IsDefault(policy))
+        {
+            obj["tool_policy"] = new Obj { ["max_tier"] = ToolTierRules.MaxTierOf(policy).ToWire() };
+        }
     }
 
     private static List<object?> Requirements(IReadOnlyList<StageRequirement> requires) =>
@@ -202,6 +426,7 @@ public static class DefinitionHash
             ArtifactLockedRequirement locked => new Obj { ["artifact_locked"] = locked.ArtifactKey },
             NoPendingGatesRequirement none => new Obj { ["no_pending_gates"] = new Obj { ["except"] = Strings(none.Except) } },
             GuardRequirement guard => new Obj { ["guard"] = guard.Guard },
+            InputRequirement input => new Obj { ["input"] = input.ArtifactKey },
             _ => throw new InvalidOperationException($"Unknown requirement {r.GetType().Name}."),
         })).ToList();
 

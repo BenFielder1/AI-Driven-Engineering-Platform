@@ -1,0 +1,174 @@
+using System.Reflection;
+using System.Text.RegularExpressions;
+using Tevrin.Domain.Access;
+using Tevrin.Domain.Deployments;
+using Tevrin.Domain.Entities;
+using Tevrin.Domain.Execution;
+using Tevrin.Domain.GitHub;
+using Tevrin.Domain.Releases;
+using Tevrin.Domain.Stack;
+using Tevrin.Engine.Domain.Common;
+using Tevrin.Engine.Domain.Notifications;
+using Tevrin.Infrastructure;
+using Tevrin.Infrastructure.Agents;
+using Tevrin.Infrastructure.Security;
+using Tevrin.Pack.Sdlc;
+using Tevrin.UnitTests.Stack;
+
+namespace Tevrin.UnitTests.Common;
+
+/// <summary>
+/// 0.6.0 rename (§4.29): what people and Git hosts see says Tevrin (FR-198, FR-199), and the identifiers users already hold keep
+/// their <c>aide</c> names (FR-201).
+/// </summary>
+public sealed partial class Fr198To201RenameTests
+{
+    /// <summary>
+    /// The old product name as a word: not part of an identifier such as <c>AIDE_RUN_MIGRATIONS</c>, <c>X-AIDE-Signature</c>,
+    /// <c>AIDE-Step-Id</c> or a path or host (<c>.aide/</c>, <c>aide.test</c>).
+    /// </summary>
+    [GeneratedRegex(@"(?<![-\w/.])AIDE(?![\w-])", RegexOptions.CultureInvariant)]
+    private static partial Regex OldProductName();
+
+    // ---------- FR-198: server-generated text ----------
+
+    [Fact]
+    public void FR198_An_email_subject_starts_with_Tevrin()
+    {
+        var subject = ChannelText.EmailSubject("Pre-release gate waiting: Todo API");
+
+        Assert.StartsWith("[Tevrin] ", subject, StringComparison.Ordinal);
+        Assert.Equal("[Tevrin] Pre-release gate waiting: Todo API", subject);
+    }
+
+    [Fact]
+    public void FR198_Email_Slack_and_Teams_link_back_with_Open_in_Tevrin() =>
+        Assert.Equal("Open in Tevrin", ChannelText.OpenLinkLabel);
+
+    [Fact]
+    public void FR198_A_new_GitHub_App_is_named_Tevrin_host() =>
+        Assert.Equal("Tevrin (aide.example.com)", GitHubRules.ManifestAppName("aide.example.com"));
+
+    [Fact]
+    public void FR198_Pull_request_merge_and_tag_text_name_Tevrin()
+    {
+        Assert.Equal("[Tevrin] Todo API — Implementation (2 steps)", PullRequestDescription.Title("Todo API", 2));
+        Assert.Equal("[Tevrin] Release v1.2.0: Todo API", ReleaseRules.MergeTitle("Todo API", "v1.2.0"));
+        Assert.Equal("Tevrin release v1.2.0: Todo API (version 1.2.0)", ReleaseRules.TagMessage("Todo API", "v1.2.0", "1.2.0"));
+        Assert.StartsWith("[Tevrin][Phase:execution][Step:1] ", CodeGeneration.CommitMessage(1, "Add the API", ["src/api.ts"], Guid.NewGuid()).Subject, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every string constant the domain and infrastructure ship (messages, titles, names) is free of the old name.</summary>
+    [Fact]
+    public void FR198_No_shipped_string_constant_names_the_product_AIDE()
+    {
+        var offenders = new[] { typeof(ChannelText).Assembly, typeof(DependencyInjection).Assembly }
+            .SelectMany(a => a.GetTypes())
+            .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (Field: $"{f.DeclaringType!.FullName}.{f.Name}", Value: (string)f.GetRawConstantValue()!))
+            .Where(c => OldProductName().IsMatch(c.Value))
+            .Select(c => c.Field)
+            .ToList();
+
+        Assert.Empty(offenders);
+        Assert.Equal("The deployment didn't finish within 30 minutes; Tevrin stopped polling it.", DeploymentPollRules.TimeoutMessage);
+    }
+
+    // ---------- FR-199: agent prompts ----------
+
+    [Theory]
+    [InlineData(SdlcAgents.IdeaRefinement, "6")]
+    [InlineData(SdlcAgents.SpecGenerator, "7")]
+    [InlineData(SdlcAgents.PlanGenerator, "7")] // FR-242: v7 (deployment files)
+    [InlineData(SdlcAgents.CodeGenerator, "5")]
+    [InlineData(SdlcAgents.CodeReview, "10")] // FR-247: v10 (finding ids, waivers)
+    [InlineData(SdlcAgents.RepositoryAnalyst, "3")]
+    [InlineData(SdlcAgents.StackAnalyst, "3")]
+    [InlineData(SdlcAgents.BuildFix, "1")] // FR-256: build_fix v1
+    public void FR199_Each_rendered_system_prompt_names_Tevrin_not_AIDE_at_the_new_version(string agent, string version)
+    {
+        var template = new EmbeddedPromptLibrary().Template(agent);
+        var rendered = template.Render(template.RequiredInputs.ToDictionary(n => n, n => (string?)$"<{n}>", StringComparer.Ordinal)).Value;
+
+        Assert.Equal(version, template.Version);
+        Assert.Contains("agent of Tevrin", rendered.System, StringComparison.Ordinal);
+        Assert.DoesNotMatch(OldProductName(), rendered.System);
+        Assert.DoesNotMatch(OldProductName(), rendered.User);
+    }
+
+    [Fact]
+    public void FR199_A_specialist_prompt_composed_from_the_stack_catalog_names_Tevrin_not_AIDE()
+    {
+        var template = new EmbeddedPromptLibrary().Template(SdlcAgents.CodeGenerator);
+        var basePrompt = template.Render(template.RequiredInputs.ToDictionary(n => n, n => (string?)$"<{n}>", StringComparer.Ordinal)).Value;
+        var resolution = StackResolverTests.Resolve(StackResolverTests.AspnetSpa(frontendHost: "deploy-netlify", backendHost: "deploy-render", databaseHost: "render-postgres"));
+
+        Assert.NotEmpty(resolution.AgentKeys);
+        foreach (var key in resolution.AgentKeys)
+        {
+            var composed = StackPrompt.Compose(basePrompt, resolution, key).Value;
+            Assert.Contains("Tevrin", composed.System, StringComparison.Ordinal);
+            Assert.DoesNotMatch(OldProductName(), composed.System);
+        }
+    }
+
+    [Fact]
+    public void FR199_No_stack_catalog_file_names_the_product_AIDE()
+    {
+        var offenders = StackTestCatalog.ShippedFiles().Where(f => OldProductName().IsMatch(f.Value)).Select(f => f.Key).ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    // ---------- FR-201: identifiers users already hold keep their names ----------
+
+    [Fact]
+    public void FR201_API_tokens_issued_with_the_aide_pat_prefix_stay_valid()
+    {
+        // FR-326 (§4.77) moves new tokens to tevrin_pat_; the aide_pat_ tokens users hold keep working until 0.9.0.
+        Assert.Equal("aide_pat_", ApiTokenRules.LegacyPrefix);
+        Assert.True(ApiTokenRules.IsWellFormed("aide_pat_" + new string('A', 43)));
+    }
+
+    [Fact]
+    public void FR326_Webhook_deliveries_send_the_X_Tevrin_headers_and_still_the_X_AIDE_ones()
+    {
+        // FR-201 kept the X-AIDE-* headers; FR-326 (§4.77) adds X-Tevrin-* and sends both through 0.8.x.
+        Assert.Equal(
+            ["X-Tevrin-Signature", "X-Tevrin-Timestamp", "X-Tevrin-Delivery", "X-Tevrin-Event"],
+            [WebhookSignature.HeaderName, WebhookSignature.TimestampHeaderName, WebhookSignature.DeliveryHeaderName, WebhookSignature.EventHeaderName]);
+        Assert.Equal(
+            ["X-AIDE-Signature", "X-AIDE-Timestamp", "X-AIDE-Delivery", "X-AIDE-Event"],
+            [WebhookSignature.LegacyHeaderName, WebhookSignature.LegacyTimestampHeaderName, WebhookSignature.LegacyDeliveryHeaderName, WebhookSignature.LegacyEventHeaderName]);
+    }
+
+    [Fact]
+    public void FR201_Stored_formats_branches_and_paths_keep_their_aide_names()
+    {
+        // FR-232 (D-0.6.1-2) withdraws the aide/ prefix for new branches only: recorded aide/ branches are kept (§4.35).
+        Assert.Equal("tevrin/todo-api/v1.2.0", ReleaseVersionRules.BranchName("todo-api", Guid.NewGuid(), SemVer.Parse("1.2.0")));
+        Assert.Equal("aide/todo-api/v1.2.0", BranchNaming.Choose("aide/todo-api/v1.2.0", true, null, "todo-api", Guid.NewGuid(), SemVer.Parse("1.2.0")));
+        // FR-326 (§4.77): agents may write neither rules folder; plan blocks and profile fences are read under both tags.
+        Assert.Equal([".tevrin/", ".aide/"], PathRules.RulesDirectories);
+        Assert.True(PathRules.IsAgentForbidden(".aide/rules.md"));
+        Assert.True(PathRules.IsAgentForbidden(".tevrin/rules.md"));
+        Assert.Equal("aide-plan", PlanDocument.LegacyBlockLanguage);
+        Assert.Equal("aide-stack-profile", StackProfile.LegacyFenceTag);
+        Assert.Contains("aide-stack-profile", StackProfile.FenceTags);
+        // FR-326, D-0.8.0-10: the merge strategy is written as tevrin_merges; aide_merges is still read until 0.9.0.
+        Assert.Equal(MergeStrategy.TevrinMerges, EnumStrings.Parse<MergeStrategy>("aide_merges"));
+        // FR-326: commits carry the Tevrin-Step-Id trailer and still the AIDE-Step-Id one.
+        Assert.Equal("Tevrin-Step-Id", CodeGeneration.StepTrailer);
+        Assert.Equal("AIDE-Step-Id", CodeGeneration.LegacyStepTrailer);
+        Assert.Equal("AIDE_RUN_MIGRATIONS", DerivedEnvRules.RunMigrations);
+    }
+
+    [Fact]
+    public void FR201_Server_identifiers_keep_their_aide_names()
+    {
+        Assert.Equal("aide", DataProtectionSetup.DefaultApplicationName);
+        // FR-325 (D-0.8.0-7) renames the connection string to ConnectionStrings:Tevrin; the old name is still read until 0.9.0.
+        Assert.Equal("Aide", DependencyInjection.LegacyConnectionStringName);
+    }
+}

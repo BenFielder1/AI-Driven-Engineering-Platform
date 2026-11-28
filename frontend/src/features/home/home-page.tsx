@@ -131,7 +131,8 @@ function UnreadNotifications() {
 
 /**
  * /home (FR-207): the signed-in landing page. A greeting, the "Get set up" checklist (§4.30; dismissable, stored in
- * `aide.home.checklist-dismissed`), Recent projects (up to 6, last updated first) and Unread notifications (up to 5).
+ * `tevrin.home.checklist-dismissed`, or the pre-0.8.0 `aide.` key: FR-326), Recent projects (up to 6, last updated
+ * first) and Unread notifications (up to 5).
  * Each panel loads, fails and retries on its own.
  */
 export function HomePage({ user }: { user: User }) {

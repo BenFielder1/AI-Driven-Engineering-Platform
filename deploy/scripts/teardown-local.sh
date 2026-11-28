@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Remove the AIDE app from Docker Desktop Kubernetes (context docker-desktop only).
-#   default:      deletes workloads, services, config and secrets; KEEPS the namespace and PVCs (DB + aide-data).
-#   --wipe-data:  additionally deletes the 'aide' namespace and all its data, after typing the namespace to confirm.
+# Remove the Tevrin app from Docker Desktop Kubernetes (context docker-desktop only).
+#   default:      deletes workloads, services, config and secrets; KEEPS the namespace and PVCs (DB + tevrin-data).
+#   --wipe-data:  additionally deletes the 'tevrin' namespace and all its data, after typing the namespace to confirm.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -24,10 +24,10 @@ fi
 
 step "Deleting app resources in namespace $NS (PVCs kept)"
 $K -n "$NS" delete deployment,statefulset,service,job,configmap,secret \
-  -l app.kubernetes.io/part-of=aide --ignore-not-found --wait=true
+  -l app.kubernetes.io/part-of=tevrin --ignore-not-found --wait=true
 
 if [[ $WIPE -eq 1 ]]; then
-  step "--wipe-data: this deletes namespace '$NS' including the database and aide-data volumes"
+  step "--wipe-data: this deletes namespace '$NS' including the database and tevrin-data volumes"
   $K -n "$NS" get pvc || true
   read -r -p "Type '$NS' to permanently delete all data: " answer
   if [[ "$answer" == "$NS" ]]; then

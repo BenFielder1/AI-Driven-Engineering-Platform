@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Agents;
 using Tevrin.Engine.Domain.Entities;
+using Tevrin.Engine.Domain.Outcomes;
 
 namespace Tevrin.Engine.Runtime.Persistence;
 
@@ -73,8 +74,32 @@ public sealed class RunLogQueries(IEngineDbContext db)
     private async Task<IReadOnlyList<PromptStats>> PromptStatsAsync(IQueryable<PipelineRun> runs, CancellationToken cancellationToken)
     {
         var groups = await GroupsQuery(runs).ToListAsync(cancellationToken);
-        return RunLogStats.Summarise(groups.Select(g => new PromptRunSums(
+        var stats = RunLogStats.Summarise(groups.Select(g => new PromptRunSums(
             g.Agent, g.PromptVersion, g.Runs, g.Finished, g.Failed, g.Input, g.Output, g.Cost, g.LatencyRuns, g.Latency, g.Duration)));
+        var means = OutcomeScoring.Means(await OutcomeScoresAsync(runs, cancellationToken))
+            .ToLookup(m => (m.Agent, m.PromptVersion));
+        return [.. stats.Select(s => means.Contains((s.Agent, s.PromptVersion))
+            ? s with { Outcomes = [.. means[(s.Agent, s.PromptVersion)]] }
+            : s)];
+    }
+
+    /// <summary>
+    /// FR-353: the outcome scores of <paramref name="runs"/>, each attributed to the agent run it rates: an agent-run
+    /// target directly, an artifact target through the agent run that produced the artifact (artifacts with no producing
+    /// agent run, such as inputs, aren't attributed). Filtered and joined in SQL.
+    /// </summary>
+    private async Task<IReadOnlyList<AttributedOutcomeScore>> OutcomeScoresAsync(IQueryable<PipelineRun> runs, CancellationToken cancellationToken)
+    {
+        var runIds = runs.Select(p => p.Id);
+        var scores = db.OutcomeScores.AsNoTracking().Where(s => runIds.Contains(s.PipelineRunId));
+        var direct = await scores.Where(s => s.AgentRunId != null)
+            .Join(db.AgentRuns.AsNoTracking(), s => s.AgentRunId, r => (Guid?)r.Id, (s, r) => new { r.Agent, r.PromptVersion, s.Metric, Target = r.Id, s.Score })
+            .ToListAsync(cancellationToken);
+        var viaArtifact = await scores.Where(s => s.ArtifactId != null)
+            .Join(db.Artifacts.AsNoTracking(), s => s.ArtifactId, a => (Guid?)a.Id, (s, a) => new { s.Metric, s.Score, Target = a.Id, a.AgentRunId })
+            .Join(db.AgentRuns.AsNoTracking(), x => x.AgentRunId, r => (Guid?)r.Id, (x, r) => new { r.Agent, r.PromptVersion, x.Metric, x.Target, x.Score })
+            .ToListAsync(cancellationToken);
+        return [.. direct.Concat(viaArtifact).Select(x => new AttributedOutcomeScore(x.Agent, x.PromptVersion, x.Metric, x.Target.ToString("N"), x.Score))];
     }
 
     /// <summary>

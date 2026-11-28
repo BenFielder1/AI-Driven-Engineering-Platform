@@ -15,7 +15,7 @@ data:
   # network). AllowFake above covers it outside Development. The normal overlay leaves it unset (real trackers).
   Trackers__Provider: Fake
   # FR-73 / §8: Local import ("existing" repo) resolves git.localSourcePath under this root. Seeded by
-  # deploy/scripts/seed-e2e-repo.sh with existing-app (tags v0.1.0, v0.2.0). On the aide-data volume.
+  # deploy/scripts/seed-e2e-repo.sh with existing-app (tags v0.1.0, v0.2.0). On the tevrin-data volume.
   Git__Local__ImportRoot: /data/import
   # FR-22: new projects default to the Fake LLM (deterministic agent outputs incl. Fake specialist scripts),
   # whatever system keys secrets.env holds.

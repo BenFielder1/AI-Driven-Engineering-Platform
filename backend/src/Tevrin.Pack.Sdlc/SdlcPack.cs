@@ -8,7 +8,7 @@ namespace Tevrin.Pack.Sdlc;
 /// the tool and context names (FR-317: <see cref="SdlcToolNames"/>, <see cref="SdlcContextNames"/>), the
 /// <see cref="ReviewCycles"/> setting, every SDLC job type (<see cref="SdlcJobTypes"/>) and the artifacts its jobs
 /// rather than its stages produce. It references only the engine (D-0.7.0-23): the guard implementations, the settings
-/// provider and the start selector are composed by the host from <c>Aide.Domain</c> rules.
+/// provider and the start selector are composed by the host from <c>Tevrin.Domain</c> rules.
 /// </summary>
 public sealed class SdlcPack : IPipelinePack
 {
@@ -26,6 +26,10 @@ public sealed class SdlcPack : IPipelinePack
 
     public string Id => PackId;
 
+    /// <summary>FR-330: the SDLC's runs are started and moved by its own pages and endpoints, so the engine's
+    /// run-control endpoints refuse it (<c>RUN_CONTROLLED_BY_HOST</c>). The definition and its hash are unchanged.</summary>
+    public RunControl RunControlOf(string pipelineId) => RunControl.Host;
+
     public void Register(IPackRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
@@ -39,10 +43,11 @@ public sealed class SdlcPack : IPipelinePack
             registry.AddGuard(guard);
         }
 
-        // FR-317: the repo tools (agent.tools) and the context sections the host's providers supply.
+        // FR-317: the repo tools (agent.tools) and the context sections the host's providers supply. FR-358: they only
+        // read the working copy, so they're 'read' (under every stage's default max_tier; the SDLC is unchanged).
         foreach (var tool in SdlcToolNames.All)
         {
-            registry.AddTool(tool);
+            registry.AddTool(tool, ToolTier.Read);
         }
 
         foreach (var name in SdlcContextNames.All)

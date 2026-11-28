@@ -15,7 +15,7 @@
 //    GET /api/projects (page 1, 50 rows), GET …/execution/runs and GET …/compliance/reports.
 //
 // Usage (Node 24, from the repo root):  node scripts/perf/nfr-perf2.mjs          # http://localhost:8080
-// Env: BASE_URL, REQUESTS=50, CONCURRENCY=4, CYCLES=10, PERF_EMAIL=nfr-perf2@perf.aide.local, PERF_PASSWORD=…
+// Env: BASE_URL, REQUESTS=50, CONCURRENCY=4, CYCLES=10, PERF_EMAIL=nfr-perf2@perf.tevrin.local, PERF_PASSWORD=…
 // NOTE: creates data in the target database (the perf user and its projects). Re-runs reuse them. The per-run API
 // token is revoked when the run ends.
 
@@ -26,7 +26,7 @@ const REQUESTS = Math.max(30, Number(process.env.REQUESTS ?? 50))
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 4)
 const CYCLES = Number(process.env.CYCLES ?? 10)
 const PROJECTS = 50
-const EMAIL = process.env.PERF_EMAIL ?? 'nfr-perf2@perf.aide.local'
+const EMAIL = process.env.PERF_EMAIL ?? 'nfr-perf2@perf.tevrin.local'
 const PASSWORD = process.env.PERF_PASSWORD ?? 'nfr-perf2-password-1'
 const P95_TARGET_MS = 300
 const HISTORY_NAME = 'NFR-PERF2-HISTORY'

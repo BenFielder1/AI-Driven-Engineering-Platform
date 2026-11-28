@@ -1,5 +1,5 @@
 /**
- * §4.10 release versions, mirroring backend `Aide.Domain/Releases/SemVer.cs` and `ReleaseVersionRules.cs` so the
+ * §4.10 release versions, mirroring backend `Tevrin.Domain/Releases/SemVer.cs` and `ReleaseVersionRules.cs` so the
  * Start new version dialog (FR-60, FR-61) and the wizard (FR-66) validate as the server does. The server still
  * decides: these only give live feedback.
  */

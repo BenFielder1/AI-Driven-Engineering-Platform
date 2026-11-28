@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { authDb, seedToken, signInAs } from '../../mocks/handlers/auth'
 import { renderRoute } from '../../test/render'
 
-const PLAIN = 'aide_pat_' + 'x'.repeat(43)
+const PLAIN = 'tevrin_pat_' + 'x'.repeat(43)
 
 describe('AccountPage', () => {
   it('FR-3: shows the profile with the system role', async () => {

@@ -3,7 +3,7 @@
 # Every kubectl call goes through $K, pinned to the docker-desktop context; the current context is never used.
 
 CTX=docker-desktop
-NS=aide
+NS=tevrin
 APP_PORT="${APP_PORT:-8080}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -85,7 +85,7 @@ spec:
           if [ -e /vol/18/docker ]; then
             if [ -r /vol/18/docker/PG_VERSION ]; then current="\$(tr -d '[:space:]' < /vol/18/docker/PG_VERSION)"; else current=unknown; fi
           fi
-          echo "aide-db-check legacy=\${legacy:-unknown} current=\${current:-unknown}"
+          echo "tevrin-db-check legacy=\${legacy:-unknown} current=\${current:-unknown}"
       securityContext:
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
@@ -119,7 +119,7 @@ EOF
     || die "Could not read the check pod's result. Nothing was applied."
   delete_db_check_pod
   trap - EXIT
-  [[ "$result" =~ ^aide-db-check\ legacy=([^\ ]+)\ current=([^\ ]+)$ ]] \
+  [[ "$result" =~ ^tevrin-db-check\ legacy=([^\ ]+)\ current=([^\ ]+)$ ]] \
     || die "Unexpected result from the database version check: '$result'. Nothing was applied."
   legacy="${BASH_REMATCH[1]}"
   current="${BASH_REMATCH[2]}"

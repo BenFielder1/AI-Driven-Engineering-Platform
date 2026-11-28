@@ -279,7 +279,7 @@ describe('Settings → Git: release settings (FR-64, FR-65, §4.10)', () => {
     await user.click(within(form).getByRole('button', { name: 'Save release settings' }))
 
     expect(await screen.findByText('Release settings saved.')).toBeInTheDocument()
-    expect(requestsTo('PATCH', '/settings/git').at(-1)?.body).toEqual({ mergeStrategy: 'aide_merges', tagPrefix: 'release/' })
+    expect(requestsTo('PATCH', '/settings/git').at(-1)?.body).toEqual({ mergeStrategy: 'tevrin_merges', tagPrefix: 'release/' })
     expect(project.git.tagPrefix).toBe('release/')
   })
 

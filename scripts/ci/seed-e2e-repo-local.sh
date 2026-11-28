@@ -3,13 +3,13 @@
 # Runs the exact in-pod seed script embedded in deploy/scripts/seed-e2e-repo.sh (the heredoc between <<'SH' and
 # SH), so the CI seed and the Kubernetes seed can never drift: same files, commits, dates and tags v0.1.0/v0.2.0.
 #
-# Usage: scripts/ci/seed-e2e-repo-local.sh [import-root]   (default: $AIDE_IMPORT_ROOT or /data/import)
+# Usage: scripts/ci/seed-e2e-repo-local.sh [import-root]   (default: $TEVRIN_IMPORT_ROOT, then the pre-0.8.0 $AIDE_IMPORT_ROOT, or /data/import)
 # Seeds <import-root>/existing-app. Idempotent (a complete repo is left untouched). Needs git and a POSIX sh.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE="$REPO_ROOT/deploy/scripts/seed-e2e-repo.sh"
-IMPORT_ROOT="${1:-${AIDE_IMPORT_ROOT:-/data/import}}"
+IMPORT_ROOT="${1:-${TEVRIN_IMPORT_ROOT:-${AIDE_IMPORT_ROOT:-/data/import}}}"
 REPO="$IMPORT_ROOT/existing-app"
 
 # Lines strictly between the heredoc opener (ends in <<'SH') and its terminator (a line that is exactly SH).

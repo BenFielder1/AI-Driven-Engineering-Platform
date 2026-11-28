@@ -33,12 +33,49 @@ public static class DefinitionErrorCodes
     /// <summary>FR-295, D-0.7.0-33: an agent stage's prompt isn't one its pack registered.</summary>
     public const string UnknownPrompt = "DEF_UNKNOWN_PROMPT";
 
+    /// <summary>
+    /// FR-352 (0.8.0): a project-scope artifact a run would produce (a stage or agent output, a gate's <c>approves</c>, a
+    /// pack handler's product) or supply (<c>input: true</c>), or declared differently from another pipeline sharing its
+    /// key (D-0.8.0-19).
+    /// </summary>
+    public const string ScopeInput = "DEF_SCOPE_INPUT";
+
+    /// <summary>FR-343 (0.8.0): a stage in one branch of a <c>parallel</c> group reads an artifact another branch of the
+    /// same group produces.</summary>
+    public const string BranchInput = "DEF_BRANCH_INPUT";
+
+    /// <summary>FR-344, FR-347 (0.8.0): a <c>routes:</c> entry or <c>on_veto.to</c> that isn't an earlier stage.</summary>
+    public const string RouteTarget = "DEF_ROUTE_TARGET";
+
+    /// <summary>FR-358 (0.8.0): a tool an agent stage or binding lists whose registered tier is above its
+    /// <c>tool_policy.max_tier</c> (default <c>write</c>).</summary>
+    public const string ToolTier = "DEF_TOOL_TIER";
+
+    /// <summary>FR-345 (0.8.0, also FR-344 and FR-349 agent references, and FR-355/FR-356 map, reduce and conversation
+    /// agents): an agent key the stage doesn't bind in <c>agents:</c>.</summary>
+    public const string FanOutAgent = "DEF_FANOUT_AGENT";
+
+    /// <summary>FR-354 (0.8.0): a <c>followups:</c> entry whose stage isn't a top-level stage, is listed twice, is reached by
+    /// the main flow (a start, the linear default, <c>on_success</c>, <c>on_reject</c>, <c>loop</c>, a route or
+    /// <c>on_veto</c>), or whose <c>after</c> is empty, repeats a duration or holds one that isn't <c>&lt;n&gt;d|h|m</c> with
+    /// <c>n</c> &gt; 0.</summary>
+    public const string FollowUpStage = "DEF_FOLLOWUP_STAGE";
+
+    /// <summary>FR-355 (0.8.0): a <c>map.over</c> that isn't <c>&lt;artifact key&gt;[.&lt;array path&gt;]</c> naming a JSON
+    /// artifact the stage can read (one of its inputs, or an output of an earlier stage).</summary>
+    public const string MapSource = "DEF_MAP_SOURCE";
+
+    /// <summary>FR-356 (0.8.0): a <c>conversation</c> without 2–6 participants, with a missing or repeated role or agent, or
+    /// whose <c>opener</c> isn't one of the roles.</summary>
+    public const string ConversationParticipants = "DEF_CONVERSATION_PARTICIPANTS";
+
     /// <summary>Every code, in §4.49 table order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         Parse, DuplicateId, UnknownStage, UnknownArtifact, UnknownStatus, UnknownGuard, UnknownHandler, UnknownTool,
         UnknownJobType, StageKind, UnreachableStage, UncappedLoop, LoopForward, SchemaNotFound, ArtifactNoProducer,
-        UnknownSetting, TriggerNotSupported, UnknownPrompt,
+        UnknownSetting, TriggerNotSupported, UnknownPrompt, ScopeInput, BranchInput, RouteTarget, ToolTier,
+        FanOutAgent, FollowUpStage, MapSource, ConversationParticipants,
     ];
 
     /// <summary>

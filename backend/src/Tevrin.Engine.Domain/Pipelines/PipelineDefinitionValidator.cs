@@ -38,6 +38,9 @@ public static partial class PipelineDefinitionValidator
     {
         private readonly List<DefinitionError> _errors = [];
         private readonly HashSet<string> _stageIds = new(definition.Stages.Select(s => s.Id), StringComparer.Ordinal);
+
+        /// <summary>FR-343: every stage with its YAML path, each parallel group followed by its branch stages.</summary>
+        private readonly List<(StageDefinition Stage, string Path)> _allStages = AllStagesWithPaths(definition);
         private readonly HashSet<string> _artifactKeys = new(definition.Artifacts.Select(a => a.Key), StringComparer.Ordinal);
         private readonly HashSet<string> _statuses = new(
             definition.Statuses.Select(s => s.Name).Concat(EnumStrings.Values<GenericRunStatus>()), StringComparer.Ordinal);
@@ -48,7 +51,7 @@ public static partial class PipelineDefinitionValidator
         private readonly HashSet<string> _registeredSettings = new(catalog.Settings, StringComparer.Ordinal);
         private readonly HashSet<string> _schemas = new(catalog.Schemas, StringComparer.Ordinal);
         private readonly HashSet<string> _gateTypes = new(
-            definition.Stages.Select(s => s.Gate?.Type).OfType<string>().Append(EngineGates.Escalation), StringComparer.Ordinal);
+            definition.AllStages.Select(s => s.Gate?.Type).OfType<string>().Append(EngineGates.Escalation), StringComparer.Ordinal);
 
         public List<DefinitionError> Execute()
         {
@@ -57,11 +60,13 @@ public static partial class PipelineDefinitionValidator
             ValidateStatuses();
             ValidateStatusChanges();
             ValidateConcurrency();
+            ValidateLimits();
             ValidateStages();
             ValidateAgentBindings();
             ValidateStageHandlers();
             ValidateStart();
             ValidateReachability();
+            ValidateFollowUps();
             ValidateProducers();
             return _errors;
         }
@@ -89,11 +94,7 @@ public static partial class PipelineDefinitionValidator
                 Add(DefinitionErrorCodes.Parse, "title", "'title' is required.");
             }
 
-            if (definition.Trigger.Kind is not TriggerKind.Manual)
-            {
-                Add(DefinitionErrorCodes.TriggerNotSupported, "trigger.kind",
-                    $"Trigger kind '{definition.Trigger.Kind.ToWire()}' is not supported in this version; only 'manual' runs.");
-            }
+            ValidateTrigger();
 
             if (definition.ApprovalModes.Count == 0)
             {
@@ -156,6 +157,12 @@ public static partial class PipelineDefinitionValidator
                 }
 
                 CheckName(artifact.Key, path, "Artifact key");
+
+                // FR-352: a project-scope artifact is pinned from the project's history, not supplied to one run.
+                if (artifact.Scope == ArtifactScope.Project && artifact.Input)
+                {
+                    Add(DefinitionErrorCodes.ScopeInput, path + ".scope", $"Artifact '{artifact.Key}' can't be both 'input: true' and 'scope: project'.");
+                }
                 if (string.IsNullOrWhiteSpace(artifact.Title))
                 {
                     Add(DefinitionErrorCodes.Parse, path + ".title", "'title' is required.");
@@ -232,6 +239,93 @@ public static partial class PipelineDefinitionValidator
             }
         }
 
+        /// <summary>
+        /// FR-284, FR-336, FR-337: a <c>schedule</c> or <c>webhook</c> trigger takes only <c>input</c> and <c>on_active</c>,
+        /// and a <c>manual</c> trigger takes no option; any other option is <see cref="DefinitionErrorCodes.TriggerNotSupported"/>.
+        /// A webhook needs <c>input</c>; <c>input</c> names an artifact declared <c>input: true</c>. FR-339: each entry of a
+        /// <c>triggers:</c> list follows the same rules; the list is not empty and has at most one webhook and one schedule.
+        /// </summary>
+        private void ValidateTrigger()
+        {
+            if (definition.Triggers is not { } triggers)
+            {
+                ValidateTrigger(definition.Trigger, "trigger");
+                return;
+            }
+
+            if (triggers.Count == 0)
+            {
+                Add(DefinitionErrorCodes.Parse, "triggers", "'triggers' needs at least one trigger.");
+            }
+
+            for (var i = 0; i < triggers.Count; i++)
+            {
+                var path = $"triggers[{i}]";
+                var kind = triggers[i].Kind;
+                if (kind is TriggerKind.Schedule or TriggerKind.Webhook && triggers.Take(i).Any(t => t.Kind == kind))
+                {
+                    Add(DefinitionErrorCodes.Parse, path + ".kind", $"A pipeline declares at most one {kind.ToWire()} trigger.");
+                }
+
+                ValidateTrigger(triggers[i], path);
+            }
+        }
+
+        private void ValidateTrigger(PipelineTrigger trigger, string path)
+        {
+            var triggered = trigger.Kind is TriggerKind.Schedule or TriggerKind.Webhook;
+            foreach (var key in trigger.Options.Keys)
+            {
+                var known = key is PipelineTrigger.InputOption or PipelineTrigger.OnActiveOption;
+                if (!triggered)
+                {
+                    Add(DefinitionErrorCodes.TriggerNotSupported, $"{path}.{key}",
+                        $"A '{trigger.Kind.ToWire()}' trigger takes no options; '{key}' needs a schedule or webhook trigger.");
+                }
+                else if (!known)
+                {
+                    Add(DefinitionErrorCodes.TriggerNotSupported, $"{path}.{key}",
+                        $"Trigger option '{key}' is not supported; a {trigger.Kind.ToWire()} trigger takes 'input' and 'on_active'.");
+                }
+            }
+
+            if (!triggered)
+            {
+                return;
+            }
+
+            if (trigger.Options.TryGetValue(PipelineTrigger.OnActiveOption, out var onActive) &&
+                !EnumStrings.TryParse(onActive, out TriggerOnActive _))
+            {
+                Add(DefinitionErrorCodes.Parse, $"{path}.on_active", $"'on_active' must be 'submit' or 'skip', not '{onActive}'.");
+            }
+
+            if (trigger.Input is not { } input)
+            {
+                if (trigger.Kind == TriggerKind.Webhook)
+                {
+                    Add(DefinitionErrorCodes.Parse, $"{path}.input", "A webhook trigger needs 'input': the artifact its body is stored as.");
+                }
+
+                return;
+            }
+
+            CheckInputArtifact(input, $"{path}.input");
+        }
+
+        /// <summary>FR-335: <paramref name="key"/> is a declared artifact marked <c>input: true</c>.</summary>
+        private void CheckInputArtifact(string key, string path)
+        {
+            if (string.IsNullOrEmpty(key) || !_artifactKeys.Contains(key))
+            {
+                CheckArtifactRef(key, path);
+            }
+            else if (definition.FindArtifact(key) is { Input: false })
+            {
+                Add(DefinitionErrorCodes.Parse, path, $"Artifact '{key}' is not an input; declare it with 'input: true'.");
+            }
+        }
+
         private void ValidateConcurrency()
         {
             var exclusive = definition.Concurrency.Exclusive;
@@ -300,6 +394,7 @@ public static partial class PipelineDefinitionValidator
                 ValidateGuards(stage, path);
                 ValidateGate(stage, path);
                 ValidateTransitions(stage, i, path);
+                ValidateFlow(stage, i, path, seen);
             }
         }
 
@@ -307,7 +402,14 @@ public static partial class PipelineDefinitionValidator
         /// pack registered, and its required placeholders must be filled by the stage's inputs or the pack's context
         /// (<see cref="AgentPromptPlaceholders.Problem"/>); skipped when the catalog doesn't list prompts
         /// (<see cref="PackCatalog.Prompts"/> null).</summary>
-        private void CheckPrompt(StageDefinition stage, AgentStageDefinition agent, string path)
+        /// <summary>FR-354: a follow-up stage's prompt also gets its label as <c>{{VARIANT}}</c> and the run's outcome scores
+        /// as <c>{{OUTCOME_SCORES}}</c>.</summary>
+        private IReadOnlyCollection<string>? WithFollowUp(StageDefinition stage, IReadOnlyCollection<string>? supplied) =>
+            FollowUpRules.IsFollowUpStage(definition, stage.Id)
+                ? [.. supplied ?? [], VariantRules.LabelPlaceholder, FollowUpRules.OutcomeScoresPlaceholder]
+                : supplied;
+
+        private void CheckPrompt(StageDefinition stage, AgentStageDefinition agent, string path, IReadOnlyCollection<string>? supplied = null)
         {
             if (catalog.Prompts is not { } prompts || string.IsNullOrEmpty(agent.Key))
             {
@@ -320,7 +422,7 @@ public static partial class PipelineDefinitionValidator
             {
                 Add(DefinitionErrorCodes.UnknownPrompt, at, $"No pack registered prompt '{name}'.");
             }
-            else if (AgentPromptPlaceholders.Problem(stage, source, catalog.ContextNames) is { } problem)
+            else if (AgentPromptPlaceholders.Problem(stage, source, catalog.ContextNames, WithFollowUp(stage, supplied)) is { } problem)
             {
                 Add(DefinitionErrorCodes.UnknownPrompt, at, $"Prompt '{name}' can't be rendered for stage '{stage.Id}': {problem}.");
             }
@@ -347,6 +449,8 @@ public static partial class PipelineDefinitionValidator
                     {
                         Add(DefinitionErrorCodes.UnknownTool, $"{path}.agent.tools[{t}]", $"No pack registered tool '{tool}'.");
                     }
+
+                    CheckToolTier(tool, stage.ToolPolicy, $"{path}.agent.tools[{t}]"); // FR-358
                 }
 
                 CheckJobType(agent.JobType, path + ".agent.job_type");
@@ -368,12 +472,23 @@ public static partial class PipelineDefinitionValidator
         {
             for (var j = 0; j < stage.Inputs.Count; j++)
             {
-                CheckArtifactRef(stage.Inputs[j], $"{path}.inputs[{j}]");
+                CheckArtifactRef(stage.Inputs[j], $"{path}.inputs[{RunsInputRules.InputPosition(stage, j)}]");
             }
 
             if (stage.Output is { } output)
             {
                 CheckArtifactRef(output, path + ".output");
+                CheckNotProjectScoped(output, path + ".output");
+            }
+        }
+
+        /// <summary>FR-352: a project-scope artifact is edited by people through the artifact endpoints, never produced by a run.</summary>
+        private void CheckNotProjectScoped(string key, string path)
+        {
+            if (definition.FindArtifact(key) is { Scope: ArtifactScope.Project })
+            {
+                Add(DefinitionErrorCodes.ScopeInput, path,
+                    $"Artifact '{key}' has 'scope: project': people edit and lock it through the artifact endpoints, so no stage, gate or handler of a run may produce it.");
             }
         }
 
@@ -389,6 +504,9 @@ public static partial class PipelineDefinitionValidator
                         break;
                     case GuardRequirement guard:
                         CheckGuard(guard.Guard, itemPath + ".guard");
+                        break;
+                    case InputRequirement input:
+                        CheckInputArtifact(input.ArtifactKey, itemPath + ".input");
                         break;
                     case NoPendingGatesRequirement none:
                         for (var k = 0; k < none.Except.Count; k++)
@@ -409,7 +527,20 @@ public static partial class PipelineDefinitionValidator
         {
             for (var j = 0; j < stage.Validate.Count; j++)
             {
-                CheckGuard(stage.Validate[j].Guard, $"{path}.validate[{j}].guard");
+                var validation = stage.Validate[j];
+                if (validation.Agent is null)
+                {
+                    CheckGuard(validation.Guard!, $"{path}.validate[{j}].guard");
+                }
+                else if (validation.Guard is not null)
+                {
+                    Add(DefinitionErrorCodes.Parse, $"{path}.validate[{j}]", "A 'validate' entry needs exactly one of 'guard' and 'agent'.");
+                }
+                else
+                {
+                    // FR-350: a validator agent is one the stage binds under 'agents:'.
+                    CheckBoundAgent(stage, validation.Agent, $"{path}.validate[{j}].agent");
+                }
             }
 
             if (stage.OnInvalid is { } onInvalid && onInvalid.MaxAttempts is < MinAttempts or > MaxAttempts)
@@ -436,10 +567,11 @@ public static partial class PipelineDefinitionValidator
             {
                 Add(DefinitionErrorCodes.Parse, path + ".gate.type", "'type' is required.");
             }
-            else if (gate.Type == EngineGates.Escalation)
+            else if (EngineGates.IsEngineRaised(gate.Type))
             {
+                // FR-359: a tool_approval decision must never count as a stage's entry approval.
                 Add(DefinitionErrorCodes.Parse, path + ".gate.type",
-                    $"'{EngineGates.Escalation}' gates are engine-owned and never guard entry to a stage; use another gate type.");
+                    $"'{gate.Type}' gates are engine-owned and never guard entry to a stage; use another gate type.");
             }
             else
             {
@@ -462,6 +594,7 @@ public static partial class PipelineDefinitionValidator
             if (gate.Approves is { } approves)
             {
                 CheckArtifactRef(approves, path + ".gate.approves");
+                CheckNotProjectScoped(approves, path + ".gate.approves");
             }
         }
 
@@ -574,7 +707,7 @@ public static partial class PipelineDefinitionValidator
                 var stage = stages[index];
                 string?[] targets =
                 [
-                    stage.OnSuccess ?? (index + 1 < stages.Count ? stages[index + 1].Id : null),
+                    stage.OnSuccess ?? definition.NextInFlow(index),
                     stage.OnReject?.To,
                     stage.Loop?.To,
                 ];
@@ -592,7 +725,8 @@ public static partial class PipelineDefinitionValidator
             var reported = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i < stages.Count; i++)
             {
-                if (!visited[i] && definition.IndexOfStage(stages[i].Id) == i && reported.Add(stages[i].Id))
+                if (!visited[i] && definition.IndexOfStage(stages[i].Id) == i && !FollowUpRules.IsFollowUpStage(definition, stages[i].Id)
+                    && reported.Add(stages[i].Id))
                 {
                     Add(DefinitionErrorCodes.UnreachableStage, $"stages[{i}]", $"No path from a start stage reaches stage '{stages[i].Id}'.");
                 }
@@ -602,8 +736,20 @@ public static partial class PipelineDefinitionValidator
         /// <summary>An artifact some stage reads must be some stage's output or produced by a pack handler.</summary>
         private void ValidateProducers()
         {
-            var produced = new HashSet<string>(catalog.ProducedArtifacts, StringComparer.Ordinal);
-            foreach (var stage in definition.Stages)
+            // FR-335: an input artifact is supplied from outside the run, so it needs no producer; FR-352: nor does a
+            // project-scope artifact, which people edit and the run pins at its start.
+            var produced = new HashSet<string>(
+                catalog.ProducedArtifacts.Concat(definition.Artifacts.Where(a => a.Input || a.Scope == ArtifactScope.Project).Select(a => a.Key)),
+                StringComparer.Ordinal);
+
+            // FR-352: a pack handler doesn't produce a project-scope artifact either (people edit it).
+            foreach (var artifact in definition.Artifacts.Where(a => a.Scope == ArtifactScope.Project && catalog.ProducedArtifacts.Contains(a.Key)))
+            {
+                Add(DefinitionErrorCodes.ScopeInput, $"artifacts.{artifact.Key}.scope",
+                    $"Artifact '{artifact.Key}' has 'scope: project', but a pack handler produces it; people edit and lock it through the artifact endpoints.");
+            }
+
+            foreach (var stage in definition.AllStages)
             {
                 if (stage.Output is { } output)
                 {
@@ -615,20 +761,20 @@ public static partial class PipelineDefinitionValidator
             }
 
             var reported = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage, at) in _allStages)
             {
-                var inputs = definition.Stages[i].Inputs;
+                var inputs = stage.Inputs;
                 for (var j = 0; j < inputs.Count; j++)
                 {
                     var key = inputs[j];
                     if (_artifactKeys.Contains(key) && !produced.Contains(key) && reported.Add(key))
                     {
-                        Add(DefinitionErrorCodes.ArtifactNoProducer, $"stages[{i}].inputs[{j}]",
+                        Add(DefinitionErrorCodes.ArtifactNoProducer, $"{at}.inputs[{RunsInputRules.InputPosition(stage, j)}]",
                             $"Artifact '{key}' is read but no stage outputs it and no pack handler produces it.");
                     }
                 }
 
-                var bindings = definition.Stages[i].Agents;
+                var bindings = stage.Agents;
                 for (var b = 0; b < bindings.Count; b++)
                 {
                     for (var j = 0; j < bindings[b].Inputs.Count; j++)
@@ -636,7 +782,7 @@ public static partial class PipelineDefinitionValidator
                         var key = bindings[b].Inputs[j];
                         if (_artifactKeys.Contains(key) && !produced.Contains(key) && reported.Add(key))
                         {
-                            Add(DefinitionErrorCodes.ArtifactNoProducer, $"stages[{i}].agents[{b}].inputs[{j}]",
+                            Add(DefinitionErrorCodes.ArtifactNoProducer, $"{at}.agents[{b}].inputs[{j}]",
                                 $"Artifact '{key}' is read but no stage outputs it and no pack handler produces it.");
                         }
                     }

@@ -14,18 +14,17 @@ public static partial class PipelineDefinitionValidator
         private void ValidateStageHandlers()
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < definition.Stages.Count; i++)
+            foreach (var (stage, at) in _allStages)
             {
-                var stage = definition.Stages[i];
                 if (!string.IsNullOrEmpty(stage.Handler) && !names.Add(stage.Handler))
                 {
-                    Add(DefinitionErrorCodes.DuplicateId, $"stages[{i}].handler", DuplicateHandler(stage.Handler));
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.handler", DuplicateHandler(stage.Handler));
                 }
 
                 for (var j = 0; j < stage.Handlers.Count; j++)
                 {
                     var handler = stage.Handlers[j];
-                    var path = $"stages[{i}].handlers[{j}]";
+                    var path = $"{at}.handlers[{j}]";
                     if (string.IsNullOrEmpty(handler))
                     {
                         Add(DefinitionErrorCodes.Parse, path, "A handler name is required.");
@@ -38,6 +37,17 @@ public static partial class PipelineDefinitionValidator
                     {
                         Add(DefinitionErrorCodes.UnknownHandler, path, $"No pack registered stage handler '{handler}'.");
                     }
+                }
+
+                // FR-355: a map or reduce handler is a handler name too (registration is checked with the map).
+                if (stage.Map?.Handler is { Length: > 0 } mapHandler && !names.Add(mapHandler))
+                {
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.map.handler", DuplicateHandler(mapHandler));
+                }
+
+                if (stage.Reduce?.Handler is { Length: > 0 } reduceHandler && !names.Add(reduceHandler))
+                {
+                    Add(DefinitionErrorCodes.DuplicateId, $"{at}.reduce.handler", DuplicateHandler(reduceHandler));
                 }
             }
         }

@@ -3,6 +3,7 @@ import { ErrorState, LoadingState } from '../../components/ui/states'
 import { useRunArtifacts } from '../api/hooks'
 import type { PipelineDefinition, TimelineItem } from '../api/types'
 import type { DefinitionLabels } from '../labels'
+import { TranscriptVersion, TranscriptView } from '../constructs/transcript'
 import { ArtifactDiff, ArtifactViewer } from './artifact-viewer'
 import { TimelineEntry } from './run-timeline'
 
@@ -31,22 +32,35 @@ function TextBlock({ label, text, truncated, missing }: { label: string; text: s
   )
 }
 
-/** An agent run: its input (the rendered prompt, redacted) and output side by side, with truncation notices. */
+/**
+ * An agent run: its input (the rendered prompt, redacted) and output side by side, with truncation notices. FR-363: a
+ * conversation turn also shows its reply as a chat turn, labelled with its speaker's role.
+ */
 function AgentRunBody({ item }: { item: TimelineItem }) {
+  const turn = item.turnIndex != null && item.output ? item.output : null
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <TextBlock
-        label="Input"
-        text={item.input}
-        truncated={item.inputTruncated === true}
-        missing="No input was recorded for this run. Runs from before Tevrin 0.7.0 don't store it."
-      />
-      <TextBlock
-        label="Output"
-        text={item.output}
-        truncated={item.outputTruncated === true}
-        missing="This run has no output."
-      />
+    <div className="flex flex-col gap-4">
+      {turn !== null && (
+        <TranscriptView
+          turns={[{ role: item.turnRole ?? '', agentKey: item.agentKey ?? '', text: turn, agentRunId: item.agentRunId ?? item.id }]}
+          label={`Turn ${String(item.turnIndex)}`}
+          participants={[]}
+        />
+      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TextBlock
+          label="Input"
+          text={item.input}
+          truncated={item.inputTruncated === true}
+          missing="No input was recorded for this run. Runs from before Tevrin 0.7.0 don't store it."
+        />
+        <TextBlock
+          label="Output"
+          text={item.output}
+          truncated={item.outputTruncated === true}
+          missing="This run has no output."
+        />
+      </div>
     </div>
   )
 }
@@ -68,6 +82,19 @@ function ArtifactVersionBody({ runId, item, definition, labels }: { runId: strin
   if (artifacts.isError) {
     // Without the version list the previous version is unknown: never guess "first version".
     return <ErrorState error={artifacts.error} onRetry={() => void artifacts.refetch()} title={`The versions of ${title} couldn't load`} />
+  }
+  // FR-363: a conversation stage's transcript renders as a chat (definition-driven: the stage that outputs this key).
+  const conversation = definition?.stages.find((s) => s.conversation && s.output === key)?.conversation
+  if (conversation && item.variant == null && item.itemIndex == null) {
+    return (
+      <TranscriptVersion
+        runId={runId}
+        artifactKey={key}
+        version={version}
+        title={title}
+        participants={conversation.participants.map((p) => p.agent)}
+      />
+    )
   }
   if (previous === null) {
     return (

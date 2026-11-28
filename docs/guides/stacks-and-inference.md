@@ -10,7 +10,7 @@ nav_order: 7
 
 Pick one option per layer in the wizard's Stack step. The options come from a versioned catalog of frontend, backend, data, version control and deployment hosts, adapted from the stack-packs. An Owner can change the stack until the implementation plan is locked, and again when starting a version.
 
-- The catalog is data under `backend/src/Aide.Infrastructure/Agents/Stack/` (`catalog.json`, `packs/`, `agents/`, `core/`). It is content-hashed.
+- The catalog is data under `backend/src/Tevrin.Infrastructure/Agents/Stack/` (`catalog.json`, `packs/`, `agents/`, `core/`). It is content-hashed.
 - The backend owns the compatibility rules. `POST /api/stack/options` and `/validate` serve the wizard, Settings and the API.
 - Each release version pins the composition and the catalog version it was built with. Each run records the packs used.
 - Generic specialist agents load the skills of the chosen packs. Spec sections, plan rules, protected paths and the review checklist come from the composition.

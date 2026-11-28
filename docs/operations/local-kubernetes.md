@@ -13,15 +13,15 @@ Run the whole app, built from your checkout, on the Docker Desktop Kubernetes cl
 ./deploy/scripts/teardown-local.sh                        # remove app (keeps DB data unless --wipe-data)
 ```
 
-The script builds the `aide-api` and `aide-web` images, tags them with the git SHA, applies the manifests in two passes, runs the `db-migrate` Job, rolls out `api` and `web`, then runs `smoke.sh`. It is safe to re-run and never deletes data. Run it from the repo root in Git Bash or WSL.
+The script builds the `tevrin-api` and `tevrin-web` images, tags them with the git SHA, applies the manifests in two passes, runs the `db-migrate` Job, rolls out `api` and `web`, then runs `smoke.sh`. It is safe to re-run and never deletes data. Run it from the repo root in Git Bash or WSL.
 
-- **App:** http://localhost:8080 (namespace `aide`).
-- **web:** the Next.js standalone server (`frontend/server.ts` in the `aide-web` image) on the `web` LoadBalancer Service, port 8080. It serves the pages, sets the security headers and CSP nonce, and proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL=http://api:8080` from the `app-config` ConfigMap. It runs as uid 1000 (`node`) with a read-only root filesystem; only `/tmp` (an emptyDir holding Next's cache) is writable. Probes use `/healthz`, which never calls the API. `TRUST_EDGE_FORWARDED` is not set, because there is no edge proxy in front of it. The API is ClusterIP only.
+- **App:** http://localhost:8080 (namespace `tevrin`; before 0.8.0 it was `aide`, see [Rename to Tevrin](rename-to-tevrin.md)).
+- **web:** the Next.js standalone server (`frontend/server.ts` in the `tevrin-web` image) on the `web` LoadBalancer Service, port 8080. It serves the pages, sets the security headers and CSP nonce, and proxies `/api` (including the SignalR WebSockets) to `BACKEND_URL=http://api:8080` from the `app-config` ConfigMap. It runs as uid 1000 (`node`) with a read-only root filesystem; only `/tmp` (an emptyDir holding Next's cache) is writable. Probes use `/healthz`, which never calls the API. `TRUST_EDGE_FORWARDED` is not set, because there is no edge proxy in front of it. The API is ClusterIP only.
 - **secrets.env:** if `deploy/k8s/overlays/local/secrets.env` is missing, the script copies `secrets.env.example` and generates the database password, the matching connection string and `Approvals__SigningKey`. It is git-ignored. Edit it to add LLM keys, GitHub App or OAuth values, SMTP; then re-run the script. The script refuses to generate a new password while the database volume exists.
 - **Seed admin:** `admin@aide.local`. The password is logged once by the pod that creates it (a Warning line, `Seeded admin admin@aide.local with password ...`):
-  `kubectl --context docker-desktop -n aide logs deploy/api | grep -i 'Seeded admin'`
+  `kubectl --context docker-desktop -n tevrin logs deploy/api | grep -i 'Seeded admin'`
   After a redeploy the line is gone. Note it on the first deploy.
-- **Logs:** `kubectl --context docker-desktop -n aide logs deploy/api` (also `deploy/web`, `statefulset/db`, `job/db-migrate`). Logs are JSON.
+- **Logs:** `kubectl --context docker-desktop -n tevrin logs deploy/api` (also `deploy/web`, `statefulset/db`, `job/db-migrate`). Logs are JSON.
 - **Smoke test only:** `./deploy/scripts/smoke.sh` (`deploy-local.sh` runs it at the end; set `BASE_URL` to test another host). It checks:
   - `/healthz` returns `ok`
   - `/` returns 307 (to `/projects`) or 200
@@ -30,7 +30,7 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
 - **E2E mode:** `./deploy/scripts/deploy-local.sh --e2e` is the only switch. It applies `deploy/k8s/overlays/local-e2e`: `Deployments__Provider=Fake`, `Databases__Provider=Fake`, `Deployments__AllowFake=true`, `Git__Local__ImportRoot=/data/import` and `Llm__DefaultProvider=fake`. Fake databases mean no real provisioning or migration runner. It also seeds the Local import repo `/data/import/existing-app` (tags `v0.1.0`, `v0.2.0`) with `seed-e2e-repo.sh`. The API logs a warning on every boot while Fake deployments are on. Use it only for Playwright runs.
 - **Switch back:** run `./deploy/scripts/deploy-local.sh` again without `--e2e`. The API pod restarts with Vercel deployments and no Local import. The seeded repo stays on the volume, unused.
 - **Teardown:** `./deploy/scripts/teardown-local.sh` (no flags) removes workloads, services, config and secrets. It keeps the namespace and the volumes, so data survives.
-- **`--wipe-data`:** `./deploy/scripts/teardown-local.sh --wipe-data` also deletes the whole `aide` namespace: the database and the `aide-data` volume (working copies, encryption keys). You must type `aide` to confirm. Saved project secrets cannot be decrypted afterwards.
+- **`--wipe-data`:** `./deploy/scripts/teardown-local.sh --wipe-data` also deletes the whole `tevrin` namespace: the database and the `tevrin-data` volume (working copies, encryption keys). You must type `tevrin` to confirm. Saved project secrets cannot be decrypted afterwards.
 
 ## Troubleshooting
 
@@ -40,7 +40,7 @@ The script builds the `aide-api` and `aide-web` images, tags them with the git S
 | `holds a pre-18 PostgreSQL data directory` | The database volume still has PostgreSQL 17 data. Nothing was changed. Follow [Upgrade local data from PostgreSQL 17 to 18](postgres-18-upgrade.md) |
 | `secrets.env is missing but the database volume already exists` | Restore your old `secrets.env`, or run `teardown-local.sh --wipe-data` (deletes all data) |
 | `secrets.env has Windows (CRLF) line endings` | Convert the file to LF (`sed -i 's/\r$//' deploy/k8s/overlays/local/secrets.env`) and re-run |
-| `still contains the 'change-me' POSTGRES_PASSWORD` | Set a real password that matches the one in `ConnectionStrings__Aide` |
+| `still contains the 'change-me' POSTGRES_PASSWORD` | Set a real password that matches the one in `ConnectionStrings__Tevrin` |
 | Migration Job logs `Cannot load library libgssapi_krb5.so.2` | Harmless Npgsql Kerberos probe. Ignore it |
 | Seed admin password not in the logs | It is logged only once, by the pod that created the account. Register a new user and promote it (Admin page), or wipe data |
 | `429 RATE_LIMITED` on register or login | Limit is 5 per minute per IP. Wait for the `Retry-After` time. Dev loop: set `Auth__RateLimits__RegisterPerMinute` |

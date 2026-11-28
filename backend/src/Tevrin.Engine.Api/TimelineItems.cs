@@ -45,6 +45,12 @@ public static class TimelineItems
             Checkpoint = execution.Checkpoint,
             ExitedAt = execution.ExitedAt,
             Outcome = execution.Outcome,
+            Branch = execution.Branch,
+            Variant = execution.Variant,
+            ItemIndex = execution.ItemIndex,
+            ParentExecutionId = execution.ParentExecutionId,
+            FollowUp = execution.FollowUp,
+            VetoFindings = VetoFindingsOf(execution.VetoFindings),
         };
     }
 
@@ -75,6 +81,9 @@ public static class TimelineItems
             InputTruncated = replay ? run.InputTruncated || inputCut : null,
             Output = output,
             OutputTruncated = replay ? outputCut : null,
+            ItemIndex = run.ItemIndex,
+            TurnIndex = run.TurnIndex,
+            TurnRole = run.TurnRole,
         };
     }
 
@@ -110,5 +119,30 @@ public static class TimelineItems
         ArtifactStatus = row.Status,
         ContentHash = row.ContentHash,
         AgentRunId = row.AgentRunId,
+        Variant = row.Variant,
+        ItemIndex = row.ItemIndex,
     };
+
+    /// <summary>FR-344: the stored veto findings (a JSON array of strings), or <c>null</c> when there are none or they
+    /// can't be read.</summary>
+    public static IReadOnlyList<string>? VetoFindingsOf(string? stored)
+    {
+        if (string.IsNullOrWhiteSpace(stored))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(stored);
+            return document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array
+                ? [.. document.RootElement.EnumerateArray()
+                    .Select(e => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString()! : e.GetRawText())]
+                : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 }

@@ -19,6 +19,12 @@ public static class EngineJobTypes
     /// <summary>Reserved: fires a pipeline trigger. Unused in 0.7.0 (D-0.7.0-15).</summary>
     public const string TriggerFire = "trigger.fire";
 
+    /// <summary>
+    /// FR-332, FR-336 (0.8.0): the job types that move engine-controlled runs (the run driver; from M66 step c, trigger
+    /// fires). A host's own lifecycle operations (e.g. the SDLC rollback) leave them alone: they belong to other runs.
+    /// </summary>
+    public static IReadOnlyList<string> RunScoped { get; } = [StageRun, TriggerFire];
+
     /// <summary>Every engine job type.</summary>
     public static IReadOnlyList<string> All { get; } = [StageRun, AgentRun, GateTimer, TriggerFire];
 }

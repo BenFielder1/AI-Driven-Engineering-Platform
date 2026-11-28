@@ -1,5 +1,5 @@
 #!/bin/sh
-# AIDE API container entrypoint (FR-106, D-V3-10).
+# Tevrin API container entrypoint (FR-106, D-V3-10).
 #
 # Started as root (Railway, plain `docker run`): the /data volume may be a fresh, root-owned mount. Create the keys and
 # workspaces folders, hand them to $APP_UID, then drop to $APP_UID with setpriv. The app never runs as root.
@@ -10,10 +10,17 @@
 set -eu
 
 APP_UID="${APP_UID:-1654}"
-DATA_DIR="${AIDE_DATA_DIR:-/data}"
+# FR-325 (§4.77): TEVRIN_DATA_DIR, else the pre-0.8.0 AIDE_DATA_DIR (read until 0.9.0, with a warning), else /data.
+if [ -z "${TEVRIN_DATA_DIR:-}" ] && [ -n "${AIDE_DATA_DIR:-}" ]; then
+    echo "warning: config name AIDE_DATA_DIR is deprecated; use TEVRIN_DATA_DIR. It is read until 0.9.0." >&2
+    TEVRIN_DATA_DIR="$AIDE_DATA_DIR"
+elif [ -n "${TEVRIN_DATA_DIR:-}" ] && [ -n "${AIDE_DATA_DIR:-}" ]; then
+    echo "warning: config name AIDE_DATA_DIR is ignored because TEVRIN_DATA_DIR is set; remove the old name." >&2
+fi
+DATA_DIR="${TEVRIN_DATA_DIR:-/data}"
 
 if [ "$#" -eq 0 ] || ! command -v "$1" >/dev/null 2>&1; then
-    set -- dotnet /app/Aide.Api.dll "$@"
+    set -- dotnet /app/Tevrin.Api.dll "$@"
 fi
 
 if [ "$(id -u)" != "0" ]; then

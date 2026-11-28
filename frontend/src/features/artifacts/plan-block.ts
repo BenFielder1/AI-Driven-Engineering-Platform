@@ -1,12 +1,18 @@
 import type { ArtifactType } from './artifacts-api'
 
-/** The plan artifact types (FR-29): their Markdown ends with the structured ```aide-plan block. */
+/** The plan artifact types (FR-29): their Markdown ends with the structured plan block. */
 export const planTypes: readonly ArtifactType[] = ['implementation_plan', 'optimization_plan']
 
 export const isPlanType = (type: ArtifactType) => planTypes.includes(type)
 
-/** The fence language of the block (backend PlanDocument.BlockLanguage). */
-export const PLAN_BLOCK_LANGUAGE = 'aide-plan'
+/** FR-326 (§4.77): the fence language plans are written with from 0.8.0. */
+export const TEVRIN_PLAN_BLOCK_LANGUAGE = 'tevrin-plan'
+
+/** FR-326: the pre-0.8.0 fence language. Stored plans keep it, so it is always read. */
+export const LEGACY_PLAN_BLOCK_LANGUAGE = 'aide-plan'
+
+/** The fence language of the block (backend PlanDocument.BlockLanguage). Both languages are read. */
+export const PLAN_BLOCK_LANGUAGE = TEVRIN_PLAN_BLOCK_LANGUAGE
 
 export interface PlanPreviewStep {
   number: number
@@ -23,8 +29,8 @@ export interface PlanPreviewStep {
   addedReason: string | null
 }
 
-/** Same shape as the backend's BlockPattern: a line ```aide-plan, the JSON, then a closing ``` line. */
-const blockPattern = /^```aide-plan[ \t]*\n([\s\S]*?)\n```[ \t]*$/gm
+/** Same shape as the backend's BlockPattern: a line ```tevrin-plan or ```aide-plan (FR-326), the JSON, then a closing ``` line. */
+const blockPattern = /^```(?:tevrin|aide)-plan[ \t]*\n([\s\S]*?)\n```[ \t]*$/gm
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
@@ -44,7 +50,7 @@ function readProvenance(step: Record<string, unknown>): Pick<PlanPreviewStep, 'a
 }
 
 /**
- * A read-only preview of a plan draft's steps, read from its single ```aide-plan block (FR-29, D6). Display only:
+ * A read-only preview of a plan draft's steps, read from its single plan block (FR-29, D6). Display only:
  * the server validates the block when a draft is saved or approved (INVALID_PLAN), so this returns `null` for anything
  * it can't read rather than reporting rule violations of its own.
  */

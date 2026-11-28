@@ -16,7 +16,7 @@ import { safeReturnUrl } from './return-url'
 
 // The backend's error-code list, read at test time so the two sides can't drift (CLAUDE.md rule 4).
 const errorCodesSource = Object.values(
-  import.meta.glob<string>('../../../backend/src/Aide.Domain/Common/ErrorCodes.cs', {
+  import.meta.glob<string>('../../../backend/src/Tevrin.Domain/Common/ErrorCodes.cs', {
     query: '?raw',
     import: 'default',
     eager: true,

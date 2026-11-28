@@ -4,7 +4,7 @@
 #
 # Usage: scripts/ci/check-generated.sh [target|path]...
 #   (no args)  all generated artefacts (same as: contract client)
-#   contract   backend/openapi/api.json        regenerate: dotnet build backend/src/Aide.Api
+#   contract   backend/openapi/api.json        regenerate: dotnet build backend/src/Tevrin.Api
 #   client     frontend/src/api/generated/     regenerate: npm --prefix frontend run gen:api
 #   all        both of the above
 #   <path>     any other repo-relative path, checked as-is
@@ -21,7 +21,7 @@ add_target() {
   case "$1" in
     contract)
       paths+=("backend/openapi/api.json")
-      hints+=("contract: run 'dotnet build backend/src/Aide.Api' and commit backend/openapi/api.json")
+      hints+=("contract: run 'dotnet build backend/src/Tevrin.Api' and commit backend/openapi/api.json")
       ;;
     client)
       paths+=("frontend/src/api/generated")

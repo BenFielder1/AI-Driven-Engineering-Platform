@@ -6,7 +6,7 @@ nav_order: 2
 
 # Deploy to Railway
 
-Tevrin runs on Railway as one project with two environments: `production` at **https://www.tevrin.dev** (the bare `tevrin.dev` redirects there) and `preview` at **https://aide.benfielder.com**. Each has a public `web`, a private `api` with a `/data` volume, and its own Postgres 18. The project is defined as code in [`.railway/railway.ts`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/.railway/railway.ts). The Railway project and service names keep the internal name `aide`.
+Tevrin runs on Railway as one project with two environments: `production` at **https://www.tevrin.dev** (the bare `tevrin.dev` redirects there) and `preview` at **https://aide.benfielder.com**. Each has a public `web`, a private `api` with a `/data` volume, and its own Postgres 18. The project is defined as code in [`.railway/railway.ts`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/.railway/railway.ts). The Railway project is named `tevrin`; the generic service names `api`, `web` and `postgres` stay.
 
 ## How deploys happen
 

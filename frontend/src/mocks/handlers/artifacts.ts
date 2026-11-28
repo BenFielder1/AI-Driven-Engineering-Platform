@@ -395,7 +395,7 @@ export const artifactHandlers = [
       })
     }
     const p = a.project
-    // FR-18, FR-29: an edited plan is validated from its aide-plan block (the backend also re-renders the prose).
+    // FR-18, FR-29: an edited plan is validated from its plan block (the backend also re-renders the prose).
     if (type === 'implementation_plan' || type === 'optimization_plan') {
       const plan = validatePlan(content)
       if ('reasons' in plan) {
@@ -501,7 +501,7 @@ export const artifactHandlers = [
     if (artifact.status !== 'draft') {
       return problem(409, 'ARTIFACT_NOT_DRAFT', 'Only drafts can be approved.')
     }
-    // FR-30: approving a plan creates its execution steps from the aide-plan block.
+    // FR-30: approving a plan creates its execution steps from the plan block.
     if (artifact.type === 'implementation_plan' || artifact.type === 'optimization_plan') {
       const plan = validatePlan(artifact.content)
       if ('reasons' in plan) {

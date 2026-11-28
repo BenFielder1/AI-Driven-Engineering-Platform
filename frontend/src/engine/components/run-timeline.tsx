@@ -1,3 +1,4 @@
+import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/states'
 import { useRunTimeline } from '../api/hooks'
@@ -7,7 +8,13 @@ import { timelineKindLabels, type DefinitionLabels } from '../labels'
 import { describeEntry } from '../timeline-text'
 import { useNewEntriesAnnouncement } from './use-new-entries'
 
-/** One entry: its kind, time, a one-line title, the facts and any reason, comment or error. */
+/** FR-363: route and veto transitions are labelled entries. */
+const flagLabels = { routed: 'Routed back', vetoed: 'Vetoed' } as const
+
+/**
+ * One entry: its kind, time, a one-line title, the facts (with its branch, variant, item, follow-up or turn) and any
+ * reason, comment, error or veto findings.
+ */
 export function TimelineEntry({ item, labels }: { item: TimelineItem; labels: DefinitionLabels }) {
   const text = describeEntry(item, labels)
   return (
@@ -16,9 +23,17 @@ export function TimelineEntry({ item, labels }: { item: TimelineItem; labels: De
         <span className="font-medium uppercase tracking-wide">{timelineKindLabels[item.kind]}</span>
         <time dateTime={item.at}>{formatDateTime(item.at)}</time>
       </p>
-      <p className="mt-0.5 break-words font-medium">{text.title}</p>
+      <p className="mt-0.5 flex flex-wrap items-center gap-2 break-words font-medium">
+        <span>{text.title}</span>
+        {text.flag && <Badge tone={text.flag === 'vetoed' ? 'danger' : 'warning'}>{flagLabels[text.flag]}</Badge>}
+      </p>
       {text.facts.length > 0 && <p className="break-words text-sm text-muted-foreground">{text.facts.join(' · ')}</p>}
-      {text.note && <p className="mt-1 whitespace-pre-wrap break-words text-sm">{text.note}</p>}
+      {text.note && (
+        <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+          {text.flag === 'vetoed' && <span className="sr-only">Veto findings: </span>}
+          {text.note}
+        </p>
+      )}
     </div>
   )
 }

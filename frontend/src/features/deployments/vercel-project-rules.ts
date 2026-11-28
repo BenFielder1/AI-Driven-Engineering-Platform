@@ -22,7 +22,7 @@ export function suggestVercelProjectName(text: string): string {
       .replace(/[^a-z0-9._-]+/g, '-')
       .replace(/-{3,}/g, '--')
       .replace(/^[-.]+|[-.]+$/g, '')
-      .slice(0, 100) || 'aide-app'
+      .slice(0, 100) || 'tevrin-app'
   )
 }
 

@@ -6,7 +6,7 @@ nav_order: 5
 
 # Error codes
 
-API errors are RFC 9457 problem details with an `errorCode` extension. The backend defines the codes in [`ErrorCodes.cs`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/backend/src/Aide.Domain/Common/ErrorCodes.cs). The frontend maps them to user copy in one place, `frontend/src/lib/errors.ts`. Each spec lists the codes it introduced with their status and copy.
+API errors are RFC 9457 problem details with an `errorCode` extension. The backend defines the codes in [`ErrorCodes.cs`](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/blob/main/backend/src/Tevrin.Domain/Common/ErrorCodes.cs). The frontend maps them to user copy in one place, `frontend/src/lib/errors.ts`. Each spec lists the codes it introduced with their status and copy.
 
 ## Common codes
 

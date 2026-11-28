@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Tevrin.Engine.Domain.Artifacts;
 using Tevrin.Engine.Domain.Entities;
 using Tevrin.Engine.Domain.Gates;
+using Tevrin.Engine.Domain.Pipelines;
 using Tevrin.Engine.Runtime.Persistence;
 
 namespace Tevrin.Engine.Runtime.Agents;
@@ -16,6 +17,11 @@ namespace Tevrin.Engine.Runtime.Agents;
 public interface IAgentStageStore
 {
     Task<PipelineRun?> FindRunAsync(Guid runId, CancellationToken cancellationToken);
+
+    /// <summary>FR-351, §4.75: the newest not-deleted feedback entries for (pipeline, agent key, the run's project), at most
+    /// <paramref name="max"/>, for <see cref="FeedbackInjectionRules.Select"/>.</summary>
+    Task<IReadOnlyList<FeedbackEntry>> FeedbackAsync(PipelineRun run, string pipelineId, string agentKey, int max, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<FeedbackEntry>>([]);
 
     /// <summary>The highest locked version of each of <paramref name="keys"/> in the run's subject (a key without one is
     /// left out). The caller checks integrity.</summary>
@@ -34,8 +40,60 @@ public interface IAgentStageStore
     /// <summary>FR-310: the agent run with <paramref name="agentRunId"/>, tracked, or <c>null</c> (the runner refuses one of another pipeline run or stage).</summary>
     Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// FR-359: gate <paramref name="gateId"/> of <paramref name="run"/>, tracked, whatever its status, or <c>null</c>. A store
+    /// that doesn't hold engine gates finds none, so a saved destructive call is never run there.
+    /// </summary>
+    Task<ApprovalGate?> FindGateAsync(PipelineRun run, Guid gateId, CancellationToken cancellationToken) =>
+        Task.FromResult<ApprovalGate?>(null);
+
     /// <summary>FR-310: the run subject's version of <paramref name="key"/> that agent run <paramref name="agentRunId"/> produced, or <c>null</c>.</summary>
     Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FR-345, FR-346: the newest version of each variant of <paramref name="key"/> this run stored (superseded ones left
+    /// out), by variant label. Fan-out branches write these; isolation (§4.65) and aggregation read them.
+    /// </summary>
+    Task<IReadOnlyList<Artifact>> RunVariantsAsync(PipelineRun run, string key, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([]);
+
+    /// <summary>
+    /// FR-355: the newest version of each map item of <paramref name="key"/> this run stored since
+    /// <paramref name="since"/> (the current map entry; superseded ones left out), in item index order. The isolation check
+    /// (§4.65) and the reduce list read them.
+    /// </summary>
+    Task<IReadOnlyList<Artifact>> RunItemsAsync(PipelineRun run, string key, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([]);
+
+    /// <summary>FR-355: the highest version of map item <paramref name="itemIndex"/> of <paramref name="key"/> in this run (any
+    /// status), or <c>null</c>: the item's next output is numbered after it.</summary>
+    Task<int?> MaxItemVersionAsync(PipelineRun run, string key, int itemIndex, CancellationToken cancellationToken) =>
+        Task.FromResult<int?>(null);
+
+    /// <summary>FR-346: the newest version (no variant, not superseded) of each of <paramref name="keys"/> this run stored.</summary>
+    Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Artifact>>([]);
+
+    /// <summary>FR-354: the run's outcome scores (FR-353) as <c>(metric, score)</c>, oldest observation first.</summary>
+    Task<IReadOnlyList<(string Metric, double Score)>> RunOutcomeScoresAsync(PipelineRun run, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<(string Metric, double Score)>>([]);
+
+    /// <summary>
+    /// FR-357: the project's runs of <paramref name="input"/>'s pipeline other than <paramref name="run"/> that ended with
+    /// its status at or after <paramref name="since"/> and have a final version of its artifact (the newest that is no map
+    /// item and not superseded: a plain version first, else a follow-up output), newest completion first, at most
+    /// <see cref="RunsInputDefinition.MaxRuns"/>. <see cref="RunsInputRules.Select"/> makes the list.
+    /// </summary>
+    Task<IReadOnlyList<RunsInputCandidate>> RunsOutputsAsync(PipelineRun run, RunsInputDefinition input, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RunsInputCandidate>>([]);
+
+    /// <summary>
+    /// FR-359: the next save also writes <paramref name="run"/>'s row, so it fails on the run's concurrency token if the run
+    /// was moved (cancelled, rolled back) since it was read. Default: nothing (a store without one).
+    /// </summary>
+    void Touch(PipelineRun run)
+    {
+    }
 
     void Add(AgentRun agentRun);
 
@@ -52,12 +110,12 @@ public interface IAgentStageStore
 /// </summary>
 public static class AgentStageScope
 {
-    /// <summary>The release version id the run's artifacts and gates are stored under (<see cref="Guid.Empty"/> without a
-    /// subject).</summary>
-    public static Guid ReleaseVersionOf(PipelineRun run)
+    /// <summary>The release version id the run's artifacts and gates are stored under (FR-334: <c>null</c> without a
+    /// subject, so the rows belong to the run alone).</summary>
+    public static Guid? ReleaseVersionOf(PipelineRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        return run.SubjectId ?? Guid.Empty;
+        return run.SubjectId;
     }
 
     /// <summary>Whether an artifact belongs to <paramref name="run"/>'s subject.</summary>
@@ -81,6 +139,17 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
     public Task<PipelineRun?> FindRunAsync(Guid runId, CancellationToken cancellationToken) =>
         db.PipelineRuns.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
 
+    public async Task<IReadOnlyList<FeedbackEntry>> FeedbackAsync(PipelineRun run, string pipelineId, string agentKey, int max, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var rows = await db.AgentFeedback.AsNoTracking()
+            .Where(f => f.ProjectId == run.ProjectId && f.PipelineId == pipelineId && f.AgentKey == agentKey && f.DeletedAt == null)
+            .OrderByDescending(f => f.CreatedAt).ThenByDescending(f => f.Id)
+            .Take(max)
+            .ToListAsync(cancellationToken);
+        return [.. rows.Select(f => new FeedbackEntry(f.Id, f.Source == AgentFeedbackSource.Stage ? FeedbackInjectionRules.SourceStage : FeedbackInjectionRules.SourceHuman, f.Text, f.CreatedAt, Deleted: false))];
+    }
+
     public async Task<IReadOnlyList<Artifact>> LatestLockedAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(keys);
@@ -89,24 +158,33 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
             return [];
         }
 
-        return await db.Artifacts.AsNoTracking()
+        // FR-352, §4.76: a project-scope artifact is read at the version the run pinned at its start, never a newer one.
+        var pinned = await Runs.ProjectArtifacts.PinnedAsync(db, run, keys, cancellationToken);
+        var own = keys.Where(k => !run.PinnedArtifacts.ContainsKey(k)).ToList();
+        if (own.Count == 0)
+        {
+            return pinned;
+        }
+
+        var latest = await db.Artifacts.AsNoTracking()
             .Where(AgentStageScope.InSubject(run))
-            .Where(a => keys.Contains(a.Type) && a.Status == ArtifactStatus.Locked)
+            .Where(a => own.Contains(a.Type) && a.Status == ArtifactStatus.Locked && a.Variant == null && a.ItemIndex == null)
             .GroupBy(a => a.Type)
             .Select(g => g.OrderByDescending(a => a.Version).First())
             .ToListAsync(cancellationToken);
+        return [.. latest, .. pinned];
     }
 
     public async Task<IReadOnlyList<ArtifactVersion>> VersionsAsync(Guid projectId, string key, CancellationToken cancellationToken) =>
         await db.Artifacts.AsNoTracking()
-            .Where(a => a.ProjectId == projectId && a.Type == key)
+            .Where(a => a.ProjectId == projectId && a.Type == key && a.ItemIndex == null)
             .Select(a => new ArtifactVersion(a.Version, a.Status))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Artifact>> SubjectVersionsAsync(PipelineRun run, string key, IReadOnlyCollection<int> versions, CancellationToken cancellationToken) =>
         versions.Count == 0
             ? []
-            : await db.Artifacts.Where(AgentStageScope.InSubject(run)).Where(a => a.Type == key && versions.Contains(a.Version)).ToListAsync(cancellationToken);
+            : await db.Artifacts.Where(AgentStageScope.InSubject(run)).Where(a => a.Type == key && a.Variant == null && a.ItemIndex == null && versions.Contains(a.Version)).ToListAsync(cancellationToken);
 
     public Task<ApprovalGate?> PendingGateAsync(PipelineRun run, string type, CancellationToken cancellationToken)
     {
@@ -117,8 +195,106 @@ public sealed class EngineAgentStageStore(IEngineDbContext db) : IAgentStageStor
     public Task<AgentRun?> FindAgentRunAsync(Guid agentRunId, CancellationToken cancellationToken) =>
         db.AgentRuns.FirstOrDefaultAsync(r => r.Id == agentRunId, cancellationToken);
 
+    public Task<ApprovalGate?> FindGateAsync(PipelineRun run, Guid gateId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return db.ApprovalGates.FirstOrDefaultAsync(g => g.Id == gateId && g.PipelineRunId == run.Id, cancellationToken);
+    }
+
     public Task<Artifact?> ArtifactOfAgentRunAsync(PipelineRun run, string key, Guid agentRunId, CancellationToken cancellationToken) =>
         db.Artifacts.Where(AgentStageScope.InSubject(run)).FirstOrDefaultAsync(a => a.Type == key && a.AgentRunId == agentRunId, cancellationToken);
+
+    public async Task<IReadOnlyList<Artifact>> RunVariantsAsync(PipelineRun run, string key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        var rows = await db.Artifacts.AsNoTracking()
+            .Where(a => a.PipelineRunId == runId && a.Type == key && a.Variant != null && a.Status != ArtifactStatus.Superseded)
+            .ToListAsync(cancellationToken);
+        return [.. rows.GroupBy(a => a.Variant!, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!).OrderBy(a => a.CreatedAt).ThenBy(a => a.Variant, StringComparer.Ordinal)];
+    }
+
+    public async Task<IReadOnlyList<Artifact>> RunItemsAsync(PipelineRun run, string key, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        var rows = await db.Artifacts.AsNoTracking()
+            .Where(a => a.PipelineRunId == runId && a.Type == key && a.ItemIndex != null && a.CreatedAt >= since && a.Status != ArtifactStatus.Superseded)
+            .ToListAsync(cancellationToken);
+        return [.. rows.GroupBy(a => a.ItemIndex!.Value).Select(g => g.MaxBy(a => a.Version)!).OrderBy(a => a.ItemIndex)];
+    }
+
+    public Task<int?> MaxItemVersionAsync(PipelineRun run, string key, int itemIndex, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        return db.Artifacts
+            .Where(a => a.PipelineRunId == runId && a.Type == key && a.ItemIndex == itemIndex)
+            .MaxAsync(a => (int?)a.Version, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<(string Metric, double Score)>> RunOutcomeScoresAsync(PipelineRun run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var runId = run.Id;
+        var rows = await db.OutcomeScores.AsNoTracking()
+            .Where(s => s.PipelineRunId == runId)
+            .OrderBy(s => s.ObservedAt).ThenBy(s => s.Id)
+            .Select(s => new { s.Metric, s.Score })
+            .ToListAsync(cancellationToken);
+        return [.. rows.Select(r => (r.Metric, r.Score))];
+    }
+
+    public async Task<IReadOnlyList<Artifact>> RunLatestAsync(PipelineRun run, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(keys);
+        var runId = run.Id;
+        var rows = await db.Artifacts.AsNoTracking()
+            .Where(a => a.PipelineRunId == runId && keys.Contains(a.Type) && a.Variant == null && a.ItemIndex == null && a.Status != ArtifactStatus.Superseded)
+            .ToListAsync(cancellationToken);
+        return [.. rows.GroupBy(a => a.Type, StringComparer.Ordinal).Select(g => g.MaxBy(a => a.Version)!)];
+    }
+
+    public async Task<IReadOnlyList<RunsInputCandidate>> RunsOutputsAsync(PipelineRun run, RunsInputDefinition input, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(input);
+        var (projectId, runId, pipelineId, status, key) = (run.ProjectId, run.Id, input.Pipeline, input.Status, input.Artifact);
+        const string followUp = FollowUpRules.LabelPrefix;
+
+        // One bounded query: the matching runs (newest completion first, capped) with a correlated subquery for each one's
+        // final version of the artifact (a plain version first, else the newest follow-up output, FR-354); runs without one
+        // aren't counted toward the cap. A final version that fails its integrity check isn't replaced by an older one: the
+        // reader drops the run (FR-20).
+        var rows = await db.PipelineRuns.AsNoTracking()
+            .Where(r => r.ProjectId == projectId && r.PipelineId == pipelineId && r.Status == status && r.Id != runId
+                && r.CompletedAt != null && r.CompletedAt >= since)
+            .Where(r => db.Artifacts.Any(a => a.PipelineRunId == r.Id && a.ProjectId == projectId && a.Type == key
+                && (a.Variant == null || a.Variant.StartsWith(followUp)) && a.ItemIndex == null && a.Status != ArtifactStatus.Superseded))
+            .OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.StartedAt)
+            .Take(RunsInputDefinition.MaxRuns)
+            .Select(r => new
+            {
+                r.Id,
+                r.StartedAt,
+                r.CompletedAt,
+                Final = db.Artifacts
+                    .Where(a => a.PipelineRunId == r.Id && a.ProjectId == projectId && a.Type == key
+                        && (a.Variant == null || a.Variant.StartsWith(followUp)) && a.ItemIndex == null && a.Status != ArtifactStatus.Superseded)
+                    .OrderBy(a => a.Variant == null ? 0 : 1).ThenByDescending(a => a.Version).ThenByDescending(a => a.CreatedAt)
+                    .Select(a => new { a.Content, a.ContentHash, a.Status })
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(cancellationToken);
+        return [.. rows.Where(r => r.Final is not null).Select(r => new RunsInputCandidate(r.Id, pipelineId, status, r.StartedAt, r.CompletedAt, r.Final!.Content)
+        {
+            ArtifactStatus = r.Final.Status,
+            ContentHash = r.Final.ContentHash,
+        })];
+    }
+
+    public void Touch(PipelineRun run) => Runs.EngineRunMoves.Touch(db, run);
 
     public void Add(AgentRun agentRun) => db.AgentRuns.Add(agentRun);
 

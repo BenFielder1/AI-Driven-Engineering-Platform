@@ -115,19 +115,24 @@ public sealed class PipelineDefinitionResolver(PipelineRegistryHost registryHost
             }
         }
 
-        foreach (var stage in definition.Stages)
+        // FR-343: parallel branch stages too; FR-344, FR-346: veto and disagreement guards.
+        foreach (var stage in definition.AllStages)
         {
             var guards = stage.Requires.OfType<GuardRequirement>().Select(r => r.Guard)
-                .Concat(stage.Validate.Select(v => v.Guard))
+                .Concat(stage.Validate.Select(v => v.Guard).OfType<string>()) // FR-350: an agent entry has no guard
                 .Concat(stage.Loop?.Requires.OfType<GuardRequirement>().Select(r => r.Guard) ?? [])
-                .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard)); // D-0.7.0-44: the bindings' own checks
+                .Concat(stage.Agents.SelectMany(b => b.Validate).Select(v => v.Guard).OfType<string>()) // D-0.7.0-44: the bindings' own checks
+                .Concat(stage.Veto.Select(v => v.Guard).OfType<string>())
+                .Concat(stage.Aggregate?.DisagreementGuard is { } disagreement ? [disagreement] : [])
+                .Concat(stage.Conversation?.Stop?.Guard is { } stop ? [stop] : []); // FR-356: the conversation's stop guard
             foreach (var guard in guards)
             {
                 Check(PipelineComponentKind.Guard, "guard", guard);
             }
 
             // D-0.7.0-43: the primary handler, then the secondary ones.
-            foreach (var handler in stage.AllHandlers())
+            // FR-355: then the map and reduce handlers (their agents are bindings, whose tools follow).
+            foreach (var handler in stage.AllHandlers().Concat(stage.ConstructHandlers()))
             {
                 Check(PipelineComponentKind.StageHandler, "handler", handler);
             }

@@ -26,6 +26,26 @@ public sealed class StageExecution
     /// <summary>How the run left the stage: the transition kind (<see cref="PipelineTransitionKinds"/>), or the run's final
     /// status (<c>completed</c>, <c>failed</c>, <c>cancelled</c>) when it ended in the stage. Null while open.</summary>
     public string? Outcome { get; set; }
+
+    /// <summary>FR-343–FR-349, §5: the parallel branch this execution ran in; null outside a branch.</summary>
+    public string? Branch { get; init; }
+
+    /// <summary>FR-355, §4.68, §5: the 0-based map item index of an item execution; null outside a map.</summary>
+    public int? ItemIndex { get; init; }
+
+    /// <summary>FR-355: the map stage's own execution an item execution belongs to (one per item, unique with
+    /// <see cref="ItemIndex"/>); null for every other execution.</summary>
+    public Guid? ParentExecutionId { get; init; }
+
+    /// <summary>FR-343–FR-349, §5: the variant label this execution produced; null otherwise.</summary>
+    public string? Variant { get; init; }
+
+    /// <summary>FR-343–FR-349, §5: the veto findings (JSON) when a veto stage stopped the run; null otherwise.</summary>
+    public string? VetoFindings { get; set; }
+
+    /// <summary>FR-354, §5: the follow-up label (<c>followup:&lt;duration&gt;</c>) of an execution run after the run completed;
+    /// null for the main flow.</summary>
+    public string? FollowUp { get; init; }
 }
 
 /// <summary>FR-297: pure rules for stage executions.</summary>

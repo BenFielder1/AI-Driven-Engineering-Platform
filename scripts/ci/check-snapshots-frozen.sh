@@ -1,33 +1,57 @@
 #!/usr/bin/env bash
 # FR-261 (0.7.0): the SDLC characterisation snapshots are the behaviour contract of the engine extraction. They were
-# committed in 8dce91a (milestone M54, from CI run 44108300811) and re-sorted once in d4d84f8 (D-0.7.0-22: id-label arrays sorted as sets) and no later commit may change, add or remove one.
+# committed in 8dce91a (milestone M54, from CI run 44108300811) and re-sorted once in d4d84f8 (D-0.7.0-22: id-label arrays sorted as sets).
+# FR-328 (0.8.0): the rename re-baselined them and the golden prompt files once, in the commit named by `rebaseline`
+# below (checked by check-snapshots-rebaseline.sh). No later commit may change, add or remove one.
+# While `rebaseline` is empty (the re-baseline commit itself, which can't name its own SHA), the bytes aren't compared:
+# check-snapshots-rebaseline.sh stands in, and the next commit sets `rebaseline`.
 # Usage: scripts/ci/check-snapshots-frozen.sh   (run from the repo root; fetches the base commit if it's missing)
 set -euo pipefail
 
-base=d4d84f86b1504b983f287d904551d8b372b6e3df
-dir=backend/tests/Aide.IntegrationTests/Characterisation/Snapshots
+# frozen BASE OLD_DIR DIR: the files in DIR (working tree) equal the files in OLD_DIR at BASE, byte for byte, with none added
+# or removed.
+frozen() {
+  local base="$1" old_dir="$2" dir="$3" bad=0 name
+  if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+    git fetch --quiet --depth=1 origin "$base"
+  fi
+  local expected actual
+  expected="$(git ls-tree -r --name-only "$base" -- "$old_dir/" | sed "s|^$old_dir/||" | LC_ALL=C sort)"
+  actual="$( (cd "$dir" 2>/dev/null && find . -type f | sed 's|^\./||') | LC_ALL=C sort)"
+  if [ -z "$expected" ]; then
+    echo "No files under $old_dir at $base" >&2
+    return 1
+  fi
+  if [ "$expected" != "$actual" ]; then
+    echo "The file list in $dir differs from $old_dir at $base:" >&2
+    diff <(echo "$expected") <(echo "$actual") >&2 || true
+    bad=1
+  fi
+  while IFS= read -r name; do
+    if [ -f "$dir/$name" ] && ! git show "$base:$old_dir/$name" | cmp -s - "$dir/$name"; then
+      echo "changed: $dir/$name" >&2
+      bad=1
+    fi
+  done <<< "$expected"
+  return "$bad"
+}
 
-if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-  git fetch --quiet --depth=1 origin "$base"
+rebaseline=4865d264ac0585a6e2b4585a0d104f2937be4f90
+if [ -z "$rebaseline" ]; then
+  echo "FR-328 re-baseline commit: byte freeze deferred to the next commit; check-snapshots-rebaseline.sh checks the change"
+  exit 0
 fi
 
-if ! git diff --exit-code --stat "$base" -- "$dir"; then
-  echo "::error::The characterisation snapshots in $dir differ from M54 ($base). They are frozen for 0.7.0 (FR-261): fix the behaviour change instead." >&2
+dir=backend/tests/Tevrin.IntegrationTests/Characterisation/Snapshots
+if ! frozen "$rebaseline" "$dir" "$dir"; then
+  echo "::error::The characterisation snapshots in $dir differ from the FR-328 re-baseline ($rebaseline). They are frozen (FR-261, FR-328): fix the behaviour change instead." >&2
   exit 1
 fi
-echo "Characterisation snapshots unchanged since M54 ($base)"
+echo "Characterisation snapshots unchanged since the FR-328 re-baseline ($rebaseline)"
 
-# FR-317-FR-321 (§3.10): the golden prompt files pin all eight SDLC agents' templates and rendered prompts. They were
-# committed in b593268 (M59) and stay frozen while the SDLC moves onto the engine runner.
-golden_base=b593268b11278a6912b0685f9e7e5885a916f7ce
-golden_dir=backend/tests/Aide.UnitTests/Agents/Golden
-
-if ! git cat-file -e "${golden_base}^{commit}" 2>/dev/null; then
-  git fetch --quiet --depth=1 origin "$golden_base"
-fi
-
-if ! git diff --exit-code --stat "$golden_base" -- "$golden_dir"; then
-  echo "::error::The golden prompt files in $golden_dir differ from M59 ($golden_base). They are frozen for 0.7.0 (§3.10): fix the prompt change instead." >&2
+golden_dir=backend/tests/Tevrin.UnitTests/Agents/Golden
+if ! frozen "$rebaseline" "$golden_dir" "$golden_dir"; then
+  echo "::error::The golden prompt files in $golden_dir differ from the FR-328 re-baseline ($rebaseline). They are frozen (§3.10, FR-328): fix the prompt change instead." >&2
   exit 1
 fi
-echo "Golden prompt files unchanged since M59 ($golden_base)"
+echo "Golden prompt files unchanged since the FR-328 re-baseline ($rebaseline)"
