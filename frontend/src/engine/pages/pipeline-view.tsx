@@ -8,6 +8,10 @@ import { useDocumentTitle } from '../../lib/use-document-title'
 import { usePipelineDefinition, usePipelineRun, usePipelineRuns, useRunGates, useRunStages } from '../api/hooks'
 import type { PipelineRun } from '../api/types'
 import { PromptComparison } from '../components/prompt-comparison'
+import { FeedbackSection } from '../feedback/feedback-section'
+import { canManageTriggers, noAccess, type PipelineAccess } from '../run-control/access'
+import { StartRunAction, SubmitInputAction } from '../run-control/run-control-actions'
+import { TriggersSection } from '../triggers/triggers-section'
 import { RunArtifacts } from '../components/run-artifacts'
 import { RunSummary } from '../components/run-summary'
 import { RunTimeline } from '../components/run-timeline'
@@ -27,12 +31,27 @@ export interface PipelineViewProps {
   /** The host's link to the Pipeline tab showing a run, labelled `label`. */
   runLink: (runId: string, label: string) => ReactNode
   documentTitle: string
+  /**
+   * The viewer's effective project role and user id, from the host (FR-362, FR-365, FR-366). Start run, Submit input,
+   * adding and deleting feedback and the Triggers section show only for the roles SPEC §2 allows; without it, none do.
+   */
+  access?: PipelineAccess
 }
 
 const runOption = (run: PipelineRun) =>
   `${run.pipelineTitle} · started ${formatDateTime(run.startedAt)} · ${runStatusLabels[run.status]}`
 
-function RunDetail({ projectId, listed, replayLink }: { projectId: string; listed: PipelineRun; replayLink: (runId: string) => ReactNode }) {
+function RunDetail({
+  projectId,
+  listed,
+  replayLink,
+  access,
+}: {
+  projectId: string
+  listed: PipelineRun
+  replayLink: (runId: string) => ReactNode
+  access: PipelineAccess
+}) {
   // The run's own query: live `pipelineRunUpdated` messages land here.
   const detail = usePipelineRun(listed.id)
   const run = detail.data ?? listed
@@ -48,7 +67,16 @@ function RunDetail({ projectId, listed, replayLink }: { projectId: string; liste
           <p>Stage and artifact names show as keys until it loads.</p>
         </Alert>
       )}
-      <Section id="pipeline-run" title="Run" actions={replayLink(run.id)}>
+      <Section
+        id="pipeline-run"
+        title="Run"
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <SubmitInputAction run={run} definition={definition.data} access={access} />
+            {replayLink(run.id)}
+          </div>
+        }
+      >
         <RunSummary run={run} definition={definition.data} />
       </Section>
       <Section id="pipeline-stages" title="Stages">
@@ -71,6 +99,11 @@ function RunDetail({ projectId, listed, replayLink }: { projectId: string; liste
       <Section id="pipeline-prompts" title="Prompt versions">
         <PromptComparison pipelineId={run.pipelineId} projectId={projectId} />
       </Section>
+      {definition.data && (
+        <Section id="pipeline-feedback" title="Feedback">
+          <FeedbackSection projectId={projectId} definition={definition.data} access={access} />
+        </Section>
+      )}
     </div>
   )
 }
@@ -78,9 +111,18 @@ function RunDetail({ projectId, listed, replayLink }: { projectId: string; liste
 /**
  * FR-306 Pipeline tab: a run picker (newest first), the run summary, its stage list, timeline and artifacts, and the
  * pipeline's prompt versions. Everything is rendered from the run's definition and data (FR-305), so any pipeline
- * renders here unchanged. States: loading, empty ("No runs yet"), error and not found.
+ * renders here unchanged. States: loading, empty ("No runs yet"), error and not found. 0.8.0: Start run and Submit
+ * input (FR-362), Feedback (FR-365) and Triggers (FR-366), each shown only to the roles `access` allows.
  */
-export function PipelineView({ projectId, runId, onRunChange, replayLink, runLink, documentTitle }: PipelineViewProps) {
+export function PipelineView({
+  projectId,
+  runId,
+  onRunChange,
+  replayLink,
+  runLink,
+  documentTitle,
+  access = noAccess,
+}: PipelineViewProps) {
   useDocumentTitle(documentTitle)
   usePipelineLive(projectId)
   const runs = usePipelineRuns(projectId)
@@ -96,7 +138,7 @@ export function PipelineView({ projectId, runId, onRunChange, replayLink, runLin
         variant="not_started"
         headingLevel={3}
         title="No runs yet"
-        description="A run starts when the project's pipeline does. Its stages, timeline and artifacts show here."
+        description="A run starts when the project's pipeline does, or with Start run. Its stages, timeline and artifacts show here."
       />
     )
   } else if (runId !== undefined && !runs.data.some((r) => r.id === runId)) {
@@ -121,17 +163,25 @@ export function PipelineView({ projectId, runId, onRunChange, replayLink, runLin
             </option>
           ))}
         </SelectField>
-        <RunDetail key={selected.id} projectId={projectId} listed={selected} replayLink={replayLink} />
+        <RunDetail key={selected.id} projectId={projectId} listed={selected} replayLink={replayLink} access={access} />
       </div>
     )
   }
 
   return (
     <section aria-labelledby="pipeline-title" className="flex flex-col gap-4">
-      <h2 id="pipeline-title" className="text-xl">
-        Pipeline
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="pipeline-title" className="text-xl">
+          Pipeline
+        </h2>
+        <StartRunAction projectId={projectId} access={access} onStarted={onRunChange} />
+      </div>
       {body}
+      {canManageTriggers(access) && (
+        <Section id="pipeline-triggers" title="Triggers">
+          <TriggersSection projectId={projectId} />
+        </Section>
+      )}
     </section>
   )
 }

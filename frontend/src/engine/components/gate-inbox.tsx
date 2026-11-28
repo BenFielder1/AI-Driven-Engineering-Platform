@@ -23,12 +23,13 @@ export interface GateInboxProps {
   onDecided?: (item: GateInboxItem) => void
 }
 
-type Open = { item: GateInboxItem; action: 'approve' | 'reject'; definition: PipelineDefinition | undefined } | null
+type Open = { item: GateInboxItem; action: 'approve' | 'reject'; definition: PipelineDefinition | undefined; choice?: string } | null
 
 /**
  * FR-307 GateInbox: pending gates across the projects the user can see, newest first, with "Load more". Each row shows
  * the project, pipeline, gate title, gated artifact, age and overdue flag; stage gates are approved or rejected here by
  * those who may decide them, other gates link to their project. Labels come from the run's definition (FR-305).
+ * FR-364: engine-raised gates show their payload on the card (a tool call, an external action, or variants to pick).
  */
 export function GateInbox({ links, decisionCopy, cannotDecideNote, onDecided }: GateInboxProps) {
   const [pipelineId, setPipelineId] = useState<string | null>(null)
@@ -74,8 +75,8 @@ export function GateInbox({ links, decisionCopy, cannotDecideNote, onDecided }: 
               pipelines={pipelines.data}
               links={links}
               cannotDecideNote={cannotDecideNote}
-              onDecide={(action, definition) => {
-                setOpen({ item, action, definition })
+              onDecide={(action, definition, choice) => {
+                setOpen({ item, action, definition, ...(choice ? { choice } : {}) })
               }}
             />
           ))}
@@ -119,6 +120,8 @@ export function GateInbox({ links, decisionCopy, cannotDecideNote, onDecided }: 
         <GateDecision
           gate={open.item.gate}
           action={open.action}
+          choice={open.choice}
+          definition={open.definition}
           gateLabel={gateTitle(open.item, open.definition)}
           copy={decisionCopy?.(open.item)}
           fallbackFocusRef={listRef}

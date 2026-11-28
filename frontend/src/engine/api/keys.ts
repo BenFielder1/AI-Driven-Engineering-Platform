@@ -21,6 +21,9 @@ export const engineKeys = {
   artifactDiff: (runId: string, key: string, from: number, to: number) =>
     [...engineKeys.artifacts(runId), 'diff', key, from, to] as const,
   gates: (runId: string) => [...engineKeys.run(runId), 'gates'] as const,
+  /** FR-363: a map execution's items, per status filter. */
+  mapItems: (runId: string, executionId: string, status: string | null) =>
+    [...engineKeys.run(runId), 'map-items', executionId, status ?? 'all'] as const,
   /** FR-307: the gate inbox, per filter (all filters sit under `gateInboxAll`, so a decision refreshes every one). */
   gateInboxAll: () => [...engineKeys.all, 'gate-inbox'] as const,
   gateInbox: (pipelineId: string | null) => [...engineKeys.gateInboxAll(), pipelineId ?? 'all'] as const,

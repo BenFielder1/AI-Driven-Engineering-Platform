@@ -10,7 +10,8 @@ import { ModalDialog } from '../../components/ui/modal-dialog'
 import { TextAreaField } from '../../components/ui/textarea-field'
 import { applyFieldErrors, errorMessage } from '../../lib/errors'
 import { useDecidePipelineGate } from '../api/gate-hooks'
-import type { RunGate } from '../api/types'
+import type { PipelineDefinition, RunGate } from '../api/types'
+import { GatePayloadView } from '../constructs/gate-payload'
 
 /** DecidePipelineGateRequest.comment maxLength (the API's limit, as the project gate endpoints). */
 export const GATE_DECISION_COMMENT_MAX = 4000
@@ -48,13 +49,20 @@ export interface GateDecisionProps {
   /** Called after the API accepted the decision, with a sentence for a toast. */
   onDecided: (message: string) => void
   fallbackFocusRef?: RefObject<HTMLElement | null>
+  /** FR-364: the variant picked on a variant_select gate's card (approve only). */
+  choice?: string | undefined
+  /** The run's definition, for the payload's labels (FR-305). */
+  definition?: PipelineDefinition | undefined
 }
 
 /**
  * FR-307 GateDecision: approve or reject one pipeline gate through the engine endpoints, with the project gate dialogs'
  * copy. Reject is a destructive confirmation (alertdialog, SPEC §7). Errors use the shared copy (`pipelineGateDecision`).
+ *
+ * FR-364: a gate with a payload shows it in the dialog too (the tool call or the exact external payload), so the
+ * decider confirms what they saw; a variant pick says which variant is chosen.
  */
-export function GateDecision({ gate, action, gateLabel, copy, onClose, onDecided, fallbackFocusRef }: GateDecisionProps) {
+export function GateDecision({ gate, action, gateLabel, copy, onClose, onDecided, fallbackFocusRef, choice, definition }: GateDecisionProps) {
   const decide = useDecidePipelineGate()
   const [serverError, setServerError] = useState<string | null>(null)
   const {
@@ -65,15 +73,16 @@ export function GateDecision({ gate, action, gateLabel, copy, onClose, onDecided
   } = useForm<Values>({ resolver: zodResolver(gateDecisionSchema), defaultValues: { comment: '' } })
   const approve = action === 'approve'
   const label = copy?.label ?? gateLabel
+  const pick = approve && choice ? choice : null
 
   const onSubmit = handleSubmit(({ comment }) => {
     setServerError(null)
     const trimmed = comment.trim()
     decide.mutate(
-      { runId: gate.runId, gateId: gate.id, action, comment: trimmed ? trimmed : null },
+      { runId: gate.runId, gateId: gate.id, action, comment: trimmed ? trimmed : null, ...(pick ? { choice: pick } : {}) },
       {
         onSuccess: () => {
-          onDecided(`${label} ${approve ? 'approved' : 'rejected'}.`)
+          onDecided(pick ? `${pick} picked for ${label.toLowerCase()}.` : `${label} ${approve ? 'approved' : 'rejected'}.`)
         },
         onError: (error) => {
           const unmatched = applyFieldErrors(error, setError, ['comment'])
@@ -88,9 +97,13 @@ export function GateDecision({ gate, action, gateLabel, copy, onClose, onDecided
     <ModalDialog
       open
       role={approve ? 'dialog' : 'alertdialog'}
-      title={`${approve ? 'Approve' : 'Reject'} ${label.toLowerCase()}?`}
+      title={pick ? `Pick ${pick} for ${label.toLowerCase()}?` : `${approve ? 'Approve' : 'Reject'} ${label.toLowerCase()}?`}
       description={
-        approve ? (copy?.approveEffect ?? defaultGateEffects.approve) : (copy?.rejectEffect ?? defaultGateEffects.reject)
+        pick
+          ? `${pick} becomes the stage's output and the run continues.`
+          : approve
+            ? (copy?.approveEffect ?? defaultGateEffects.approve)
+            : (copy?.rejectEffect ?? defaultGateEffects.reject)
       }
       busy={decide.isPending}
       fallbackFocusRef={fallbackFocusRef}
@@ -104,6 +117,7 @@ export function GateDecision({ gate, action, gateLabel, copy, onClose, onDecided
             ...(isSubmitted ? fieldErrorSummary(errors, { comment: commentId }) : []),
           ]}
         />
+        <GatePayloadView gate={gate} definition={definition} variants={false} />
         <TextAreaField
           id={commentId}
           label={approve ? 'Comment (optional)' : 'Feedback (optional)'}
@@ -122,7 +136,7 @@ export function GateDecision({ gate, action, gateLabel, copy, onClose, onDecided
             pending={decide.isPending}
             pendingLabel={approve ? 'Approving…' : 'Rejecting…'}
           >
-            {approve ? 'Approve' : 'Reject'}
+            {pick ? `Pick ${pick}` : approve ? 'Approve' : 'Reject'}
           </Button>
         </div>
       </form>

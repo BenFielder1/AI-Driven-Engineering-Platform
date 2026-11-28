@@ -778,6 +778,33 @@ export const contextualErrorMessages = {
     NOT_FOUND: "That user no longer exists. The list now shows the latest.",
     FORBIDDEN: "Only administrators can change system roles, and only from a browser session.",
   },
+  /** POST /api/projects/:id/pipeline-runs from the Pipeline tab's Start run dialog (0.8.0 FR-362). */
+  startPipelineRun: {
+    FORBIDDEN: "Only project Contributors and Owners can start runs.",
+    NOT_FOUND: "That pipeline isn't available any more. Pick another one.",
+    INPUT_INVALID: "Some inputs don't match their schema. Fix them and try again.",
+    VALIDATION: "One of the inputs isn't declared by this pipeline. Reload and try again.",
+  },
+  /** POST /api/pipeline-runs/:runId/inputs/:artifactKey from the Submit input dialog (0.8.0 FR-362). */
+  submitPipelineInput: {
+    FORBIDDEN: "Only project Contributors and Owners can submit input.",
+    NOT_FOUND: "This run no longer takes that input. Reload to see the run.",
+    INPUT_INVALID: "The input doesn't match its schema. Fix it and try again.",
+    RUN_NOT_ACTIVE: "This run isn't waiting for input any more. The page now shows its latest state.",
+  },
+  /** The Pipeline tab's Feedback section: add and delete agent feedback (0.8.0 FR-365). */
+  agentFeedback: {
+    FORBIDDEN: "You can delete only your own feedback, unless you're a project Owner.",
+    NOT_FOUND: "That feedback entry was already deleted. The list now shows the latest.",
+    VALIDATION: "Feedback must be 1 to 2,000 characters.",
+  },
+  /** The Pipeline tab's Triggers section: schedules and webhooks (0.8.0 FR-366). */
+  pipelineTriggers: {
+    FORBIDDEN: "Only project Owners can manage triggers.",
+    NOT_FOUND: "That schedule or webhook was already deleted. The list now shows the latest.",
+    TRIGGER_NOT_SUPPORTED: "This pipeline doesn't declare that trigger.",
+    CONFLICT: "This webhook's secret was just rotated elsewhere. Reload to see the webhook, then rotate again if you need to.",
+  },
   /** POST /api/pipeline-runs/:runId/gates/:gateId/approve|reject from the gate inbox (0.7.0 FR-307). */
   pipelineGateDecision: {
     FORBIDDEN: "Only project Owners can decide this gate.",
@@ -1386,6 +1413,11 @@ export function errorMessage(error: unknown, context?: ErrorContext): string {
       return error.message.startsWith("Request failed with HTTP")
         ? trackerCopy(error.errorCode as TrackerCopyCode)
         : error.message;
+    }
+    if (error.errorCode === "SOURCE_ARTIFACT_MISSING") {
+      // D-0.8.0-19: the problem's `reason` is the missing artifact's title; no placeholder reaches the screen.
+      const artifact = error.reason?.trim() ?? "";
+      return messageFor("SOURCE_ARTIFACT_MISSING", context).replaceAll("{artifact}", artifact === "" ? "the source artifact" : artifact);
     }
     if (error.errorCode === "INVALID_STATE") {
       const reason = error.message.startsWith("Request failed with HTTP") ? "" : error.message.trim();

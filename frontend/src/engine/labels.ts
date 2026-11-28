@@ -1,6 +1,6 @@
 import type { Schemas } from '../api/client'
 import type { BadgeTone } from '../components/ui/badge'
-import type { GenericRunStatus, PipelineDefinition, RunGate, StageState, TimelineKind } from './api/types'
+import type { GenericRunStatus, MapItemStatus, PipelineDefinition, RunGate, StageState, TimelineKind } from './api/types'
 import { humanise } from './format'
 
 /**
@@ -97,7 +97,10 @@ export interface DefinitionLabels {
 }
 
 export function definitionLabels(definition: PipelineDefinition | undefined, gates: readonly RunGate[] = []): DefinitionLabels {
-  const stages = new Map(definition?.stages.map((s) => [s.id, s.title]) ?? [])
+  // FR-343: a parallel group's branch stages are nested in it; their entries carry their own ids.
+  const stages = new Map(
+    definition?.stages.flatMap((s) => [[s.id, s.title] as const, ...(s.branches ?? []).flatMap((b) => b.stages.map((x) => [x.id, x.title] as const))]) ?? [],
+  )
   const artifacts = new Map(definition?.artifacts.map((a) => [a.key, a.title]) ?? [])
   const gateTitles = new Map(gates.map((g) => [g.id, g.title]))
   const gateTypeTitles = new Map(gates.map((g) => [g.type, g.title]))
@@ -108,4 +111,39 @@ export function definitionLabels(definition: PipelineDefinition | undefined, gat
       (gateId ? gateTitles.get(gateId) : undefined) ??
       (gateType ? (gateTypeTitles.get(gateType) ?? humanise(gateType)) : 'Gate'),
   }
+}
+
+/** FR-363: a map item's status. */
+export const mapItemStatusLabels: Record<MapItemStatus, string> = {
+  open: 'Open',
+  completed: 'Completed',
+  failed: 'Failed',
+}
+
+export const mapItemStatusTones: Record<MapItemStatus, BadgeTone> = {
+  open: 'info',
+  completed: 'success',
+  failed: 'danger',
+}
+
+/** FR-355, FR-363: map items are 0-based in the data and counted from 1 on screen ("Item 1"). */
+export const itemLabel = (index: number) => `Item ${String(index + 1)}`
+
+/**
+ * FR-343, FR-345, FR-363: a branch as a lane label. A parallel group's branches are 0-based indexes ("Branch 1"); a
+ * fan-out's are its agent keys or `#n`, shown as they are.
+ */
+export const branchLabel = (branch: string) => (/^\d+$/.test(branch) ? `Branch ${String(Number(branch) + 1)}` : `Branch ${branch}`)
+
+/** FR-354, FR-363: a follow-up label (`followup:7d`) as words ("Follow-up after 7d"); other labels as they are. */
+export function followUpLabel(label: string): string {
+  const after = /^followup:(.+)$/.exec(label)?.[1]
+  return after ? `Follow-up after ${after}` : label
+}
+
+/** FR-364: what a gate payload asks for, by its `kind`. */
+export const gatePayloadKindLabels: Record<string, string> = {
+  variant_select: 'Pick a variant',
+  tool_call: 'Tool approval',
+  external_handler: 'External action',
 }

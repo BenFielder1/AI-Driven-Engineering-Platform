@@ -12,12 +12,13 @@ function parsePipelineSearch(raw: Record<string, unknown>): { run?: string } {
 
 /** /projects/:id/pipeline (FR-306): the engine's Pipeline view of the project's runs. Picking a run replaces the entry. */
 export default function PipelineRoute() {
-  const { project } = useProjectAccess()
+  const { project, role, user, readOnly } = useProjectAccess()
   const search = useSearch(parsePipelineSearch)
   const setSearch = useSetSearch()
   return (
     <PipelineView
       projectId={project.id}
+      access={{ role: readOnly ? 'viewer' : role, userId: user?.id ?? null }}
       runId={search.run}
       documentTitle={`Pipeline · ${project.name}`}
       onRunChange={(run) => {
