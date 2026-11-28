@@ -114,6 +114,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] c. Live hub events `stageBranchUpdated` and `mapProgress` (§6, FR-363), D-0.8.0-33 — found by the pre-PR audit — ba0e2db ([CI 46138735113](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46138735113))
   - [x] d. Spec and docs cleanup from the audit: §6 routes, acceptance headings, §10 order, CLAUDE.md/STACK.md coach pack, coach guide "From the UI"; release-PR docs (Triggers and webhooks guide, construct reference, error-codes reference) stay in M73
   - [x] b2. Frontend: lanes, map progress, variants, transcripts, follow-ups, veto/route entries (FR-363); gate cards with payloads (FR-364); `{artifact}` in `SOURCE_ARTIFACT_MISSING`. `DEF_*` codes have no copy (none do; the parity test reads `ErrorCodes.cs` only)
+- **Build PR [#66](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/pull/66)** opened 2026-11-28 after Ben ran the rename runbook steps 1–3 on preview; all CI checks green on d50098b (test credential vectors assembled at run time after GitGuardian flagged two fake values in 9ea5306).
 - [ ] M73 Release 0.8.0 — FR-367 (on Ben's confirmation)
 
 ## Decisions
