@@ -41,7 +41,9 @@ export interface InputEditorProps {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-function FileUpload({ id, onText }: { id: string; onText: (text: string) => void }) {
+/** A JSON file picker; `error` (an unreadable file) is announced and tied to the picker. */
+function FileUpload({ id, onText, error }: { id: string; onText: (text: string) => void; error?: string | null }) {
+  const errorId = `${id}-error`
   const onChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
@@ -54,7 +56,18 @@ function FileUpload({ id, onText }: { id: string; onText: (text: string) => void
       <label htmlFor={id} className={labelClass}>
         Upload a JSON file
       </label>
-      <input id={id} type="file" accept="application/json,.json" onChange={onChange} className="text-sm" />
+      <input
+        id={id}
+        type="file"
+        accept="application/json,.json"
+        onChange={onChange}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        className="text-sm"
+      />
+      <p id={errorId} aria-live="polite" className="text-sm text-destructive empty:hidden">
+        {error ?? ''}
+      </p>
     </div>
   )
 }
@@ -121,14 +134,17 @@ function FlatForm({ idPrefix, title, schema, required, fields, ref }: InputEdito
   }))
 
   const rootError = form.formState.errors.root?.message
+  const rootErrorId = `${idPrefix}-schema-error`
   return (
-    <fieldset className="flex flex-col gap-3">
+    <fieldset className="flex flex-col gap-3" aria-describedby={rootError ? rootErrorId : undefined}>
       <legend className="mb-1 text-sm font-semibold">{required ? title : `${title} (optional now)`}</legend>
       {!required && <p className="text-sm text-muted-foreground">Leave it blank to add it later: the run waits for it.</p>}
       {fields.map((field) => (
         <FlatControl key={field.key} field={field} id={`${idPrefix}-${field.key}`} form={form} />
       ))}
-      {rootError && <p className="text-sm text-destructive">{rootError}</p>}
+      <p id={rootErrorId} aria-live="polite" className="text-sm text-destructive empty:hidden">
+        {rootError ?? ''}
+      </p>
       <FileUpload
         id={`${idPrefix}-file`}
         onText={(text) => {
@@ -144,8 +160,8 @@ function FlatForm({ idPrefix, title, schema, required, fields, ref }: InputEdito
             setUploadError('That file isn’t valid JSON.')
           }
         }}
+        error={uploadError}
       />
-      {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
     </fieldset>
   )
 }

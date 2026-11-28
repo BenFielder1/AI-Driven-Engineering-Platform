@@ -8,7 +8,7 @@ import { useDocumentTitle } from '../../lib/use-document-title'
 import { usePipelineDefinition, usePipelineRun, usePipelineRuns, useRunGates, useRunStages } from '../api/hooks'
 import type { PipelineRun } from '../api/types'
 import { PromptComparison } from '../components/prompt-comparison'
-import { FeedbackSection } from '../feedback/feedback-section'
+import { PipelineFeedback } from '../feedback/pipeline-feedback'
 import { canManageTriggers, noAccess, type PipelineAccess } from '../run-control/access'
 import { StartRunAction, SubmitInputAction } from '../run-control/run-control-actions'
 import { TriggersSection } from '../triggers/triggers-section'
@@ -99,11 +99,6 @@ function RunDetail({
       <Section id="pipeline-prompts" title="Prompt versions">
         <PromptComparison pipelineId={run.pipelineId} projectId={projectId} />
       </Section>
-      {definition.data && (
-        <Section id="pipeline-feedback" title="Feedback">
-          <FeedbackSection projectId={projectId} definition={definition.data} access={access} />
-        </Section>
-      )}
     </div>
   )
 }
@@ -128,6 +123,7 @@ export function PipelineView({
   const runs = usePipelineRuns(projectId)
 
   let body: ReactNode
+  let shownPipelineId: string | undefined
   if (runs.isPending) {
     body = <LoadingState label="Loading runs…" />
   } else if (runs.isError) {
@@ -147,6 +143,7 @@ export function PipelineView({
     body = <RunNotFound action={latest && runLink(latest.id, 'Show the latest run')} />
   } else {
     const selected = runs.data.find((r) => r.id === runId) ?? runs.data[0]
+    shownPipelineId = selected?.pipelineId
     body = selected && (
       <div className="flex flex-col gap-4">
         <SelectField
@@ -177,6 +174,9 @@ export function PipelineView({
         <StartRunAction projectId={projectId} access={access} onStarted={onRunChange} />
       </div>
       {body}
+      <Section id="pipeline-feedback" title="Feedback">
+        <PipelineFeedback projectId={projectId} access={access} defaultPipelineId={shownPipelineId} />
+      </Section>
       {canManageTriggers(access) && (
         <Section id="pipeline-triggers" title="Triggers">
           <TriggersSection projectId={projectId} />

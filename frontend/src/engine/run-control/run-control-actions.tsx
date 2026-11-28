@@ -53,7 +53,7 @@ function StartRunButton({ projectId, onStarted }: { projectId: string; onStarted
   )
 }
 
-/** FR-362: Submit input on a run waiting on input (Contributor and up), with the same editor as Start run. */
+/** FR-362: Submit input on an engine-controlled run waiting on input (Contributor and up), with the same editor as Start run. */
 export function SubmitInputAction({
   run,
   definition,
@@ -64,7 +64,8 @@ export function SubmitInputAction({
   access: PipelineAccess
 }) {
   const inputs = definition?.artifacts.filter((a) => a.input === true) ?? []
-  if (run.status !== 'waiting_on_input' || !canStartRuns(access) || inputs.length === 0) {
+  // A host-controlled pipeline (the SDLC) takes input from its own pages: the API answers 409 RUN_CONTROLLED_BY_HOST.
+  if (run.status !== 'waiting_on_input' || definition?.runControl !== 'engine' || !canStartRuns(access) || inputs.length === 0) {
     return null
   }
   return <SubmitInputButton run={run} inputs={inputs} />

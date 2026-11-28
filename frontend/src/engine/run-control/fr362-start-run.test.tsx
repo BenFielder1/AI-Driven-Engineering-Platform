@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { http } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { runControlDb } from '../../mocks/handlers/engine-run-control'
+import { coachRunControlDefinition, runControlDb } from '../../mocks/handlers/engine-run-control'
 import { seedCoachRun } from '../../mocks/handlers/pipeline-seeds'
 import { problem } from '../../mocks/handlers/problem'
 import { server } from '../../mocks/server'
@@ -114,6 +114,23 @@ describe('FR-362: Start run and Submit input', () => {
     expect(within(await screen.findByTestId('run-summary')).getByRole('heading', { name: 'Fixture intake' })).toBeInTheDocument()
   })
 
+  it('FR362_flat_form_upload_error_is_announced_and_tied_to_the_picker', async () => {
+    const { dialog, user } = await openStartRun()
+    await user.selectOptions(dialog.getByRole('combobox', { name: 'Pipeline' }), 'fixture-intake')
+    await dialog.findByRole('textbox', { name: 'Summary' })
+    const picker = dialog.getByLabelText('Upload a JSON file')
+    await user.upload(picker, new File(['{not json'], 'bad.json', { type: 'application/json' }))
+    expect(await dialog.findByText('That file isn’t valid JSON.')).toHaveAttribute('aria-live', 'polite')
+    expect(picker).toHaveAttribute('aria-invalid', 'true')
+    expect(picker).toHaveAccessibleDescription('That file isn’t valid JSON.')
+
+    await user.upload(picker, new File(['{"summary":"From file","priority":"low"}'], 'ok.json', { type: 'application/json' }))
+    await waitFor(() => {
+      expect(dialog.getByRole('textbox', { name: 'Summary' })).toHaveValue('From file')
+    })
+    expect(picker).not.toHaveAttribute('aria-invalid')
+  })
+
   it('FR362_json_file_upload_fills_the_editor', async () => {
     const { dialog, user } = await openStartRun()
     await dialog.findByRole('textbox', { name: 'Session log (JSON)' })
@@ -157,6 +174,17 @@ describe('FR-362: Start run and Submit input', () => {
     await renderPipeline(project.id, { role: null, userId: null })
     expect(await screen.findByText('No runs yet')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Start run' })).not.toBeInTheDocument()
+  })
+
+  it('FR362_no_submit_input_on_a_host_controlled_run', async () => {
+    runControlDb.definitions = [{ ...coachRunControlDefinition, runControl: 'host' }]
+    const { project, access } = memberOf('contributor')
+    seedCoachRun(project, { status: 'waiting_on_input' })
+    await renderPipeline(project.id, access)
+    expect(await screen.findByTestId('run-summary')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Feedback' })).toBeInTheDocument()
+    await screen.findByRole('combobox', { name: 'Agent' })
+    expect(screen.queryByRole('button', { name: 'Submit input' })).not.toBeInTheDocument()
   })
 
   it('FR362_submit_input_on_a_run_waiting_on_input', async () => {

@@ -84,8 +84,11 @@ describe('FR-365: scores and feedback', () => {
     const { user } = await renderPipeline(project.id, access)
 
     const region = within(await screen.findByRole('region', { name: 'Feedback' }))
-    expect(region.getByRole('combobox', { name: 'Agent' })).toHaveDisplayValue('performance-analyst')
-    expect(region.getAllByRole('option').map((o) => o.textContent)).toEqual(['performance-analyst', 'programme-planner', 'coach-voice'])
+    // The shown run's pipeline is picked first.
+    expect(region.getByRole('combobox', { name: 'Pipeline' })).toHaveDisplayValue('Impulse coaching')
+    const agent = await region.findByRole('combobox', { name: 'Agent' })
+    expect(agent).toHaveDisplayValue('performance-analyst')
+    expect(within(agent).getAllByRole('option').map((o) => o.textContent)).toEqual(['performance-analyst', 'programme-planner', 'coach-voice'])
     const list = await region.findByRole('list', { name: 'Feedback for performance-analyst' })
     const items = within(list).getAllByRole('listitem')
     expect(items).toHaveLength(2)
@@ -118,6 +121,17 @@ describe('FR-365: scores and feedback', () => {
       expect(within(list).queryByText('Weigh the long run more.')).not.toBeInTheDocument()
     })
     expect(within(list).getByText('Mention sleep.')).toBeInTheDocument()
+  })
+
+  it('FR365_feedback_shows_without_runs', async () => {
+    const { project, access, user: me } = memberOf('contributor')
+    seedTwoEntries(project.id, me.id)
+    const { user } = await renderPipeline(project.id, access)
+    expect(await screen.findByText('No runs yet')).toBeInTheDocument()
+    const region = within(await screen.findByRole('region', { name: 'Feedback' }))
+    await user.selectOptions(await region.findByRole('combobox', { name: 'Pipeline' }), 'impulse-coach')
+    expect(await region.findByText('Mention sleep.')).toBeInTheDocument()
+    expect(region.getByRole('textbox', { name: 'New feedback' })).toBeInTheDocument()
   })
 
   it('FR365_viewer_reads_feedback_without_add_or_delete', async () => {
