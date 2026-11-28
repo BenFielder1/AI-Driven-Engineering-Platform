@@ -26871,6 +26871,60 @@
         },
         "description": "FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are\n            open). `executionId` pages them (`ListPipelineRunMapItems`)."
       },
+      "PipelineMapProgressMessage": {
+        "required": [
+          "projectId",
+          "runId",
+          "stageId",
+          "progress"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "The run's project (the hub group).",
+            "format": "uuid"
+          },
+          "runId": {
+            "type": "string",
+            "description": "The pipeline run.",
+            "format": "uuid"
+          },
+          "stageId": {
+            "type": "string",
+            "description": "The map stage (the stage list entry whose `map` this replaces)."
+          },
+          "progress": {
+            "required": [
+              "executionId",
+              "total",
+              "completed",
+              "failed"
+            ],
+            "type": "object",
+            "properties": {
+              "executionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "total": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "completed": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "failed": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "description": "FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are\n            open). `executionId` pages them (`ListPipelineRunMapItems`)."
+          }
+        },
+        "description": "FR-363 live (§6 hub events): a map execution's progress changed (items opened or ended), counted from its item rows\n(D-0.8.0-24). Throttled per map execution (at most one a second, then a trailing one with the latest counts)."
+      },
       "PipelineRunDto": {
         "required": [
           "id",
@@ -27215,6 +27269,59 @@
           }
         },
         "description": "FR-366: a cron and timezone's next fire times (UTC), before the schedule is saved."
+      },
+      "PipelineStageBranchUpdatedMessage": {
+        "required": [
+          "projectId",
+          "runId",
+          "executionId",
+          "stageId",
+          "branch",
+          "exitedAt",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "The run's project (the hub group).",
+            "format": "uuid"
+          },
+          "runId": {
+            "type": "string",
+            "description": "The pipeline run.",
+            "format": "uuid"
+          },
+          "executionId": {
+            "type": "string",
+            "description": "The branch's stage execution.",
+            "format": "uuid"
+          },
+          "stageId": {
+            "type": "string",
+            "description": "The stage the branch is in (a parallel branch's own stage, or the fan-out stage)."
+          },
+          "branch": {
+            "type": "string",
+            "description": "The branch id (`0`, `1`… for a parallel group; an agent key or `#n` for a fan-out)."
+          },
+          "exitedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When the branch left the stage; `null` while it is open.",
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "How it left (a transition kind, `completed` or `failed`); `null` while open."
+          }
+        },
+        "description": "FR-363 live (§6 hub events): a parallel-branch or fan-out-branch stage execution was entered or left. Ids and state\nonly, never content: the client refreshes the run's timeline, which the lanes read."
       },
       "PipelineStageDefinitionDto": {
         "required": [

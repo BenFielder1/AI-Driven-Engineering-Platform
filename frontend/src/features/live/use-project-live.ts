@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useContext, useEffect, useState } from 'react'
 
 import { pipelineLiveBus } from '../../engine/live/live-bus'
+import { projectIdOf } from '../../engine/live/pipeline-live'
 import { applyBuildCheckUpdate } from '../execution/build-checks-api'
 import { notificationKeys } from '../notifications/notifications-api'
 import { LiveConnectionContext } from './live-connection'
@@ -117,8 +118,7 @@ export function useProjectLive(projectId: string): LiveStatus {
     })
     // FR-302: pipeline messages go to the engine views that are open (src/engine/live/live-bus.ts).
     connection.onPipelineEvent((event) => {
-      const eventProject =
-        event.type === 'pipelineRunUpdated' ? event.run.projectId : event.type === 'gateUpdated' ? event.gate.projectId : projectId
+      const eventProject = projectIdOf(event) ?? projectId
       if (!disposed && eventProject === projectId) {
         pipelineLiveBus.publish(projectId, event)
       }

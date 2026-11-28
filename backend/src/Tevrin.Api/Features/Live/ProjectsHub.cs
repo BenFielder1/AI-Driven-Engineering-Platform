@@ -57,6 +57,12 @@ public sealed class ProjectsHub(TevrinDbContext db, SystemRoleLookup roles, Proj
     /// <summary>FR-302: a gate of a run changed; the payload is the gate DTO (<c>PipelineGateDto</c>).</summary>
     public const string GateUpdatedMethod = "gateUpdated";
 
+    /// <summary>FR-363: a branch stage execution changed; the payload is <c>PipelineStageBranchUpdatedMessage</c>.</summary>
+    public const string StageBranchUpdatedMethod = "stageBranchUpdated";
+
+    /// <summary>FR-363: a map execution's progress changed (throttled); the payload is <c>PipelineMapProgressMessage</c>.</summary>
+    public const string MapProgressMethod = "mapProgress";
+
     /// <summary>The hub error message for a join the caller isn't allowed to make.</summary>
     public const string ForbiddenError = ErrorCodes.Forbidden;
 

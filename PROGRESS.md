@@ -109,9 +109,9 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
   - [x] e. On-call end to end: signed webhook → investigator (read) → executor (destructive) (FR-361); bad signatures, replay and rotation are covered by FR-337's `TriggerTests` — e695642 ([CI 45955212466](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/45955212466))
 - [ ] M72 Engine UI — FR-362–FR-366
   - [x] a. Backend: additive DTO fields and read endpoints the engine UI needs (gate payload, timeline labels, map progress, input schemas, follow-ups, next fire times; map items and schedule preview endpoints); contract + client regenerated, D-0.8.0-32. Feedback, mean scores, pinned artifacts, scope and trigger CRUD already existed. Gate payloads are now on the DTO, which clears the M71 build-PR blocker once the UI shows them (b2) — 04b940b ([CI 46062120341](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46062120341))
-  - [x] b1. Frontend: Start run / Submit input dialogs (FR-362), Feedback and scores (FR-365), Triggers (FR-366); host page passes `access` — f441ee1 + fixes a767ea4
+  - [x] b1. Frontend: Start run / Submit input dialogs (FR-362), Feedback and scores (FR-365), Triggers (FR-366); host page passes `access` — f441ee1 + fixes a767ea4 ([CI 46136578515](https://github.com/BenFielder1/AI-Driven-Engineering-Platform/actions/runs/46136578515))
   - Carry-overs from M67–M71 (gate payloads, timeline labels, pinned artifacts, `{artifact}`, scores and feedback) are all closed by a and b; `DEF_*` codes keep no copy.
-  - [ ] c. Live hub events `stageBranchUpdated` and `mapProgress` (§6, FR-363) — found by the pre-PR audit
+  - [x] c. Live hub events `stageBranchUpdated` and `mapProgress` (§6, FR-363), D-0.8.0-33 — found by the pre-PR audit
   - [x] d. Spec and docs cleanup from the audit: §6 routes, acceptance headings, §10 order, CLAUDE.md/STACK.md coach pack, coach guide "From the UI"; release-PR docs (Triggers and webhooks guide, construct reference, error-codes reference) stay in M73
   - [x] b2. Frontend: lanes, map progress, variants, transcripts, follow-ups, veto/route entries (FR-363); gate cards with payloads (FR-364); `{artifact}` in `SOURCE_ARTIFACT_MISSING`. `DEF_*` codes have no copy (none do; the parity test reads `ErrorCodes.cs` only)
 - [ ] M73 Release 0.8.0 — FR-367 (on Ben's confirmation)
@@ -153,6 +153,7 @@ Agents never run the full gate, Docker, Testcontainers or E2E locally.
 - Tool approval (M71c review minors, left as is): if the last attempt is dead-lettered by lease expiry while the old worker still runs an approved, claimed tool, the hook fails the run and the old worker may later save it `Succeeded` (`agent_runs` has no xmin); the tool still runs once. Runs pinned to definitions from before `DEF_FOLLOWUP_STAGE` refuses destructive follow-ups can raise an undecidable gate; the 24 h timer rejects it. A waiting gate costs one model-free delivery every 2 minutes. The denial names the reviewer by user id, not name.
 - `StartPipelineRunRequest.inputs` (and schedule `inputs`) are generated as `Record<string, never>` because the contract has no `additionalProperties`; the frontend casts. Emit `additionalProperties: {}` from the API in a later contract change (M72b review).
 - Local Vitest is flaky on this machine (first full-route render times out at 20 s under memory pressure, same on HEAD); CI is the gate.
+- Construct hub events (M72c review, left as is): the engine job's save awaits the hub send (at most once a second per map); throttling and groups are per API process (no backplane, as for every hub event).
 - Integration shards: `rest` hit its 22-min step timeout in M69 and was split (5d048d7, `pipelines-projects`); watch shard times as tests grow.
 
 ## Manual checks (Ben)

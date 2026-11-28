@@ -23,7 +23,7 @@ export interface LiveConnection {
   onProjectEvent(handler: (message: ProjectEventMessage) => void): void
   /** FR-259: `buildCheckUpdated`, the build check item after it starts, changes state or has fix steps planned. */
   onBuildCheckUpdated(handler: (message: BuildCheckUpdatedMessage) => void): void
-  /** FR-302: the engine's `pipelineRunUpdated`, `stageUpdated` and `gateUpdated` messages (each carries its DTO). */
+  /** FR-302, FR-363: the engine's `pipelineRunUpdated`, `stageUpdated`, `gateUpdated`, `stageBranchUpdated` and `mapProgress` messages. */
   onPipelineEvent(handler: (event: PipelineLiveEvent) => void): void
   /** Automatic reconnect lost the connection and is retrying. */
   onReconnecting(handler: () => void): void
@@ -136,6 +136,13 @@ export const createSignalRConnection: LiveConnectionFactory = () => {
         })
         c.on('gateUpdated', (gate: Extract<PipelineLiveEvent, { type: 'gateUpdated' }>['gate']) => {
           handler({ type: 'gateUpdated', gate })
+        })
+        // FR-363: branch stage executions and (throttled) map progress.
+        c.on('stageBranchUpdated', (update: Extract<PipelineLiveEvent, { type: 'stageBranchUpdated' }>['update']) => {
+          handler({ type: 'stageBranchUpdated', update })
+        })
+        c.on('mapProgress', (update: Extract<PipelineLiveEvent, { type: 'mapProgress' }>['update']) => {
+          handler({ type: 'mapProgress', update })
         })
       })
     },

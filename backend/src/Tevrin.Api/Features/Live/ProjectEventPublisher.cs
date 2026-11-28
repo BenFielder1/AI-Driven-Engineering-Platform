@@ -58,6 +58,15 @@ public sealed class ProjectViewerRegistry
         }
     }
 
+    /// <summary>Whether any connection views any project (FR-363: branch and map pushes skip every read otherwise).</summary>
+    public bool HasAnyViewers()
+    {
+        lock (_lock)
+        {
+            return _connections.Values.Any(c => c.Projects.Count > 0);
+        }
+    }
+
     /// <summary>Removes and returns the connections of <paramref name="userId"/> viewing <paramref name="projectId"/>.</summary>
     public IReadOnlyList<string> RemoveViewer(Guid userId, Guid projectId)
     {

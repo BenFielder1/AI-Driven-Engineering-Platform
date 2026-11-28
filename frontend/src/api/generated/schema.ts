@@ -6653,6 +6653,38 @@ export interface components {
             failed: number;
         };
         /**
+         * @description FR-363 live (§6 hub events): a map execution's progress changed (items opened or ended), counted from its item rows
+         *     (D-0.8.0-24). Throttled per map execution (at most one a second, then a trailing one with the latest counts).
+         */
+        PipelineMapProgressMessage: {
+            /**
+             * Format: uuid
+             * @description The run's project (the hub group).
+             */
+            projectId: string;
+            /**
+             * Format: uuid
+             * @description The pipeline run.
+             */
+            runId: string;
+            /** @description The map stage (the stage list entry whose `map` this replaces). */
+            stageId: string;
+            /**
+             * @description FR-355, FR-363: a map execution's items: how many there are, have completed and have failed (the rest are
+             *                 open). `executionId` pages them (`ListPipelineRunMapItems`).
+             */
+            progress: {
+                /** Format: uuid */
+                executionId: string;
+                /** Format: int32 */
+                total: number;
+                /** Format: int32 */
+                completed: number;
+                /** Format: int32 */
+                failed: number;
+            };
+        };
+        /**
          * @description FR-300: a pipeline run. `status` is the generic status derived on read (§4.57); `packStatus` the pack's own.
          *     `hashShort` is the first 12 characters of the pinned definition hash. `cost` and the token totals sum the
          *     run's agent runs.
@@ -6762,6 +6794,38 @@ export interface components {
             cron: string;
             timezone: string;
             nextFireTimes: string[];
+        };
+        /**
+         * @description FR-363 live (§6 hub events): a parallel-branch or fan-out-branch stage execution was entered or left. Ids and state
+         *     only, never content: the client refreshes the run's timeline, which the lanes read.
+         */
+        PipelineStageBranchUpdatedMessage: {
+            /**
+             * Format: uuid
+             * @description The run's project (the hub group).
+             */
+            projectId: string;
+            /**
+             * Format: uuid
+             * @description The pipeline run.
+             */
+            runId: string;
+            /**
+             * Format: uuid
+             * @description The branch's stage execution.
+             */
+            executionId: string;
+            /** @description The stage the branch is in (a parallel branch's own stage, or the fan-out stage). */
+            stageId: string;
+            /** @description The branch id (`0`, `1`… for a parallel group; an agent key or `#n` for a fan-out). */
+            branch: string;
+            /**
+             * Format: date-time
+             * @description When the branch left the stage; `null` while it is open.
+             */
+            exitedAt: null | string;
+            /** @description How it left (a transition kind, `completed` or `failed`); `null` while open. */
+            outcome: null | string;
         };
         /**
          * @description A stage of a definition. `kind` is `agent`, `code` or `manual`; `transitions` lists

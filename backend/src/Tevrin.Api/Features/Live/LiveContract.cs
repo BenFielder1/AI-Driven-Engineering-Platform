@@ -27,6 +27,11 @@ public static class LiveEndpoints
         services.AddSingleton<ProjectViewerRegistry>();
         services.AddSingleton<PipelineLivePublisher>();
 
+        // FR-363: committed branch and map item changes go out as stageBranchUpdated and (throttled) mapProgress.
+        services.AddSingleton<PipelineConstructLivePublisher>();
+        services.AddSingleton<PipelineConstructLiveInterceptor>();
+        services.ConfigureDbContext<TevrinDbContext>((sp, options) => options.AddInterceptors(sp.GetRequiredService<PipelineConstructLiveInterceptor>()));
+
         // Committed project events (from any writer) are pushed to the project's group.
         services.RemoveAll<IProjectEventPublisher>();
         services.AddSingleton<IProjectEventPublisher, SignalRProjectEventPublisher>();
@@ -48,7 +53,8 @@ public static class LiveEndpoints
 internal sealed class LiveContractDocumentTransformer : IOpenApiDocumentTransformer
 {
     private static readonly Type[] MessageTypes = [typeof(ProjectEventMessage), typeof(BuildChecks.BuildCheckUpdatedMessage),
-        typeof(Tevrin.Engine.Api.PipelineRunDto), typeof(Tevrin.Engine.Api.PipelineStageDto), typeof(Tevrin.Engine.Api.PipelineGateDto)];
+        typeof(Tevrin.Engine.Api.PipelineRunDto), typeof(Tevrin.Engine.Api.PipelineStageDto), typeof(Tevrin.Engine.Api.PipelineGateDto),
+        typeof(Tevrin.Engine.Api.PipelineStageBranchUpdatedMessage), typeof(Tevrin.Engine.Api.PipelineMapProgressMessage)];
 
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
     {

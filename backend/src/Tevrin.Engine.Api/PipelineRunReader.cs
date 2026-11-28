@@ -200,6 +200,26 @@ public sealed class PipelineRunReader(
         return newest.Where(e => counts.ContainsKey(e.Id)).ToDictionary(e => e.StageId, e => counts[e.Id], StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// FR-363 live: map execution <paramref name="executionId"/>'s progress (D-0.8.0-24), with its run, project and stage;
+    /// <c>null</c> when it isn't a run's stage execution. A map with no items yet reports zero counts.
+    /// </summary>
+    public async Task<PipelineMapProgressMessage?> MapProgressMessageAsync(Guid executionId, CancellationToken cancellationToken)
+    {
+        var map = await db.StageExecutions.AsNoTracking()
+            .Where(e => e.Id == executionId && e.ParentExecutionId == null)
+            .Join(db.PipelineRuns.AsNoTracking(), e => e.PipelineRunId, r => r.Id, (e, r) => new { e.StageId, e.PipelineRunId, r.ProjectId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (map is null)
+        {
+            return null;
+        }
+
+        var progress = await ItemCounts(db.StageExecutions.AsNoTracking().Where(e => e.ParentExecutionId == executionId))
+            .FirstOrDefaultAsync(cancellationToken) ?? new PipelineMapProgressDto(executionId, 0, 0, 0);
+        return new PipelineMapProgressMessage(map.ProjectId, map.PipelineRunId, map.StageId, progress);
+    }
+
     /// <summary>D-0.8.0-24: map progress grouped from item rows (<see cref="MapRules.StatusOf"/>, written out so EF translates it).</summary>
     private static IQueryable<PipelineMapProgressDto> ItemCounts(IQueryable<StageExecution> items) =>
         items.GroupBy(e => e.ParentExecutionId!.Value)
